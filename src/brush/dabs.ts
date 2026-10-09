@@ -1,4 +1,4 @@
-import { evalDynamic, type BrushSettings, type InputSample } from '../core/brush';
+import { evalDynamic, shadeAmount, type BrushSettings, type InputSample } from '../core/brush';
 import { hash01 } from '../core/rng';
 import { tiltAmount, type StrokePoint } from '../core/stroke';
 
@@ -13,6 +13,8 @@ export interface Dab {
   /** Radians. */
   angle: number;
   roundness: number;
+  /** 0 = normal tip, 1 = side-of-pencil shading tip (blended by tilt). */
+  shade: number;
 }
 
 /** Speed (px/ms) that counts as "fast" (1.0) for speed dynamics. */
@@ -109,8 +111,17 @@ export class DabWalker {
     const b = this.brush;
     const i = this.index++;
     const s: InputSample = { pressure: p.pressure, tilt: tiltAmount(p), speed: this.speed };
-    const size = Math.max(0.5, b.size * evalDynamic(b.sizeDyn, s, hash01(this.seed, i, 1)) * this.taper(distance));
-    const alpha = b.flow * evalDynamic(b.flowDyn, s, hash01(this.seed, i, 2)) * evalDynamic(b.opacityDyn, s, hash01(this.seed, i, 3));
+    const ts = b.tiltShade;
+    const shade = shadeAmount(ts, p.tiltX, p.tiltY);
+    const size = Math.max(
+      0.5,
+      b.size * evalDynamic(b.sizeDyn, s, hash01(this.seed, i, 1)) * this.taper(distance) * (1 + (ts.size - 1) * shade),
+    );
+    const alpha =
+      b.flow *
+      evalDynamic(b.flowDyn, s, hash01(this.seed, i, 2)) *
+      evalDynamic(b.opacityDyn, s, hash01(this.seed, i, 3)) *
+      (1 + (ts.opacity - 1) * shade);
     let x = p.x;
     let y = p.y;
     if (b.scatter > 0) {
@@ -118,8 +129,17 @@ export class DabWalker {
       x += -Math.sin(this.dir) * off;
       y += Math.cos(this.dir) * off;
     }
-    const angle = (b.angle * Math.PI) / 180 + (b.followDirection ? this.dir : 0);
-    return { x, y, size, alpha, angle, roundness: b.roundness };
+    let angle = (b.angle * Math.PI) / 180 + (b.followDirection ? this.dir : 0);
+    let roundness = b.roundness;
+    if (shade > 0) {
+      // The flat of the lead lies along the direction the pen leans (its azimuth).
+      const azimuth = Math.atan2(p.tiltY, p.tiltX);
+      let diff = azimuth - angle;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      angle += diff * shade;
+      roundness += (ts.roundness - roundness) * shade;
+    }
+    return { x, y, size, alpha, angle, roundness, shade };
   }
 }
 

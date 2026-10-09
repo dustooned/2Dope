@@ -10,8 +10,8 @@ export function makeCanvas(w: number, h: number): HTMLCanvasElement {
   return c;
 }
 
-function ctx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
-  const ctx = c.getContext('2d', { willReadFrequently: false });
+export function ctx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
+  const ctx = c.getContext('2d');
   if (!ctx) throw new Error('2D canvas unavailable');
   return ctx;
 }
@@ -22,6 +22,10 @@ export interface Rect {
   y: number;
   w: number;
   h: number;
+}
+
+export function putPixels(canvas: HTMLCanvasElement, rect: Rect, data: ImageData): void {
+  ctx2d(canvas).putImageData(data, rect.x, rect.y);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -109,6 +113,20 @@ function grainCanvas(): HTMLCanvasElement {
   return c;
 }
 
+/** Remove coverage through the paper grain (canvas-aligned, so texture stays put across strokes). */
+function applyGrain(g: CanvasRenderingContext2D, r: Rect, strength: number, scale: number): void {
+  if (strength <= 0) return;
+  const pat = g.createPattern(grainCanvas(), 'repeat');
+  if (!pat) return;
+  pat.setTransform(new DOMMatrix().scale(scale, scale));
+  g.save();
+  g.globalCompositeOperation = 'destination-out';
+  g.globalAlpha = Math.min(1, strength);
+  g.fillStyle = pat;
+  g.fillRect(r.x, r.y, r.w, r.h);
+  g.restore();
+}
+
 // ---------------------------------------------------------------------------------------------
 
 export interface StrokeCommit {
@@ -118,31 +136,49 @@ export interface StrokeCommit {
 }
 
 /**
- * Raster painting for one layer. A stroke renders its dabs into `buffer` (coverage builds up with
- * flow), then composites once onto `layer` at the stroke opacity (Photoshop-style Opacity vs Flow).
- * While a stroke is live, `displaySource()` returns what the screen should show for the layer.
+ * Raster painting onto one bound canvas (the current drawing). A stroke renders its dabs into
+ * buffers (coverage builds up with flow), then composites once onto the canvas at the stroke
+ * opacity (Photoshop-style Opacity vs Flow). Tilt-shaded dabs go to a second buffer with a soft
+ * tip and their own, stronger grain. While a stroke is live, `displaySource()` returns what the
+ * screen should show for the bound canvas.
  */
 export class RasterEngine {
-  readonly layer: HTMLCanvasElement;
+  private target: HTMLCanvasElement;
   private readonly buffer: HTMLCanvasElement;
+  private readonly shadeBuffer: HTMLCanvasElement;
   private readonly grained: HTMLCanvasElement;
+  private readonly scratch: HTMLCanvasElement;
   private readonly work: HTMLCanvasElement;
-  private readonly lctx: CanvasRenderingContext2D;
   private readonly bctx: CanvasRenderingContext2D;
+  private readonly sctx: CanvasRenderingContext2D;
   private record: StrokeRecord | null = null;
   private tip: HTMLCanvasElement | null = null;
+  private shadeTip: HTMLCanvasElement | null = null;
+  private hasShade = false;
   private bbox: { x0: number; y0: number; x1: number; y1: number } | null = null;
 
   constructor(
     readonly width: number,
     readonly height: number,
   ) {
-    this.layer = makeCanvas(width, height);
+    this.target = makeCanvas(width, height);
     this.buffer = makeCanvas(width, height);
+    this.shadeBuffer = makeCanvas(width, height);
     this.grained = makeCanvas(width, height);
+    this.scratch = makeCanvas(width, height);
     this.work = makeCanvas(width, height);
-    this.lctx = ctx2d(this.layer);
     this.bctx = ctx2d(this.buffer);
+    this.sctx = ctx2d(this.shadeBuffer);
+  }
+
+  /** The canvas strokes paint onto. */
+  get bound(): HTMLCanvasElement {
+    return this.target;
+  }
+
+  bind(canvas: HTMLCanvasElement): void {
+    if (this.record) return;
+    this.target = canvas;
   }
 
   get active(): StrokeRecord | null {
@@ -151,24 +187,33 @@ export class RasterEngine {
 
   begin(record: StrokeRecord): void {
     this.record = record;
-    this.tip = tipSprite(record.brush.hardness, record.tool === 'eraser' ? '#000000' : record.color);
+    const color = record.tool === 'eraser' ? '#000000' : record.color;
+    this.tip = tipSprite(record.brush.hardness, color);
+    this.shadeTip = tipSprite(record.brush.tiltShade.hardness, color);
+    this.hasShade = false;
     this.bbox = null;
     this.bctx.clearRect(0, 0, this.width, this.height);
+    this.sctx.clearRect(0, 0, this.width, this.height);
   }
 
   addDabs(dabs: Dab[]): void {
-    if (!this.tip) return;
+    if (!this.tip || !this.shadeTip) return;
     for (const d of dabs) {
-      drawDab(this.bctx, d, this.tip);
+      if (d.shade < 1) drawDab(this.bctx, d, this.tip, 1 - d.shade);
+      if (d.shade > 0) {
+        drawDab(this.sctx, d, this.shadeTip, d.shade);
+        this.hasShade = true;
+      }
       this.grow(d);
     }
     this.bctx.globalAlpha = 1;
+    this.sctx.globalAlpha = 1;
   }
 
   /** Draw extra, temporary dabs (predicted input) straight onto a display context. */
   drawGhost(ctx: CanvasRenderingContext2D, dabs: Dab[]): void {
-    if (!this.tip || !this.record || this.record.tool === 'eraser') return;
-    for (const d of dabs) drawDab(ctx, d, this.tip, this.record.brush.opacity);
+    if (!this.tip || !this.shadeTip || !this.record || this.record.tool === 'eraser') return;
+    for (const d of dabs) drawDab(ctx, d, d.shade > 0.5 ? this.shadeTip : this.tip, this.record.brush.opacity);
     ctx.globalAlpha = 1;
   }
 
@@ -196,24 +241,22 @@ export class RasterEngine {
     return { x, y, w: x1 - x, h: y1 - y };
   }
 
-  /** The stroke image with paper grain applied (or the raw buffer). */
+  /** The stroke image: normal buffer and shade buffer, each with its own paper grain. */
   private strokeImage(r: Rect): HTMLCanvasElement {
-    const grain = this.record?.brush.grain ?? 0;
-    if (grain <= 0) return this.buffer;
+    const b = this.record?.brush;
+    if (!b) return this.buffer;
+    if (b.grain <= 0 && !this.hasShade) return this.buffer;
     const g = ctx2d(this.grained);
-    g.save();
     g.clearRect(r.x, r.y, r.w, r.h);
     g.drawImage(this.buffer, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
-    g.globalCompositeOperation = 'destination-out';
-    g.globalAlpha = grain;
-    const pat = g.createPattern(grainCanvas(), 'repeat');
-    if (pat) {
-      const s = this.record?.brush.grainScale ?? 1;
-      pat.setTransform(new DOMMatrix().scale(s, s));
-      g.fillStyle = pat;
-      g.fillRect(r.x, r.y, r.w, r.h);
+    applyGrain(g, r, b.grain, b.grainScale);
+    if (this.hasShade) {
+      const s = ctx2d(this.scratch);
+      s.clearRect(r.x, r.y, r.w, r.h);
+      s.drawImage(this.shadeBuffer, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+      applyGrain(s, r, b.tiltShade.grain, b.grainScale);
+      g.drawImage(this.scratch, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
     }
-    g.restore();
     return this.grained;
   }
 
@@ -229,60 +272,51 @@ export class RasterEngine {
   }
 
   /**
-   * What to draw for this layer right now. With no live stroke: the layer. With a live stroke:
-   * a work canvas holding layer + stroke (so the eraser previews correctly).
+   * What to draw for the bound canvas right now. With no live stroke: the canvas itself. With a
+   * live stroke: a work canvas holding canvas + stroke (so the eraser previews correctly).
    */
   displaySource(): HTMLCanvasElement {
     const r = this.rect();
-    if (!this.record || !r) return this.layer;
+    if (!this.record || !r) return this.target;
     const w = ctx2d(this.work);
     w.clearRect(0, 0, this.width, this.height);
-    w.drawImage(this.layer, 0, 0);
+    w.drawImage(this.target, 0, 0);
     this.apply(w, r);
     return this.work;
   }
 
   /**
    * Finish the stroke: re-render it from data (now the length is known, the end taper applies),
-   * composite onto the layer, and return before/after pixels for undo.
+   * composite onto the bound canvas, and return before/after pixels for undo.
    */
   commit(): StrokeCommit | null {
     const rec = this.record;
     if (!rec) return null;
-    if (rec.brush.taperEnd > 0 && rec.tool !== 'pen') {
+    if (rec.brush.taperEnd > 0) {
       this.bctx.clearRect(0, 0, this.width, this.height);
+      this.sctx.clearRect(0, 0, this.width, this.height);
       this.bbox = null;
+      this.hasShade = false;
       this.addDabs(dabsForStroke(rec.brush, rec.seed, rec.points, strokeLength(rec.points)));
     }
     const r = this.rect();
     let result: StrokeCommit | null = null;
     if (r) {
-      const before = this.lctx.getImageData(r.x, r.y, r.w, r.h);
-      this.apply(this.lctx, r);
-      const after = this.lctx.getImageData(r.x, r.y, r.w, r.h);
+      const tctx = ctx2d(this.target);
+      const before = tctx.getImageData(r.x, r.y, r.w, r.h);
+      this.apply(tctx, r);
+      const after = tctx.getImageData(r.x, r.y, r.w, r.h);
       result = { rect: r, before, after };
     }
-    this.record = null;
-    this.bbox = null;
-    this.bctx.clearRect(0, 0, this.width, this.height);
+    this.cancel();
     return result;
   }
 
   cancel(): void {
     this.record = null;
     this.bbox = null;
+    this.hasShade = false;
     this.bctx.clearRect(0, 0, this.width, this.height);
-  }
-
-  put(rect: Rect, data: ImageData): void {
-    this.lctx.putImageData(data, rect.x, rect.y);
-  }
-
-  snapshot(): ImageData {
-    return this.lctx.getImageData(0, 0, this.width, this.height);
-  }
-
-  clear(): void {
-    this.lctx.clearRect(0, 0, this.width, this.height);
+    this.sctx.clearRect(0, 0, this.width, this.height);
   }
 }

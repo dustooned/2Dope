@@ -116,11 +116,136 @@ button:disabled {
   min-height: 0;
 }
 
+.stage-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .stage {
   position: relative;
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   touch-action: none;
+}
+
+/* Flipbook strip */
+
+.strip {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.strip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 6px 10px;
+}
+
+.strip-bar .name {
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.frame-readout {
+  min-width: 64px;
+}
+
+.hold-readout {
+  min-width: 22px;
+  text-align: center;
+}
+
+.strip-track {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 78px;
+  touch-action: pan-x;
+  cursor: pointer;
+  outline: none;
+}
+
+.strip-inner {
+  position: relative;
+  height: 100%;
+  min-width: 100%;
+}
+
+.strip-ruler span {
+  position: absolute;
+  top: 2px;
+  width: 64px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.block {
+  position: absolute;
+  top: 18px;
+  height: 52px;
+  margin-left: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.block.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.block .thumb {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 56px;
+  height: 32px;
+  border-radius: 3px;
+}
+
+.block .num {
+  position: absolute;
+  left: 5px;
+  bottom: 1px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* A hold: a line through the extra frames, like an X-sheet hold line. */
+.block .hold-line {
+  position: absolute;
+  left: 62px;
+  right: 8px;
+  top: 19px;
+  height: 2px;
+  background: var(--muted);
+  border-radius: 1px;
+}
+
+.strip-playhead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 100%;
+  border-left: 2px solid var(--accent);
+  background: rgba(255, 90, 138, 0.08);
+  pointer-events: none;
+}
+
+button.play[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1d1d22;
 }
 
 #canvas {
@@ -236,6 +361,12 @@ legend {
   gap: 4px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 input[type='range'] {

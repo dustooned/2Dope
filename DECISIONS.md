@@ -12,6 +12,14 @@
 - **Canvas 2D** for M0. Move to WebGL2 when effects/compositing need it.
 - Recorded points are the **stabilized** points, so replay doesn't depend on zoom or stabilizer state.
 
+## 2026-10-09: Tilt shading + frames (M1 slice 1)
+
+- **Tilt shading** is a per-brush `tiltShade` block: past a threshold the dab blends (20° band) into a bigger, lighter, flatter, softer tip angled to the pen's azimuth. Shaded coverage goes to a second buffer with its own grain, so shading is grainy while lines stay crisp in the same stroke.
+- Mouse testing: **Alt** simulates a tilted pen.
+- **Timing = run-length exposures** `{drawing, length}`; pure functions in `core/timeline.ts`, undo keeps the old array.
+- **Add frame inside a hold splits it** (new drawing takes the rest of the hold), so timing stays the same; on a hold's last frame it inserts one frame.
+- Drawings are full-size canvases for now. Risk: memory on long shots (8 MB per 1080p drawing). Sparse tiles come before long projects.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

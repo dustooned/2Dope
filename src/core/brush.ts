@@ -17,6 +17,26 @@ export interface Dynamic {
   invert: boolean;
 }
 
+/**
+ * Shading with the side of the pencil. Past `threshold` degrees of tilt the brush blends into a
+ * second, broader, softer, lighter tip that leans with the pen and shows more paper grain.
+ */
+export interface TiltShade {
+  enabled: boolean;
+  /** Tilt (degrees from upright) where shading starts; full shading 20° later. */
+  threshold: number;
+  /** Size multiplier at full shading. */
+  size: number;
+  /** Opacity multiplier at full shading. */
+  opacity: number;
+  /** Tip roundness at full shading (flat side of the lead). */
+  roundness: number;
+  /** Tip hardness at full shading. */
+  hardness: number;
+  /** Paper grain strength for the shaded part. */
+  grain: number;
+}
+
 export interface BrushSettings {
   name: string;
   /** Diameter in document pixels. */
@@ -51,6 +71,29 @@ export interface BrushSettings {
   smoothing: number;
   /** Pulled-string (lazy mouse) stabilizer instead of exponential smoothing. */
   pulledString: boolean;
+  tiltShade: TiltShade;
+}
+
+export const NO_TILT_SHADE: TiltShade = {
+  enabled: false,
+  threshold: 40,
+  size: 3,
+  opacity: 0.45,
+  roundness: 0.35,
+  hardness: 0.1,
+  grain: 0.8,
+};
+
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/** 0 (no shading) .. 1 (full side-of-pencil shading) for a pen tilt. */
+export function shadeAmount(ts: TiltShade, tiltX: number, tiltY: number): number {
+  if (!ts.enabled) return 0;
+  const deg = Math.min(90, Math.hypot(tiltX, tiltY));
+  return smoothstep(ts.threshold, ts.threshold + 20, deg);
 }
 
 export interface InputSample {
@@ -99,6 +142,7 @@ const base: BrushSettings = {
   taperEnd: 0,
   smoothing: 0.25,
   pulledString: false,
+  tiltShade: { ...NO_TILT_SHADE, enabled: true },
 };
 
 export const PRESETS: BrushSettings[] = [
@@ -116,6 +160,7 @@ export const PRESETS: BrushSettings[] = [
     taperStart: 30,
     taperEnd: 40,
     smoothing: 0.45,
+    tiltShade: NO_TILT_SHADE,
   },
   {
     ...base,
@@ -131,6 +176,7 @@ export const PRESETS: BrushSettings[] = [
     opacityDyn: dyn('off'),
     grain: 0,
     smoothing: 0.2,
+    tiltShade: NO_TILT_SHADE,
   },
   {
     ...base,
@@ -142,13 +188,25 @@ export const PRESETS: BrushSettings[] = [
     flow: 0.5,
     roundness: 0.6,
     followDirection: true,
-    sizeDyn: dyn('tilt', 0.5, 1),
+    sizeDyn: dyn('pressure', 0.5, 1),
     opacityDyn: dyn('pressure', 0.1, 1.4),
     flowDyn: dyn('off', 0, 1, 0.4),
     scatter: 0.08,
     grain: 0.75,
     grainScale: 1.2,
     smoothing: 0.1,
+    tiltShade: { enabled: true, threshold: 35, size: 2.5, opacity: 0.55, roundness: 0.3, hardness: 0.05, grain: 0.9 },
+  },
+  {
+    ...base,
+    name: 'Shading Pencil',
+    size: 6,
+    hardness: 0.7,
+    spacing: 0.1,
+    flow: 0.8,
+    grain: 0.5,
+    grainScale: 0.5,
+    tiltShade: { enabled: true, threshold: 30, size: 5, opacity: 0.35, roundness: 0.25, hardness: 0.05, grain: 0.85 },
   },
   {
     ...base,
@@ -163,6 +221,7 @@ export const PRESETS: BrushSettings[] = [
     flowDyn: dyn('pressure', 0, 1.5),
     grain: 0,
     smoothing: 0.3,
+    tiltShade: NO_TILT_SHADE,
   },
 ];
 

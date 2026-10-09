@@ -2,6 +2,7 @@ import './style.css';
 import { App } from './app';
 import type { Tool } from './core/stroke';
 import { buildPanel } from './ui/panel';
+import { Strip } from './ui/strip';
 
 const $ = <T extends HTMLElement>(sel: string) => {
   const e = document.querySelector<T>(sel);
@@ -23,7 +24,7 @@ syncTools();
 const actions: Record<string, () => void> = {
   undo: () => app.undo(),
   redo: () => app.redo(),
-  clear: () => app.clearAll(),
+  clear: () => app.clearFrame(),
   fit: () => app.fit(),
   actual: () => app.actualSize(),
   flip: () => app.flipView(),
@@ -58,3 +59,6 @@ setInterval(() => {
 }, 150);
 
 buildPanel(app, $('#panel'));
+
+const strip = new Strip(app, $('#strip'));
+app.onFrameChange = () => strip.update();

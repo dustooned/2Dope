@@ -3,7 +3,9 @@ import { History } from './core/history';
 import { newSeed } from './core/rng';
 import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type Tool } from './core/stroke';
 import { DabWalker } from './brush/dabs';
-import { RasterEngine } from './brush/raster';
+import { putPixels, RasterEngine } from './brush/raster';
+import { Project, type Drawing } from './core/project';
+import { addAfter, changeHold, duplicateAt, nextDrawing, prevDrawing, removeAt, type Edit, type Exposure } from './core/timeline';
 import { Smoother } from './brush/smoothing';
 import { drawVectorStroke } from './brush/vector';
 import { snapRotation, Viewport } from './view/viewport';
@@ -13,6 +15,8 @@ const COLOR_KEY = '2dope.m0.color';
 
 interface LiveStroke {
   record: StrokeRecord;
+  /** The drawing being painted (fixed for the whole stroke). */
+  drawing: Drawing;
   pointerId: number;
   t0: number;
   smoother: Smoother;
@@ -62,8 +66,13 @@ export interface InputStats {
 export class App {
   readonly docW = 1920;
   readonly docH = 1080;
+  readonly project = new Project(this.docW, this.docH);
   readonly raster = new RasterEngine(this.docW, this.docH);
-  vectors: StrokeRecord[] = [];
+  /** Current frame, 0-based. */
+  frame = 0;
+  playing = false;
+  /** Fires when the frame or the timeline changes. */
+  onFrameChange: () => void = () => {};
   readonly history = new History();
   readonly view = new Viewport();
 
@@ -92,6 +101,8 @@ export class App {
   private moveCount = 0;
   private coalescedCount = 0;
   private statsWindow = performance.now();
+  private playClock = { t0: 0, f0: 0 };
+  private spacePanned = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -105,7 +116,8 @@ export class App {
     this.color = loadJSON<string>(COLOR_KEY) ?? '#1d1d24';
     this.bindEvents();
     this.resize();
-    const loop = () => {
+    const loop = (now: number) => {
+      if (this.playing) this.tickPlayback(now);
       if (this.needsRender) this.render();
       requestAnimationFrame(loop);
     };
@@ -160,24 +172,145 @@ export class App {
     this.requestRender();
   }
 
-  clearAll(): void {
-    const before = this.raster.snapshot();
-    const vectors = this.vectors;
+  /** Clear the current drawing (undoable). */
+  clearFrame(): void {
+    if (this.live) return;
+    const d = this.drawing;
+    const g = d.canvas.getContext('2d');
+    if (!g) return;
+    const full = { x: 0, y: 0, w: this.docW, h: this.docH };
+    const before = g.getImageData(0, 0, this.docW, this.docH);
+    const vectors = d.vectors;
     this.history.push(
       {
-        label: 'Clear canvas',
+        label: 'Clear drawing',
         do: () => {
-          this.raster.clear();
-          this.vectors = [];
+          g.clearRect(0, 0, this.docW, this.docH);
+          d.vectors = [];
+          this.touch(d);
         },
         undo: () => {
-          this.raster.put({ x: 0, y: 0, w: this.docW, h: this.docH }, before);
-          this.vectors = vectors;
+          putPixels(d.canvas, full, before);
+          d.vectors = vectors;
+          this.touch(d);
         },
       },
       false,
     );
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Frames and playback
+
+  get drawing(): Drawing {
+    return this.project.drawingAtFrame(this.frame);
+  }
+
+  /** Mark a drawing changed (thumbnails, render). */
+  private touch(d: Drawing): void {
+    d.rev += 1;
     this.requestRender();
+    this.onFrameChange();
+  }
+
+  setFrame(f: number): void {
+    if (this.live) return;
+    const len = this.project.length;
+    const next = ((Math.round(f) % len) + len) % len;
+    if (next === this.frame) return;
+    this.frame = next;
+    if (this.playing) this.playClock = { t0: performance.now(), f0: next };
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  nextFrame(): void {
+    this.setFrame(this.frame + 1);
+  }
+
+  prevFrame(): void {
+    this.setFrame(this.frame - 1);
+  }
+
+  nextDrawing(): void {
+    this.setFrame(nextDrawing(this.project.exposures, this.frame));
+  }
+
+  prevDrawing(): void {
+    this.setFrame(prevDrawing(this.project.exposures, this.frame));
+  }
+
+  togglePlay(): void {
+    if (this.live) return;
+    this.playing = !this.playing;
+    this.playClock = { t0: performance.now(), f0: this.frame };
+    this.onFrameChange();
+  }
+
+  setFps(fps: number): void {
+    this.project.fps = Math.max(1, Math.min(120, Math.round(fps)));
+    this.playClock = { t0: performance.now(), f0: this.frame };
+    this.onFrameChange();
+  }
+
+  private tickPlayback(now: number): void {
+    const len = this.project.length;
+    const f = (this.playClock.f0 + Math.floor(((now - this.playClock.t0) * this.project.fps) / 1000)) % len;
+    if (f !== this.frame) {
+      this.frame = f;
+      this.requestRender();
+      this.onFrameChange();
+    }
+  }
+
+  /** Run a timeline edit as an undoable command. */
+  private editTimeline(label: string, fn: (ex: Exposure[]) => Edit): void {
+    if (this.live) return;
+    const beforeEx = this.project.exposures;
+    const beforeFrame = this.frame;
+    const r = fn(beforeEx);
+    if (r.ex === beforeEx) return;
+    this.history.push(
+      {
+        label,
+        do: () => {
+          this.project.exposures = r.ex;
+          this.frame = Math.min(r.frame, this.project.length - 1);
+          this.requestRender();
+          this.onFrameChange();
+        },
+        undo: () => {
+          this.project.exposures = beforeEx;
+          this.frame = Math.min(beforeFrame, this.project.length - 1);
+          this.requestRender();
+          this.onFrameChange();
+        },
+      },
+      false,
+    );
+  }
+
+  addFrame(): void {
+    const d = this.project.newDrawing();
+    this.editTimeline('Add frame', (ex) => addAfter(ex, this.frame, d.id));
+  }
+
+  duplicateFrame(): void {
+    const d = this.project.cloneDrawing(this.drawing);
+    this.editTimeline('Duplicate frame', (ex) => duplicateAt(ex, this.frame, d.id));
+  }
+
+  deleteFrame(): void {
+    this.editTimeline('Delete frame', (ex) => {
+      const r = removeAt(ex, this.frame);
+      if (r.ex.length > 0) return r;
+      // Never leave the layer empty: replace the last drawing with a blank one.
+      return { ex: [{ drawing: this.project.newDrawing().id, length: 1 }], frame: 0 };
+    });
+  }
+
+  changeHold(delta: number): void {
+    this.editTimeline(delta > 0 ? 'Longer hold' : 'Shorter hold', (ex) => changeHold(ex, this.frame, delta));
   }
 
   fit(): void {
@@ -211,10 +344,11 @@ export class App {
     c.height = this.docH;
     const g = c.getContext('2d');
     if (!g) return;
-    g.drawImage(this.raster.layer, 0, 0);
-    for (const v of this.vectors) drawVectorStroke(g, v, this.lengthOf(v));
+    const d = this.drawing;
+    g.drawImage(d.canvas, 0, 0);
+    for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
     const a = document.createElement('a');
-    a.download = `2dope-${Date.now()}.png`;
+    a.download = `2dope-frame${String(this.frame + 1).padStart(3, '0')}.png`;
     a.href = c.toDataURL('image/png');
     a.click();
   }
@@ -236,11 +370,22 @@ export class App {
       tiltX = mag * Math.cos(az);
       tiltY = mag * Math.sin(az);
     }
+    // Mouse users can test side-of-pencil shading: hold Alt to simulate a pen lying at ~65°.
+    if (e.pointerType === 'mouse' && e.altKey) {
+      tiltX = 55;
+      tiltY = 35;
+    }
     return { x: d.x, y: d.y, pressure, tiltX, tiltY, t: e.timeStamp - t0 };
   }
 
   private beginStroke(e: PointerEvent): void {
+    if (this.playing) {
+      this.playing = false;
+      this.onFrameChange();
+    }
     const tool = this.tool;
+    const drawing = this.drawing;
+    this.raster.bind(drawing.canvas);
     const record: StrokeRecord = {
       id: newStrokeId(),
       tool,
@@ -253,6 +398,7 @@ export class App {
     const first = this.toPoint(e, t0);
     this.live = {
       record,
+      drawing,
       pointerId: e.pointerId,
       t0,
       smoother: new Smoother(record.brush.smoothing, record.brush.pulledString, this.view.zoom),
@@ -292,16 +438,19 @@ export class App {
       rec.points.push(q);
       if (rec.tool !== 'pen') this.raster.addDabs(live.walker.push(q));
     }
+    const d = live.drawing;
     if (rec.tool === 'pen') {
       const id = rec.id;
       this.history.push(
         {
           label: 'Vector stroke',
           do: () => {
-            this.vectors = [...this.vectors, rec];
+            d.vectors = [...d.vectors, rec];
+            this.touch(d);
           },
           undo: () => {
-            this.vectors = this.vectors.filter((v) => v.id !== id);
+            d.vectors = d.vectors.filter((v) => v.id !== id);
+            this.touch(d);
           },
         },
         false,
@@ -311,9 +460,16 @@ export class App {
       if (c) {
         this.history.push({
           label: rec.tool === 'eraser' ? 'Erase' : 'Brush stroke',
-          do: () => this.raster.put(c.rect, c.after),
-          undo: () => this.raster.put(c.rect, c.before),
+          do: () => {
+            putPixels(d.canvas, c.rect, c.after);
+            this.touch(d);
+          },
+          undo: () => {
+            putPixels(d.canvas, c.rect, c.before);
+            this.touch(d);
+          },
         });
+        this.touch(d);
       }
     }
     this.requestRender();
@@ -393,6 +549,7 @@ export class App {
     const mode: NavMode | null =
       e.button === 1 || this.held.has('Space') ? 'pan' : this.held.has('KeyR') ? 'rotate' : this.held.has('KeyZ') ? 'zoom' : null;
     if (mode) {
+      if (mode === 'pan' && this.held.has('Space')) this.spacePanned = true;
       const c = { x: this.viewW / 2, y: this.viewH / 2 };
       this.nav = {
         mode,
@@ -551,10 +708,13 @@ export class App {
     const typing = target instanceof HTMLInputElement && target.type !== 'range' && target.type !== 'checkbox' && target.type !== 'color';
     if (typing || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
     if (!down) {
+      // A tap of Space (no drag) plays / pauses; Space + drag pans.
+      if (e.code === 'Space' && this.held.has('Space') && !this.spacePanned) this.togglePlay();
       this.held.delete(e.code);
       this.updateCursor();
       return;
     }
+    if (e.key === 'Alt') e.preventDefault();
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.code === 'KeyZ') {
       e.preventDefault();
@@ -569,12 +729,54 @@ export class App {
     }
     if (mod) return;
     if (['Space', 'KeyR', 'KeyZ'].includes(e.code)) {
-      if (e.code === 'Space') e.preventDefault();
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!this.held.has('Space')) this.spacePanned = false;
+      }
       this.held.add(e.code);
       this.updateCursor();
       return;
     }
     switch (e.code) {
+      case 'ArrowRight':
+        e.preventDefault();
+        this.nextFrame();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        this.prevFrame();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        this.nextDrawing();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        this.prevDrawing();
+        break;
+      case 'Enter':
+        e.preventDefault();
+        this.togglePlay();
+        break;
+      case 'KeyN':
+        this.addFrame();
+        break;
+      case 'KeyD':
+        this.duplicateFrame();
+        break;
+      case 'Delete':
+      case 'Backspace':
+        e.preventDefault();
+        this.deleteFrame();
+        break;
+      case 'Equal':
+      case 'NumpadAdd':
+        this.changeHold(1);
+        break;
+      case 'Minus':
+      case 'NumpadSubtract':
+        this.changeHold(-1);
+        break;
       case 'KeyB':
         this.setTool('brush');
         break;
@@ -668,9 +870,10 @@ export class App {
     g.shadowColor = 'transparent';
 
     g.imageSmoothingEnabled = this.view.zoom < 2;
-    g.drawImage(this.raster.displaySource(), 0, 0);
-
     const live = this.live;
+    const d = live ? live.drawing : this.drawing;
+    g.drawImage(live && live.record.tool !== 'pen' ? this.raster.displaySource() : d.canvas, 0, 0);
+
     // Predicted input: drawn ahead of the real stroke this frame only (lower perceived latency).
     if (live && live.predicted.length && live.record.brush.smoothing < 0.15) {
       if (live.record.tool === 'pen') {
@@ -682,7 +885,7 @@ export class App {
       }
     }
 
-    for (const v of this.vectors) drawVectorStroke(g, v, this.lengthOf(v));
+    for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
     if (live && live.record.tool === 'pen') {
       const extra = live.record.brush.smoothing < 0.15 ? live.predicted : [];
       drawVectorStroke(g, { ...live.record, points: [...live.record.points, ...extra] });

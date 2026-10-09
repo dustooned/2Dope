@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DabWalker, dabsForStroke } from '../brush/dabs';
 import { Smoother } from '../brush/smoothing';
-import { dyn, evalDynamic, PRESETS } from './brush';
+import { dyn, evalDynamic, PRESETS, shadeAmount } from './brush';
 import { History } from './history';
 import { hash01 } from './rng';
 import { strokeLength, type StrokePoint } from './stroke';
@@ -63,6 +63,28 @@ describe('dab walker', () => {
     const mid = dabs[Math.floor(dabs.length / 2)]!;
     expect(dabs[0]!.size).toBeLessThan(mid.size);
     expect(dabs[dabs.length - 1]!.size).toBeLessThan(mid.size);
+  });
+});
+
+describe('tilt shading', () => {
+  const ts = { ...PRESETS[0]!.tiltShade, enabled: true, threshold: 40, size: 3, opacity: 0.5, roundness: 0.3 };
+  const brush = { ...PRESETS[0]!, sizeDyn: dyn('off'), opacityDyn: dyn('off'), flowDyn: dyn('off'), size: 10, flow: 1, tiltShade: ts };
+  const at = (tilt: number) => dabsForStroke(brush, 1, [{ x: 0, y: 0, pressure: 1, tiltX: tilt, tiltY: 0, t: 0 }], Infinity)[0]!;
+
+  it('is off below the threshold and full 20° past it', () => {
+    expect(shadeAmount(ts, 30, 0)).toBe(0);
+    expect(shadeAmount(ts, 60, 0)).toBe(1);
+    expect(shadeAmount({ ...ts, enabled: false }, 80, 0)).toBe(0);
+  });
+
+  it('makes the dab bigger, lighter and flatter when tilted', () => {
+    const up = at(0);
+    const side = at(70);
+    expect(up.shade).toBe(0);
+    expect(side.shade).toBe(1);
+    expect(side.size).toBeCloseTo(up.size * 3);
+    expect(side.alpha).toBeCloseTo(up.alpha * 0.5);
+    expect(side.roundness).toBeCloseTo(0.3);
   });
 });
 

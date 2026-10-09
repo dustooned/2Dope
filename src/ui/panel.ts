@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { cloneBrush, PRESETS, type BrushSettings, type Control, type Dynamic } from '../core/brush';
+import { cloneBrush, PRESETS, type BrushSettings, type Control, type Dynamic, type TiltShade } from '../core/brush';
 import type { StrokePoint, StrokeRecord } from '../core/stroke';
 import { strokeLength } from '../core/stroke';
 import { dabsForStroke } from '../brush/dabs';
@@ -21,7 +21,13 @@ interface SliderDef {
   unit?: string;
 }
 
-const SECTIONS: { title: string; sliders: SliderDef[]; toggles?: { key: 'followDirection' | 'pulledString'; label: string }[]; dyn?: DynKey[] }[] = [
+const SECTIONS: {
+  title: string;
+  sliders: SliderDef[];
+  toggles?: { key: 'followDirection' | 'pulledString'; label: string }[];
+  dyn?: DynKey[];
+  tilt?: boolean;
+}[] = [
   {
     title: 'Tip',
     sliders: [
@@ -42,6 +48,11 @@ const SECTIONS: { title: string; sliders: SliderDef[]; toggles?: { key: 'followD
       { key: 'grain', label: 'Paper grain', min: 0, max: 1, step: 0.01 },
       { key: 'grainScale', label: 'Grain scale', min: 0.25, max: 3, step: 0.05 },
     ],
+  },
+  {
+    title: 'Tilt shading',
+    sliders: [],
+    tilt: true,
   },
   {
     title: 'Dynamics',
@@ -135,6 +146,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
       fs.append(row);
     }
     for (const key of section.dyn ?? []) fs.append(dynamicEditor(app, key, refreshers));
+    if (section.tilt) fs.append(tiltEditor(app, refreshers));
     body.append(fs);
   }
 
@@ -154,7 +166,8 @@ export function buildPanel(app: App, root: HTMLElement): void {
         x: 40 + t * 480,
         y: 75 + Math.sin(t * Math.PI * 2) * 38,
         pressure: Math.sin(t * Math.PI),
-        tiltX: 60 * (1 - t),
+        // Starts lying flat (side-of-pencil shading) and ends upright.
+        tiltX: 80 * Math.max(0, 1 - t * 1.6),
         tiltY: 0,
         t: i * (6 + 10 * t),
       });
@@ -190,6 +203,49 @@ export function buildPanel(app: App, root: HTMLElement): void {
     };
   })();
   refresh();
+}
+
+function tiltEditor(app: App, refreshers: (() => void)[]): HTMLElement {
+  const wrap = el('div', { class: 'tilt' });
+  const on = el('label', { class: 'row toggle' });
+  const box = el('input', { type: 'checkbox' });
+  on.append(box, el('span', {}, 'Shade with the side (tilt)'));
+  box.addEventListener('change', () => {
+    app.brush.tiltShade.enabled = box.checked;
+    app.brushChanged();
+  });
+  wrap.append(on);
+  const defs: { prop: Exclude<keyof TiltShade, 'enabled'>; label: string; min: number; max: number; step: number; unit?: string }[] = [
+    { prop: 'threshold', label: 'Starts at', min: 10, max: 75, step: 1, unit: '°' },
+    { prop: 'size', label: 'Size ×', min: 1, max: 8, step: 0.1 },
+    { prop: 'opacity', label: 'Opacity ×', min: 0.05, max: 1, step: 0.01 },
+    { prop: 'roundness', label: 'Flatness', min: 0.05, max: 1, step: 0.01 },
+    { prop: 'hardness', label: 'Hardness', min: 0, max: 1, step: 0.01 },
+    { prop: 'grain', label: 'Grain', min: 0, max: 1, step: 0.01 },
+  ];
+  const syncs: (() => void)[] = [];
+  for (const d of defs) {
+    const row = el('label', { class: 'row' });
+    const input = el('input', { type: 'range', min: String(d.min), max: String(d.max), step: String(d.step) });
+    const out = el('output');
+    input.addEventListener('input', () => {
+      app.brush.tiltShade[d.prop] = Number(input.value);
+      out.textContent = fmt(app.brush.tiltShade[d.prop], d.step, d.unit);
+      app.brushChanged();
+    });
+    syncs.push(() => {
+      input.value = String(app.brush.tiltShade[d.prop]);
+      out.textContent = fmt(app.brush.tiltShade[d.prop], d.step, d.unit);
+    });
+    row.append(el('span', { class: 'name' }, d.label), input, out);
+    wrap.append(row);
+  }
+  wrap.append(el('p', { class: 'hint' }, 'Tilt a pen past "Starts at", or hold Alt with a mouse.'));
+  refreshers.push(() => {
+    box.checked = app.brush.tiltShade.enabled;
+    for (const s of syncs) s();
+  });
+  return wrap;
 }
 
 function dynamicEditor(app: App, key: DynKey, refreshers: (() => void)[]): HTMLElement {

@@ -17,7 +17,7 @@
       <div class="group" role="group" aria-label="History">
         <button type="button" data-action="undo" title="Undo (Ctrl+Z, two-finger tap)">Undo</button>
         <button type="button" data-action="redo" title="Redo (Ctrl+Shift+Z, three-finger tap)">Redo</button>
-        <button type="button" data-action="clear" title="Clear canvas (undoable)">Clear</button>
+        <button type="button" data-action="clear" title="Clear this drawing (undoable)">Clear</button>
       </div>
       <div class="group" role="group" aria-label="View">
         <button type="button" data-action="fit" title="Fit (F)">Fit</button>
@@ -27,13 +27,16 @@
         <span id="viewinfo" class="readout"></span>
       </div>
       <label class="check"><input id="finger" type="checkbox" /> Finger paints</label>
-      <button type="button" data-action="export" title="Export PNG with alpha">PNG</button>
+      <button type="button" data-action="export" title="Export this frame as PNG with alpha">PNG</button>
       <button type="button" data-action="hide" title="Hide interface (Tab, four-finger tap)">Hide UI</button>
     </header>
     <main class="workspace">
-      <div id="stage" class="stage">
-        <canvas id="canvas" aria-label="Drawing canvas"></canvas>
-        <div id="stats" class="stats">Draw with a pen, mouse or (with Finger paints on) a finger.</div>
+      <div class="stage-col">
+        <div id="stage" class="stage">
+          <canvas id="canvas" aria-label="Drawing canvas"></canvas>
+          <div id="stats" class="stats">Draw with a pen, mouse or (with Finger paints on) a finger. Alt + mouse = tilted pencil.</div>
+        </div>
+        <section id="strip" class="strip" aria-label="Flipbook"></section>
       </div>
       <aside id="panel" class="panel" aria-label="Brush settings"></aside>
     </main>
