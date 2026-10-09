@@ -1,0 +1,20 @@
+{
+  "name": "2dope",
+  "version": "0.0.1",
+  "private": true,
+  "description": "2Dope: a small, free 2D animation tool for 3D animators. Milestone 0: pen-feel prototype.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:lan": "vite --host --mode lan",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^3.2.7"
+  }
+}
