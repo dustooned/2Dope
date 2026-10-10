@@ -115,7 +115,9 @@ export class Quick {
       if (active) this.more.classList.remove('open');
     };
     try {
-      if (localStorage.getItem(KEY) === '1') this.set(true);
+      // First visit on a small screen (an iPad held upright, a phone): start in Quick Animate.
+      const saved = localStorage.getItem(KEY);
+      if (saved === '1' || (saved === null && window.innerWidth < 900)) this.set(true);
     } catch {
       // preference unavailable: start in the full interface
     }

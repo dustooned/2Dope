@@ -93,12 +93,18 @@ for (const t of tabs) t.addEventListener('click', () => showTab(t.dataset.tab ==
 app.onToggleXSheet = () => {
   if (document.body.classList.contains('quick')) return;
   showTab($('#tab-xsheet').hidden ? 'xsheet' : 'brush');
+  document.body.classList.add('panel-open');
 };
 try {
   if (localStorage.getItem('2dope.m1.tab') === 'xsheet') showTab('xsheet');
 } catch {
   // default tab
 }
+
+// Narrow screens: the side panel is an overlay opened from the Panel button; tapping the canvas closes it.
+const setPanel = (open: boolean) => document.body.classList.toggle('panel-open', open);
+$('#panel-toggle').addEventListener('click', () => setPanel(!document.body.classList.contains('panel-open')));
+$('#stage').addEventListener('pointerdown', () => setPanel(false), { capture: true });
 
 const strip = new Strip(app, $('#strip'));
 

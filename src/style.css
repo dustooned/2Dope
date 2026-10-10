@@ -114,6 +114,7 @@ button:disabled {
   flex: 1;
   display: flex;
   min-height: 0;
+  position: relative;
 }
 
 .stage-col {
@@ -381,16 +382,6 @@ body.ui-hidden .stats {
   display: none;
 }
 
-@media (max-width: 760px) {
-  .panel {
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: min(300px, 85vw);
-    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
-  }
-}
 
 .strip-lock {
   position: absolute;
@@ -848,8 +839,10 @@ button.role-inbetween[aria-pressed='true'] {
 .quickbar {
   position: fixed;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: max-content;
   z-index: 30;
   flex-wrap: wrap;
   justify-content: center;
@@ -955,4 +948,84 @@ body.ui-hidden .strip {
 
 .xsummary {
   min-height: 2.6em;
+}
+
+/* Tablets and phones: the canvas gets the room.
+   The top bar and the timeline controls become one scrollable row each, and the side panel
+   slides over the canvas from a Panel button instead of sitting beside it. */
+
+#panel-toggle {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  #panel-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .topbar,
+  .strip-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .topbar > *,
+  .strip-bar > * {
+    flex: 0 0 auto;
+  }
+
+  .panel {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(340px, 88vw);
+    box-shadow: -10px 0 28px rgba(0, 0, 0, 0.5);
+  }
+
+  body.panel-open .panel {
+    display: block;
+  }
+
+  .xsheet {
+    height: calc(100vh - 120px);
+  }
+
+  .strip-track {
+    height: 92px;
+  }
+}
+
+/* Phones: the Quick Animate bar is one scrollable row and More drops down below it */
+@media (max-width: 600px) {
+  .quickbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: calc(100vw - 16px);
+    top: 8px;
+    padding: 6px 8px;
+    gap: 8px;
+  }
+
+  .quickbar > * {
+    flex: 0 0 auto;
+  }
+
+  .quick-more.open {
+    position: fixed;
+    top: 64px;
+    left: 8px;
+    right: 8px;
+    z-index: 31;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(38, 38, 45, 0.98);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  }
 }
