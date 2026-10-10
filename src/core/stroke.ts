@@ -13,7 +13,7 @@ export interface StrokePoint {
   t: number;
 }
 
-export type Tool = 'brush' | 'eraser' | 'pen';
+export type Tool = 'brush' | 'eraser' | 'pen' | 'fill';
 
 /**
  * A stroke is data, not pixels: the stabilized points plus everything needed to re-render it

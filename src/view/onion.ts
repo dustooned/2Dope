@@ -1,7 +1,5 @@
 import { makeCanvas } from '../brush/raster';
-import { drawVectorStroke } from '../brush/vector';
-import type { Drawing } from '../core/project';
-import { strokeLength } from '../core/stroke';
+import { paintDrawing, type Drawing } from '../core/project';
 
 export interface OnionSettings {
   enabled: boolean;
@@ -58,8 +56,7 @@ export class OnionCache {
     const c = makeCanvas(this.w, this.h);
     const g = c.getContext('2d');
     if (!g) throw new Error('2D canvas unavailable');
-    g.drawImage(d.canvas, 0, 0);
-    for (const v of d.vectors) drawVectorStroke(g, v, strokeLength(v.points));
+    paintDrawing(g, d);
     if (color) {
       // Recolor everything drawn, keeping its alpha.
       g.globalCompositeOperation = 'source-in';

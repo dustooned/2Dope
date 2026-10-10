@@ -1,7 +1,5 @@
 import type { App } from '../app';
-import { drawVectorStroke } from '../brush/vector';
-import { FPS_PRESETS, type Drawing } from '../core/project';
-import { strokeLength } from '../core/stroke';
+import { FPS_PRESETS, paintDrawing, type Drawing } from '../core/project';
 import { locate, startOf } from '../core/timeline';
 
 const CELL = 64;
@@ -204,10 +202,9 @@ export class Strip {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.fillStyle = '#ffffff';
       g.fillRect(0, 0, c.width, c.height);
-      const s = Math.min(c.width / d.canvas.width, c.height / d.canvas.height);
+      const s = Math.min(c.width / d.line.width, c.height / d.line.height);
       g.setTransform(s, 0, 0, s, 0, 0);
-      g.drawImage(d.canvas, 0, 0);
-      for (const v of d.vectors) drawVectorStroke(g, v, strokeLength(v.points));
+      paintDrawing(g, d);
     }
     this.thumbs.set(d.id, { rev: d.rev, canvas: c });
     return c;

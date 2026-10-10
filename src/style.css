@@ -414,3 +414,8 @@ button[aria-pressed='true'] {
   width: 80px;
   min-height: 0;
 }
+
+.group .name {
+  color: var(--muted);
+  margin-right: 2px;
+}

@@ -34,6 +34,16 @@ npm run dev:lan
 - Brush panel with live preview; settings persist in the browser; "Copy JSON" gives the native brush format.
 - **Tilt shading**: lean the pen and textured brushes (Pencil, Shading Pencil, Charcoal) switch to a broad, soft, grainy side-of-the-lead tip that follows the lean direction.
 
+## M1 slice 3: line + fill planes, fill tool
+
+- Every drawing has a **Line** plane (linework, on top) and a **Fill** plane (flat color, always under). The **On: Line | Fill** switch (or **X**) picks where brushes and the eraser write.
+- **Fill tool (G):** click inside a shape. It reads the Line plane plus vector strokes and paints the Fill plane **under** the lines.
+  - **No halo:** soft anti-aliased edges count as line, and the fill tucks under the line ("Under line" px) only through pixels the line covers, so it can never leak through a line or leave a white fringe.
+  - **Close gaps:** gaps in the line up to N px do not leak (default 4). Larger gaps still leak, by design.
+  - **Line edge:** line alpha that blocks the fill (lower = softer edges block too).
+  - Fills never change the line art; recoloring a fill = fill again with another color. Fill, color and eraser are all undoable.
+- Thumbnails, onion skins and PNG export show all planes together as one image.
+
 ## M1 slice 2: onion skin + scrub lock
 
 - **Onion skin (O):** previous drawings tinted blue, next drawings red, fading with distance. Holds are skipped (you see distinct drawings). Strip controls: count before/after (0 to 5) and opacity. Hidden during playback.
@@ -55,7 +65,8 @@ npm run dev:lan
 | Rotate view | two-finger twist | R + drag; `0` resets |
 | Undo / redo | two- / three-finger tap | Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) |
 | Hide UI | four-finger tap | Tab |
-| Tools | | B brush, E eraser, P vector |
+| Tools | | B brush, E eraser, P vector, G fill |
+| Draw on Line / Fill plane | **On** switch | X |
 | Brush size | | `[` `]` |
 | Fit / 100% / flip view | | F / 1 / H |
 | Tilt shading (side of pencil) | tilt the pen past "Starts at" | hold **Alt** while drawing |

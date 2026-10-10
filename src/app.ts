@@ -3,8 +3,9 @@ import { History } from './core/history';
 import { newSeed } from './core/rng';
 import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type Tool } from './core/stroke';
 import { DabWalker } from './brush/dabs';
-import { putPixels, RasterEngine } from './brush/raster';
-import { Project, type Drawing } from './core/project';
+import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
+import { paintDrawing, planeCanvas, Project, type Drawing, type Plane } from './core/project';
+import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
 import { addAfter, changeHold, duplicateAt, neighborDrawings, nextDrawing, prevDrawing, removeAt, type Edit, type Exposure } from './core/timeline';
 import { Smoother } from './brush/smoothing';
 import { drawVectorStroke } from './brush/vector';
@@ -14,11 +15,15 @@ import { snapRotation, Viewport } from './view/viewport';
 const BRUSH_KEY = '2dope.m0.brush';
 const COLOR_KEY = '2dope.m0.color';
 const ONION_KEY = '2dope.m1.onion';
+const FILL_KEY = '2dope.m1.fill';
 
 interface LiveStroke {
   record: StrokeRecord;
   /** The drawing being painted (fixed for the whole stroke). */
   drawing: Drawing;
+  /** The plane canvas being painted, and which plane it is. */
+  canvas: HTMLCanvasElement;
+  plane: Plane;
   pointerId: number;
   t0: number;
   smoother: Smoother;
@@ -87,6 +92,9 @@ export class App {
   brush: BrushSettings;
   color: string;
   tool: Tool = 'brush';
+  /** Which pixel plane brushes and the eraser write to. Fill always sits under line. */
+  plane: Plane = 'line';
+  fillOptions: FillOptions = { ...DEFAULT_FILL, ...(loadJSON<Partial<FillOptions>>(FILL_KEY) ?? {}) };
   fingerPaint = false;
   uiHidden = false;
 
@@ -111,6 +119,7 @@ export class App {
   private statsWindow = performance.now();
   private playClock = { t0: 0, f0: 0 };
   private spacePanned = false;
+  private fillScratch: HTMLCanvasElement | null = null;
   private readonly onionCache = new OnionCache(this.docW, this.docH);
 
   constructor(
@@ -150,6 +159,76 @@ export class App {
     this.onToolChange();
   }
 
+  setPlane(p: Plane): void {
+    this.plane = p;
+    this.onToolChange();
+  }
+
+  togglePlane(): void {
+    this.setPlane(this.plane === 'line' ? 'fill' : 'line');
+  }
+
+  fillOptionsChanged(): void {
+    saveJSON(FILL_KEY, this.fillOptions);
+  }
+
+  /**
+   * Fill the region under the click. The region comes from the line plane plus vector strokes
+   * (what you see as line art); the color goes on the fill plane, under the lines.
+   */
+  private fillAt(e: PointerEvent): void {
+    const d = this.drawing;
+    const p = this.toPoint(e, e.timeStamp);
+    const x = Math.floor(p.x);
+    const y = Math.floor(p.y);
+    if (x < 0 || y < 0 || x >= this.docW || y >= this.docH) return;
+    this.fillScratch ??= makeCanvas(this.docW, this.docH);
+    const sg = this.fillScratch.getContext('2d', { willReadFrequently: true });
+    if (!sg) return;
+    sg.clearRect(0, 0, this.docW, this.docH);
+    sg.drawImage(d.line, 0, 0);
+    for (const v of d.vectors) drawVectorStroke(sg, v, this.lengthOf(v));
+    const px = sg.getImageData(0, 0, this.docW, this.docH).data;
+    const alpha = new Uint8Array(this.docW * this.docH);
+    for (let i = 0; i < alpha.length; i++) alpha[i] = px[i * 4 + 3]!;
+    const r = computeFill(alpha, this.docW, this.docH, x, y, this.fillOptions);
+    if (!r) return;
+
+    const target = planeCanvas(d, 'fill');
+    const tg = target.getContext('2d');
+    if (!tg) return;
+    const rect = { x: r.x0, y: r.y0, w: r.x1 - r.x0 + 1, h: r.y1 - r.y0 + 1 };
+    const before = tg.getImageData(rect.x, rect.y, rect.w, rect.h);
+    const after = new ImageData(new Uint8ClampedArray(before.data), rect.w, rect.h);
+    const n = parseInt(this.color.replace('#', ''), 16);
+    const cr = (n >> 16) & 255;
+    const cg = (n >> 8) & 255;
+    const cb = n & 255;
+    for (let yy = 0; yy < rect.h; yy++) {
+      for (let xx = 0; xx < rect.w; xx++) {
+        if (!r.mask[(rect.y + yy) * this.docW + rect.x + xx]) continue;
+        const o = (yy * rect.w + xx) * 4;
+        after.data[o] = cr;
+        after.data[o + 1] = cg;
+        after.data[o + 2] = cb;
+        after.data[o + 3] = 255;
+      }
+    }
+    putPixels(target, rect, after);
+    this.history.push({
+      label: 'Fill',
+      do: () => {
+        putPixels(target, rect, after);
+        this.touch(d);
+      },
+      undo: () => {
+        putPixels(target, rect, before);
+        this.touch(d);
+      },
+    });
+    this.touch(d);
+  }
+
   setBrush(b: BrushSettings): void {
     this.brush = b;
     saveJSON(BRUSH_KEY, b);
@@ -185,21 +264,26 @@ export class App {
   clearFrame(): void {
     if (this.live) return;
     const d = this.drawing;
-    const g = d.canvas.getContext('2d');
+    const g = d.line.getContext('2d');
     if (!g) return;
     const full = { x: 0, y: 0, w: this.docW, h: this.docH };
     const before = g.getImageData(0, 0, this.docW, this.docH);
+    const fillCanvas = d.fill;
+    const fg = fillCanvas?.getContext('2d') ?? null;
+    const fillBefore = fg ? fg.getImageData(0, 0, this.docW, this.docH) : null;
     const vectors = d.vectors;
     this.history.push(
       {
         label: 'Clear drawing',
         do: () => {
           g.clearRect(0, 0, this.docW, this.docH);
+          fg?.clearRect(0, 0, this.docW, this.docH);
           d.vectors = [];
           this.touch(d);
         },
         undo: () => {
-          putPixels(d.canvas, full, before);
+          putPixels(d.line, full, before);
+          if (fillCanvas && fillBefore) putPixels(fillCanvas, full, fillBefore);
           d.vectors = vectors;
           this.touch(d);
         },
@@ -389,8 +473,7 @@ export class App {
     const g = c.getContext('2d');
     if (!g) return;
     const d = this.drawing;
-    g.drawImage(d.canvas, 0, 0);
-    for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
+    paintDrawing(g, d);
     const a = document.createElement('a');
     a.download = `2dope-frame${String(this.frame + 1).padStart(3, '0')}.png`;
     a.href = c.toDataURL('image/png');
@@ -427,9 +510,15 @@ export class App {
       this.playing = false;
       this.onFrameChange();
     }
+    if (this.tool === 'fill') {
+      this.fillAt(e);
+      return;
+    }
     const tool = this.tool;
     const drawing = this.drawing;
-    this.raster.bind(drawing.canvas);
+    const plane: Plane = tool === 'pen' ? 'line' : this.plane;
+    const canvas = planeCanvas(drawing, plane);
+    this.raster.bind(canvas);
     const record: StrokeRecord = {
       id: newStrokeId(),
       tool,
@@ -443,6 +532,8 @@ export class App {
     this.live = {
       record,
       drawing,
+      canvas,
+      plane,
       pointerId: e.pointerId,
       t0,
       smoother: new Smoother(record.brush.smoothing, record.brush.pulledString, this.view.zoom),
@@ -505,11 +596,11 @@ export class App {
         this.history.push({
           label: rec.tool === 'eraser' ? 'Erase' : 'Brush stroke',
           do: () => {
-            putPixels(d.canvas, c.rect, c.after);
+            putPixels(live.canvas, c.rect, c.after);
             this.touch(d);
           },
           undo: () => {
-            putPixels(d.canvas, c.rect, c.before);
+            putPixels(live.canvas, c.rect, c.before);
             this.touch(d);
           },
         });
@@ -837,6 +928,12 @@ export class App {
       case 'KeyP':
         this.setTool('pen');
         break;
+      case 'KeyG':
+        this.setTool('fill');
+        break;
+      case 'KeyX':
+        this.togglePlane();
+        break;
       case 'BracketLeft':
         this.resizeBrush(1 / 1.15);
         break;
@@ -924,7 +1021,11 @@ export class App {
     this.drawOnion(g);
     const live = this.live;
     const d = live ? live.drawing : this.drawing;
-    g.drawImage(live && live.record.tool !== 'pen' ? this.raster.displaySource() : d.canvas, 0, 0);
+    const rasterLive = live && live.record.tool !== 'pen' ? live : null;
+    const fillSrc = rasterLive && rasterLive.plane === 'fill' ? this.raster.displaySource() : d.fill;
+    const lineSrc = rasterLive && rasterLive.plane === 'line' ? this.raster.displaySource() : d.line;
+    if (fillSrc) g.drawImage(fillSrc, 0, 0);
+    g.drawImage(lineSrc, 0, 0);
 
     // Predicted input: drawn ahead of the real stroke this frame only (lower perceived latency).
     if (live && live.predicted.length && live.record.brush.smoothing < 0.15) {

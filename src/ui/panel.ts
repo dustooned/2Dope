@@ -150,6 +150,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
     body.append(fs);
   }
 
+  body.prepend(fillEditor(app));
   root.append(head, preview, body);
 
   function drawPreview(): void {
@@ -203,6 +204,32 @@ export function buildPanel(app: App, root: HTMLElement): void {
     };
   })();
   refresh();
+}
+
+function fillEditor(app: App): HTMLElement {
+  const fs = el('fieldset');
+  fs.append(el('legend', {}, 'Fill (G)'));
+  const defs: { prop: 'gap' | 'under' | 'threshold'; label: string; min: number; max: number; step: number; unit: string; hint: string }[] = [
+    { prop: 'gap', label: 'Close gaps', min: 0, max: 24, step: 1, unit: 'px', hint: 'Gaps in the line smaller than this do not leak.' },
+    { prop: 'under', label: 'Under line', min: 0, max: 8, step: 1, unit: 'px', hint: 'How far the fill tucks under the line (no white halo).' },
+    { prop: 'threshold', label: 'Line edge', min: 2, max: 200, step: 1, unit: '', hint: 'Line alpha that counts as line. Lower = soft edges block the fill too.' },
+  ];
+  for (const d of defs) {
+    const row = el('label', { class: 'row', title: d.hint });
+    const input = el('input', { type: 'range', min: String(d.min), max: String(d.max), step: String(d.step) });
+    const out = el('output');
+    input.value = String(app.fillOptions[d.prop]);
+    out.textContent = fmt(app.fillOptions[d.prop], d.step, d.unit);
+    input.addEventListener('input', () => {
+      app.fillOptions[d.prop] = Number(input.value);
+      out.textContent = fmt(app.fillOptions[d.prop], d.step, d.unit);
+      app.fillOptionsChanged();
+    });
+    row.append(el('span', { class: 'name' }, d.label), input, out);
+    fs.append(row);
+  }
+  fs.append(el('p', { class: 'hint' }, 'Reads the Line plane and vector strokes; paints the Fill plane under them. Use the On: Fill switch (X) to paint color by hand.'));
+  return fs;
 }
 
 function tiltEditor(app: App, refreshers: (() => void)[]): HTMLElement {

@@ -26,6 +26,15 @@
 - **Scrub lock** (from Procreate Dreams, behavior only): a home frame; any scrub (strip drag, Shift + arrows) snaps back on release. Home is a frame index, clamped if the timeline shrinks.
 - Onion settings persist per device (localStorage); lock state is session-only for now.
 
+## 2026-10-10: Line + Fill planes and the fill tool (M1 slice 3)
+
+- **Planes:** Drawing = `line` canvas + lazily created `fill` canvas (+ vectors). Display order fill, line, vectors. The fill plane is created on first use (memory). Shade plane deferred.
+- **Fill algorithm** (src/fill/fill.ts, pure, tested): barrier = line alpha >= threshold (soft edges block); distance-to-line BFS gives a closing radius capped by the seed's own distance (clicks next to lines still work); flood fill over open pixels; give back the closing band (bounded steps, restricted to the band); grow under the line only into pixels with alpha > 0. 32 ms on a 1920x1080 ring.
+- **Why it cannot halo or leak:** the fill only ever enters pixels the line covers (alpha > 0), and the line plane draws on top of it.
+- **Known limits:** a gap is only closed on its near side (a few px), so a notch can remain where the line is missing; closing can leave a tiny sliver just past a gap; fills are hard-edged where no line covers the boundary (inside a closed gap). Contiguous region only (no fill-all-enclosed yet); hold-and-slide gesture not built yet.
+- The eraser works on the active plane only (no erase-all-planes modifier yet).
+- Dev-only `window.__2dope` handle for scripted checks.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?
