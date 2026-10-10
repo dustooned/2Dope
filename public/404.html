@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page not found · 2Dope</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #1d1d22;
+        color: #e8e8ee;
+        font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      main { max-width: 440px; text-align: center; }
+      .logo { font-size: 15px; letter-spacing: 0.02em; color: #9a9aa8; margin-bottom: 18px; }
+      .logo b { color: #e8e8ee; }
+      .code { font-size: 72px; font-weight: 700; line-height: 1; color: #ff5a8a; }
+      h1 { margin: 12px 0 6px; font-size: 22px; }
+      p { margin: 0 0 22px; color: #9a9aa8; }
+      a.btn {
+        display: inline-block;
+        min-height: 44px;
+        padding: 10px 18px;
+        border-radius: 8px;
+        background: #ff5a8a;
+        color: #1d1d22;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      a.btn:hover { filter: brightness(1.08); }
+      .sketch { margin: 0 auto 8px; width: 120px; height: 70px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="logo"><b>2Dope</b> pen lab</div>
+      <svg class="sketch" viewBox="0 0 120 70" fill="none" stroke="#9a9aa8" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+        <path d="M10 55 C 30 10, 50 10, 60 35 S 90 60, 110 15" stroke-dasharray="2 7" />
+        <circle cx="110" cy="15" r="6" stroke="#ff5a8a" />
+      </svg>
+      <div class="code">404</div>
+      <h1>That frame is missing</h1>
+      <p>There is nothing at this address. The link may be mistyped, or the page has moved.</p>
+      <a class="btn" id="home" href="/2Dope/">Back to 2Dope</a>
+    </main>
+    <script>
+      // Point the button at the app's own folder, wherever it is hosted (".../2Dope/" on GitHub Pages).
+      (function () {
+        var p = location.pathname;
+        var i = p.indexOf('/2Dope/');
+        document.getElementById('home').href = i >= 0 ? p.slice(0, i + 7) : '/';
+      })();
+    </script>
+  </body>
+</html>

@@ -1,4 +1,7 @@
 import './style.css';
+
+// Tells the page's start-up watchdog (index.html) that the app code loaded.
+(window as unknown as { __2dopeBooted?: boolean }).__2dopeBooted = true;
 import { App } from './app';
 import type { Tool } from './core/stroke';
 import { buildPanel } from './ui/panel';

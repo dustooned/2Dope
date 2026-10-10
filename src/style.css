@@ -1029,3 +1029,14 @@ body.ui-hidden .strip {
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
   }
 }
+
+/* Shown by the start-up watchdog in index.html when the app code did not load */
+.bootfail {
+  margin: 16px;
+  padding: 14px 16px;
+  border: 1px solid #ff5a8a;
+  border-radius: 10px;
+  background: #2a1d24;
+  color: #e8e8ee;
+  font: 15px/1.5 system-ui, sans-serif;
+}
