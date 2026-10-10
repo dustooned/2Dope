@@ -64,6 +64,15 @@
 - Refit uses a timer, not requestAnimationFrame (which pauses in background tabs).
 - Not built yet: new-project flipbook template, phoneme/dialogue columns, sheet columns for sound and camera, X-sheet text export.
 
+## 2026-10-10: PNG sequence export (M1 slice 7)
+
+- **Output is a zip** (browsers cannot write folders, and Safari cannot at all): one folder per pass plus `export.json`. A desktop wrapper can write real folders later with the same code.
+- **Passes are exact because planes are stored separately** (Lines = line plane + vectors, Fills = fill plane, Matte = silhouette). Background only affects Combined so the other passes composite cleanly.
+- **Each distinct drawing is rendered once per pass**; held frames reuse the bytes. The export is modal (project cannot change underneath it); Cancel is clean.
+- **Encoding is parallel** (up to 6 in flight from one scratch canvas, because `toBlob` copies pixels at call time). Background tabs slow each encode to ~1 s in browsers; this keeps a background export usable. The yield between renders uses a message channel because setTimeout is clamped in background tabs.
+- **export.json** is the seed of the Blender manifest (milestone 2).
+- Not built yet: exporting while you keep drawing, video/GIF/WebM/ProRes, in/out range markers, PNG-with-project bundle.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

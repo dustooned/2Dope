@@ -44,6 +44,7 @@
       </div>
       <label class="check"><input id="finger" type="checkbox" /> Finger paints</label>
       <button type="button" data-action="export" title="Export this frame as PNG with alpha">PNG</button>
+      <button type="button" id="export-seq" title="Export the whole shot as PNG sequences with alpha (Lines / Fills / Matte passes)">Export…</button>
       <button type="button" id="enter-quick" title="Quick Animate: just the canvas, a slim strip and the essentials (Tab)">Quick Animate</button>
       <button type="button" data-action="hide" title="Hide interface (Shift+Tab, four-finger tap)">Hide UI</button>
     </header>
@@ -64,6 +65,7 @@
         <div id="tab-xsheet" role="tabpanel" hidden></div>
       </aside>
     </main>
+    <dialog id="export" aria-label="Export"></dialog>
     <div id="quickbar"></div>
     <div id="toasts" class="toasts" aria-live="polite"></div>
     <dialog id="versions" aria-label="Versions">

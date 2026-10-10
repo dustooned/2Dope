@@ -915,3 +915,44 @@ body.ui-hidden .strip {
 .group.mode {
   margin-left: auto;
 }
+
+/* Export dialog */
+
+.xrow {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.xrow .name {
+  color: var(--muted);
+}
+
+.xrow input[type="text"] {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.xpasses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.xprogress {
+  width: 100%;
+  height: 10px;
+  margin-top: 10px;
+  accent-color: var(--accent);
+}
+
+.xsummary {
+  min-height: 2.6em;
+}

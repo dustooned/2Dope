@@ -3,6 +3,7 @@ import { App } from './app';
 import type { Tool } from './core/stroke';
 import { buildPanel } from './ui/panel';
 import { openStore } from './io/persist';
+import { ExportUI } from './ui/exportdialog';
 import { FileUI } from './ui/files';
 import { Quick } from './ui/quick';
 import { Strip } from './ui/strip';
@@ -103,9 +104,11 @@ const strip = new Strip(app, $('#strip'));
 
 // Quick Animate (a lighter view of the same project)
 let files: FileUI | null = null;
+let exporter: ExportUI | null = null;
 const quick = new Quick(app, $('#quickbar'), {
   exportPng: () => app.exportPNG(),
   saveFile: () => void files?.exportProject(),
+  exportSeq: () => exporter?.open(),
 });
 app.onToggleQuick = () => quick.toggle();
 $('#enter-quick').addEventListener('click', () => quick.toggle());
@@ -130,5 +133,8 @@ app.fit();
 const { store, persistent } = await openStore();
 files = new FileUI(app, store, persistent);
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;
+exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
+$('#export-seq').addEventListener('click', () => exporter?.open());
+if (import.meta.env.DEV) (window as unknown as { __export: ExportUI }).__export = exporter;
 await files.offerRecovery();
 if (!persistent) files.toast('Browser storage is unavailable here (private window?), so your work will not survive closing this tab. Use Save to keep a file.');

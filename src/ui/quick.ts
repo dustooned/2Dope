@@ -35,7 +35,7 @@ export class Quick {
   constructor(
     private readonly app: App,
     host: HTMLElement,
-    private readonly actions: { exportPng: () => void; saveFile: () => void },
+    private readonly actions: { exportPng: () => void; saveFile: () => void; exportSeq: () => void },
   ) {
     this.bar = host;
     host.classList.add('quickbar');
@@ -89,6 +89,7 @@ export class Quick {
       btn('Fit view', 'Fit (F)', () => app.fit()),
       btn('Flip view', 'Flip view (H)', () => app.flipView()),
       btn('Export PNG', 'Export this frame as PNG with alpha', () => actions.exportPng()),
+      btn('Export sequence…', 'Export the whole shot as PNG sequences', () => actions.exportSeq()),
       btn('Save .2dope', 'Save a project file', () => actions.saveFile()),
       btn('Exit Quick Animate', 'Back to the full interface (Tab)', () => this.set(false)),
     );

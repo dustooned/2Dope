@@ -34,6 +34,12 @@ npm run dev:lan
 - Brush panel with live preview; settings persist in the browser; "Copy JSON" gives the native brush format.
 - **Tilt shading**: lean the pen and textured brushes (Pencil, Shading Pencil, Charcoal) switch to a broad, soft, grainy side-of-the-lead tip that follows the lean direction.
 
+## M1 slice 7: PNG sequence export (milestone 1 complete)
+
+**Export…** writes the whole shot as PNG sequences with alpha in one zip (see `docs/export-format.md`): pick **Combined / Lines / Fills / Matte** passes, size (100/75/50/25%), background (transparent or white, combined pass), all frames or the selected drawings, and the first file number (e.g. 1001). Progress bar and **Cancel**; held drawings are rendered once. Settings are remembered. **PNG** still saves just the current frame.
+
+**Milestone 1 "done when":** a 5-second hand-drawn shot is drawn, timed and exported with transparency.
+
 ## M1 slice 6: X-sheet and Quick Animate
 
 **X-sheet** (the **X-sheet** tab in the side panel, or **Shift+X**): the same timeline as a numbers grid, one row per frame. The drawing number sits on the frame where it starts; a line runs through the frames it is held; a heavier rule marks each second; a notes column sits on the right.
