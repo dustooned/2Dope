@@ -73,7 +73,7 @@ export interface InputStats {
 export class App {
   readonly docW = 1920;
   readonly docH = 1080;
-  readonly project = new Project(this.docW, this.docH);
+  project = new Project(this.docW, this.docH);
   readonly raster = new RasterEngine(this.docW, this.docH);
   /** Current frame, 0-based. */
   frame = 0;
@@ -86,6 +86,12 @@ export class App {
   scrubbing = false;
   /** Fires when the frame or the timeline changes. */
   onFrameChange: () => void = () => {};
+  /** Fires when the document itself changed (drawing, timeline, fps): autosave listens. */
+  onDocChanged: () => void = () => {};
+  /** Fires right before a destructive edit, while the old state is still intact. */
+  onRisky: (label: string) => void = () => {};
+  /** Fires after a different project replaced the current one. */
+  onProjectLoaded: () => void = () => {};
   readonly history = new History();
   readonly view = new Viewport();
 
@@ -140,6 +146,11 @@ export class App {
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
+  }
+
+  /** True while a stroke is being drawn (autosave waits for it to end). */
+  get strokeActive(): boolean {
+    return this.live !== null;
   }
 
   get viewW(): number {
@@ -263,6 +274,7 @@ export class App {
   /** Clear the current drawing (undoable). */
   clearFrame(): void {
     if (this.live) return;
+    this.onRisky('Before clear drawing');
     const d = this.drawing;
     const g = d.line.getContext('2d');
     if (!g) return;
@@ -292,6 +304,22 @@ export class App {
     );
   }
 
+  /** Replace the whole project (open, restore, new). Clears undo and per-project view state. */
+  loadProject(p: Project): void {
+    if (this.live) this.endStroke(true);
+    this.playing = false;
+    this.scrubbing = false;
+    this.lockFrame = null;
+    this.project = p;
+    this.frame = 0;
+    this.onionCache.clear();
+    this.history.clear();
+    this.requestRender();
+    this.onFrameChange();
+    this.onProjectLoaded();
+    this.onDocChanged();
+  }
+
   // -------------------------------------------------------------------------------------------
   // Frames and playback
 
@@ -304,6 +332,7 @@ export class App {
     d.rev += 1;
     this.requestRender();
     this.onFrameChange();
+    this.onDocChanged();
   }
 
   setFrame(f: number): void {
@@ -379,6 +408,7 @@ export class App {
     this.project.fps = Math.max(1, Math.min(120, Math.round(fps)));
     this.playClock = { t0: performance.now(), f0: this.frame };
     this.onFrameChange();
+    this.onDocChanged();
   }
 
   private tickPlayback(now: number): void {
@@ -406,12 +436,14 @@ export class App {
           this.frame = Math.min(r.frame, this.project.length - 1);
           this.requestRender();
           this.onFrameChange();
+          this.onDocChanged();
         },
         undo: () => {
           this.project.exposures = beforeEx;
           this.frame = Math.min(beforeFrame, this.project.length - 1);
           this.requestRender();
           this.onFrameChange();
+          this.onDocChanged();
         },
       },
       false,
@@ -429,6 +461,7 @@ export class App {
   }
 
   deleteFrame(): void {
+    if (!this.live) this.onRisky('Before delete drawing');
     this.editTimeline('Delete frame', (ex) => {
       const r = removeAt(ex, this.frame);
       if (r.ex.length > 0) return r;

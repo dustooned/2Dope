@@ -9,6 +9,16 @@
   <body>
     <header class="topbar">
       <strong class="logo">2Dope <span>pen lab · M0</span></strong>
+      <div class="group file" role="group" aria-label="Project">
+        <input id="pname" type="text" placeholder="Untitled" maxlength="60" aria-label="Project name" />
+        <button type="button" data-file="save" title="Save a .2dope file (a backup you keep)">Save</button>
+        <button type="button" data-file="open" title="Open a .2dope file">Open</button>
+        <button type="button" data-file="new" title="New project (the current one is kept under Versions)">New</button>
+        <button type="button" data-file="versions" title="Restore points">Versions</button>
+        <span id="savestatus" class="readout" role="status"></span>
+        <span id="storage" class="readout"></span>
+        <input id="openfile" type="file" accept=".2dope,.zip,.json,application/zip,application/json" hidden />
+      </div>
       <div class="group" role="group" aria-label="Tools">
         <button type="button" data-tool="brush" title="Brush (B)">Brush</button>
         <button type="button" data-tool="eraser" title="Eraser (E)">Eraser</button>
@@ -46,6 +56,19 @@
       </div>
       <aside id="panel" class="panel" aria-label="Brush settings"></aside>
     </main>
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <dialog id="versions" aria-label="Versions">
+      <h2>Versions</h2>
+      <div class="vsave">
+        <input type="text" data-v="name" placeholder="Name this version…" maxlength="80" />
+        <button type="button" data-v="save">Save version</button>
+      </div>
+      <div data-v="list" class="vlist"></div>
+      <div class="vfoot">
+        <button type="button" data-v="json" title="project.json only, without images: for scripts, diffing and version control">Export JSON only</button>
+        <button type="button" data-v="close">Close</button>
+      </div>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

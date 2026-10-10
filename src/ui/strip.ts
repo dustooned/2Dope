@@ -136,6 +136,13 @@ export class Strip {
     this.update();
   }
 
+  /** Forget cached thumbnails and layout (a different project was loaded). */
+  reset(): void {
+    this.thumbs.clear();
+    this.signature = '';
+    this.update();
+  }
+
   /** Call when the frame or the timeline changes. Rebuilds blocks only when needed. */
   update(): void {
     const app = this.app;

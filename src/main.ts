@@ -2,6 +2,8 @@ import './style.css';
 import { App } from './app';
 import type { Tool } from './core/stroke';
 import { buildPanel } from './ui/panel';
+import { openStore } from './io/persist';
+import { FileUI } from './ui/files';
 import { Strip } from './ui/strip';
 
 const $ = <T extends HTMLElement>(sel: string) => {
@@ -67,5 +69,13 @@ buildPanel(app, $('#panel'));
 
 const strip = new Strip(app, $('#strip'));
 app.onFrameChange = () => strip.update();
+app.onProjectLoaded = () => strip.reset();
 // The strip takes height from the stage, so fit again now that the layout is final.
 app.fit();
+
+// Local autosave, versions, recovery. If browser storage is unavailable we still run (memory only).
+const { store, persistent } = await openStore();
+const files = new FileUI(app, store, persistent);
+if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;
+await files.offerRecovery();
+if (!persistent) files.toast('Browser storage is unavailable here (private window?), so your work will not survive closing this tab. Use Save to keep a file.');

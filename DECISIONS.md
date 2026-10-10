@@ -35,6 +35,16 @@
 - The eraser works on the active plane only (no erase-all-planes modifier yet).
 - Dev-only `window.__2dope` handle for scripted checks.
 
+## 2026-10-10: Autosave, recovery, versions, project file (M1 slice 4)
+
+- **File = zip of project.json + content-addressed PNG assets** (docs/project-format.md). Content addressing (hash of the PNG bytes) gives free de-duplication, immutable assets, and lets autosave and versions share storage with no per-version copy. A unique hash also avoids the trap of reusing counters (`rev`) across sessions.
+- **Own tiny zip reader/writer** (no dependency): STORE on write, STORE+DEFLATE on read, checksums, size caps, zip-slip rejection. Deterministic output.
+- **Crash safety:** write new assets first, then the project record that points to them; one write at a time on a queue; a failed save keeps the previous good save and reports the error.
+- **Capture is synchronous, encoding is async** (`toBlob` snapshots pixels at call time). That is what makes "save a version right before Clear" exact while the UI keeps going.
+- **Schema rules:** additive = no bump; breaking = bump + migrate; newer files refused. Everything validated on load; project.json is read back and validated before every write.
+- **PNG round trip is lossless in alpha; RGB can differ by 1 on a few near-transparent pixels** (canvas stores premultiplied alpha). It stabilizes after the first save, so it does not accumulate. Tests compare with tolerance 1 and exact alpha.
+- **Not yet:** a stroke being drawn when the tab dies is lost (the last finished stroke is saved); raster strokes are still pixels, not data; recent-projects list / multiple projects in browser storage (one autosave slot for now); only layer 1 opens.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

@@ -44,17 +44,33 @@ export function planeCanvas(d: Drawing, plane: Plane): HTMLCanvasElement {
  * Drawings are never deleted from the map while undo may still need them.
  */
 export class Project {
+  name = 'Untitled';
+  created = new Date().toISOString();
   fps = 12;
   exposures: Exposure[];
   readonly drawings = new Map<string, Drawing>();
   private nextNum = 1;
 
+  /** `blank = false` makes an empty shell for the loader to fill (no first drawing). */
   constructor(
     readonly width: number,
     readonly height: number,
+    blank = true,
   ) {
-    const d = this.newDrawing();
-    this.exposures = [{ drawing: d.id, length: 1 }];
+    if (blank) {
+      const d = this.newDrawing();
+      this.exposures = [{ drawing: d.id, length: 1 }];
+    } else {
+      this.exposures = [];
+    }
+  }
+
+  /** Add a drawing with a known id (used when loading a file). */
+  adopt(id: string, num: number, vectors: StrokeRecord[]): Drawing {
+    const d: Drawing = { id, num, line: makeCanvas(this.width, this.height), fill: null, vectors, rev: 0 };
+    this.drawings.set(id, d);
+    this.nextNum = Math.max(this.nextNum, num + 1);
+    return d;
   }
 
   get length(): number {

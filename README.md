@@ -34,6 +34,14 @@ npm run dev:lan
 - Brush panel with live preview; settings persist in the browser; "Copy JSON" gives the native brush format.
 - **Tilt shading**: lean the pen and textured brushes (Pencil, Shading Pencil, Charcoal) switch to a broad, soft, grainy side-of-the-lead tip that follows the lean direction.
 
+## M1 slice 4: autosave, recovery, versions, files
+
+- **Autosave** to the browser (IndexedDB) about a second after every change (never mid-stroke). The status next to the project name shows Saved / Saving / Unsaved / error, and the storage meter shows how much space is used and whether the browser has promised not to clear it.
+- **Recovery:** after a crash or a closed tab, the next start offers **Restore** (pixel-for-pixel) or **Start fresh** (the old session is kept under Versions).
+- **Versions:** an automatic restore point every 10 minutes while you work (last 10 kept), before **Clear** and **Delete drawing**, and before opening, restoring or starting a new project. **Versions** also lets you save your own named ones (never auto-deleted).
+- **Save / Open:** **Save** downloads a `.2dope` file (a zip you can keep; see `docs/project-format.md`). **Open** loads one. **Export JSON only** (in Versions) writes just `project.json` for scripts and diffing.
+- **Backup reminder** after 30 minutes of work without a saved file, and a warning if 2Dope is open in two tabs (they would overwrite each other).
+
 ## M1 slice 3: line + fill planes, fill tool
 
 - Every drawing has a **Line** plane (linework, on top) and a **Fill** plane (flat color, always under). The **On: Line | Fill** switch (or **X**) picks where brushes and the eraser write.

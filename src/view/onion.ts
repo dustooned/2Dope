@@ -44,6 +44,10 @@ export class OnionCache {
     private readonly h: number,
   ) {}
 
+  clear(): void {
+    this.map.clear();
+  }
+
   ghost(d: Drawing, color: string | null): HTMLCanvasElement {
     const key = `${d.id}|${d.rev}|${color ?? '-'}`;
     const hit = this.map.get(key);

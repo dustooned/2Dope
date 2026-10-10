@@ -42,6 +42,13 @@ export class History {
     return cmd;
   }
 
+  /** Forget all undo/redo (used when a different project is loaded). */
+  clear(): void {
+    this.done = [];
+    this.undone = [];
+    this.onChange();
+  }
+
   get canUndo(): boolean {
     return this.done.length > 0;
   }
