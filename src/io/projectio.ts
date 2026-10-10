@@ -62,6 +62,7 @@ export function captureProject(project: Project, cache: PlaneCache | null): Capt
       num: d.num,
       rev: d.rev,
       vectors: [...d.vectors],
+      role: d.role,
       line: job('line'),
       fill: job('fill'),
       drawing: d,
@@ -85,7 +86,7 @@ export function captureProject(project: Project, cache: PlaneCache | null): Capt
       for (const p of planes) {
         const line = await keyOf(p.line);
         const fill = await keyOf(p.fill);
-        drawings[p.id] = { num: p.num, line, fill, vectors: p.vectors };
+        drawings[p.id] = { num: p.num, line, fill, vectors: p.vectors, ...(p.role ? { role: p.role } : {}) };
         keys.push({ d: p.drawing, rev: p.rev, line, fill });
       }
       const file: ProjectFile = {
@@ -129,7 +130,7 @@ export async function loadProjectFile(file: ProjectFile, getAsset: (path: string
   const used = [...new Set(layer.exposures.map((e) => e.drawing))];
   for (const id of used) {
     const f = file.drawings[id]!;
-    const d = project.adopt(id, f.num, f.vectors);
+    const d = project.adopt(id, f.num, f.vectors, f.role ?? null);
     for (const plane of ['line', 'fill'] as const) {
       const path = f[plane];
       if (!path) continue;

@@ -45,6 +45,15 @@
 - **PNG round trip is lossless in alpha; RGB can differ by 1 on a few near-transparent pixels** (canvas stores premultiplied alpha). It stabilizes after the first save, so it does not accumulate. Tests compare with tolerance 1 and exact alpha.
 - **Not yet:** a stroke being drawn when the tab dies is lost (the last finished stroke is saved); raster strokes are still pixels, not data; recent-projects list / multiple projects in browser storage (one autosave slot for now); only layer 1 opens.
 
+## 2026-10-10: Timeline, exposure and roles (M1 slice 5)
+
+- **Drags preview live without touching history and commit as ONE command** (before/after exposure arrays), so a whole drag is one undo step and a cancelled drag leaves no trace.
+- **Selection is by exposure index** and is cleared by edits that shift indices (add, delete, move, undo/redo of those) but kept by exposure/hold changes, which do not.
+- **Exposure = set every selected hold to N** (never deletes a drawing). Setting back to 1s restores 1 each; per-drawing original lengths are not remembered (simple, predictable).
+- **Roles (key/breakdown/inbetween) are an optional per-drawing field**, saved in project.json without a schema bump (additive; unknown values ignored). Onion "keys only" uses it.
+- **Keys 1-4 now set exposure** (as in the original spec); 100% zoom moved to Shift+1.
+- Not built yet: in/out markers and loop range, ripple modifier, frame-range (sub-block) marquee, moving several blocks at once, per-layer frame-rate override.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

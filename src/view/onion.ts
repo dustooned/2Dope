@@ -16,6 +16,8 @@ export interface OnionSettings {
   afterColor: string;
   /** Keep onion skins visible while scrubbing or playing. */
   whileScrubbing: boolean;
+  /** Only ghost drawings marked as key poses. */
+  keysOnly: boolean;
 }
 
 export const DEFAULT_ONION: OnionSettings = {
@@ -28,6 +30,7 @@ export const DEFAULT_ONION: OnionSettings = {
   beforeColor: '#2f7bff',
   afterColor: '#ff3b5c',
   whileScrubbing: true,
+  keysOnly: false,
 };
 
 const MAX_CACHE = 8;

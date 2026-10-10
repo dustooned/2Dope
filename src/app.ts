@@ -4,9 +4,9 @@ import { newSeed } from './core/rng';
 import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type Tool } from './core/stroke';
 import { DabWalker } from './brush/dabs';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
-import { paintDrawing, planeCanvas, Project, type Drawing, type Plane } from './core/project';
+import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
-import { addAfter, changeHold, duplicateAt, neighborDrawings, nextDrawing, prevDrawing, removeAt, type Edit, type Exposure } from './core/timeline';
+import { addAfter, adjustHolds, duplicateAt, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, removeIndices, setHolds, totalFrames, type Edit, type Exposure } from './core/timeline';
 import { Smoother } from './brush/smoothing';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
@@ -78,6 +78,8 @@ export class App {
   /** Current frame, 0-based. */
   frame = 0;
   playing = false;
+  /** Selected exposures (indices into the timeline); empty means "the current drawing". */
+  selection: number[] = [];
   /** Onion skin settings (saved per device). */
   onion: OnionSettings = { ...DEFAULT_ONION, ...(loadJSON<Partial<OnionSettings>>(ONION_KEY) ?? {}) };
   /** Scrub lock: the home frame to snap back to after flipping, or null. */
@@ -311,6 +313,7 @@ export class App {
     this.scrubbing = false;
     this.lockFrame = null;
     this.project = p;
+    this.selection = [];
     this.frame = 0;
     this.onionCache.clear();
     this.history.clear();
@@ -422,7 +425,7 @@ export class App {
   }
 
   /** Run a timeline edit as an undoable command. */
-  private editTimeline(label: string, fn: (ex: Exposure[]) => Edit): void {
+  private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, keepSelection = false): void {
     if (this.live) return;
     const beforeEx = this.project.exposures;
     const beforeFrame = this.frame;
@@ -432,6 +435,7 @@ export class App {
       {
         label,
         do: () => {
+          if (!keepSelection) this.selection = [];
           this.project.exposures = r.ex;
           this.frame = Math.min(r.frame, this.project.length - 1);
           this.requestRender();
@@ -439,6 +443,7 @@ export class App {
           this.onDocChanged();
         },
         undo: () => {
+          if (!keepSelection) this.selection = [];
           this.project.exposures = beforeEx;
           this.frame = Math.min(beforeFrame, this.project.length - 1);
           this.requestRender();
@@ -460,18 +465,83 @@ export class App {
     this.editTimeline('Duplicate frame', (ex) => duplicateAt(ex, this.frame, d.id));
   }
 
+  /** Selected exposures, or the current drawing's when nothing is selected. */
+  get targets(): number[] {
+    const n = this.project.exposures.length;
+    const sel = this.selection.filter((i) => i >= 0 && i < n);
+    if (sel.length) return sel;
+    const l = locate(this.project.exposures, this.frame);
+    return l ? [l.index] : [];
+  }
+
+  setSelection(indices: number[]): void {
+    const n = this.project.exposures.length;
+    this.selection = [...new Set(indices)].filter((i) => i >= 0 && i < n).sort((a, b) => a - b);
+    this.onFrameChange();
+  }
+
+  selectAll(): void {
+    this.setSelection(this.project.exposures.map((_, i) => i));
+  }
+
   deleteFrame(): void {
     if (!this.live) this.onRisky('Before delete drawing');
-    this.editTimeline('Delete frame', (ex) => {
-      const r = removeAt(ex, this.frame);
-      if (r.ex.length > 0) return r;
+    const picked = this.selection.length ? [...this.selection] : null;
+    this.editTimeline(picked ? 'Delete drawings' : 'Delete frame', (ex) => {
+      const r = picked ? { ex: removeIndices(ex, picked), frame: this.frame } : removeAt(ex, this.frame);
+      if (r.ex.length > 0) return { ex: r.ex, frame: Math.min(r.frame, totalFrames(r.ex) - 1) };
       // Never leave the layer empty: replace the last drawing with a blank one.
       return { ex: [{ drawing: this.project.newDrawing().id, length: 1 }], frame: 0 };
     });
   }
 
+  /** Make each selected drawing last N frames (1s, 2s, 3s...). Never deletes a drawing. */
+  setExposure(n: number): void {
+    this.editTimeline(n === 1 ? 'Exposure on ones' : `Exposure on ${n}s`, (ex) => ({ ex: setHolds(ex, this.targets, n), frame: this.frame }), true);
+  }
+
   changeHold(delta: number): void {
-    this.editTimeline(delta > 0 ? 'Longer hold' : 'Shorter hold', (ex) => changeHold(ex, this.frame, delta));
+    this.editTimeline(delta > 0 ? 'Longer hold' : 'Shorter hold', (ex) => ({ ex: adjustHolds(ex, this.targets, delta), frame: this.frame }), true);
+  }
+
+  /** Mark the selected (or current) drawings as key / breakdown / inbetween; marking again clears it. */
+  setRole(role: Role): void {
+    if (this.live) return;
+    const ids = [...new Set(this.targets.map((i) => this.project.exposures[i]!.drawing))];
+    const ds = ids.map((id) => this.project.drawing(id));
+    if (!ds.length) return;
+    const next: Role | null = ds.every((d) => d.role === role) ? null : role;
+    const before = ds.map((d) => d.role);
+    const apply = (roles: (Role | null)[]) => {
+      ds.forEach((d, i) => (d.role = roles[i] ?? null));
+      this.requestRender();
+      this.onFrameChange();
+      this.onDocChanged();
+    };
+    this.history.push({ label: next ? `Mark as ${next}` : 'Clear mark', do: () => apply(ds.map(() => next)), undo: () => apply(before) }, false);
+  }
+
+  /** While dragging on the timeline: show the new order/holds without recording history yet. */
+  previewExposures(ex: Exposure[]): void {
+    this.project.exposures = ex;
+    this.frame = Math.min(this.frame, this.project.length - 1);
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** At the end of a drag: record it as one undoable step (before = the exposures when the drag began). */
+  commitExposures(label: string, before: Exposure[], after: Exposure[]): void {
+    if (after === before) return;
+    const set = (ex: Exposure[]) => {
+      this.selection = [];
+      this.project.exposures = ex;
+      this.frame = Math.min(this.frame, this.project.length - 1);
+      this.requestRender();
+      this.onFrameChange();
+      this.onDocChanged();
+    };
+    this.history.push({ label, do: () => set(after), undo: () => set(before) }, true);
+    this.onDocChanged();
   }
 
   fit(): void {
@@ -899,6 +969,11 @@ export class App {
       this.redo();
       return;
     }
+    if (mod && e.code === 'KeyA') {
+      e.preventDefault();
+      this.selectAll();
+      return;
+    }
     if (mod) return;
     if (['Space', 'KeyR', 'KeyZ'].includes(e.code)) {
       if (e.code === 'Space') {
@@ -977,7 +1052,18 @@ export class App {
         this.fit();
         break;
       case 'Digit1':
-        this.actualSize();
+        // 1 / 2 / 3 / 4 set the exposure of the selected drawings; Shift+1 is 100% zoom.
+        if (e.shiftKey) this.actualSize();
+        else this.setExposure(1);
+        break;
+      case 'Digit2':
+        this.setExposure(2);
+        break;
+      case 'Digit3':
+        this.setExposure(3);
+        break;
+      case 'Digit4':
+        this.setExposure(4);
         break;
       case 'Digit0':
         this.resetRotation();
@@ -1084,7 +1170,8 @@ export class App {
   private drawOnion(g: CanvasRenderingContext2D): void {
     const o = this.onion;
     if (!o.enabled || this.playing || (this.scrubbing && !o.whileScrubbing)) return;
-    const n = neighborDrawings(this.project.exposures, this.frame, o.before, o.after);
+    const keys = o.keysOnly ? (id: string) => this.project.drawing(id).role === 'key' : undefined;
+    const n = neighborDrawings(this.project.exposures, this.frame, o.before, o.after, keys);
     const draw = (list: typeof n.before, color: string) => {
       for (const nb of list) {
         const d = this.project.drawing(nb.drawing);

@@ -1,10 +1,16 @@
 import type { App } from '../app';
-import { FPS_PRESETS, paintDrawing, type Drawing } from '../core/project';
-import { locate, startOf } from '../core/timeline';
+import { FPS_PRESETS, paintDrawing, ROLES, type Drawing, type Role } from '../core/project';
+import { commonHold, dropIndex, indicesInFrames, locate, moveExposure, setHolds, startOf, type Exposure } from '../core/timeline';
 
-const CELL = 64;
 const THUMB_W = 56;
 const THUMB_H = 32;
+const RULER_H = 18;
+const HANDLE_W = 9;
+const DRAG_THRESHOLD = 4;
+const ZOOM_KEY = '2dope.m1.cell';
+
+const ROLE_LETTER: Record<Role, string> = { key: 'K', breakdown: 'B', inbetween: 'I' };
+const ROLE_NAME: Record<Role, string> = { key: 'Key', breakdown: 'Breakdown', inbetween: 'Inbetween' };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -13,26 +19,53 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
   return e;
 }
 
+function loadCell(): number {
+  try {
+    const n = Number(localStorage.getItem(ZOOM_KEY));
+    if (n >= 20 && n <= 120) return n;
+  } catch {
+    // storage unavailable: use the default
+  }
+  return 64;
+}
+
+type Drag =
+  | { kind: 'scrub' }
+  | { kind: 'resize'; index: number; before: Exposure[]; startX: number; moved: boolean }
+  | { kind: 'move'; index: number; before: Exposure[]; startX: number; moved: boolean; shift: boolean }
+  | { kind: 'marquee'; x0: number; y0: number; base: number[]; moved: boolean };
+
 /**
- * The flipbook strip: one block per drawing, stretched over its hold, with a thumbnail and its
- * drawing number. Click or drag to scrub. Holds show as a line through the extra frames.
+ * The timeline strip. One block per drawing, as wide as its hold.
+ * - Drag a block's right edge to change its hold (all selected blocks follow).
+ * - Drag a block to reorder it. Click selects; Shift+click adds; drag on empty space to marquee-select.
+ * - Drag on the ruler to scrub.
+ * - Exposure buttons (1s 2s 3s 4s or a number) re-space the selected drawings without deleting any.
+ * - K / B / I mark drawings as key, breakdown or inbetween.
  */
 export class Strip {
   private readonly track: HTMLElement;
   private readonly inner: HTMLElement;
   private readonly playhead: HTMLElement;
+  private readonly marquee: HTMLElement;
   private readonly frameLabel: HTMLElement;
-  private readonly holdLabel: HTMLElement;
+  private readonly expLabel: HTMLElement;
+  private readonly expInput: HTMLInputElement;
   private readonly playBtn: HTMLButtonElement;
   private readonly fpsSel: HTMLSelectElement;
   private readonly onionBtn: HTMLButtonElement;
+  private readonly keysBtn: HTMLButtonElement;
   private readonly lockBtn: HTMLButtonElement;
   private readonly beforeSel: HTMLSelectElement;
   private readonly afterSel: HTMLSelectElement;
   private readonly opacityRange: HTMLInputElement;
+  private readonly zoomRange: HTMLInputElement;
   private readonly lockMark: HTMLElement;
+  private readonly roleBtns = new Map<Role, HTMLButtonElement>();
   private readonly thumbs = new Map<string, { rev: number; canvas: HTMLCanvasElement }>();
   private signature = '';
+  private cell = loadCell();
+  private drag: Drag | null = null;
 
   constructor(
     private readonly app: App,
@@ -49,7 +82,6 @@ export class Strip {
     this.fpsSel = el('select', { 'aria-label': 'Frames per second', title: 'Frames per second' });
     for (const f of FPS_PRESETS) this.fpsSel.append(el('option', { value: String(f) }, `${f} fps`));
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
-    this.holdLabel = el('span', { class: 'readout hold-readout', title: 'Frames this drawing is held' });
 
     const nav = el('div', { class: 'group' });
     nav.append(
@@ -59,19 +91,39 @@ export class Strip {
       btn('▶', 'Next frame (→)', () => app.nextFrame()),
       btn('⏭', 'Next drawing (↑)', () => app.nextDrawing()),
     );
+
     const edit = el('div', { class: 'group' });
     edit.append(
       btn('+ Frame', 'New drawing after this frame (N)', () => app.addFrame()),
       btn('Duplicate', 'Duplicate drawing (D)', () => app.duplicateFrame()),
-      btn('Delete', 'Delete drawing and its hold (Delete)', () => app.deleteFrame()),
+      btn('Delete', 'Delete the selected drawings, or this one (Delete)', () => app.deleteFrame()),
     );
-    const hold = el('div', { class: 'group' });
-    hold.append(
-      el('span', { class: 'name' }, 'Hold'),
-      btn('−', 'Shorter hold (−)', () => app.changeHold(-1)),
-      this.holdLabel,
-      btn('+', 'Longer hold (=)', () => app.changeHold(1)),
-    );
+
+    // Exposure: how many frames each selected drawing is held (on ones, twos, threes...).
+    const exposure = el('div', { class: 'group', role: 'group', 'aria-label': 'Exposure' });
+    exposure.append(el('span', { class: 'name' }, 'Exposure'));
+    for (const n of [1, 2, 3, 4]) exposure.append(btn(`${n}s`, `Hold the selected drawings for ${n} frame${n > 1 ? 's' : ''} each (${n})`, () => app.setExposure(n)));
+    this.expInput = el('input', { type: 'number', min: '1', max: '99', step: '1', 'aria-label': 'Exposure in frames', title: 'Type a number of frames and press Enter', class: 'exp-input' });
+    this.expInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.stopPropagation();
+      const n = Math.round(Number(this.expInput.value));
+      if (n >= 1 && n <= 99) app.setExposure(n);
+      this.expInput.blur();
+    });
+    this.expInput.addEventListener('keyup', (e) => e.stopPropagation());
+    this.expLabel = el('span', { class: 'readout exp-readout', title: 'Exposure of the selected drawings (or the current one)' });
+    exposure.append(this.expInput, this.expLabel, btn('−', 'One frame shorter (−)', () => app.changeHold(-1)), btn('+', 'One frame longer (=)', () => app.changeHold(1)));
+
+    // Roles: what each drawing is for.
+    const roles = el('div', { class: 'group', role: 'group', 'aria-label': 'Drawing role' });
+    roles.append(el('span', { class: 'name' }, 'Mark'));
+    for (const r of ROLES) {
+      const b = btn(ROLE_LETTER[r], `${ROLE_NAME[r]}: mark the selected drawings as a ${r} (click again to clear)`, () => app.setRole(r), `role role-${r}`);
+      this.roleBtns.set(r, b);
+      roles.append(b);
+    }
+
     const onion = el('div', { class: 'group' });
     this.onionBtn = btn('Onion', 'Onion skin on/off (O)', () => app.toggleOnion());
     const count = (label: string, title: string, get: () => number, set: (n: number) => void) => {
@@ -95,46 +147,160 @@ export class Strip {
       app.onionChanged();
     });
     onion.append(this.opacityRange);
-    this.lockBtn = btn('Lock', 'Scrub lock (L): mark this frame as home. Drag the strip or hold Shift + arrows to flip; it snaps back when you let go.', () => app.toggleLock());
+    this.keysBtn = btn('Keys only', 'Onion skin shows only drawings marked as keys', () => {
+      app.onion.keysOnly = !app.onion.keysOnly;
+      app.onionChanged();
+    });
+    onion.append(this.keysBtn);
+    this.lockBtn = btn('Lock', 'Scrub lock (L): mark this frame as home. Drag the ruler or hold Shift + arrows to flip; it snaps back when you let go.', () => app.toggleLock());
     onion.append(this.lockBtn);
-    bar.append(nav, this.frameLabel, this.fpsSel, edit, hold, onion);
 
-    this.track = el('div', { class: 'strip-track', role: 'slider', 'aria-label': 'Frames', tabindex: '0' });
+    const zoom = el('div', { class: 'group' });
+    this.zoomRange = el('input', { type: 'range', min: '20', max: '120', step: '2', 'aria-label': 'Timeline zoom', title: 'Timeline zoom', class: 'onion-opacity' });
+    this.zoomRange.value = String(this.cell);
+    this.zoomRange.addEventListener('input', () => {
+      this.cell = Number(this.zoomRange.value);
+      try {
+        localStorage.setItem(ZOOM_KEY, String(this.cell));
+      } catch {
+        // not persisted: fine
+      }
+      this.signature = '';
+      this.update();
+    });
+    zoom.append(el('span', { class: 'name' }, 'Zoom'), this.zoomRange);
+
+    bar.append(nav, this.frameLabel, this.fpsSel, edit, exposure, roles, onion, zoom);
+
+    this.track = el('div', { class: 'strip-track', role: 'region', 'aria-label': 'Timeline', tabindex: '0' });
     this.inner = el('div', { class: 'strip-inner' });
     this.playhead = el('div', { class: 'strip-playhead' });
+    this.marquee = el('div', { class: 'strip-marquee' });
     this.lockMark = el('div', { class: 'strip-lock', title: 'Scrub lock home frame' }, '⌂');
     this.track.append(this.inner);
     root.append(bar, this.track);
 
-    let scrubbing = false;
-    const frameAt = (e: PointerEvent) => {
-      const r = this.inner.getBoundingClientRect();
-      return Math.floor((e.clientX - r.left) / CELL);
-    };
+    this.bindPointer();
+    this.update();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Pointer interaction
+
+  private local(e: PointerEvent): { x: number; y: number } {
+    const r = this.inner.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  private frameAtX(x: number): number {
+    return Math.max(0, Math.min(Math.floor(x / this.cell), this.app.project.length - 1));
+  }
+
+  private bindPointer(): void {
+    const app = this.app;
     this.track.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
-      scrubbing = true;
+      const target = e.target as HTMLElement;
+      const p = this.local(e);
       try {
         this.track.setPointerCapture(e.pointerId);
       } catch {
-        // ignore
+        // capture can fail for stale pointers; dragging still works while over the strip
       }
-      app.beginScrub();
-      app.setFrame(Math.min(frameAt(e), app.project.length - 1));
+      const blockEl = target.closest<HTMLElement>('.block');
+      if (blockEl) {
+        const index = Number(blockEl.dataset.index);
+        const before = app.project.exposures;
+        if (target.classList.contains('handle')) {
+          this.drag = { kind: 'resize', index, before, startX: p.x, moved: false };
+          // dragging the edge of an unselected block acts on that block only
+          if (!app.selection.includes(index)) app.setSelection([index]);
+        } else {
+          this.drag = { kind: 'move', index, before, startX: p.x, moved: false, shift: e.shiftKey };
+        }
+        return;
+      }
+      if (p.y < RULER_H) {
+        this.drag = { kind: 'scrub' };
+        app.beginScrub();
+        app.setFrame(this.frameAtX(p.x));
+        return;
+      }
+      this.drag = { kind: 'marquee', x0: p.x, y0: p.y, base: e.shiftKey ? [...app.selection] : [], moved: false };
     });
-    this.track.addEventListener('pointermove', (e) => {
-      if (scrubbing) app.setFrame(Math.max(0, Math.min(frameAt(e), app.project.length - 1)));
-    });
-    const stop = () => {
-      if (!scrubbing) return;
-      scrubbing = false;
-      app.endScrub();
-    };
-    this.track.addEventListener('pointerup', stop);
-    this.track.addEventListener('pointercancel', stop);
 
-    this.update();
+    this.track.addEventListener('pointermove', (e) => {
+      const d = this.drag;
+      if (!d) return;
+      const p = this.local(e);
+      if (d.kind === 'scrub') {
+        app.setFrame(this.frameAtX(p.x));
+      } else if (d.kind === 'resize') {
+        if (Math.abs(p.x - d.startX) > 1) d.moved = true;
+        const startFrame = startOf(d.before, d.index);
+        const length = Math.max(1, Math.round(p.x / this.cell - startFrame));
+        const group = app.selection.includes(d.index) ? app.selection : [d.index];
+        app.previewExposures(setHolds(d.before, group, length));
+      } else if (d.kind === 'move') {
+        if (!d.moved && Math.abs(p.x - d.startX) < DRAG_THRESHOLD) return;
+        d.moved = true;
+        const to = dropIndex(d.before, d.index, p.x / this.cell);
+        app.previewExposures(moveExposure(d.before, d.index, to));
+      } else if (d.kind === 'marquee') {
+        if (!d.moved && Math.hypot(p.x - d.x0, p.y - d.y0) < DRAG_THRESHOLD) return;
+        d.moved = true;
+        const left = Math.min(p.x, d.x0);
+        const top = Math.min(p.y, d.y0);
+        Object.assign(this.marquee.style, { display: 'block', left: `${left}px`, top: `${top}px`, width: `${Math.abs(p.x - d.x0)}px`, height: `${Math.abs(p.y - d.y0)}px` });
+        const f0 = Math.floor(Math.min(p.x, d.x0) / this.cell);
+        const f1 = Math.floor(Math.max(p.x, d.x0) / this.cell);
+        app.setSelection([...d.base, ...indicesInFrames(app.project.exposures, f0, f1)]);
+      }
+    });
+
+    const finish = (e: PointerEvent, cancelled: boolean) => {
+      const d = this.drag;
+      this.drag = null;
+      this.marquee.style.display = 'none';
+      if (!d) return;
+      const p = this.local(e);
+      if (d.kind === 'scrub') {
+        app.endScrub();
+      } else if (d.kind === 'resize') {
+        if (cancelled) app.previewExposures(d.before);
+        else app.commitExposures('Change hold', d.before, app.project.exposures);
+      } else if (d.kind === 'move') {
+        if (cancelled) {
+          app.previewExposures(d.before);
+        } else if (d.moved) {
+          app.commitExposures('Move drawing', d.before, app.project.exposures);
+          const at = app.project.exposures.findIndex((x) => x === d.before[d.index]);
+          app.setSelection(at >= 0 ? [at] : []);
+        } else {
+          // a click: select (Shift toggles) and jump to the clicked frame
+          const sel = new Set(app.selection);
+          if (d.shift) {
+            if (sel.has(d.index)) sel.delete(d.index);
+            else sel.add(d.index);
+            app.setSelection([...sel]);
+          } else {
+            app.setSelection([d.index]);
+          }
+          const start = startOf(app.project.exposures, d.index);
+          const len = app.project.exposures[d.index]!.length;
+          app.setFrame(Math.max(start, Math.min(start + len - 1, Math.floor(p.x / this.cell))));
+        }
+      } else if (d.kind === 'marquee' && !d.moved && !cancelled) {
+        // a click on empty space: clear the selection and move the playhead
+        if (!d.base.length) app.setSelection([]);
+        app.setFrame(this.frameAtX(p.x));
+      }
+    };
+    this.track.addEventListener('pointerup', (e) => finish(e, false));
+    this.track.addEventListener('pointercancel', (e) => finish(e, true));
   }
+
+  // -------------------------------------------------------------------------------------------
 
   /** Forget cached thumbnails and layout (a different project was loaded). */
   reset(): void {
@@ -143,31 +309,42 @@ export class Strip {
     this.update();
   }
 
-  /** Call when the frame or the timeline changes. Rebuilds blocks only when needed. */
+  /** Call when the frame, selection or timeline changes. Rebuilds blocks only when needed. */
   update(): void {
     const app = this.app;
     const p = app.project;
-    const sig = p.exposures.map((e) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).rev}`).join('|');
+    const sel = new Set(app.selection);
+    const sig = `${this.cell}#` + p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).rev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
     if (sig !== this.signature) {
       this.signature = sig;
       this.rebuild();
     }
-    const total = p.length;
-    this.frameLabel.textContent = `${app.frame + 1} / ${total}`;
+    const cell = this.cell;
+    this.frameLabel.textContent = `${app.frame + 1} / ${p.length}`;
     const l = locate(p.exposures, app.frame);
-    this.holdLabel.textContent = l ? String(p.exposures[l.index]!.length) : '-';
+    const targets = app.targets;
+    const common = commonHold(p.exposures, targets);
+    this.expLabel.textContent = targets.length === 0 ? '-' : common === null ? 'mixed' : `${common}`;
+    this.expLabel.title = `${targets.length} drawing${targets.length === 1 ? '' : 's'} ${app.selection.length ? 'selected' : '(current)'}`;
     this.playBtn.textContent = app.playing ? 'Pause' : 'Play';
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(p.fps);
-    this.playhead.style.transform = `translateX(${app.frame * CELL}px)`;
+    this.playhead.style.width = `${cell}px`;
+    this.playhead.style.transform = `translateX(${app.frame * cell}px)`;
     this.onionBtn.setAttribute('aria-pressed', String(app.onion.enabled));
+    this.keysBtn.setAttribute('aria-pressed', String(app.onion.keysOnly));
     this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));
     this.lockBtn.textContent = app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`;
     this.beforeSel.value = String(app.onion.before);
     this.afterSel.value = String(app.onion.after);
     this.opacityRange.value = String(app.onion.opacity);
+    this.zoomRange.value = String(cell);
     this.lockMark.style.display = app.lockFrame === null ? 'none' : 'block';
-    this.lockMark.style.transform = `translateX(${(app.lockFrame ?? 0) * CELL}px)`;
+    this.lockMark.style.width = `${cell}px`;
+    this.lockMark.style.transform = `translateX(${(app.lockFrame ?? 0) * cell}px)`;
+    // role buttons show the role shared by the targeted drawings
+    const roles = targets.map((i) => p.drawing(p.exposures[i]!.drawing).role);
+    for (const [r, b] of this.roleBtns) b.setAttribute('aria-pressed', String(roles.length > 0 && roles.every((x) => x === r)));
     for (const b of this.inner.querySelectorAll<HTMLElement>('.block')) {
       b.classList.toggle('current', l !== null && b.dataset.index === String(l.index));
     }
@@ -176,27 +353,36 @@ export class Strip {
 
   private rebuild(): void {
     const p = this.app.project;
+    const cell = this.cell;
+    const sel = new Set(this.app.selection);
     this.inner.replaceChildren();
-    this.inner.style.width = `${p.length * CELL}px`;
+    this.inner.style.width = `${Math.max(p.length * cell + cell * 2, 200)}px`;
     const ruler = el('div', { class: 'strip-ruler' });
+    const step = cell < 28 ? 5 : cell < 40 ? 2 : 1;
     for (let f = 0; f < p.length; f++) {
+      if (f % step !== 0 && f !== p.length - 1) continue;
       const n = el('span', {}, String(f + 1));
-      n.style.left = `${f * CELL}px`;
+      n.style.left = `${f * cell}px`;
+      n.style.width = `${cell}px`;
       ruler.append(n);
     }
     this.inner.append(ruler);
     p.exposures.forEach((e, i) => {
       const d = p.drawing(e.drawing);
-      const block = el('div', { class: 'block', 'data-index': String(i) });
-      block.style.left = `${startOf(p.exposures, i) * CELL}px`;
-      block.style.width = `${e.length * CELL - 4}px`;
-      block.append(this.thumb(d), el('span', { class: 'num' }, String(d.num)));
-      if (e.length > 1) block.append(el('span', { class: 'hold-line' }));
+      const width = e.length * cell - 4;
+      const block = el('div', { class: `block${sel.has(i) ? ' selected' : ''}`, 'data-index': String(i) });
+      block.style.left = `${startOf(p.exposures, i) * cell}px`;
+      block.style.width = `${width}px`;
+      if (width >= 52) block.append(this.thumb(d));
+      block.append(el('span', { class: 'num' }, String(d.num)));
+      if (e.length > 1 && width >= 90) block.append(el('span', { class: 'hold-line' }));
+      if (e.length > 1) block.append(el('span', { class: 'len' }, `×${e.length}`));
+      if (d.role) block.append(el('span', { class: `badge role-${d.role}`, title: ROLE_NAME[d.role] }, ROLE_LETTER[d.role]));
+      block.append(el('span', { class: 'handle', title: 'Drag to change the hold' }));
       this.inner.append(block);
     });
-    this.inner.append(this.lockMark, this.playhead);
-    // Forget thumbnails of drawings no longer on the strip.
-    const used = new Set(p.exposures.map((e) => e.drawing));
+    this.inner.append(this.lockMark, this.playhead, this.marquee);
+    const used = new Set(p.exposures.map((x) => x.drawing));
     for (const id of this.thumbs.keys()) if (!used.has(id)) this.thumbs.delete(id);
   }
 
@@ -218,9 +404,10 @@ export class Strip {
   }
 
   private keepVisible(): void {
-    const x = this.app.frame * CELL;
+    if (this.drag) return; // do not scroll under the user's pointer
+    const x = this.app.frame * this.cell;
     const t = this.track;
-    if (x < t.scrollLeft) t.scrollLeft = x - CELL;
-    else if (x + CELL > t.scrollLeft + t.clientWidth) t.scrollLeft = x + CELL * 2 - t.clientWidth;
+    if (x < t.scrollLeft) t.scrollLeft = x - this.cell;
+    else if (x + this.cell > t.scrollLeft + t.clientWidth) t.scrollLeft = x + this.cell * 2 - t.clientWidth;
   }
 }

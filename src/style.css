@@ -546,3 +546,123 @@ dialog h2 {
   justify-content: space-between;
   margin-top: 12px;
 }
+
+/* Timeline: selection, handles, roles, exposure */
+
+.strip-track {
+  height: 96px;
+  touch-action: pan-x;
+  user-select: none;
+}
+
+.block {
+  touch-action: none;
+  cursor: grab;
+  top: 20px;
+  height: 58px;
+}
+
+.block:active {
+  cursor: grabbing;
+}
+
+.block.selected {
+  background: #3a2f3a;
+  border-color: #c9739a;
+}
+
+.block.selected.current {
+  border-color: var(--accent);
+}
+
+.block .handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.16));
+  touch-action: none;
+}
+
+.block .len {
+  position: absolute;
+  right: 12px;
+  bottom: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.block .badge {
+  position: absolute;
+  right: 12px;
+  top: 3px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #1d1d22;
+}
+
+.role-key {
+  background: #ff5a8a;
+}
+.role-breakdown {
+  background: #ffd24a;
+}
+.role-inbetween {
+  background: #4aa3ff;
+}
+
+button.role {
+  min-width: 34px;
+  padding: 0 8px;
+  font-weight: 700;
+}
+
+button.role[aria-pressed='true'] {
+  color: #1d1d22;
+}
+
+button.role-key[aria-pressed='true'] {
+  background: #ff5a8a;
+  border-color: #ff5a8a;
+}
+button.role-breakdown[aria-pressed='true'] {
+  background: #ffd24a;
+  border-color: #ffd24a;
+}
+button.role-inbetween[aria-pressed='true'] {
+  background: #4aa3ff;
+  border-color: #4aa3ff;
+}
+
+.strip-marquee {
+  display: none;
+  position: absolute;
+  border: 1px solid var(--accent);
+  background: rgba(255, 90, 138, 0.14);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.exp-input {
+  width: 52px;
+  min-height: 34px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.exp-readout {
+  min-width: 44px;
+  text-align: center;
+}

@@ -39,6 +39,7 @@ assets/<hash>.png       one PNG per non-empty pixel plane (transparent RGBA)
       "num": 1,                      // the cel number shown in the UI
       "line": "assets/2eid…-3fq8.png",   // Line plane (on top), or null if empty
       "fill": "assets/18hm…-znj.png",    // Fill plane (always under the line), or null
+      "role": "key",                  // optional: "key" | "breakdown" | "inbetween" (unknown values are ignored)
       "vectors": [ /* StrokeRecord: tool, brush settings, color, seed, points {x,y,pressure,tiltX,tiltY,t} */ ]
     }
   }

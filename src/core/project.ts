@@ -3,6 +3,10 @@ import { drawVectorStroke } from '../brush/vector';
 import { strokeLength, type StrokeRecord } from './stroke';
 import { drawingAt, totalFrames, type Exposure } from './timeline';
 
+/** What a drawing is for in the animation: a key pose, a breakdown between keys, or an inbetween. */
+export type Role = 'key' | 'breakdown' | 'inbetween';
+export const ROLES: Role[] = ['key', 'breakdown', 'inbetween'];
+
 /** Which pixel plane a tool writes to. */
 export type Plane = 'line' | 'fill';
 
@@ -19,6 +23,8 @@ export interface Drawing {
   line: HTMLCanvasElement;
   fill: HTMLCanvasElement | null;
   vectors: StrokeRecord[];
+  /** Optional label shown on the timeline; does not change how the drawing looks. */
+  role: Role | null;
   /** Bumped on every change, so thumbnails and onion skins know when to redraw. */
   rev: number;
 }
@@ -66,8 +72,8 @@ export class Project {
   }
 
   /** Add a drawing with a known id (used when loading a file). */
-  adopt(id: string, num: number, vectors: StrokeRecord[]): Drawing {
-    const d: Drawing = { id, num, line: makeCanvas(this.width, this.height), fill: null, vectors, rev: 0 };
+  adopt(id: string, num: number, vectors: StrokeRecord[], role: Role | null = null): Drawing {
+    const d: Drawing = { id, num, line: makeCanvas(this.width, this.height), fill: null, vectors, role, rev: 0 };
     this.drawings.set(id, d);
     this.nextNum = Math.max(this.nextNum, num + 1);
     return d;
@@ -79,7 +85,7 @@ export class Project {
 
   newDrawing(): Drawing {
     const num = this.nextNum++;
-    const d: Drawing = { id: `d${num}`, num, line: makeCanvas(this.width, this.height), fill: null, vectors: [], rev: 0 };
+    const d: Drawing = { id: `d${num}`, num, line: makeCanvas(this.width, this.height), fill: null, vectors: [], role: null, rev: 0 };
     this.drawings.set(d.id, d);
     return d;
   }

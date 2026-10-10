@@ -172,6 +172,16 @@ describe('project schema', () => {
     expect(() => validateProjectFile(fps)).toThrow(SchemaError);
   });
 
+  it('keeps a drawing role when valid and ignores unknown ones (additive field, no schema bump)', () => {
+    const p = sample();
+    p.drawings.d1!.role = 'key';
+    expect(validateProjectFile(p).drawings.d1!.role).toBe('key');
+    const odd = sample() as unknown as { drawings: { d1: { role: string } } };
+    odd.drawings.d1.role = 'hero-pose';
+    expect(validateProjectFile(odd).drawings.d1!.role).toBeUndefined();
+    expect(validateProjectFile(sample()).drawings.d2!.role).toBeUndefined();
+  });
+
   it('refuses asset paths that could escape the archive', () => {
     for (const bad of ['../x.png', 'assets/../x.png', '/etc/passwd', 'assets/a.exe', 'assets/a/b.png']) {
       const p = sample();

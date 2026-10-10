@@ -127,20 +127,111 @@ export interface Neighbor {
  * The distinct drawings before and after the current one (holds are skipped, like flipping
  * through paper). Used for onion skins.
  */
-export function neighborDrawings(ex: Exposure[], frame: number, before: number, after: number): { before: Neighbor[]; after: Neighbor[] } {
+export function neighborDrawings(
+  ex: Exposure[],
+  frame: number,
+  before: number,
+  after: number,
+  /** Only count drawings this accepts (e.g. keys only). */
+  accept: (drawing: string) => boolean = () => true,
+): { before: Neighbor[]; after: Neighbor[] } {
   const l = locate(ex, frame);
   const out = { before: [] as Neighbor[], after: [] as Neighbor[] };
   if (!l) return out;
   const current = ex[l.index]!.drawing;
   for (let i = l.index - 1, n = 1; i >= 0 && n <= before; i--) {
     const id = ex[i]!.drawing;
-    if (id === current || out.before.some((b) => b.drawing === id)) continue;
+    if (id === current || !accept(id) || out.before.some((b) => b.drawing === id)) continue;
     out.before.push({ drawing: id, distance: n++ });
   }
   for (let i = l.index + 1, n = 1; i < ex.length && n <= after; i++) {
     const id = ex[i]!.drawing;
-    if (id === current || out.after.some((a) => a.drawing === id)) continue;
+    if (id === current || !accept(id) || out.after.some((a) => a.drawing === id)) continue;
     out.after.push({ drawing: id, distance: n++ });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Editing several exposures at once (selection, exposure, drag)
+
+function uniqueSorted(indices: number[], n: number): number[] {
+  return [...new Set(indices)].filter((i) => Number.isInteger(i) && i >= 0 && i < n).sort((a, b) => a - b);
+}
+
+/** Set the hold of every listed exposure to `length` frames (minimum 1). Returns the same array if nothing changed. */
+export function setHolds(ex: Exposure[], indices: number[], length: number): Exposure[] {
+  const len = Math.max(1, Math.round(length));
+  const idx = uniqueSorted(indices, ex.length);
+  if (!idx.some((i) => ex[i]!.length !== len)) return ex;
+  const out = ex.slice();
+  for (const i of idx) out[i] = { ...out[i]!, length: len };
+  return out;
+}
+
+/** Add `delta` frames to every listed exposure's hold (each stays at least 1). */
+export function adjustHolds(ex: Exposure[], indices: number[], delta: number): Exposure[] {
+  const idx = uniqueSorted(indices, ex.length);
+  const out = ex.slice();
+  let changed = false;
+  for (const i of idx) {
+    const length = Math.max(1, ex[i]!.length + delta);
+    if (length !== ex[i]!.length) {
+      out[i] = { ...ex[i]!, length };
+      changed = true;
+    }
+  }
+  return changed ? out : ex;
+}
+
+/** Remove the listed exposures. */
+export function removeIndices(ex: Exposure[], indices: number[]): Exposure[] {
+  const idx = new Set(uniqueSorted(indices, ex.length));
+  return idx.size ? ex.filter((_, i) => !idx.has(i)) : ex;
+}
+
+/** Move the exposure at `from` so it ends up at index `to` (in the resulting array). */
+export function moveExposure(ex: Exposure[], from: number, to: number): Exposure[] {
+  if (from < 0 || from >= ex.length) return ex;
+  const t = Math.max(0, Math.min(ex.length - 1, to));
+  if (t === from) return ex;
+  const out = ex.slice();
+  const [item] = out.splice(from, 1);
+  out.splice(t, 0, item!);
+  return out;
+}
+
+/** Where a dragged exposure lands if its center is at frame position `x` (fractional frames). */
+export function dropIndex(ex: Exposure[], from: number, x: number): number {
+  let pos = 0;
+  let before = 0;
+  for (let i = 0; i < ex.length; i++) {
+    if (i === from) continue;
+    const len = ex[i]!.length;
+    if (pos + len / 2 < x) before++;
+    pos += len;
+  }
+  return before;
+}
+
+/** Exposures that overlap the frame range [f0, f1] (inclusive, any order). */
+export function indicesInFrames(ex: Exposure[], f0: number, f1: number): number[] {
+  const a = Math.min(f0, f1);
+  const b = Math.max(f0, f1);
+  const out: number[] = [];
+  let start = 0;
+  for (let i = 0; i < ex.length; i++) {
+    const end = start + ex[i]!.length - 1;
+    if (end >= a && start <= b) out.push(i);
+    start += ex[i]!.length;
+  }
+  return out;
+}
+
+/** The hold all listed exposures share, or null when they differ (shown as "mixed") or none are listed. */
+export function commonHold(ex: Exposure[], indices: number[]): number | null {
+  const idx = uniqueSorted(indices, ex.length);
+  if (!idx.length) return null;
+  const first = ex[idx[0]!]!.length;
+  return idx.every((i) => ex[i]!.length === first) ? first : null;
 }

@@ -34,6 +34,8 @@ export interface DrawingFile {
   line: string | null;
   fill: string | null;
   vectors: StrokeRecord[];
+  /** Optional (added without a schema bump): key / breakdown / inbetween. Unknown values are ignored. */
+  role?: 'key' | 'breakdown' | 'inbetween' | null;
 }
 
 export interface ProjectFile {
@@ -159,7 +161,8 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     const vectors = Array.isArray(d.vectors) ? d.vectors : [];
     vectorTotal += vectors.length;
     if (vectorTotal > MAX_VECTORS) throw new SchemaError('the project has too many vector strokes');
-    drawings[id] = { num: int(d.num, `drawing ${id} number`, 1, 1e9), ...planes, vectors: vectors.map(stroke) };
+    const role = d.role === 'key' || d.role === 'breakdown' || d.role === 'inbetween' ? d.role : null;
+    drawings[id] = { num: int(d.num, `drawing ${id} number`, 1, 1e9), ...planes, vectors: vectors.map(stroke), ...(role ? { role } : {}) };
   }
 
   const layers: LayerFile[] = raw.layers.map((l: unknown, i: number) => {

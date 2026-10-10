@@ -34,6 +34,14 @@ npm run dev:lan
 - Brush panel with live preview; settings persist in the browser; "Copy JSON" gives the native brush format.
 - **Tilt shading**: lean the pen and textured brushes (Pencil, Shading Pencil, Charcoal) switch to a broad, soft, grainy side-of-the-lead tip that follows the lean direction.
 
+## M1 slice 5: timeline, exposure, roles
+
+- **Timeline blocks** are as wide as their hold. **Drag a block's right edge** to change its hold (if several are selected they all take the new length). **Drag a block** to reorder. Each drag is one undo step.
+- **Select:** click a block (**Shift**+click adds), drag on empty space for a **marquee**, **Ctrl+A** for all. Click empty space to deselect. Drag on the **ruler** (top strip) to scrub.
+- **Exposure:** **1s 2s 3s 4s** buttons (or keys **1 2 3 4**, or type a number + Enter) set how many frames each selected drawing is held, without deleting anything; going back to 1s restores the spacing. The readout shows **mixed** when the selection differs. With nothing selected it acts on the current drawing. (**Shift+1** is now 100% zoom.)
+- **Mark K / B / I:** label drawings as **key**, **breakdown** or **inbetween** (badge on the block; click again to clear). **Keys only** limits onion skin to key drawings.
+- **Zoom** slider for long shots. **Delete** removes all selected drawings (undoable).
+
 ## M1 slice 4: autosave, recovery, versions, files
 
 - **Autosave** to the browser (IndexedDB) about a second after every change (never mid-stroke). The status next to the project name shows Saved / Saving / Unsaved / error, and the storage meter shows how much space is used and whether the browser has promised not to clear it.
@@ -76,7 +84,9 @@ npm run dev:lan
 | Tools | | B brush, E eraser, P vector, G fill |
 | Draw on Line / Fill plane | **On** switch | X |
 | Brush size | | `[` `]` |
-| Fit / 100% / flip view | | F / 1 / H |
+| Fit / 100% / flip view | | F / Shift+1 / H |
+| Exposure of selection | strip 1s 2s 3s 4s | 1 / 2 / 3 / 4 |
+| Select all drawings | | Ctrl+A |
 | Tilt shading (side of pencil) | tilt the pen past "Starts at" | hold **Alt** while drawing |
 | Next / previous frame | strip: tap or drag | → / ← |
 | Next / previous drawing | strip ⏭ ⏮ | ↑ / ↓ |
