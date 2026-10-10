@@ -20,6 +20,12 @@
 - **Add frame inside a hold splits it** (new drawing takes the rest of the hold), so timing stays the same; on a hold's last frame it inserts one frame.
 - Drawings are full-size canvases for now. Risk: memory on long shots (8 MB per 1080p drawing). Sparse tiles come before long projects.
 
+## 2026-10-10: Onion skin + scrub lock (M1 slice 2)
+
+- Onion skin shows **distinct drawings**, not frames (holds skipped), like paper. Ghosts are cached as tinted canvases keyed by drawing + revision + color (max 8 canvases) so rendering is a few drawImage calls.
+- **Scrub lock** (from Procreate Dreams, behavior only): a home frame; any scrub (strip drag, Shift + arrows) snaps back on release. Home is a frame index, clamped if the timeline shrinks.
+- Onion settings persist per device (localStorage); lock state is session-only for now.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

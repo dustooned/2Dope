@@ -27,6 +27,12 @@ export class Strip {
   private readonly holdLabel: HTMLElement;
   private readonly playBtn: HTMLButtonElement;
   private readonly fpsSel: HTMLSelectElement;
+  private readonly onionBtn: HTMLButtonElement;
+  private readonly lockBtn: HTMLButtonElement;
+  private readonly beforeSel: HTMLSelectElement;
+  private readonly afterSel: HTMLSelectElement;
+  private readonly opacityRange: HTMLInputElement;
+  private readonly lockMark: HTMLElement;
   private readonly thumbs = new Map<string, { rev: number; canvas: HTMLCanvasElement }>();
   private signature = '';
 
@@ -68,11 +74,37 @@ export class Strip {
       this.holdLabel,
       btn('+', 'Longer hold (=)', () => app.changeHold(1)),
     );
-    bar.append(nav, this.frameLabel, this.fpsSel, edit, hold);
+    const onion = el('div', { class: 'group' });
+    this.onionBtn = btn('Onion', 'Onion skin on/off (O)', () => app.toggleOnion());
+    const count = (label: string, title: string, get: () => number, set: (n: number) => void) => {
+      const sel = el('select', { 'aria-label': title, title });
+      for (let n = 0; n <= 5; n++) sel.append(el('option', { value: String(n) }, String(n)));
+      sel.value = String(get());
+      sel.addEventListener('change', () => {
+        set(Number(sel.value));
+        app.onionChanged();
+      });
+      onion.append(el('span', { class: 'name' }, label), sel);
+      return sel;
+    };
+    onion.append(this.onionBtn);
+    this.beforeSel = count('◀', 'Previous drawings shown (blue)', () => app.onion.before, (n) => (app.onion.before = n));
+    this.afterSel = count('▶', 'Next drawings shown (red)', () => app.onion.after, (n) => (app.onion.after = n));
+    this.opacityRange = el('input', { type: 'range', min: '0.1', max: '0.9', step: '0.05', 'aria-label': 'Onion opacity', title: 'Onion opacity', class: 'onion-opacity' });
+    this.opacityRange.value = String(app.onion.opacity);
+    this.opacityRange.addEventListener('input', () => {
+      app.onion.opacity = Number(this.opacityRange.value);
+      app.onionChanged();
+    });
+    onion.append(this.opacityRange);
+    this.lockBtn = btn('Lock', 'Scrub lock (L): mark this frame as home. Drag the strip or hold Shift + arrows to flip; it snaps back when you let go.', () => app.toggleLock());
+    onion.append(this.lockBtn);
+    bar.append(nav, this.frameLabel, this.fpsSel, edit, hold, onion);
 
     this.track = el('div', { class: 'strip-track', role: 'slider', 'aria-label': 'Frames', tabindex: '0' });
     this.inner = el('div', { class: 'strip-inner' });
     this.playhead = el('div', { class: 'strip-playhead' });
+    this.lockMark = el('div', { class: 'strip-lock', title: 'Scrub lock home frame' }, '⌂');
     this.track.append(this.inner);
     root.append(bar, this.track);
 
@@ -89,13 +121,17 @@ export class Strip {
       } catch {
         // ignore
       }
-      if (app.playing) app.togglePlay();
+      app.beginScrub();
       app.setFrame(Math.min(frameAt(e), app.project.length - 1));
     });
     this.track.addEventListener('pointermove', (e) => {
       if (scrubbing) app.setFrame(Math.max(0, Math.min(frameAt(e), app.project.length - 1)));
     });
-    const stop = () => (scrubbing = false);
+    const stop = () => {
+      if (!scrubbing) return;
+      scrubbing = false;
+      app.endScrub();
+    };
     this.track.addEventListener('pointerup', stop);
     this.track.addEventListener('pointercancel', stop);
 
@@ -119,6 +155,14 @@ export class Strip {
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(p.fps);
     this.playhead.style.transform = `translateX(${app.frame * CELL}px)`;
+    this.onionBtn.setAttribute('aria-pressed', String(app.onion.enabled));
+    this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));
+    this.lockBtn.textContent = app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`;
+    this.beforeSel.value = String(app.onion.before);
+    this.afterSel.value = String(app.onion.after);
+    this.opacityRange.value = String(app.onion.opacity);
+    this.lockMark.style.display = app.lockFrame === null ? 'none' : 'block';
+    this.lockMark.style.transform = `translateX(${(app.lockFrame ?? 0) * CELL}px)`;
     for (const b of this.inner.querySelectorAll<HTMLElement>('.block')) {
       b.classList.toggle('current', l !== null && b.dataset.index === String(l.index));
     }
@@ -145,7 +189,7 @@ export class Strip {
       if (e.length > 1) block.append(el('span', { class: 'hold-line' }));
       this.inner.append(block);
     });
-    this.inner.append(this.playhead);
+    this.inner.append(this.lockMark, this.playhead);
     // Forget thumbnails of drawings no longer on the strip.
     const used = new Set(p.exposures.map((e) => e.drawing));
     for (const id of this.thumbs.keys()) if (!used.has(id)) this.thumbs.delete(id);

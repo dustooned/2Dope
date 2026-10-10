@@ -5,13 +5,15 @@ import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type To
 import { DabWalker } from './brush/dabs';
 import { putPixels, RasterEngine } from './brush/raster';
 import { Project, type Drawing } from './core/project';
-import { addAfter, changeHold, duplicateAt, nextDrawing, prevDrawing, removeAt, type Edit, type Exposure } from './core/timeline';
+import { addAfter, changeHold, duplicateAt, neighborDrawings, nextDrawing, prevDrawing, removeAt, type Edit, type Exposure } from './core/timeline';
 import { Smoother } from './brush/smoothing';
 import { drawVectorStroke } from './brush/vector';
+import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
 import { snapRotation, Viewport } from './view/viewport';
 
 const BRUSH_KEY = '2dope.m0.brush';
 const COLOR_KEY = '2dope.m0.color';
+const ONION_KEY = '2dope.m1.onion';
 
 interface LiveStroke {
   record: StrokeRecord;
@@ -71,6 +73,12 @@ export class App {
   /** Current frame, 0-based. */
   frame = 0;
   playing = false;
+  /** Onion skin settings (saved per device). */
+  onion: OnionSettings = { ...DEFAULT_ONION, ...(loadJSON<Partial<OnionSettings>>(ONION_KEY) ?? {}) };
+  /** Scrub lock: the home frame to snap back to after flipping, or null. */
+  lockFrame: number | null = null;
+  /** True while the user is scrubbing or flipping (strip drag, Shift+arrows). */
+  scrubbing = false;
   /** Fires when the frame or the timeline changes. */
   onFrameChange: () => void = () => {};
   readonly history = new History();
@@ -103,6 +111,7 @@ export class App {
   private statsWindow = performance.now();
   private playClock = { t0: 0, f0: 0 };
   private spacePanned = false;
+  private readonly onionCache = new OnionCache(this.docW, this.docH);
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -244,6 +253,41 @@ export class App {
     if (this.live) return;
     this.playing = !this.playing;
     this.playClock = { t0: performance.now(), f0: this.frame };
+    this.onFrameChange();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Onion skin and scrub lock
+
+  onionChanged(): void {
+    saveJSON(ONION_KEY, this.onion);
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  toggleOnion(): void {
+    this.onion.enabled = !this.onion.enabled;
+    this.onionChanged();
+  }
+
+  /** Set the home frame to the current frame, or clear it if it is already home. */
+  toggleLock(): void {
+    this.lockFrame = this.lockFrame === this.frame ? null : this.frame;
+    this.onFrameChange();
+  }
+
+  beginScrub(): void {
+    if (this.playing) this.togglePlay();
+    this.scrubbing = true;
+    this.requestRender();
+  }
+
+  /** Stop scrubbing; with a scrub lock set, snap back to the home frame. */
+  endScrub(): void {
+    if (!this.scrubbing) return;
+    this.scrubbing = false;
+    if (this.lockFrame !== null) this.setFrame(Math.min(this.lockFrame, this.project.length - 1));
+    this.requestRender();
     this.onFrameChange();
   }
 
@@ -503,7 +547,10 @@ export class App {
     new ResizeObserver(() => this.resize()).observe(this.stage);
     window.addEventListener('keydown', (e) => this.onKey(e, true));
     window.addEventListener('keyup', (e) => this.onKey(e, false));
-    window.addEventListener('blur', () => this.held.clear());
+    window.addEventListener('blur', () => {
+      this.held.clear();
+      this.endScrub();
+    });
   }
 
   private local(e: PointerEvent): { x: number; y: number } {
@@ -708,6 +755,7 @@ export class App {
     const typing = target instanceof HTMLInputElement && target.type !== 'range' && target.type !== 'checkbox' && target.type !== 'color';
     if (typing || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
     if (!down) {
+      if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && this.scrubbing) this.endScrub();
       // A tap of Space (no drag) plays / pauses; Space + drag pans.
       if (e.code === 'Space' && this.held.has('Space') && !this.spacePanned) this.togglePlay();
       this.held.delete(e.code);
@@ -739,20 +787,23 @@ export class App {
     }
     switch (e.code) {
       case 'ArrowRight':
-        e.preventDefault();
-        this.nextFrame();
-        break;
       case 'ArrowLeft':
-        e.preventDefault();
-        this.prevFrame();
-        break;
       case 'ArrowUp':
+      case 'ArrowDown': {
         e.preventDefault();
-        this.nextDrawing();
+        // With a scrub lock set, Shift + arrows flip through frames and snap home when Shift is released.
+        if (e.shiftKey && this.lockFrame !== null && !this.scrubbing) this.beginScrub();
+        if (e.code === 'ArrowRight') this.nextFrame();
+        else if (e.code === 'ArrowLeft') this.prevFrame();
+        else if (e.code === 'ArrowUp') this.nextDrawing();
+        else this.prevDrawing();
         break;
-      case 'ArrowDown':
-        e.preventDefault();
-        this.prevDrawing();
+      }
+      case 'KeyO':
+        this.toggleOnion();
+        break;
+      case 'KeyL':
+        this.toggleLock();
         break;
       case 'Enter':
         e.preventDefault();
@@ -870,6 +921,7 @@ export class App {
     g.shadowColor = 'transparent';
 
     g.imageSmoothingEnabled = this.view.zoom < 2;
+    this.drawOnion(g);
     const live = this.live;
     const d = live ? live.drawing : this.drawing;
     g.drawImage(live && live.record.tool !== 'pen' ? this.raster.displaySource() : d.canvas, 0, 0);
@@ -892,6 +944,24 @@ export class App {
     }
 
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
+  }
+
+  /** Ghosts of the neighboring drawings: previous in blue, next in red, fading with distance. */
+  private drawOnion(g: CanvasRenderingContext2D): void {
+    const o = this.onion;
+    if (!o.enabled || this.playing || (this.scrubbing && !o.whileScrubbing)) return;
+    const n = neighborDrawings(this.project.exposures, this.frame, o.before, o.after);
+    const draw = (list: typeof n.before, color: string) => {
+      for (const nb of list) {
+        const d = this.project.drawing(nb.drawing);
+        g.globalAlpha = o.opacity * Math.pow(o.falloff, nb.distance - 1);
+        g.drawImage(this.onionCache.ghost(d, o.tint ? color : null), 0, 0);
+      }
+    };
+    // Farther ghosts first so the nearest sits on top.
+    draw([...n.before].reverse(), o.beforeColor);
+    draw([...n.after].reverse(), o.afterColor);
+    g.globalAlpha = 1;
   }
 
   private drawPixelGrid(g: CanvasRenderingContext2D): void {

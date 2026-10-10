@@ -62,3 +62,5 @@ buildPanel(app, $('#panel'));
 
 const strip = new Strip(app, $('#strip'));
 app.onFrameChange = () => strip.update();
+// The strip takes height from the stage, so fit again now that the layout is final.
+app.fit();

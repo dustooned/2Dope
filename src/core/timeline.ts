@@ -116,3 +116,31 @@ export function prevDrawing(ex: Exposure[], frame: number): number {
   if (l.index === 0) return 0;
   return startOf(ex, l.index - 1);
 }
+
+export interface Neighbor {
+  drawing: string;
+  /** 1 = the nearest distinct drawing on that side. */
+  distance: number;
+}
+
+/**
+ * The distinct drawings before and after the current one (holds are skipped, like flipping
+ * through paper). Used for onion skins.
+ */
+export function neighborDrawings(ex: Exposure[], frame: number, before: number, after: number): { before: Neighbor[]; after: Neighbor[] } {
+  const l = locate(ex, frame);
+  const out = { before: [] as Neighbor[], after: [] as Neighbor[] };
+  if (!l) return out;
+  const current = ex[l.index]!.drawing;
+  for (let i = l.index - 1, n = 1; i >= 0 && n <= before; i--) {
+    const id = ex[i]!.drawing;
+    if (id === current || out.before.some((b) => b.drawing === id)) continue;
+    out.before.push({ drawing: id, distance: n++ });
+  }
+  for (let i = l.index + 1, n = 1; i < ex.length && n <= after; i++) {
+    const id = ex[i]!.drawing;
+    if (id === current || out.after.some((a) => a.drawing === id)) continue;
+    out.after.push({ drawing: id, distance: n++ });
+  }
+  return out;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addAfter, changeHold, drawingAt, duplicateAt, locate, nextDrawing, prevDrawing, removeAt, totalFrames, type Exposure } from './timeline';
+import { addAfter, changeHold, drawingAt, duplicateAt, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, totalFrames, type Exposure } from './timeline';
 
 const ex: Exposure[] = [
   { drawing: 'a', length: 2 },
@@ -64,5 +64,27 @@ describe('timeline', () => {
     expect(prevDrawing(ex, 5)).toBe(3);
     expect(prevDrawing(ex, 3)).toBe(2);
     expect(prevDrawing(ex, 0)).toBe(0);
+  });
+});
+
+describe('onion neighbors', () => {
+  const ex2: Exposure[] = [
+    { drawing: 'a', length: 2 },
+    { drawing: 'b', length: 3 },
+    { drawing: 'c', length: 1 },
+    { drawing: 'd', length: 2 },
+  ];
+  it('skips holds and counts distinct drawings on each side', () => {
+    const r = neighborDrawings(ex2, 3, 2, 2); // inside b's hold
+    expect(r.before).toEqual([{ drawing: 'a', distance: 1 }]);
+    expect(r.after).toEqual([
+      { drawing: 'c', distance: 1 },
+      { drawing: 'd', distance: 2 },
+    ]);
+  });
+  it('limits to the requested counts and handles the ends', () => {
+    expect(neighborDrawings(ex2, 0, 3, 1).before).toEqual([]);
+    expect(neighborDrawings(ex2, 6, 1, 3).after).toEqual([]);
+    expect(neighborDrawings(ex2, 5, 1, 1).before).toEqual([{ drawing: 'b', distance: 1 }]);
   });
 });

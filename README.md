@@ -34,6 +34,11 @@ npm run dev:lan
 - Brush panel with live preview; settings persist in the browser; "Copy JSON" gives the native brush format.
 - **Tilt shading**: lean the pen and textured brushes (Pencil, Shading Pencil, Charcoal) switch to a broad, soft, grainy side-of-the-lead tip that follows the lean direction.
 
+## M1 slice 2: onion skin + scrub lock
+
+- **Onion skin (O):** previous drawings tinted blue, next drawings red, fading with distance. Holds are skipped (you see distinct drawings). Strip controls: count before/after (0 to 5) and opacity. Hidden during playback.
+- **Scrub lock (L):** marks the current frame as **home** (shown with a gold marker and "Home N" on the button). Drag the strip, or hold **Shift + arrows**, to flip through frames; when you let go (or release Shift) it snaps back to home. Press L on the home frame again to clear it.
+
 ## M1 slice 1: frames
 
 - Flipbook strip: one block per drawing, stretched over its hold, with thumbnail and drawing number.
@@ -56,6 +61,8 @@ npm run dev:lan
 | Tilt shading (side of pencil) | tilt the pen past "Starts at" | hold **Alt** while drawing |
 | Next / previous frame | strip: tap or drag | → / ← |
 | Next / previous drawing | strip ⏭ ⏮ | ↑ / ↓ |
+| Onion skin on/off | | O |
+| Scrub lock set/clear | strip Lock button | L (then Shift + arrows to flip) |
 | Play / pause | strip Play | Enter, or tap Space |
 | New / duplicate / delete drawing | strip buttons | N / D / Delete |
 | Longer / shorter hold | strip Hold + / − | = / − |

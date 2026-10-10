@@ -391,3 +391,26 @@ body.ui-hidden .stats {
     box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
   }
 }
+
+.strip-lock {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 100%;
+  border-left: 2px dashed #ffd24a;
+  color: #ffd24a;
+  font-size: 12px;
+  line-height: 14px;
+  padding-left: 3px;
+  pointer-events: none;
+}
+
+button[aria-pressed='true'] {
+  /* toggles share the accent look */
+}
+
+.onion-opacity {
+  width: 80px;
+  min-height: 0;
+}
