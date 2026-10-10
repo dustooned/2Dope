@@ -17,6 +17,8 @@ export const FORMAT = '2dope';
 export interface ExposureFile {
   drawing: string;
   length: number;
+  /** Optional exposure-sheet note (added without a schema bump). */
+  note?: string;
 }
 
 export interface LayerFile {
@@ -177,7 +179,8 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
       const length = int(e.length, 'exposure length', 1, MAX_FRAMES);
       frames += length;
       if (frames > MAX_FRAMES) throw new SchemaError('the timeline is too long');
-      return { drawing, length };
+      const note = typeof e.note === 'string' && e.note.trim() ? e.note.trim().slice(0, 200) : undefined;
+      return note ? { drawing, length, note } : { drawing, length };
     });
     return { id: str(l.id, 'layer id', 64), type: 'drawing' as const, name: str(l.name ?? 'Drawing', 'layer name'), exposures };
   });

@@ -6,7 +6,7 @@ import { DabWalker } from './brush/dabs';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
-import { addAfter, adjustHolds, duplicateAt, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, removeIndices, setHolds, totalFrames, type Edit, type Exposure } from './core/timeline';
+import { addAfter, adjustHolds, duplicateAt, exposeAt, setNote, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, removeIndices, setHolds, totalFrames, type Edit, type Exposure } from './core/timeline';
 import { Smoother } from './brush/smoothing';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
@@ -92,6 +92,11 @@ export class App {
   onDocChanged: () => void = () => {};
   /** Fires right before a destructive edit, while the old state is still intact. */
   onRisky: (label: string) => void = () => {};
+  /** Fires when a stroke starts or ends (Quick Animate hides its controls while drawing). */
+  onStrokeState: (active: boolean) => void = () => {};
+  /** Keyboard hooks owned by the layout: Quick Animate (Tab) and the X-sheet (Shift+X). */
+  onToggleQuick: () => void = () => {};
+  onToggleXSheet: () => void = () => {};
   /** Fires after a different project replaced the current one. */
   onProjectLoaded: () => void = () => {};
   readonly history = new History();
@@ -495,6 +500,21 @@ export class App {
     });
   }
 
+  /**
+   * X-sheet style: show drawing number `num` from `frame` to the end of that hold. A number with
+   * no drawing yet creates a blank one with that number.
+   */
+  exposeDrawingAt(frame: number, num: number): void {
+    if (this.live || !Number.isInteger(num) || num < 1 || num > 9999) return;
+    const d = this.project.drawingByNum(num) ?? this.project.adopt(`d${num}x${Date.now().toString(36)}`, num, []);
+    this.editTimeline(`Show drawing ${num}`, (ex) => ({ ex: exposeAt(ex, frame, d.id), frame }));
+  }
+
+  /** Set the exposure-sheet note on one exposure. */
+  setExposureNote(index: number, text: string): void {
+    this.editTimeline('Edit note', (ex) => ({ ex: setNote(ex, index, text), frame: this.frame }), true);
+  }
+
   /** Make each selected drawing last N frames (1s, 2s, 3s...). Never deletes a drawing. */
   setExposure(n: number): void {
     this.editTimeline(n === 1 ? 'Exposure on ones' : `Exposure on ${n}s`, (ex) => ({ ex: setHolds(ex, this.targets, n), frame: this.frame }), true);
@@ -646,6 +666,7 @@ export class App {
     };
     if (tool !== 'pen') this.raster.begin(record);
     this.feed(first);
+    this.onStrokeState(true);
   }
 
   private feed(p: StrokePoint): void {
@@ -666,6 +687,7 @@ export class App {
     const live = this.live;
     if (!live) return;
     this.live = null;
+    this.onStrokeState(false);
     const rec = live.record;
     if (cancel) {
       if (rec.tool !== 'pen') this.raster.cancel();
@@ -948,6 +970,8 @@ export class App {
     const target = e.target as HTMLElement | null;
     const typing = target instanceof HTMLInputElement && target.type !== 'range' && target.type !== 'checkbox' && target.type !== 'color';
     if (typing || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
+    // Panels that handle their own keys (the X-sheet grid) are left alone.
+    if (target?.closest?.('[data-own-keys]')) return;
     if (!down) {
       if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && this.scrubbing) this.endScrub();
       // A tap of Space (no drag) plays / pauses; Space + drag pans.
@@ -1040,7 +1064,9 @@ export class App {
         this.setTool('fill');
         break;
       case 'KeyX':
-        this.togglePlane();
+        // X switches the plane brushes write to; Shift+X shows or hides the X-sheet.
+        if (e.shiftKey) this.onToggleXSheet();
+        else this.togglePlane();
         break;
       case 'BracketLeft':
         this.resizeBrush(1 / 1.15);
@@ -1072,8 +1098,10 @@ export class App {
         this.flipView();
         break;
       case 'Tab':
+        // Tab = Quick Animate; Shift+Tab hides all interface (four-finger tap does too).
         e.preventDefault();
-        this.toggleUI();
+        if (e.shiftKey) this.toggleUI();
+        else this.onToggleQuick();
         break;
     }
   }

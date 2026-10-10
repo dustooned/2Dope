@@ -31,7 +31,7 @@ assets/<hash>.png       one PNG per non-empty pixel plane (transparent RGBA)
       "type": "drawing",
       "name": "Drawing",
       // run-length timing: show drawing "d1" for 2 frames, then "d2" for 1 frame
-      "exposures": [ { "drawing": "d1", "length": 2 }, { "drawing": "d2", "length": 1 } ]
+      "exposures": [ { "drawing": "d1", "length": 2, "note": "walks in" }, { "drawing": "d2", "length": 1 } ]   // note is optional (max 200 characters)
     }
   ],
   "drawings": {

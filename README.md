@@ -34,6 +34,17 @@ npm run dev:lan
 - Brush panel with live preview; settings persist in the browser; "Copy JSON" gives the native brush format.
 - **Tilt shading**: lean the pen and textured brushes (Pencil, Shading Pencil, Charcoal) switch to a broad, soft, grainy side-of-the-lead tip that follows the lean direction.
 
+## M1 slice 6: X-sheet and Quick Animate
+
+**X-sheet** (the **X-sheet** tab in the side panel, or **Shift+X**): the same timeline as a numbers grid, one row per frame. The drawing number sits on the frame where it starts; a line runs through the frames it is held; a heavier rule marks each second; a notes column sits on the right.
+- Click or drag down the rows to select drawings (Shift+click extends); **Up/Down** moves the frame; **Ctrl+A** selects all.
+- **Type a number** (or double-click a cell, or press Enter) to show that drawing from this frame to the end of its hold. A number with no drawing yet creates a blank one. Esc cancels. Later frames keep their timing.
+- **Notes:** click the note column to type a note (dialogue, an action). It stays with its drawing when you retime or reorder, and is saved in the project.
+- Frame numbers show as **Frames**, **Sec + frames** (1+12) or **Timecode** (00:00:01:11).
+- Exposure, roles, delete, undo and autosave all work here exactly as on the strip: same data, two views.
+
+**Quick Animate** (**Tab**, or the **Quick Animate** button): the canvas, a slim strip, and one floating bar (brush, eraser, fill, color, size, undo/redo, play, add frame, 1s/2s/3s, fps, onion). **More** has everything else (vector pen, Line/Fill plane, duplicate, delete, lock, fit, flip, export PNG, save). The bar and strip fade while the pen is down and return when it lifts. The mode is remembered on this device. **Shift+Tab** hides all interface.
+
 ## M1 slice 5: timeline, exposure, roles
 
 - **Timeline blocks** are as wide as their hold. **Drag a block's right edge** to change its hold (if several are selected they all take the new length). **Drag a block** to reorder. Each drag is one undo step.
@@ -80,7 +91,9 @@ npm run dev:lan
 | Zoom | pinch | wheel, Z + drag |
 | Rotate view | two-finger twist | R + drag; `0` resets |
 | Undo / redo | two- / three-finger tap | Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) |
-| Hide UI | four-finger tap | Tab |
+| Quick Animate on/off | Quick Animate button | Tab |
+| Hide all interface | four-finger tap | Shift+Tab |
+| X-sheet / Brush tab | side-panel tabs | Shift+X |
 | Tools | | B brush, E eraser, P vector, G fill |
 | Draw on Line / Fill plane | **On** switch | X |
 | Brush size | | `[` `]` |

@@ -79,6 +79,12 @@ export class Project {
     return d;
   }
 
+  /** A drawing with this cel number, if one exists. */
+  drawingByNum(num: number): Drawing | null {
+    for (const d of this.drawings.values()) if (d.num === num) return d;
+    return null;
+  }
+
   get length(): number {
     return totalFrames(this.exposures);
   }

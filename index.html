@@ -44,7 +44,8 @@
       </div>
       <label class="check"><input id="finger" type="checkbox" /> Finger paints</label>
       <button type="button" data-action="export" title="Export this frame as PNG with alpha">PNG</button>
-      <button type="button" data-action="hide" title="Hide interface (Tab, four-finger tap)">Hide UI</button>
+      <button type="button" id="enter-quick" title="Quick Animate: just the canvas, a slim strip and the essentials (Tab)">Quick Animate</button>
+      <button type="button" data-action="hide" title="Hide interface (Shift+Tab, four-finger tap)">Hide UI</button>
     </header>
     <main class="workspace">
       <div class="stage-col">
@@ -54,8 +55,16 @@
         </div>
         <section id="strip" class="strip" aria-label="Flipbook"></section>
       </div>
-      <aside id="panel" class="panel" aria-label="Brush settings"></aside>
+      <aside id="panel" class="panel" aria-label="Side panel">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-tab="brush" aria-selected="true">Brush</button>
+          <button type="button" role="tab" data-tab="xsheet" aria-selected="false" title="Exposure sheet (Shift+X)">X-sheet</button>
+        </div>
+        <div id="tab-brush" role="tabpanel"></div>
+        <div id="tab-xsheet" role="tabpanel" hidden></div>
+      </aside>
     </main>
+    <div id="quickbar"></div>
     <div id="toasts" class="toasts" aria-live="polite"></div>
     <dialog id="versions" aria-label="Versions">
       <h2>Versions</h2>

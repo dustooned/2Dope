@@ -54,6 +54,16 @@
 - **Keys 1-4 now set exposure** (as in the original spec); 100% zoom moved to Shift+1.
 - Not built yet: in/out markers and loop range, ripple modifier, frame-range (sub-block) marquee, moving several blocks at once, per-layer frame-rate override.
 
+## 2026-10-10: X-sheet and Quick Animate (M1 slice 6)
+
+- **X-sheet is a view of the same exposures** (selection, exposure, roles, undo and autosave are shared), living as a tab in the side panel so the strip stays visible. One column for now because there is one layer; it becomes one column per layer with compositing.
+- **Typing a number follows the paper convention:** it shows that drawing from the typed frame to the end of its hold (splitting the hold), and merges equal neighbors. A number with no drawing creates a blank one. Pure and tested (`exposeAt`).
+- **Notes live on the exposure** (not on a frame number), so they survive retiming, reordering and splitting. Stored as an optional `note` (no schema bump).
+- **Quick Animate = a body class + one floating bar**, not a second app: it reuses the strip and every command, hides the rest with CSS, and fades while a stroke is live (`onStrokeState`). Mode is remembered per device.
+- **Keys changed:** Tab = Quick Animate, Shift+Tab = hide UI, Shift+X = X-sheet tab. The X-sheet grid handles its own keys (`data-own-keys`) so digits type drawing numbers instead of setting exposure.
+- Refit uses a timer, not requestAnimationFrame (which pauses in background tabs).
+- Not built yet: new-project flipbook template, phoneme/dialogue columns, sheet columns for sound and camera, X-sheet text export.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

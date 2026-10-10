@@ -4,12 +4,20 @@ import type { Tool } from './core/stroke';
 import { buildPanel } from './ui/panel';
 import { openStore } from './io/persist';
 import { FileUI } from './ui/files';
+import { Quick } from './ui/quick';
 import { Strip } from './ui/strip';
+import { XSheet } from './ui/xsheet';
 
 const $ = <T extends HTMLElement>(sel: string) => {
   const e = document.querySelector<T>(sel);
   if (!e) throw new Error(`missing ${sel}`);
   return e;
+};
+
+/** Run `extra` after an existing hook, so several parts of the UI can listen to one event. */
+const chain = (prev: () => void, extra: () => void) => () => {
+  prev();
+  extra();
 };
 
 const app = new App($<HTMLCanvasElement>('#canvas'), $('#stage'));
@@ -65,17 +73,62 @@ setInterval(() => {
   viewEl.textContent = `${Math.round(app.view.zoom * 100)}% · ${Math.round(app.view.rot)}°${app.view.flipped ? ' · flipped' : ''}`;
 }, 150);
 
-buildPanel(app, $('#panel'));
+// Side panel: Brush and X-sheet tabs (Shift+X switches)
+buildPanel(app, $('#tab-brush'));
+const xsheet = new XSheet(app, $('#tab-xsheet'));
+const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-tab]')];
+const showTab = (name: 'brush' | 'xsheet') => {
+  for (const t of tabs) t.setAttribute('aria-selected', String(t.dataset.tab === name));
+  $('#tab-brush').hidden = name !== 'brush';
+  $('#tab-xsheet').hidden = name !== 'xsheet';
+  xsheet.show(name === 'xsheet');
+  try {
+    localStorage.setItem('2dope.m1.tab', name);
+  } catch {
+    // not persisted: fine
+  }
+};
+for (const t of tabs) t.addEventListener('click', () => showTab(t.dataset.tab === 'xsheet' ? 'xsheet' : 'brush'));
+app.onToggleXSheet = () => {
+  if (document.body.classList.contains('quick')) return;
+  showTab($('#tab-xsheet').hidden ? 'xsheet' : 'brush');
+};
+try {
+  if (localStorage.getItem('2dope.m1.tab') === 'xsheet') showTab('xsheet');
+} catch {
+  // default tab
+}
 
 const strip = new Strip(app, $('#strip'));
-app.onFrameChange = () => strip.update();
-app.onProjectLoaded = () => strip.reset();
+
+// Quick Animate (a lighter view of the same project)
+let files: FileUI | null = null;
+const quick = new Quick(app, $('#quickbar'), {
+  exportPng: () => app.exportPNG(),
+  saveFile: () => void files?.exportProject(),
+});
+app.onToggleQuick = () => quick.toggle();
+$('#enter-quick').addEventListener('click', () => quick.toggle());
+
+app.onFrameChange = () => {
+  strip.update();
+  xsheet.update();
+  quick.update();
+};
+app.onToolChange = chain(app.onToolChange, () => quick.update());
+app.onBrushChange = chain(app.onBrushChange, () => quick.update());
+app.history.onChange = chain(app.history.onChange, () => quick.update());
+app.onProjectLoaded = () => {
+  strip.reset();
+  xsheet.reset();
+  quick.update();
+};
 // The strip takes height from the stage, so fit again now that the layout is final.
 app.fit();
 
 // Local autosave, versions, recovery. If browser storage is unavailable we still run (memory only).
 const { store, persistent } = await openStore();
-const files = new FileUI(app, store, persistent);
+files = new FileUI(app, store, persistent);
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;
 await files.offerRecovery();
 if (!persistent) files.toast('Browser storage is unavailable here (private window?), so your work will not survive closing this tab. Use Save to keep a file.');

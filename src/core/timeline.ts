@@ -6,6 +6,8 @@
 export interface Exposure {
   drawing: string;
   length: number;
+  /** Optional text on the exposure sheet (dialogue, an action note). It travels with the drawing. */
+  note?: string;
 }
 
 export interface Located {
@@ -234,4 +236,55 @@ export function commonHold(ex: Exposure[], indices: number[]): number | null {
   if (!idx.length) return null;
   const first = ex[idx[0]!]!.length;
   return idx.every((i) => ex[i]!.length === first) ? first : null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// X-sheet style editing: type a drawing into a frame, per-drawing notes
+
+/** Merge neighbors that show the same drawing (a note on the second one is kept only if the first has none). */
+export function normalize(ex: Exposure[]): Exposure[] {
+  const out: Exposure[] = [];
+  let changed = false;
+  for (const e of ex) {
+    const last = out[out.length - 1];
+    if (last && last.drawing === e.drawing) {
+      out[out.length - 1] = { ...last, length: last.length + e.length, ...(last.note || !e.note ? {} : { note: e.note }) };
+      changed = true;
+    } else {
+      out.push(e);
+    }
+  }
+  return changed ? out : ex;
+}
+
+/**
+ * Show `drawing` starting at `frame`, the way typing a number into an exposure-sheet cell works:
+ * it replaces the exposure from that frame to the end of its hold (splitting the hold if the frame
+ * is in the middle of it), and neighbors showing the same drawing merge. Later frames keep their timing.
+ */
+export function exposeAt(ex: Exposure[], frame: number, drawing: string): Exposure[] {
+  const l = locate(ex, frame);
+  if (!l) return ex;
+  const cur = ex[l.index]!;
+  if (cur.drawing === drawing) return ex;
+  const out = ex.slice();
+  if (l.offset === 0) {
+    out[l.index] = { ...cur, drawing };
+  } else {
+    out.splice(l.index, 1, { ...cur, length: l.offset }, { drawing, length: cur.length - l.offset });
+  }
+  return normalize(out);
+}
+
+/** Set (or clear, with empty text) the note on one exposure. */
+export function setNote(ex: Exposure[], index: number, note: string): Exposure[] {
+  const cur = ex[index];
+  if (!cur) return ex;
+  const text = note.trim().slice(0, 200);
+  if ((cur.note ?? '') === text) return ex;
+  const out = ex.slice();
+  const { note: _old, ...rest } = cur;
+  void _old;
+  out[index] = text ? { ...rest, note: text } : rest;
+  return out;
 }

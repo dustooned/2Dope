@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { exposeAt, normalize, setNote } from './timeline';
+import { frameLabel, isSecondBoundary } from './timecode';
 import { addAfter, adjustHolds, changeHold, commonHold, dropIndex, indicesInFrames, moveExposure, removeIndices, setHolds, drawingAt, duplicateAt, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, totalFrames, type Exposure } from './timeline';
 
 const ex: Exposure[] = [
@@ -145,5 +147,66 @@ describe('multi-exposure editing', () => {
     const r = neighborDrawings(e, 4, 3, 3, (id) => keys.has(id)); // inside c
     expect(r.before.map((n) => n.drawing)).toEqual(['a']);
     expect(r.after.map((n) => n.drawing)).toEqual(['d']);
+  });
+});
+
+describe('x-sheet editing', () => {
+  const e: Exposure[] = [
+    { drawing: 'a', length: 2, note: 'hello' },
+    { drawing: 'b', length: 3 },
+    { drawing: 'c', length: 1 },
+  ];
+
+  it('typing a drawing at the start of an exposure replaces it, keeping its note and hold', () => {
+    const r = exposeAt(e, 2, 'z');
+    expect(r.map((x) => x.drawing)).toEqual(['a', 'z', 'c']);
+    expect(r[1]!.length).toBe(3);
+    expect(totalFrames(r)).toBe(6);
+  });
+
+  it('typing inside a hold splits it so later frames keep their timing', () => {
+    const r = exposeAt(e, 3, 'z'); // b holds frames 2..4; z takes 3..4
+    expect(r.map((x) => [x.drawing, x.length])).toEqual([['a', 2], ['b', 1], ['z', 2], ['c', 1]]);
+    expect(totalFrames(r)).toBe(6);
+    expect(r[0]!.note).toBe('hello');
+  });
+
+  it('typing the drawing that is already there changes nothing; matching a neighbor merges', () => {
+    expect(exposeAt(e, 3, 'b')).toBe(e);
+    const r = exposeAt(e, 2, 'a'); // b's slot becomes a, merges with the previous a
+    expect(r.map((x) => [x.drawing, x.length])).toEqual([['a', 5], ['c', 1]]);
+    expect(r[0]!.note).toBe('hello');
+    expect(exposeAt(e, 99, 'z')).toBe(e);
+  });
+
+  it('normalize merges equal neighbors and leaves other arrays alone', () => {
+    expect(normalize(e)).toBe(e);
+    expect(normalize([{ drawing: 'a', length: 1 }, { drawing: 'a', length: 2, note: 'n' }])).toEqual([{ drawing: 'a', length: 3, note: 'n' }]);
+  });
+
+  it('sets, trims and clears notes', () => {
+    expect(setNote(e, 1, '  walk in ')[1]!.note).toBe('walk in');
+    expect(setNote(e, 0, '')[0]!.note).toBeUndefined();
+    expect(setNote(e, 0, 'hello')).toBe(e);
+    expect(setNote(e, 9, 'x')).toBe(e);
+    expect(setNote(e, 1, 'x'.repeat(500))[1]!.note!.length).toBe(200);
+  });
+});
+
+describe('frame labels', () => {
+  it('formats frames, seconds+frames and timecode (frame is 0-based)', () => {
+    expect(frameLabel(0, 24, 'frames')).toBe('1');
+    expect(frameLabel(23, 24, 'frames')).toBe('24');
+    expect(frameLabel(0, 24, 'secFrames')).toBe('0+01');
+    expect(frameLabel(24, 24, 'secFrames')).toBe('1+01');
+    expect(frameLabel(35, 24, 'secFrames')).toBe('1+12');
+    expect(frameLabel(0, 24, 'timecode')).toBe('00:00:00:00');
+    expect(frameLabel(24 * 61 + 5, 24, 'timecode')).toBe('00:01:01:05');
+    expect(frameLabel(24 * 3600, 24, 'timecode')).toBe('01:00:00:00');
+  });
+  it('marks second boundaries', () => {
+    expect(isSecondBoundary(0, 12)).toBe(true);
+    expect(isSecondBoundary(12, 12)).toBe(true);
+    expect(isSecondBoundary(13, 12)).toBe(false);
   });
 });

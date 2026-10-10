@@ -182,6 +182,17 @@ describe('project schema', () => {
     expect(validateProjectFile(sample()).drawings.d2!.role).toBeUndefined();
   });
 
+  it('keeps exposure notes (trimmed, capped) and drops empty ones', () => {
+    const p = sample();
+    p.layers[0]!.exposures[0]!.note = '  walks in  ';
+    p.layers[0]!.exposures[1]!.note = '   ';
+    const ok = validateProjectFile(p);
+    expect(ok.layers[0]!.exposures[0]!.note).toBe('walks in');
+    expect(ok.layers[0]!.exposures[1]!.note).toBeUndefined();
+    p.layers[0]!.exposures[0]!.note = 'x'.repeat(500);
+    expect(validateProjectFile(p).layers[0]!.exposures[0]!.note!.length).toBe(200);
+  });
+
   it('refuses asset paths that could escape the archive', () => {
     for (const bad of ['../x.png', 'assets/../x.png', '/etc/passwd', 'assets/a.exe', 'assets/a/b.png']) {
       const p = sample();
