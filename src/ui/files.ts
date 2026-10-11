@@ -58,6 +58,8 @@ export interface NewProjectOptions {
   width?: number;
   height?: number;
   fps?: number;
+  /** How many frames the first drawing is held (default 1). */
+  frames?: number;
   folder?: string | null;
 }
 
@@ -70,12 +72,13 @@ export class FileUI {
   readonly autosaver: Autosaver;
   /** Fires when the library changed (a project was added, renamed, moved, deleted). */
   onLibraryChanged: () => void = () => {};
+  /** Fires after a project was opened or created (the gallery closes itself). */
+  onOpened: () => void = () => {};
   private readonly status = document.querySelector<HTMLElement>('#savestatus');
   private readonly storageEl = document.querySelector<HTMLElement>('#storage');
   private readonly nameInput = document.querySelector<HTMLInputElement>('#pname');
   private readonly toasts = document.querySelector<HTMLElement>('#toasts');
   private readonly dialog = document.querySelector<HTMLDialogElement>('#versions');
-  private projectsDialog: HTMLDialogElement | null = null;
   private lastRiskyAt = 0;
   private lastExportAt = Date.now();
   private lastExportChanges = 0;
@@ -135,9 +138,7 @@ export class FileUI {
   private bind(): void {
     const q = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
     q('[data-file="save"]')?.addEventListener('click', () => void this.exportProject());
-    q('[data-file="new"]')?.addEventListener('click', () => void this.newProject());
     q('[data-file="versions"]')?.addEventListener('click', () => void this.openVersions());
-    q('[data-file="projects"]')?.addEventListener('click', () => void this.openProjects());
     const input = q<HTMLInputElement>('#openfile');
     q('[data-file="open"]')?.addEventListener('click', () => input?.click());
     input?.addEventListener('change', () => {
@@ -254,6 +255,7 @@ export class FileUI {
       if (!quiet) this.toast(`Opened “${meta.name}”.`, [], 3000);
       for (const w of warnings.slice(0, 3)) this.toast(w);
       this.onLibraryChanged();
+      this.onOpened();
       return true;
     } catch (e) {
       this.toast(`Could not open that project: ${e instanceof Error ? e.message : String(e)}`);
@@ -273,6 +275,7 @@ export class FileUI {
     const p = new Project(opts.width ?? this.app.docW, opts.height ?? this.app.docH);
     p.name = opts.name?.trim() || 'Untitled';
     if (opts.fps) p.fps = opts.fps;
+    if (opts.frames && opts.frames > 1) p.exposures = [{ drawing: p.exposures[0]!.drawing, length: opts.frames }];
     const now = Date.now();
     const meta: ProjectMeta = {
       id: newId('p'),
@@ -281,7 +284,7 @@ export class FileUI {
       created: now,
       modified: now,
       opened: now,
-      frames: 1,
+      frames: opts.frames && opts.frames > 1 ? opts.frames : 1,
       drawings: 1,
       fps: p.fps,
       width: p.width,
@@ -295,6 +298,7 @@ export class FileUI {
     if (prev && prevEmpty) await this.autosaver.then(() => this.store.deleteProject(prev.id));
     this.announceOpen();
     this.onLibraryChanged();
+    this.onOpened();
   }
 
   private async projectHasContent(): Promise<boolean> {
@@ -423,6 +427,28 @@ export class FileUI {
     }
   }
 
+  /** Download any project in the library as a .2dope file (it does not have to be open). */
+  async exportStored(id: string): Promise<void> {
+    try {
+      if (this.current?.id === id) {
+        await this.exportProject();
+        return;
+      }
+      const head = await this.store.getHead(id);
+      if (!head) throw new Error('it is not in the library any more');
+      const file = parseProjectFile(head.json);
+      const files: { name: string; data: Uint8Array }[] = [{ name: 'project.json', data: new TextEncoder().encode(stringifyProjectFile(file)) }];
+      for (const path of assetsOf(file)) {
+        const data = await this.store.getAsset(path);
+        if (data) files.push({ name: path, data });
+      }
+      download(new Blob([writeZip(files) as BlobPart], { type: 'application/zip' }), fileName(file.name, '2dope'));
+      this.toast('Saved a .2dope file to your downloads.', [], 4000);
+    } catch (e) {
+      this.toast(`Could not export: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   private async exportJson(): Promise<void> {
     try {
       const settled = await captureProject(this.app.project).settle();
@@ -491,110 +517,6 @@ export class FileUI {
     } catch (e) {
       this.toast(`Could not restore that version: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }
-
-  // -------------------------------------------------------------------------------------------
-  // Projects dialog (a plain list; the gallery screen replaces it)
-
-  async openProjects(): Promise<void> {
-    if (!this.projectsDialog) {
-      const d = el('dialog', { class: 'projects', 'aria-label': 'Projects' });
-      document.body.append(d);
-      this.projectsDialog = d;
-      this.onLibraryChanged = () => {
-        if (d.open) void this.renderProjects();
-      };
-    }
-    await this.renderProjects();
-    this.projectsDialog.showModal();
-  }
-
-  private async renderProjects(): Promise<void> {
-    const d = this.projectsDialog;
-    if (!d) return;
-    const [projects, folders] = await Promise.all([this.store.listProjects(), this.store.listFolders()]);
-    projects.sort((a, b) => b.modified - a.modified);
-    folders.sort((a, b) => a.name.localeCompare(b.name));
-    d.replaceChildren();
-    const head = el('div', { class: 'phead' });
-    head.append(el('h2', {}, 'Projects'));
-    const newBtn = el('button', { type: 'button' }, 'New project');
-    newBtn.addEventListener('click', async () => {
-      d.close();
-      await this.newProject();
-    });
-    const folderBtn = el('button', { type: 'button' }, 'New folder');
-    folderBtn.addEventListener('click', async () => {
-      const name = window.prompt('Folder name', 'New folder');
-      if (name !== null) await this.newFolder(name);
-    });
-    const close = el('button', { type: 'button' }, 'Close');
-    close.addEventListener('click', () => d.close());
-    head.append(newBtn, folderBtn, close);
-    d.append(head);
-
-    const list = el('div', { class: 'plist' });
-    const groups: { folder: FolderRecord | null; items: ProjectMeta[] }[] = [
-      { folder: null, items: projects.filter((p) => !p.folder || !folders.some((f) => f.id === p.folder)) },
-      ...folders.map((f) => ({ folder: f, items: projects.filter((p) => p.folder === f.id) })),
-    ];
-    for (const g of groups) {
-      if (g.folder) {
-        const fh = el('div', { class: 'pfolder' });
-        fh.append(el('strong', {}, `📁 ${g.folder.name}`), el('span', { class: 'hint' }, `${g.items.length} project${g.items.length === 1 ? '' : 's'}`));
-        const f = g.folder;
-        const ren = el('button', { type: 'button' }, 'Rename');
-        ren.addEventListener('click', async () => {
-          const name = window.prompt('Folder name', f.name);
-          if (name !== null) await this.renameFolder(f, name);
-        });
-        const del = el('button', { type: 'button', title: 'Delete the folder (its projects move to the top level)' }, 'Remove');
-        del.addEventListener('click', () => void this.deleteFolder(f.id));
-        fh.append(ren, del);
-        list.append(fh);
-      }
-      for (const p of g.items) list.append(this.projectRow(p, folders));
-    }
-    d.append(list);
-  }
-
-  private projectRow(p: ProjectMeta, folders: FolderRecord[]): HTMLElement {
-    const row = el('div', { class: `prow${this.current?.id === p.id ? ' current' : ''}` });
-    const img = el('img', { class: 'pthumb', alt: '' });
-    if (p.thumb) {
-      const url = URL.createObjectURL(new Blob([p.thumb as BlobPart], { type: 'image/png' }));
-      img.src = url;
-      img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
-    }
-    const info = el('div', { class: 'vinfo' });
-    info.append(
-      el('strong', {}, p.name + (this.current?.id === p.id ? ' (open)' : '')),
-      el('span', { class: 'hint' }, `${p.frames} frame${p.frames === 1 ? '' : 's'} · ${p.drawings} drawing${p.drawings === 1 ? '' : 's'} · ${p.width}×${p.height} · ${p.fps} fps · ${ago(p.modified)}`),
-    );
-    const open = el('button', { type: 'button' }, 'Open');
-    open.addEventListener('click', async () => {
-      this.projectsDialog?.close();
-      await this.openProject(p.id);
-    });
-    const ren = el('button', { type: 'button' }, 'Rename');
-    ren.addEventListener('click', async () => {
-      const name = window.prompt('Project name', p.name);
-      if (name !== null) await this.renameProject(p.id, name);
-    });
-    const move = el('select', { 'aria-label': 'Folder', title: 'Move to a folder' });
-    move.append(el('option', { value: '' }, 'No folder'));
-    for (const f of folders) move.append(el('option', { value: f.id }, f.name));
-    move.value = p.folder ?? '';
-    move.addEventListener('change', () => void this.moveProject(p.id, move.value || null));
-    const dup = el('button', { type: 'button' }, 'Duplicate');
-    dup.addEventListener('click', () => void this.duplicateProject(p.id));
-    const del = el('button', { type: 'button' }, 'Delete');
-    del.addEventListener('click', async () => {
-      if (!window.confirm(`Delete “${p.name}” and its versions from this device? Export a .2dope first if you want to keep a copy.`)) return;
-      await this.deleteProject(p.id);
-    });
-    row.append(img, info, open, ren, move, dup, del);
-    return row;
   }
 
   // -------------------------------------------------------------------------------------------

@@ -65,7 +65,7 @@ export function isResident(d: Drawing): boolean {
   return d.parked === null;
 }
 
-export const FPS_PRESETS = [12, 15, 24, 25, 30, 60];
+export const FPS_PRESETS = [12, 15, 24, 25, 30, 50, 60];
 
 /** Draw the whole drawing (fill, then line, then vectors) onto a context. */
 export function paintDrawing(g: CanvasRenderingContext2D, d: Drawing): void {

@@ -43,9 +43,16 @@ export class OnionCache {
   private readonly map = new Map<string, HTMLCanvasElement>();
 
   constructor(
-    private readonly w: number,
-    private readonly h: number,
+    private w: number,
+    private h: number,
   ) {}
+
+  /** A project of another size was opened: old ghosts no longer fit. */
+  resize(w: number, h: number): void {
+    this.w = w;
+    this.h = h;
+    this.clear();
+  }
 
   clear(): void {
     for (const c of this.map.values()) free(c);

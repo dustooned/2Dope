@@ -73,10 +73,17 @@ export interface InputStats {
 }
 
 export class App {
-  readonly docW = 1920;
-  readonly docH = 1080;
-  project = new Project(this.docW, this.docH);
-  readonly raster = new RasterEngine(this.docW, this.docH);
+  project = new Project(1920, 1080);
+  readonly raster = new RasterEngine(1920, 1080);
+  /** The open project's page size in pixels. */
+  get docW(): number {
+    return this.project.width;
+  }
+
+  get docH(): number {
+    return this.project.height;
+  }
+
   /** Current frame, 0-based. */
   frame = 0;
   playing = false;
@@ -141,7 +148,7 @@ export class App {
   private playClock = { t0: 0, f0: 0 };
   private spacePanned = false;
   private fillScratch: HTMLCanvasElement | null = null;
-  private readonly onionCache = new OnionCache(this.docW, this.docH);
+  private readonly onionCache = new OnionCache(1920, 1080);
   private thumbsChanged = false;
   /** Undo/redo wait for parked drawings to come back; this keeps them in order. */
   private historyChain: Promise<void> = Promise.resolve();
@@ -350,10 +357,16 @@ export class App {
     this.playing = false;
     this.scrubbing = false;
     this.lockFrame = null;
+    const resized = p.width !== this.project.width || p.height !== this.project.height;
     this.project = p;
     this.selection = [];
     this.frame = 0;
-    this.onionCache.clear();
+    if (resized) {
+      this.raster.resize(p.width, p.height);
+      this.fillScratch = null;
+      this.fit();
+    }
+    this.onionCache.resize(p.width, p.height);
     this.residency.setProject(p);
     this.history.clear();
     this.requestRender();

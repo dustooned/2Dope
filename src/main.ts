@@ -8,6 +8,8 @@ import { buildPanel } from './ui/panel';
 import { openStore } from './io/persist';
 import { ExportUI } from './ui/exportdialog';
 import { FileUI } from './ui/files';
+import { Gallery } from './ui/gallery';
+import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
 import { Strip } from './ui/strip';
 import { XSheet } from './ui/xsheet';
@@ -220,6 +222,18 @@ const { store, persistent } = await openStore();
 files = new FileUI(app, store, persistent);
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;
 exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
+const newUI = new NewProjectUI();
+const gallery = new Gallery(files, newUI, $('#gallery'));
+const showGallery = () => void gallery.open();
+$('#open-gallery').addEventListener('click', showGallery);
+document.querySelectorAll('[data-file="projects"]').forEach((b) => b.addEventListener('click', showGallery));
+document.querySelectorAll('[data-file="new"]').forEach((b) =>
+  b.addEventListener('click', async () => {
+    const opts = await newUI.open(null);
+    if (opts) await files?.newProject(opts);
+  }),
+);
+if (import.meta.env.DEV) (window as unknown as { __gallery: Gallery }).__gallery = gallery;
 $('#export-seq').addEventListener('click', () => exporter?.open());
 if (import.meta.env.DEV) (window as unknown as { __export: ExportUI }).__export = exporter;
 await files.start();

@@ -51,7 +51,7 @@
       </section>
     </div>
     <header class="topbar">
-      <strong class="logo">2Dope</strong>
+      <button type="button" id="open-gallery" class="gbtn" title="All your projects">Projects</button>
       <div class="group file" role="group" aria-label="Project">
         <input id="pname" type="text" placeholder="Untitled" maxlength="60" aria-label="Project name" />
         <span id="savestatus" class="readout" role="status"></span>
@@ -93,6 +93,7 @@
         <div id="tab-xsheet" role="tabpanel" hidden></div>
       </aside>
     </main>
+    <section id="gallery" class="gallery" aria-label="Projects" hidden></section>
     <dialog id="export" aria-label="Export"></dialog>
     <div id="quickbar"></div>
     <div id="toasts" class="toasts" aria-live="polite"></div>

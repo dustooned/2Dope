@@ -59,6 +59,13 @@ npm run dev:lan
 - **Mark K / B / I:** label drawings as **key**, **breakdown** or **inbetween** (badge on the block; click again to clear). **Keys only** limits onion skin to key drawings.
 - **Zoom** slider for long shots. **Delete** removes all selected drawings (undoable).
 
+## Gallery and New project
+
+- **Projects** (top-left of the toolbar, or ☰ menu) opens the **gallery**: every project as a card with its picture, name, size and age. Tap to open; **Esc** or **← Drawing** goes back.
+- **Folders**: **New folder**, then press and hold a project (or drag with a mouse) and drop it on a folder, or on the **Projects** crumb to take it out. **⋯** on a card: Open, Rename, Move to…, Duplicate, Export .2dope, Delete. **Select** works on several at once.
+- Sort by recently changed, recently opened, newest or name (remembered).
+- **+ New project** (also ☰ → New project): pick a **shape** (Wide 16:9, Ultrawide 21:9, Vertical 9:16, Square, Classic 4:3, This screen, or Custom), a **quality** (720p / 1080p / 1440p by the short side), a **speed** (12 frame-by-frame, 15 anime, 24 cinema, 25, 30 TV, 50, 60, or any 1–120) and a **length** (1 frame, or the first drawing held 1–10 seconds). It warns when a page is heavy for an iPad and remembers your last choice. 4K is not offered yet: it needs more memory than an iPad has until tiled storage exists.
+
 ## Library and memory (after M1)
 
 - **Projects** (☰ menu): every project stays on this device and is always saved, like Procreate Dreams' Theater. Open, rename, duplicate (shares images, no extra space), delete, and sort into **folders**. 2Dope reopens the last project on start; there is nothing to "restore".

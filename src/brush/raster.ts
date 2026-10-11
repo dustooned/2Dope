@@ -158,8 +158,8 @@ export class RasterEngine {
   private bbox: { x0: number; y0: number; x1: number; y1: number } | null = null;
 
   constructor(
-    readonly width: number,
-    readonly height: number,
+    public width: number,
+    public height: number,
   ) {
     this.target = makeCanvas(width, height);
     this.buffer = makeCanvas(width, height);
@@ -169,6 +169,17 @@ export class RasterEngine {
     this.work = makeCanvas(width, height);
     this.bctx = ctx2d(this.buffer);
     this.sctx = ctx2d(this.shadeBuffer);
+  }
+
+  /** Match another document size (a different project was opened). Only call between strokes. */
+  resize(width: number, height: number): void {
+    if (width === this.width && height === this.height) return;
+    this.width = width;
+    this.height = height;
+    for (const c of [this.buffer, this.shadeBuffer, this.grained, this.scratch, this.work]) {
+      c.width = width;
+      c.height = height;
+    }
   }
 
   /** The canvas strokes paint onto. */
