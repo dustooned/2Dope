@@ -83,7 +83,7 @@ export class Quick {
     this.more.append(
       btn('Vector pen', 'Vector pen (P)', () => app.setTool('pen')),
       this.planeBtn,
-      btn('Duplicate', 'Duplicate drawing (D)', () => app.duplicateFrame()),
+      btn('Duplicate', 'Duplicate drawing (D)', () => void app.duplicateSelection()),
       btn('Delete', 'Delete drawing', () => app.deleteFrame()),
       this.lockBtn,
       btn('Fit view', 'Fit (F)', () => app.fit()),

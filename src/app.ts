@@ -12,7 +12,28 @@ import { compLength, frameContent, invert, worldMatrix } from './core/comp';
 import { CompEditor } from './compedit';
 import { drawComp } from './view/composite';
 import { drawMotionOverlay } from './view/overlay';
-import { addAfter, adjustHolds, drawingAt, duplicateAt, exposeAt, setNote, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, removeIndices, setHolds, totalFrames, type Edit, type Exposure } from './core/timeline';
+import {
+  addAfter,
+  adjustHolds,
+  drawingAt,
+  duplicateAt,
+  duplicateBlock,
+  exposeAt,
+  insertAt,
+  moveBlock,
+  setNote,
+  locate,
+  neighborDrawings,
+  nextDrawing,
+  prevDrawing,
+  removeAt,
+  removeIndices,
+  setHolds,
+  shiftBlock,
+  totalFrames,
+  type Edit,
+  type Exposure,
+} from './core/timeline';
 import { Smoother } from './brush/smoothing';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
@@ -562,8 +583,10 @@ export class App {
     const layerId = layer.id;
     const beforeEx = layer.exposures;
     const beforeFrame = this.lf;
+    const beforeSel = [...this.selection];
     const r = fn(beforeEx);
     if (r.ex === beforeEx) return;
+    const after = (): number[] => r.selection ?? (keepSelection ? beforeSel : []);
     // the layer object can be replaced by a comp-level undo, so find it again each time
     const find = () => {
       this.project.activeComp = compId;
@@ -576,8 +599,8 @@ export class App {
       {
         label,
         do: () => {
-          if (!keepSelection) this.selection = [];
           this.focusLayer(layerId);
+          this.selection = after();
           const l = find();
           if (l) l.exposures = r.ex;
           this.frame = place(r.frame, r.ex);
@@ -586,8 +609,8 @@ export class App {
           this.onDocChanged();
         },
         undo: () => {
-          if (!keepSelection) this.selection = [];
           this.focusLayer(layerId);
+          this.selection = keepSelection || r.selection ? beforeSel : [];
           const l = find();
           if (l) l.exposures = beforeEx;
           this.frame = place(beforeFrame, beforeEx);
@@ -609,6 +632,93 @@ export class App {
     if (!this.residency.isReady(this.drawing)) return;
     const d = this.project.cloneDrawing(this.drawing);
     this.editTimeline('Duplicate frame', (ex) => duplicateAt(ex, this.lf, d.id));
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Block editing (X-sheet and strip action bar): each is one undo step and selects its result
+
+  /** Exposures copied with Copy / Cut (drawing references and holds). Lives for the session. */
+  clipboard: Exposure[] = [];
+
+  /** A blank drawing (one frame) before the first or after the last selected exposure. */
+  insertBlank(where: 'before' | 'after'): void {
+    const t = this.targets;
+    if (!t.length) return this.addFrame();
+    const d = this.project.newDrawing();
+    const at = where === 'before' ? t[0]! : t[t.length - 1]! + 1;
+    this.editTimeline('Insert frame', (ex) => insertAt(ex, at, [{ drawing: d.id, length: 1 }]));
+  }
+
+  /** New drawings copied from the selected ones, placed right after them with the same holds. */
+  async duplicateSelection(): Promise<void> {
+    const t = this.targets;
+    if (this.live || !t.length) return;
+    const ex = this.project.exposures;
+    const copies = await this.copyDrawings(t.map((i) => ex[i]!.drawing));
+    if (copies && this.project.exposures === ex) this.editTimeline(t.length > 1 ? 'Duplicate drawings' : 'Duplicate frame', (e) => duplicateBlock(e, t, copies));
+  }
+
+  copySelection(): number {
+    const ex = this.project.exposures;
+    this.clipboard = this.targets.map((i) => ({ drawing: ex[i]!.drawing, length: ex[i]!.length }));
+    return this.clipboard.length;
+  }
+
+  cutSelection(): void {
+    if (!this.copySelection()) return;
+    this.selection = [...this.targets];
+    this.deleteFrame();
+  }
+
+  /**
+   * Paste after the selection (or the current drawing). `copies` makes new drawings; otherwise
+   * the same drawings are shown again, the way an exposure sheet reuses a number (cycles, holds).
+   */
+  async paste(copies = false): Promise<void> {
+    const items = this.clipboard.filter((e) => this.project.drawings.has(e.drawing));
+    if (this.live || !items.length) return;
+    const t = this.targets;
+    const at = t.length ? t[t.length - 1]! + 1 : this.project.exposures.length;
+    const ex = this.project.exposures;
+    let ids = items.map((e) => e.drawing);
+    if (copies) {
+      const made = await this.copyDrawings(ids);
+      if (!made || this.project.exposures !== ex) return;
+      ids = made;
+    }
+    this.editTimeline(copies ? 'Paste copies' : 'Paste', (e) =>
+      insertAt(
+        e,
+        at,
+        items.map((it, k) => ({ drawing: ids[k]!, length: it.length })),
+      ),
+    );
+  }
+
+  /** Move the selected (or current) exposures earlier or later by `delta` places, as one block. */
+  moveSelection(delta: number): void {
+    const t = this.targets;
+    this.editTimeline(delta < 0 ? 'Move earlier' : 'Move later', (ex) => shiftBlock(ex, t, delta));
+  }
+
+  /** Drop the selected block so it starts at `to` (an index among the exposures left without it). */
+  moveSelectionTo(to: number): void {
+    const t = this.targets;
+    this.editTimeline('Move drawings', (ex) => moveBlock(ex, t, to));
+  }
+
+  /** New drawings copied from these (one copy per distinct drawing), or null if one could not load. */
+  private async copyDrawings(ids: string[]): Promise<string[] | null> {
+    const src = [...new Set(ids)].map((id) => this.project.drawing(id));
+    try {
+      await Promise.all(src.map((d) => this.residency.pin(d)));
+      const made = new Map(src.map((d) => [d.id, this.project.cloneDrawing(d).id]));
+      return ids.map((id) => made.get(id)!);
+    } catch {
+      return null;
+    } finally {
+      for (const d of src) this.residency.unpin(d);
+    }
   }
 
   /** Selected exposures, or the current drawing's when nothing is selected. */
@@ -972,8 +1082,7 @@ export class App {
     // Pen or mouse: the pen always wins over an ongoing touch gesture.
     this.pinch = null;
     const p = this.local(e);
-    const mode: NavMode | null =
-      e.button === 1 || this.held.has('Space') ? 'pan' : this.held.has('KeyR') ? 'rotate' : this.held.has('KeyZ') ? 'zoom' : null;
+    const mode: NavMode | null = e.button === 1 || this.held.has('Space') ? 'pan' : this.held.has('KeyR') ? 'rotate' : this.held.has('KeyZ') ? 'zoom' : null;
     if (mode) {
       if (mode === 'pan' && this.held.has('Space')) this.spacePanned = true;
       const c = { x: this.viewW / 2, y: this.viewH / 2 };
@@ -1121,7 +1230,7 @@ export class App {
       const mid = { x: (ta.x + tb.x) / 2, y: (ta.y + tb.y) / 2 };
       const v = this.view;
       v.zoom = Math.min(Viewport.MAX_ZOOM, Math.max(Viewport.MIN_ZOOM, (pinch.startZoom * dist) / pinch.startDist));
-      v.rot = snapRotation(pinch.startRot + ((ang - pinch.startAng) * 180) / Math.PI * (v.flipped ? -1 : 1));
+      v.rot = snapRotation(pinch.startRot + (((ang - pinch.startAng) * 180) / Math.PI) * (v.flipped ? -1 : 1));
       v.anchor(pinch.anchor, mid.x, mid.y);
       this.requestRender();
       return;
@@ -1129,7 +1238,7 @@ export class App {
     if (this.touches.size === 1 && (!this.fingerPaint || this.workspace === 'motion') && !this.editor.dragging) {
       const t = this.touches.get(id)!;
       // One finger pans (the pen always draws, fingers navigate).
-      const prev = (t as TouchInfo & { px?: number; py?: number });
+      const prev = t as TouchInfo & { px?: number; py?: number };
       const px = prev.px ?? t.sx;
       const py = prev.py ?? t.sy;
       this.view.pan(p.x - px, p.y - py);
@@ -1200,7 +1309,20 @@ export class App {
       this.selectAll();
       return;
     }
+    // copy / cut / paste drawings on the timeline (Shift+Ctrl+V pastes new copies)
+    if (mod && this.workspace !== 'motion' && (e.code === 'KeyC' || e.code === 'KeyX' || e.code === 'KeyV')) {
+      e.preventDefault();
+      if (e.code === 'KeyC') this.copySelection();
+      else if (e.code === 'KeyX') this.cutSelection();
+      else void this.paste(e.shiftKey);
+      return;
+    }
     if (mod) return;
+    if (e.altKey && this.workspace !== 'motion' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+      e.preventDefault();
+      this.moveSelection(e.code === 'ArrowLeft' ? -1 : 1);
+      return;
+    }
     if (['Space', 'KeyR', 'KeyZ'].includes(e.code)) {
       if (e.code === 'Space') {
         e.preventDefault();
@@ -1247,7 +1369,7 @@ export class App {
         this.addFrame();
         break;
       case 'KeyD':
-        this.duplicateFrame();
+        void this.duplicateSelection();
         break;
       case 'Delete':
       case 'Backspace':

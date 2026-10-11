@@ -23,6 +23,8 @@ export interface Edit {
   ex: Exposure[];
   /** Where the playhead should go after the edit. */
   frame: number;
+  /** Exposures to select after the edit (omitted: the caller decides). */
+  selection?: number[];
 }
 
 export function totalFrames(ex: Exposure[]): number {
@@ -209,6 +211,72 @@ export function dropIndex(ex: Exposure[], from: number, x: number): number {
   let before = 0;
   for (let i = 0; i < ex.length; i++) {
     if (i === from) continue;
+    const len = ex[i]!.length;
+    if (pos + len / 2 < x) before++;
+    pos += len;
+  }
+  return before;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Block editing by touch: insert, duplicate, paste, move. The result selects what was made or
+// moved, so a second tap (move again, delete, copy) acts on the same block.
+
+/** Insert exposures at `index` (0 = before the first, `ex.length` = at the end). */
+export function insertAt(ex: Exposure[], index: number, items: Exposure[]): Edit {
+  const at = Math.max(0, Math.min(ex.length, Math.round(index)));
+  if (!items.length) return { ex, frame: startOf(ex, at), selection: [] };
+  const out = ex.slice();
+  out.splice(at, 0, ...items.map((e) => ({ ...e, length: Math.max(1, Math.round(e.length)) })));
+  return { ex: out, frame: startOf(out, at), selection: items.map((_, i) => at + i) };
+}
+
+/**
+ * Copy the listed exposures, in order and with their holds, right after the last of them.
+ * `ids` are the drawings the copies show (new drawings for "duplicate", the same ids to repeat).
+ */
+export function duplicateBlock(ex: Exposure[], indices: number[], ids: string[]): Edit {
+  const idx = uniqueSorted(indices, ex.length);
+  if (!idx.length || ids.length !== idx.length) return { ex, frame: 0 };
+  const items = idx.map((i, k) => {
+    const { note: _n, ...rest } = ex[i]!;
+    void _n;
+    return { ...rest, drawing: ids[k]! };
+  });
+  return insertAt(ex, idx[idx.length - 1]! + 1, items);
+}
+
+/**
+ * Take the listed exposures out (they close up into one block, keeping their order) and put the
+ * block back so it starts at `to`, an index into what is left. Holds and notes travel along.
+ */
+export function moveBlock(ex: Exposure[], indices: number[], to: number): Edit {
+  const idx = uniqueSorted(indices, ex.length);
+  if (!idx.length) return { ex, frame: 0 };
+  const pick = new Set(idx);
+  const block = idx.map((i) => ex[i]!);
+  const rest = ex.filter((_, i) => !pick.has(i));
+  const at = Math.max(0, Math.min(rest.length, Math.round(to)));
+  const out = [...rest.slice(0, at), ...block, ...rest.slice(at)];
+  const selection = block.map((_, k) => at + k);
+  if (out.every((e, i) => e === ex[i])) return { ex, frame: startOf(ex, idx[0]!), selection: idx };
+  return { ex: out, frame: startOf(out, at), selection };
+}
+
+/** Move the listed exposures `delta` places earlier (−) or later (+) as one block. */
+export function shiftBlock(ex: Exposure[], indices: number[], delta: number): Edit {
+  const idx = uniqueSorted(indices, ex.length);
+  if (!idx.length) return { ex, frame: 0 };
+  return moveBlock(ex, idx, idx[0]! + Math.round(delta));
+}
+
+/** Where a dragged block lands (index into the exposures left without it) when its centre is at frame position `x`. */
+export function blockDropIndex(ex: Exposure[], indices: number[], x: number): number {
+  const pick = new Set(uniqueSorted(indices, ex.length));
+  let pos = 0;
+  let before = 0;
+  for (let i = 0; i < ex.length; i++) {
+    if (pick.has(i)) continue;
     const len = ex[i]!.length;
     if (pos + len / 2 < x) before++;
     pos += len;

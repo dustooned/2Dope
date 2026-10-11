@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { exposeAt, normalize, setNote } from './timeline';
+import { blockDropIndex, duplicateBlock, exposeAt, insertAt, moveBlock, normalize, setNote, shiftBlock } from './timeline';
 import { frameLabel, isSecondBoundary } from './timecode';
-import { addAfter, adjustHolds, changeHold, commonHold, dropIndex, indicesInFrames, moveExposure, removeIndices, setHolds, drawingAt, duplicateAt, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, totalFrames, type Exposure } from './timeline';
+import {
+  addAfter,
+  adjustHolds,
+  changeHold,
+  commonHold,
+  dropIndex,
+  indicesInFrames,
+  moveExposure,
+  removeIndices,
+  setHolds,
+  drawingAt,
+  duplicateAt,
+  locate,
+  neighborDrawings,
+  nextDrawing,
+  prevDrawing,
+  removeAt,
+  totalFrames,
+  type Exposure,
+} from './timeline';
 
 const ex: Exposure[] = [
   { drawing: 'a', length: 2 },
@@ -166,7 +185,12 @@ describe('x-sheet editing', () => {
 
   it('typing inside a hold splits it so later frames keep their timing', () => {
     const r = exposeAt(e, 3, 'z'); // b holds frames 2..4; z takes 3..4
-    expect(r.map((x) => [x.drawing, x.length])).toEqual([['a', 2], ['b', 1], ['z', 2], ['c', 1]]);
+    expect(r.map((x) => [x.drawing, x.length])).toEqual([
+      ['a', 2],
+      ['b', 1],
+      ['z', 2],
+      ['c', 1],
+    ]);
     expect(totalFrames(r)).toBe(6);
     expect(r[0]!.note).toBe('hello');
   });
@@ -174,14 +198,22 @@ describe('x-sheet editing', () => {
   it('typing the drawing that is already there changes nothing; matching a neighbor merges', () => {
     expect(exposeAt(e, 3, 'b')).toBe(e);
     const r = exposeAt(e, 2, 'a'); // b's slot becomes a, merges with the previous a
-    expect(r.map((x) => [x.drawing, x.length])).toEqual([['a', 5], ['c', 1]]);
+    expect(r.map((x) => [x.drawing, x.length])).toEqual([
+      ['a', 5],
+      ['c', 1],
+    ]);
     expect(r[0]!.note).toBe('hello');
     expect(exposeAt(e, 99, 'z')).toBe(e);
   });
 
   it('normalize merges equal neighbors and leaves other arrays alone', () => {
     expect(normalize(e)).toBe(e);
-    expect(normalize([{ drawing: 'a', length: 1 }, { drawing: 'a', length: 2, note: 'n' }])).toEqual([{ drawing: 'a', length: 3, note: 'n' }]);
+    expect(
+      normalize([
+        { drawing: 'a', length: 1 },
+        { drawing: 'a', length: 2, note: 'n' },
+      ]),
+    ).toEqual([{ drawing: 'a', length: 3, note: 'n' }]);
   });
 
   it('sets, trims and clears notes', () => {
@@ -208,5 +240,49 @@ describe('frame labels', () => {
     expect(isSecondBoundary(0, 12)).toBe(true);
     expect(isSecondBoundary(12, 12)).toBe(true);
     expect(isSecondBoundary(13, 12)).toBe(false);
+  });
+});
+
+describe('block editing by touch', () => {
+  const four: Exposure[] = [
+    { drawing: 'a', length: 2 },
+    { drawing: 'b', length: 1, note: 'hey' },
+    { drawing: 'c', length: 3 },
+    { drawing: 'd', length: 1 },
+  ];
+  const names = (x: Exposure[]) => x.map((e) => `${e.drawing}${e.length}`).join(' ');
+
+  it('inserts at an index and selects what was inserted', () => {
+    const r = insertAt(four, 1, [{ drawing: 'n', length: 1 }]);
+    expect(names(r.ex)).toBe('a2 n1 b1 c3 d1');
+    expect(r.selection).toEqual([1]);
+    expect(r.frame).toBe(2);
+    expect(names(insertAt(four, 99, [{ drawing: 'n', length: 2 }]).ex)).toBe('a2 b1 c3 d1 n2');
+  });
+
+  it('duplicates a block after its last exposure, keeping holds, dropping notes', () => {
+    const r = duplicateBlock(four, [2, 1], ['b2', 'c2']);
+    expect(names(r.ex)).toBe('a2 b1 c3 b21 c23 d1');
+    expect(r.ex[3]!.note).toBeUndefined();
+    expect(r.selection).toEqual([3, 4]);
+    expect(r.frame).toBe(6);
+  });
+
+  it('moves a block (even a scattered one) as one piece; notes travel', () => {
+    const r = moveBlock(four, [1, 3], 0);
+    expect(names(r.ex)).toBe('b1 d1 a2 c3');
+    expect(r.ex[0]!.note).toBe('hey');
+    expect(r.selection).toEqual([0, 1]);
+    expect(names(shiftBlock(four, [1], 1).ex)).toBe('a2 c3 b1 d1');
+    expect(names(shiftBlock(four, [1], -5).ex)).toBe('b1 a2 c3 d1');
+    expect(shiftBlock(four, [3], 1).ex).toBe(four); // already last: nothing changes
+  });
+
+  it('a dragged block lands by its centre', () => {
+    // without b: a2 (mid 1) c3 (mid 3.5) d1 (mid 5.5)
+    expect(blockDropIndex(four, [1], 0.5)).toBe(0);
+    expect(blockDropIndex(four, [1], 1.5)).toBe(1);
+    expect(blockDropIndex(four, [1], 4)).toBe(2);
+    expect(blockDropIndex(four, [1], 9)).toBe(3);
   });
 });

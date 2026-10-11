@@ -2075,3 +2075,138 @@ body.ws-time .panel {
 .pstar.on {
   color: #ffd24a;
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Context menu (right-click / press and hold), shared by every area */
+
+.ctxmenu {
+  position: fixed;
+  z-index: 200;
+  min-width: 210px;
+  max-width: min(300px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(38, 38, 45, 0.98);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  -webkit-touch-callout: none;
+}
+
+.ctxmenu.sheet {
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  max-width: none;
+  max-height: 70vh;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+  border-radius: 16px;
+}
+
+.ctxmenu > button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  min-height: 38px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.ctxmenu.sheet > button {
+  min-height: 46px;
+}
+
+.ctxmenu > button:hover:not([disabled]),
+.ctxmenu > button:focus-visible {
+  background: var(--panel-2);
+}
+
+.ctxmenu > button[disabled] {
+  opacity: 0.4;
+}
+
+.ctxmenu > button.danger {
+  color: #ff7b7b;
+}
+
+.ctx-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ctx-title {
+  padding: 6px 10px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--line);
+}
+
+.ctx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.ctx-chips button {
+  min-width: 40px;
+  min-height: 34px;
+  padding: 0 8px;
+}
+
+.ctx-chips button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* X-sheet touch actions */
+
+.xs-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 6px;
+}
+
+.xs-acts button {
+  min-width: 36px;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.xs-acts button.danger {
+  color: #ff7b7b;
+}
+
+.xs-fno {
+  touch-action: none;
+}
+
+.xs-row.lifted {
+  background: #5a3348;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.xs-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  margin-top: -1px;
+  background: var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 2;
+}

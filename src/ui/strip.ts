@@ -1,6 +1,8 @@
 import type { App } from '../app';
 import { FPS_PRESETS, ROLES, type Drawing, type Role } from '../core/project';
-import { commonHold, dropIndex, indicesInFrames, locate, moveExposure, setHolds, startOf, type Exposure } from '../core/timeline';
+import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, type Exposure } from '../core/timeline';
+import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './contextmenu';
+import { frameMenu } from './framemenu';
 
 const THUMB_W = 56;
 const THUMB_H = 32;
@@ -95,7 +97,7 @@ export class Strip {
     const edit = el('div', { class: 'group' });
     edit.append(
       btn('+ Frame', 'New drawing after this frame (N)', () => app.addFrame()),
-      btn('Duplicate', 'Duplicate drawing (D)', () => app.duplicateFrame()),
+      btn('Duplicate', 'Duplicate drawing (D)', () => void app.duplicateSelection()),
       btn('Delete', 'Delete the selected drawings, or this one (Delete)', () => app.deleteFrame()),
     );
 
@@ -113,7 +115,12 @@ export class Strip {
     });
     this.expInput.addEventListener('keyup', (e) => e.stopPropagation());
     this.expLabel = el('span', { class: 'readout exp-readout', title: 'Exposure of the selected drawings (or the current one)' });
-    exposure.append(this.expInput, this.expLabel, btn('−', 'One frame shorter (−)', () => app.changeHold(-1)), btn('+', 'One frame longer (=)', () => app.changeHold(1)));
+    exposure.append(
+      this.expInput,
+      this.expLabel,
+      btn('−', 'One frame shorter (−)', () => app.changeHold(-1)),
+      btn('+', 'One frame longer (=)', () => app.changeHold(1)),
+    );
 
     // Roles: what each drawing is for.
     const roles = el('div', { class: 'group', role: 'group', 'aria-label': 'Drawing role' });
@@ -138,8 +145,18 @@ export class Strip {
       return sel;
     };
     onion.append(this.onionBtn);
-    this.beforeSel = count('◀', 'Previous drawings shown (blue)', () => app.onion.before, (n) => (app.onion.before = n));
-    this.afterSel = count('▶', 'Next drawings shown (red)', () => app.onion.after, (n) => (app.onion.after = n));
+    this.beforeSel = count(
+      '◀',
+      'Previous drawings shown (blue)',
+      () => app.onion.before,
+      (n) => (app.onion.before = n),
+    );
+    this.afterSel = count(
+      '▶',
+      'Next drawings shown (red)',
+      () => app.onion.after,
+      (n) => (app.onion.after = n),
+    );
     this.opacityRange = el('input', { type: 'range', min: '0.1', max: '0.9', step: '0.05', 'aria-label': 'Onion opacity', title: 'Onion opacity', class: 'onion-opacity' });
     this.opacityRange.value = String(app.onion.opacity);
     this.opacityRange.addEventListener('input', () => {
@@ -221,6 +238,18 @@ export class Strip {
           if (!app.selection.includes(index)) app.setSelection([index]);
         } else {
           this.drag = { kind: 'move', index, before, startX: p.x, moved: false, shift: e.shiftKey };
+          // press and hold (still) on a drawing: its menu
+          const at = { x: e.clientX, y: e.clientY };
+          clearTimeout(this.holdTimer);
+          this.holdTimer = window.setTimeout(() => {
+            const d = this.drag;
+            if (!d || d.kind !== 'move' || d.moved) return;
+            this.drag = null;
+            if (!app.selection.includes(index)) app.setSelection([index]);
+            this.lastHold = Date.now();
+            swallowNextClick();
+            showContextMenu(at.x, at.y, frameMenu(app));
+          }, HOLD_MS);
         }
         return;
       }
@@ -246,10 +275,20 @@ export class Strip {
         const group = app.selection.includes(d.index) ? app.selection : [d.index];
         app.previewExposures(setHolds(d.before, group, length));
       } else if (d.kind === 'move') {
-        if (!d.moved && Math.abs(p.x - d.startX) < DRAG_THRESHOLD) return;
+        if (!d.moved && Math.abs(p.x - d.startX) < Math.max(DRAG_THRESHOLD, e.pointerType === 'touch' ? HOLD_SLOP : 0)) return;
         d.moved = true;
-        const to = dropIndex(d.before, d.index, p.x / this.cell);
-        app.previewExposures(moveExposure(d.before, d.index, to));
+        clearTimeout(this.holdTimer);
+        // a selected block drags the whole selection along
+        const group = app.selection.includes(d.index) && app.selection.length > 1 ? app.selection : null;
+        if (group) {
+          const start = startOf(d.before, group[0]!);
+          const len = group.reduce((n, i) => n + d.before[i]!.length, 0);
+          const to = blockDropIndex(d.before, group, start + len / 2 + (p.x - d.startX) / this.cell);
+          app.previewExposures(moveBlock(d.before, group, to).ex);
+        } else {
+          const to = dropIndex(d.before, d.index, p.x / this.cell);
+          app.previewExposures(moveExposure(d.before, d.index, to));
+        }
       } else if (d.kind === 'marquee') {
         if (!d.moved && Math.hypot(p.x - d.x0, p.y - d.y0) < DRAG_THRESHOLD) return;
         d.moved = true;
@@ -263,6 +302,7 @@ export class Strip {
     });
 
     const finish = (e: PointerEvent, cancelled: boolean) => {
+      clearTimeout(this.holdTimer);
       const d = this.drag;
       this.drag = null;
       this.marquee.style.display = 'none';
@@ -277,9 +317,9 @@ export class Strip {
         if (cancelled) {
           app.previewExposures(d.before);
         } else if (d.moved) {
-          app.commitExposures('Move drawing', d.before, app.project.exposures);
-          const at = app.project.exposures.findIndex((x) => x === d.before[d.index]);
-          app.setSelection(at >= 0 ? [at] : []);
+          const moved = (app.selection.includes(d.index) && app.selection.length > 1 ? app.selection : [d.index]).map((i) => d.before[i]);
+          app.commitExposures(moved.length > 1 ? 'Move drawings' : 'Move drawing', d.before, app.project.exposures);
+          app.setSelection(moved.map((x) => app.project.exposures.indexOf(x!)).filter((i) => i >= 0));
         } else {
           // a click: select (Shift toggles) and jump to the clicked frame
           const sel = new Set(app.selection);
@@ -302,7 +342,19 @@ export class Strip {
     };
     this.track.addEventListener('pointerup', (e) => finish(e, false));
     this.track.addEventListener('pointercancel', (e) => finish(e, true));
+    this.track.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (Date.now() - this.lastHold < 1000) return; // the hold already opened it
+      const blockEl = (e.target as HTMLElement).closest<HTMLElement>('.block');
+      if (!blockEl) return;
+      const index = Number(blockEl.dataset.index);
+      if (!app.selection.includes(index)) app.setSelection([index]);
+      showContextMenu(e.clientX, e.clientY, frameMenu(app));
+    });
   }
+
+  private holdTimer = 0;
+  private lastHold = 0;
 
   // -------------------------------------------------------------------------------------------
 

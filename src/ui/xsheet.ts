@@ -1,6 +1,8 @@
 import type { App } from '../app';
 import { FRAME_FORMATS, frameLabel, isSecondBoundary, type FrameFormat } from '../core/timecode';
-import { commonHold } from '../core/timeline';
+import { blockDropIndex, commonHold, startOf, totalFrames } from '../core/timeline';
+import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './contextmenu';
+import { frameMenu } from './framemenu';
 
 const FORMAT_KEY = '2dope.m1.framefmt';
 
@@ -39,7 +41,6 @@ export class XSheet {
   private signature = '';
   private visible = false;
   private anchor: number | null = null;
-  private dragging = false;
   private editing: HTMLInputElement | null = null;
 
   constructor(
@@ -64,11 +65,35 @@ export class XSheet {
     this.infoEl = el('span', { class: 'hint' });
     bar.append(this.formatSel, this.infoEl);
 
+    // touch actions on the selection (the same ones are in the press-and-hold menu)
+    const acts = el('div', { class: 'xs-acts', role: 'toolbar', 'aria-label': 'Frame actions' });
+    const act = (label: string, title: string, run: () => unknown, cls = '') => {
+      const b = el('button', { type: 'button', title, class: cls }, label);
+      b.addEventListener('click', () => void run());
+      acts.append(b);
+    };
+    act('+↑', 'Insert a blank drawing before the selection', () => app.insertBlank('before'));
+    act('+↓', 'Insert a blank drawing after the selection (N)', () => app.insertBlank('after'));
+    act('Dup', 'Duplicate the selected drawings (D)', () => app.duplicateSelection());
+    act('Copy', 'Copy the selected drawings (Ctrl+C)', () => app.copySelection());
+    act('Paste', 'Paste after the selection, showing the same drawings (Ctrl+V)', () => app.paste());
+    act('↑', 'Move the selection earlier (Alt+↑)', () => app.moveSelection(-1));
+    act('↓', 'Move the selection later (Alt+↓)', () => app.moveSelection(1));
+    act('−', 'One frame shorter (−)', () => app.changeHold(-1));
+    act('+', 'One frame longer (=)', () => app.changeHold(1));
+    act('Delete', 'Delete the selected drawings (Delete)', () => app.deleteFrame(), 'danger');
+
     this.head = el('div', { class: 'xs-head' });
     this.body = el('div', { class: 'xs-body', tabindex: '0', 'data-own-keys': '', 'aria-label': 'Exposure sheet' });
-    root.append(bar, this.head, this.body);
+    this.dropLine = el('div', { class: 'xs-drop' });
+    root.append(bar, acts, this.head, this.body);
     this.bind();
   }
+
+  private readonly dropLine: HTMLElement;
+  /** The press being tracked: pending (could be a tap, a scroll or a hold), selecting a range, lifted (held), or moving the lifted block. */
+  private press: { id: number; x: number; y: number; type: string; mode: 'pending' | 'select' | 'lift' | 'moving'; canSelect: boolean; timer: number; to: number | null } | null = null;
+  private lastHold = 0;
 
   show(on: boolean): void {
     this.visible = on;
@@ -90,10 +115,19 @@ export class XSheet {
     return (target as HTMLElement | null)?.closest?.<HTMLElement>('.xs-row') ?? null;
   }
 
+  /**
+   * Touch first:
+   * - tap a row: select that drawing and go to the frame (Shift+click extends);
+   * - drag on the frame-number column (or with a mouse anywhere): select a range;
+   * - drag a finger on the cells: scroll;
+   * - press and hold: the selection lifts; drag it to move it, or let go for the menu;
+   * - right-click: the menu.
+   */
   private bind(): void {
     const app = this.app;
     this.body.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || this.editing) return;
+      if (!e.isPrimary) return this.endPress(true);
       const row = this.rowOf(e.target);
       if (!row) return;
       if ((e.target as HTMLElement).closest('.xs-note')) {
@@ -102,40 +136,138 @@ export class XSheet {
       }
       const frame = Number(row.dataset.frame);
       const index = Number(row.dataset.exp);
-      this.body.focus();
-      this.dragging = true;
+      this.body.focus({ preventScroll: true });
       try {
         this.body.setPointerCapture(e.pointerId);
       } catch {
         // capture can fail for stale pointers
       }
+      const inSel = app.selection.includes(index);
       if (e.shiftKey && this.anchor !== null) {
         this.selectRange(this.anchor, index);
-      } else {
+      } else if (!inSel) {
         this.anchor = index;
         app.setSelection([index]);
       }
       app.setLayerFrame(frame);
+      const canSelect = e.pointerType !== 'touch' || !!(e.target as HTMLElement).closest('.xs-fno');
+      const press = { id: e.pointerId, x: e.clientX, y: e.clientY, type: e.pointerType, mode: 'pending' as const, canSelect, timer: 0, to: null };
+      press.timer = window.setTimeout(() => this.lift(), HOLD_MS);
+      this.press = press;
     });
     this.body.addEventListener('pointermove', (e) => {
-      if (!this.dragging || this.anchor === null) return;
-      const r = this.body.getBoundingClientRect();
-      const rows = this.body.querySelectorAll<HTMLElement>('.xs-row');
-      const first = rows[0];
-      if (!first) return;
-      const h = first.getBoundingClientRect().height || 26;
-      const f = Math.max(0, Math.min(rows.length - 1, Math.floor((e.clientY - r.top + this.body.scrollTop) / h)));
-      const row = rows[f];
-      if (row) this.selectRange(this.anchor, Number(row.dataset.exp));
+      const p = this.press;
+      if (!p || e.pointerId !== p.id) return;
+      const moved = Math.hypot(e.clientX - p.x, e.clientY - p.y) > HOLD_SLOP;
+      if (p.mode === 'pending' && moved) {
+        clearTimeout(p.timer);
+        if (p.canSelect) p.mode = 'select';
+        else return this.endPress(false); // a finger on the cells scrolls
+      }
+      if (p.mode === 'select' && this.anchor !== null) {
+        const row = this.rowAtY(e.clientY);
+        if (row) this.selectRange(this.anchor, Number(row.dataset.exp));
+      } else if ((p.mode === 'lift' && moved) || p.mode === 'moving') {
+        p.mode = 'moving';
+        this.dragTo(e.clientY);
+      }
     });
-    const stop = () => (this.dragging = false);
-    this.body.addEventListener('pointerup', stop);
-    this.body.addEventListener('pointercancel', stop);
+    this.body.addEventListener('pointerup', (e) => {
+      const p = this.press;
+      if (!p || e.pointerId !== p.id) return;
+      if (p.mode === 'lift') {
+        this.endPress(true);
+        showContextMenu(e.clientX, e.clientY, frameMenu(this.app));
+        return;
+      }
+      const to = p.mode === 'moving' ? p.to : null;
+      this.endPress(true);
+      if (to !== null) app.moveSelectionTo(to);
+    });
+    this.body.addEventListener('pointercancel', () => this.endPress(true));
+    // keep the page from scrolling while a lifted block or a range is being dragged
+    this.body.addEventListener(
+      'touchmove',
+      (e) => {
+        if (this.press && this.press.mode !== 'pending') e.preventDefault();
+      },
+      { passive: false },
+    );
+    this.body.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (Date.now() - this.lastHold < 1000) return; // the hold already opened it (Android sends both)
+      const row = this.rowOf(e.target);
+      if (row && !app.selection.includes(Number(row.dataset.exp))) {
+        this.anchor = Number(row.dataset.exp);
+        app.setSelection([this.anchor]);
+        app.setLayerFrame(Number(row.dataset.frame));
+      }
+      showContextMenu(e.clientX, e.clientY, frameMenu(this.app));
+    });
     this.body.addEventListener('dblclick', (e) => {
       const row = this.rowOf(e.target);
       if (row && !(e.target as HTMLElement).closest('.xs-note')) this.editCell(row);
     });
     this.body.addEventListener('keydown', (e) => this.onKey(e));
+  }
+
+  /** The row under a screen y (clamped to the first and last rows). */
+  private rowAtY(clientY: number): HTMLElement | null {
+    const rows = this.body.querySelectorAll<HTMLElement>('.xs-row');
+    const first = rows[0];
+    if (!first) return null;
+    const r = this.body.getBoundingClientRect();
+    const h = first.getBoundingClientRect().height || 26;
+    const f = Math.max(0, Math.min(rows.length - 1, Math.floor((clientY - r.top + this.body.scrollTop) / h)));
+    return rows[f] ?? null;
+  }
+
+  /** Held still: pick up the selection. */
+  private lift(): void {
+    const p = this.press;
+    if (!p || p.mode !== 'pending') return;
+    p.mode = 'lift';
+    this.lastHold = Date.now();
+    swallowNextClick();
+    navigator.vibrate?.(10);
+    for (const r of this.body.querySelectorAll('.xs-row.selected')) r.classList.add('lifted');
+  }
+
+  /** Show where the lifted block would land if let go at this screen y. */
+  private dragTo(clientY: number): void {
+    const p = this.press;
+    if (!p) return;
+    const app = this.app;
+    const ex = app.project.exposures;
+    const sel = app.targets;
+    const rows = this.body.querySelectorAll<HTMLElement>('.xs-row');
+    const first = rows[0];
+    if (!first || !sel.length) return;
+    const h = first.getBoundingClientRect().height || 26;
+    // scroll when dragging near the top or bottom edge
+    const br = this.body.getBoundingClientRect();
+    if (clientY < br.top + 30) this.body.scrollTop -= 10;
+    else if (clientY > br.bottom - 30) this.body.scrollTop += 10;
+    const blockStart = startOf(ex, sel[0]!);
+    const blockLen = sel.reduce((n, i) => n + ex[i]!.length, 0);
+    const centre = blockStart + blockLen / 2 + (clientY - p.y) / h;
+    const to = blockDropIndex(ex, sel, centre);
+    p.to = to;
+    // the line goes above the first exposure left after the drop point (in today's layout)
+    const pick = new Set(sel);
+    const rest = ex.map((_, i) => i).filter((i) => !pick.has(i));
+    const before = rest[to];
+    const frame = before === undefined ? totalFrames(ex) : startOf(ex, before);
+    this.dropLine.style.top = `${frame * h}px`;
+    if (!this.dropLine.isConnected) this.body.append(this.dropLine);
+  }
+
+  private endPress(clearLift: boolean): void {
+    const p = this.press;
+    if (p) clearTimeout(p.timer);
+    this.press = null;
+    this.dropLine.remove();
+    if (clearLift) for (const r of this.body.querySelectorAll('.xs-row.lifted')) r.classList.remove('lifted');
   }
 
   private selectRange(a: number, b: number): void {
@@ -159,7 +291,19 @@ export class XSheet {
       app.selectAll();
       return;
     }
+    if (mod && (e.code === 'KeyC' || e.code === 'KeyX' || e.code === 'KeyV')) {
+      e.preventDefault();
+      if (e.code === 'KeyC') app.copySelection();
+      else if (e.code === 'KeyX') app.cutSelection();
+      else void app.paste(e.shiftKey);
+      return;
+    }
     if (mod) return;
+    if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      app.moveSelection(e.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       app.setLayerFrame(app.lf + (e.key === 'ArrowDown' ? 1 : -1));
@@ -194,7 +338,7 @@ export class XSheet {
       e.preventDefault();
       app.togglePlay();
     } else if (e.key === 'n' || e.key === 'N') app.addFrame();
-    else if (e.key === 'd' || e.key === 'D') app.duplicateFrame();
+    else if (e.key === 'd' || e.key === 'D') void app.duplicateSelection();
   }
 
   private editCell(row: HTMLElement, first?: string): void {
@@ -307,7 +451,12 @@ export class XSheet {
     p.exposures.forEach((e, i) => {
       const d = p.drawing(e.drawing);
       for (let k = 0; k < e.length; k++, frame++) {
-        const row = el('div', { class: `xs-row${isSecondBoundary(frame, p.fps) ? ' second' : ''}${sel.has(i) ? ' selected' : ''}`, 'data-frame': String(frame), 'data-exp': String(i), 'data-start': k === 0 ? '1' : '0' });
+        const row = el('div', {
+          class: `xs-row${isSecondBoundary(frame, p.fps) ? ' second' : ''}${sel.has(i) ? ' selected' : ''}`,
+          'data-frame': String(frame),
+          'data-exp': String(i),
+          'data-start': k === 0 ? '1' : '0',
+        });
         const cell = el('span', { class: `xs-cell${k === 0 ? '' : ' hold'}${d.role ? ` role-text-${d.role}` : ''}`, 'data-num': String(d.num) });
         if (k === 0) cell.textContent = String(d.num);
         row.append(el('span', { class: 'xs-fno' }, frameLabel(frame, p.fps, this.format)), cell, el('span', { class: 'xs-note' }, k === 0 ? (e.note ?? '') : ''));
