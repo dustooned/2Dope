@@ -130,6 +130,7 @@ export class Quick {
 
   set(on: boolean): void {
     this.on = on;
+    if (on) this.app.setWorkspace('draw');
     document.body.classList.toggle('quick', on);
     this.more.classList.remove('open');
     try {

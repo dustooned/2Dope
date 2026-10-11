@@ -59,6 +59,21 @@ npm run dev:lan
 - **Mark K / B / I:** label drawings as **key**, **breakdown** or **inbetween** (badge on the block; click again to clear). **Keys only** limits onion skin to key drawings.
 - **Zoom** slider for long shots. **Delete** removes all selected drawings (undoable).
 
+## Workspaces: Draw, Time, Motion
+
+One project, one playhead, one selection. The three buttons at the top (or ☰ → Interface) only change what you look at, so nothing is converted when you switch.
+
+- **Draw**: the canvas and the flipbook strip (as before). You draw on the active drawings layer's page, whatever its position in the shot.
+- **Time**: the X-sheet in front (a wide panel; a full-height overlay on narrow screens).
+- **Motion**: the shot as it will render, with a **layers and keys** view underneath.
+  - **Canvas**: tap a layer to select it, then drag to **move**, drag a corner to **scale**, drag the round handle to **rotate**. A camera, when you look through it, moves so the picture follows your finger. Two fingers pan and zoom the view. Outside the frame is dimmed.
+  - **Layers**: bars show when each layer is on screen. Drag a bar to move the layer in time (its keys go with it); drag an end to trim. **▸** opens Position, Scale, Rotation and Opacity (Zoom for a camera). Tap a value to type it; ◆ adds or removes a key at the playhead. **⋯** has rename, move up/down, parent to…, lock, colour, loop, delete. The layer's **⤷ name** is its parent.
+  - **Keys**: tap to select (Shift adds), drag to retime, Delete removes. **Easing** (Linear, Ease in, Ease out, Ease in and out, Hold) applies to the selected keys and is remembered for new ones; the little ticks under a selected key show where each frame lands (bunched = slow). **Reverse** plays the selected keys backwards.
+  - **● Auto-key** writes a key whenever you change something. A property that already has keys always keys; one that does not just changes its value. **Key at start** keeps the old value at frame 0 when you add the first key later (Procreate Dreams' behaviour).
+  - **+ Drawing / + Null / + Camera** add layers. **Through camera** switches between the camera's view and the whole comp with the camera frame.
+- **Timeline sizing**: drag the little bar between the canvas and the timeline (double-tap to reset). **Zoom** and **Rows** sliders (and pinch or Ctrl + wheel over the time area) size the Motion view. Each workspace remembers its own height.
+- Everything is undoable. Precomps (group layers into a comp, go inside), pinned properties and a graph view come next.
+
 ## Comps, layers, keyframes, camera (data model)
 
 - A project now holds **comps** (the shot and any precomps). A comp is a stack of **layers**: drawings (what the strip and X-sheet edit), **precomps** (another comp placed as one layer, looping if you like), **cameras** (pan, rotate, zoom) and **nulls** (handles to parent to).

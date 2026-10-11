@@ -11,6 +11,10 @@ export interface CompositeOptions {
   planes?: Planes;
   /** Paint comp backgrounds (off for passes that must keep alpha, like lines and fills). */
   backgrounds?: boolean;
+  /** Look through the topmost camera of the top comp (default true). */
+  camera?: boolean;
+  /** Draw this drawing's pixels from other canvases (the stroke being painted right now). */
+  source?: (d: Drawing) => { line: HTMLCanvasElement; fill: HTMLCanvasElement | null } | null;
 }
 
 const BLEND: Record<BlendMode, GlobalCompositeOperation> = {
@@ -50,11 +54,12 @@ export function releaseScratch(): void {
   scratch.clear();
 }
 
-function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes): void {
+function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions): void {
   if (d.parked) return; // the caller pins what a frame needs; never draw a packed-away drawing
-  if (planes !== 'line' && d.fill) g.drawImage(d.fill, 0, 0);
+  const src = opt?.source?.(d) ?? { line: d.line, fill: d.fill };
+  if (planes !== 'line' && src.fill) g.drawImage(src.fill, 0, 0);
   if (planes !== 'fill') {
-    g.drawImage(d.line, 0, 0);
+    g.drawImage(src.line, 0, 0);
     for (const v of d.vectors) drawVectorStroke(g, v, strokeLength(v.points));
   }
 }
@@ -77,7 +82,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     g.fillStyle = c.background;
     g.fillRect(0, 0, c.width, c.height);
   }
-  const view = viewMatrix(c, frame, comps);
+  const view = depth === 0 && opt.camera === false ? ([1, 0, 0, 1, 0, 0] as Mat) : viewMatrix(c, frame, comps);
   for (let i = c.layers.length - 1; i >= 0; i--) {
     const l = c.layers[i]!;
     if (l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps)) continue;
@@ -104,7 +109,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     else {
       source = scratchFor(`d${depth}`, project.width, project.height);
       const sg = source.getContext('2d')!;
-      paintPlanes(sg, d, planes);
+      paintPlanes(sg, d, planes, opt);
     }
   } else if (l.kind === 'comp') {
     const n = project.comps.get(l.comp);
@@ -118,7 +123,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
   g.setTransform(m);
   g.globalAlpha = alpha;
   g.globalCompositeOperation = BLEND[l.blend];
-  if (direct) paintPlanes(g, direct, planes);
+  if (direct) paintPlanes(g, direct, planes, opt);
   else if (source) g.drawImage(source, 0, 0);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';

@@ -227,7 +227,7 @@ export class Strip {
       if (p.y < RULER_H) {
         this.drag = { kind: 'scrub' };
         app.beginScrub();
-        app.setFrame(this.frameAtX(p.x));
+        app.setLayerFrame(this.frameAtX(p.x));
         return;
       }
       this.drag = { kind: 'marquee', x0: p.x, y0: p.y, base: e.shiftKey ? [...app.selection] : [], moved: false };
@@ -238,7 +238,7 @@ export class Strip {
       if (!d) return;
       const p = this.local(e);
       if (d.kind === 'scrub') {
-        app.setFrame(this.frameAtX(p.x));
+        app.setLayerFrame(this.frameAtX(p.x));
       } else if (d.kind === 'resize') {
         if (Math.abs(p.x - d.startX) > 1) d.moved = true;
         const startFrame = startOf(d.before, d.index);
@@ -292,12 +292,12 @@ export class Strip {
           }
           const start = startOf(app.project.exposures, d.index);
           const len = app.project.exposures[d.index]!.length;
-          app.setFrame(Math.max(start, Math.min(start + len - 1, Math.floor(p.x / this.cell))));
+          app.setLayerFrame(Math.max(start, Math.min(start + len - 1, Math.floor(p.x / this.cell))));
         }
       } else if (d.kind === 'marquee' && !d.moved && !cancelled) {
         // a click on empty space: clear the selection and move the playhead
         if (!d.base.length) app.setSelection([]);
-        app.setFrame(this.frameAtX(p.x));
+        app.setLayerFrame(this.frameAtX(p.x));
       }
     };
     this.track.addEventListener('pointerup', (e) => finish(e, false));
@@ -324,8 +324,8 @@ export class Strip {
       this.rebuild();
     }
     const cell = this.cell;
-    this.frameLabel.textContent = `${app.frame + 1} / ${p.length}`;
-    const l = locate(p.exposures, app.frame);
+    this.frameLabel.textContent = `${app.lf + 1} / ${p.length}`;
+    const l = locate(p.exposures, app.lf);
     const targets = app.targets;
     const common = commonHold(p.exposures, targets);
     this.expLabel.textContent = targets.length === 0 ? '-' : common === null ? 'mixed' : `${common}`;
@@ -334,7 +334,7 @@ export class Strip {
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(p.fps);
     this.playhead.style.width = `${cell}px`;
-    this.playhead.style.transform = `translateX(${app.frame * cell}px)`;
+    this.playhead.style.transform = `translateX(${app.lf * cell}px)`;
     this.onionBtn.setAttribute('aria-pressed', String(app.onion.enabled));
     this.keysBtn.setAttribute('aria-pressed', String(app.onion.keysOnly));
     this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));
@@ -412,7 +412,7 @@ export class Strip {
 
   private keepVisible(): void {
     if (this.drag) return; // do not scroll under the user's pointer
-    const x = this.app.frame * this.cell;
+    const x = this.app.lf * this.cell;
     const t = this.track;
     if (x < t.scrollLeft) t.scrollLeft = x - this.cell;
     else if (x + this.cell > t.scrollLeft + t.clientWidth) t.scrollLeft = x + this.cell * 2 - t.clientWidth;

@@ -8,6 +8,10 @@ import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
+import { compLength, frameContent } from './core/comp';
+import { CompEditor } from './compedit';
+import { drawComp } from './view/composite';
+import { drawMotionOverlay } from './view/overlay';
 import { addAfter, adjustHolds, drawingAt, duplicateAt, exposeAt, setNote, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, removeIndices, setHolds, totalFrames, type Edit, type Exposure } from './core/timeline';
 import { Smoother } from './brush/smoothing';
 import { drawVectorStroke } from './brush/vector';
@@ -72,16 +76,38 @@ export interface InputStats {
   coalesced: number;
 }
 
+/** Draw: the canvas and flipbook strip. Time: the X-sheet. Motion: layers, keys and the comp's result. */
+export type Workspace = 'draw' | 'time' | 'motion';
+
 export class App {
   project = new Project(1920, 1080);
+  workspace: Workspace = 'draw';
+  /** Edits to layers and keys (the Motion workspace). */
+  readonly editor = new CompEditor(this);
+  onWorkspaceChange: () => void = () => {};
+  private motionPointer: number | null = null;
   readonly raster = new RasterEngine(1920, 1080);
-  /** The open project's page size in pixels. */
+  /** What the canvas shows, in pixels: the comp in Motion, the drawing page otherwise. */
   get docW(): number {
-    return this.project.width;
+    return this.workspace === 'motion' ? this.project.comp.width : this.project.width;
   }
 
   get docH(): number {
-    return this.project.height;
+    return this.workspace === 'motion' ? this.project.comp.height : this.project.height;
+  }
+
+  /** Switch workspace (Draw / Time / Motion): the same project, a different arrangement. */
+  setWorkspace(w: Workspace): void {
+    if (w === this.workspace || this.live) return;
+    if (this.playing) this.togglePlay();
+    this.editor.gestureEnd(true);
+    const was = this.workspace;
+    this.workspace = w;
+    // Draw and Time look at the same page; Motion looks at the comp
+    if ((was === 'motion') !== (w === 'motion')) this.fit();
+    this.requestRender();
+    this.onFrameChange();
+    this.onWorkspaceChange();
   }
 
   /** Current frame, 0-based. */
@@ -367,6 +393,8 @@ export class App {
       this.fit();
     }
     this.onionCache.resize(p.width, p.height);
+    this.editor.reset();
+    if (this.workspace === 'motion') this.fit();
     this.residency.setProject(p);
     this.history.clear();
     this.requestRender();
@@ -378,8 +406,26 @@ export class App {
   // -------------------------------------------------------------------------------------------
   // Frames and playback
 
+  /**
+   * `frame` is the playhead in the comp's time. The strip and X-sheet edit one drawings layer in
+   * that layer's own time: layerFrame = frame − layer.start (negative before the layer starts).
+   */
+  get layerFrame(): number {
+    return this.frame - this.project.layer.start;
+  }
+
+  /** The layer frame, held inside the layer (what edits and drawing act on). */
+  get lf(): number {
+    return Math.max(0, Math.min(this.layerFrame, this.project.length - 1));
+  }
+
+  /** The comp's length in frames: what playback loops over. */
+  get compEnd(): number {
+    return Math.max(1, compLength(this.project.comp, this.project.comps));
+  }
+
   get drawing(): Drawing {
-    return this.project.drawingAtFrame(this.frame);
+    return this.project.drawingAtFrame(this.lf);
   }
 
   /** Mark a drawing changed (thumbnails, render). */
@@ -394,7 +440,7 @@ export class App {
 
   setFrame(f: number): void {
     if (this.live) return;
-    const len = this.project.length;
+    const len = this.compEnd;
     const next = ((Math.round(f) % len) + len) % len;
     if (next === this.frame) return;
     this.frame = next;
@@ -411,12 +457,18 @@ export class App {
     this.setFrame(this.frame - 1);
   }
 
+  /** Go to a frame of the active drawings layer's own time (clamped to the layer). */
+  setLayerFrame(f: number): void {
+    const last = Math.max(0, this.project.length - 1);
+    this.setFrame(this.project.layer.start + Math.max(0, Math.min(Math.round(f), last)));
+  }
+
   nextDrawing(): void {
-    this.setFrame(nextDrawing(this.project.exposures, this.frame));
+    this.setLayerFrame(nextDrawing(this.project.exposures, this.lf));
   }
 
   prevDrawing(): void {
-    this.setFrame(prevDrawing(this.project.exposures, this.frame));
+    this.setLayerFrame(prevDrawing(this.project.exposures, this.lf));
   }
 
   togglePlay(): void {
@@ -442,7 +494,7 @@ export class App {
 
   /** Set the home frame to the current frame, or clear it if it is already home. */
   toggleLock(): void {
-    this.lockFrame = this.lockFrame === this.frame ? null : this.frame;
+    this.lockFrame = this.lockFrame === this.lf ? null : this.lf;
     this.onFrameChange();
   }
 
@@ -456,7 +508,7 @@ export class App {
   endScrub(): void {
     if (!this.scrubbing) return;
     this.scrubbing = false;
-    if (this.lockFrame !== null) this.setFrame(Math.min(this.lockFrame, this.project.length - 1));
+    if (this.lockFrame !== null) this.setLayerFrame(this.lockFrame);
     this.requestRender();
     this.onFrameChange();
   }
@@ -469,7 +521,7 @@ export class App {
   }
 
   private tickPlayback(now: number): void {
-    const len = this.project.length;
+    const len = this.compEnd;
     const f = (this.playClock.f0 + Math.floor(((now - this.playClock.t0) * this.project.fps) / 1000)) % len;
     if (f !== this.frame) {
       this.frame = f;
@@ -493,27 +545,39 @@ export class App {
   private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, keepSelection = false): void {
     if (this.live) return;
     const layer = this.project.layer;
+    const compId = this.project.comp.id;
+    const layerId = layer.id;
     const beforeEx = layer.exposures;
-    const beforeFrame = this.frame;
+    const beforeFrame = this.lf;
     const r = fn(beforeEx);
     if (r.ex === beforeEx) return;
+    // the layer object can be replaced by a comp-level undo, so find it again each time
+    const find = () => {
+      this.project.activeComp = compId;
+      const l = this.project.comps.get(compId)?.layers.find((x) => x.id === layerId);
+      return l && l.kind === 'drawings' ? l : null;
+    };
+    // edits speak in layer frames; the playhead is in comp frames
+    const place = (lf: number, ex: Exposure[]) => (find()?.start ?? 0) + Math.max(0, Math.min(lf, totalFrames(ex) - 1));
     this.history.push(
       {
         label,
         do: () => {
           if (!keepSelection) this.selection = [];
-          this.focusLayer(layer.id);
-          layer.exposures = r.ex;
-          this.frame = Math.min(r.frame, this.project.length - 1);
+          this.focusLayer(layerId);
+          const l = find();
+          if (l) l.exposures = r.ex;
+          this.frame = place(r.frame, r.ex);
           this.requestRender();
           this.onFrameChange();
           this.onDocChanged();
         },
         undo: () => {
           if (!keepSelection) this.selection = [];
-          this.focusLayer(layer.id);
-          layer.exposures = beforeEx;
-          this.frame = Math.min(beforeFrame, this.project.length - 1);
+          this.focusLayer(layerId);
+          const l = find();
+          if (l) l.exposures = beforeEx;
+          this.frame = place(beforeFrame, beforeEx);
           this.requestRender();
           this.onFrameChange();
           this.onDocChanged();
@@ -525,13 +589,13 @@ export class App {
 
   addFrame(): void {
     const d = this.project.newDrawing();
-    this.editTimeline('Add frame', (ex) => addAfter(ex, this.frame, d.id));
+    this.editTimeline('Add frame', (ex) => addAfter(ex, this.lf, d.id));
   }
 
   duplicateFrame(): void {
     if (!this.residency.isReady(this.drawing)) return;
     const d = this.project.cloneDrawing(this.drawing);
-    this.editTimeline('Duplicate frame', (ex) => duplicateAt(ex, this.frame, d.id));
+    this.editTimeline('Duplicate frame', (ex) => duplicateAt(ex, this.lf, d.id));
   }
 
   /** Selected exposures, or the current drawing's when nothing is selected. */
@@ -539,7 +603,7 @@ export class App {
     const n = this.project.exposures.length;
     const sel = this.selection.filter((i) => i >= 0 && i < n);
     if (sel.length) return sel;
-    const l = locate(this.project.exposures, this.frame);
+    const l = locate(this.project.exposures, this.lf);
     return l ? [l.index] : [];
   }
 
@@ -557,7 +621,7 @@ export class App {
     if (!this.live) this.onRisky('Before delete drawing');
     const picked = this.selection.length ? [...this.selection] : null;
     this.editTimeline(picked ? 'Delete drawings' : 'Delete frame', (ex) => {
-      const r = picked ? { ex: removeIndices(ex, picked), frame: this.frame } : removeAt(ex, this.frame);
+      const r = picked ? { ex: removeIndices(ex, picked), frame: this.lf } : removeAt(ex, this.lf);
       if (r.ex.length > 0) return { ex: r.ex, frame: Math.min(r.frame, totalFrames(r.ex) - 1) };
       // Never leave the layer empty: replace the last drawing with a blank one.
       return { ex: [{ drawing: this.project.newDrawing().id, length: 1 }], frame: 0 };
@@ -576,16 +640,16 @@ export class App {
 
   /** Set the exposure-sheet note on one exposure. */
   setExposureNote(index: number, text: string): void {
-    this.editTimeline('Edit note', (ex) => ({ ex: setNote(ex, index, text), frame: this.frame }), true);
+    this.editTimeline('Edit note', (ex) => ({ ex: setNote(ex, index, text), frame: this.lf }), true);
   }
 
   /** Make each selected drawing last N frames (1s, 2s, 3s...). Never deletes a drawing. */
   setExposure(n: number): void {
-    this.editTimeline(n === 1 ? 'Exposure on ones' : `Exposure on ${n}s`, (ex) => ({ ex: setHolds(ex, this.targets, n), frame: this.frame }), true);
+    this.editTimeline(n === 1 ? 'Exposure on ones' : `Exposure on ${n}s`, (ex) => ({ ex: setHolds(ex, this.targets, n), frame: this.lf }), true);
   }
 
   changeHold(delta: number): void {
-    this.editTimeline(delta > 0 ? 'Longer hold' : 'Shorter hold', (ex) => ({ ex: adjustHolds(ex, this.targets, delta), frame: this.frame }), true);
+    this.editTimeline(delta > 0 ? 'Longer hold' : 'Shorter hold', (ex) => ({ ex: adjustHolds(ex, this.targets, delta), frame: this.lf }), true);
   }
 
   /** Mark the selected (or current) drawings as key / breakdown / inbetween; marking again clears it. */
@@ -608,7 +672,7 @@ export class App {
   /** While dragging on the timeline: show the new order/holds without recording history yet. */
   previewExposures(ex: Exposure[]): void {
     this.project.exposures = ex;
-    this.frame = Math.min(this.frame, this.project.length - 1);
+    this.frame = Math.min(this.frame, this.compEnd - 1);
     this.requestRender();
     this.onFrameChange();
   }
@@ -616,12 +680,14 @@ export class App {
   /** At the end of a drag: record it as one undoable step (before = the exposures when the drag began). */
   commitExposures(label: string, before: Exposure[], after: Exposure[]): void {
     if (after === before) return;
-    const layer = this.project.layer;
+    const compId = this.project.comp.id;
+    const layerId = this.project.layer.id;
     const set = (ex: Exposure[]) => {
       this.selection = [];
-      this.focusLayer(layer.id);
-      layer.exposures = ex;
-      this.frame = Math.min(this.frame, this.project.length - 1);
+      this.project.activeComp = compId;
+      this.focusLayer(layerId);
+      this.project.exposures = ex;
+      this.frame = Math.min(this.frame, this.compEnd - 1);
       this.requestRender();
       this.onFrameChange();
       this.onDocChanged();
@@ -869,7 +935,14 @@ export class App {
       this.touches.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y });
       if (!this.tapSession) this.tapSession = { start: performance.now(), maxTouches: 0, moved: false };
       this.tapSession.maxTouches = Math.max(this.tapSession.maxTouches, this.touches.size);
-      if (this.touches.size === 1 && this.fingerPaint) {
+      // a second finger means "navigate": let go of a layer drag
+      if (this.motionPointer !== null && this.motionPointer !== e.pointerId) {
+        this.editor.gestureEnd(true);
+        this.motionPointer = null;
+      }
+      if (this.touches.size === 1 && this.workspace === 'motion') {
+        if (this.motionDown(e)) return;
+      } else if (this.touches.size === 1 && this.fingerPaint) {
         this.beginStroke(e);
         this.requestRender();
         return;
@@ -899,8 +972,27 @@ export class App {
       return;
     }
     if (e.button !== 0) return;
+    if (this.workspace === 'motion') {
+      this.motionDown(e);
+      return;
+    }
     this.beginStroke(e);
     this.requestRender();
+  }
+
+  /** Stage point (what the canvas shows) under a pointer. */
+  private stagePoint(e: PointerEvent): [number, number] {
+    const p = this.local(e);
+    const d = this.view.screenToDoc(p.x, p.y);
+    return [d.x, d.y];
+  }
+
+  /** Motion workspace: grab a layer (or its handles) under the pointer. */
+  private motionDown(e: PointerEvent): boolean {
+    const grabbed = this.editor.gestureStart(this.stagePoint(e), this.view.zoom, e.shiftKey);
+    this.motionPointer = grabbed ? e.pointerId : null;
+    this.requestRender();
+    return grabbed;
   }
 
   private liveIsTouch(): boolean {
@@ -908,6 +1000,10 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    if (this.motionPointer === e.pointerId) {
+      this.editor.gestureMove(this.stagePoint(e));
+      return;
+    }
     if (this.live && e.pointerId === this.live.pointerId) {
       const events = e.getCoalescedEvents?.() ?? [];
       const list = events.length ? events : [e];
@@ -935,6 +1031,10 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (this.motionPointer === e.pointerId) {
+      this.motionPointer = null;
+      this.editor.gestureEnd(cancelled && e.pointerType !== 'pen');
+    }
     if (this.live && e.pointerId === this.live.pointerId) {
       this.endStroke(cancelled && e.pointerType !== 'pen');
     }
@@ -996,7 +1096,7 @@ export class App {
       this.requestRender();
       return;
     }
-    if (this.touches.size === 1 && !this.fingerPaint) {
+    if (this.touches.size === 1 && (!this.fingerPaint || this.workspace === 'motion') && !this.editor.dragging) {
       const t = this.touches.get(id)!;
       // One finger pans (the pen always draws, fingers navigate).
       const prev = (t as TouchInfo & { px?: number; py?: number });
@@ -1079,6 +1179,15 @@ export class App {
       this.held.add(e.code);
       this.updateCursor();
       return;
+    }
+    if (this.workspace === 'motion') {
+      if (e.code === 'Delete' || e.code === 'Backspace') {
+        e.preventDefault();
+        if (this.editor.keys.size) this.editor.deleteKeys();
+        else this.editor.deleteLayers();
+        return;
+      }
+      if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'KeyN' || e.code === 'KeyD' || e.code === 'Equal' || e.code === 'Minus') return;
     }
     switch (e.code) {
       case 'ArrowRight':
@@ -1238,6 +1347,11 @@ export class App {
 
     g.imageSmoothingEnabled = this.view.zoom < 2;
     this.residency.use(this.workingSet());
+    if (this.workspace === 'motion') {
+      drawComp(g, this.project, this.project.comp.id, this.frame, { camera: this.editor.throughCamera });
+      drawMotionOverlay(g, this.editor, this.view, this.dpr);
+      return;
+    }
     this.drawOnion(g);
     const live = this.live;
     const d = live ? live.drawing : this.drawing;
@@ -1279,18 +1393,34 @@ export class App {
    */
   private workingSet(): Drawing[] {
     const p = this.project;
+    if (this.workspace === 'motion') {
+      // everything the comp shows at this frame (through precomps), and what is coming up in playback
+      const out = new Set<Drawing>();
+      const add = (f: number) => {
+        for (const id of frameContent(p.comps, p.comp.id, f).drawings) {
+          const d = p.drawings.get(id);
+          if (d) out.add(d);
+        }
+      };
+      add(this.frame);
+      if (this.playing) {
+        const len = this.compEnd;
+        for (let i = 1; i <= Math.ceil(p.fps * 1.5) && i < len; i++) add((this.frame + i) % len);
+      }
+      return [...out];
+    }
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
     const o = this.onion;
     if (o.enabled) {
       const keys = o.keysOnly ? (id: string) => p.drawing(id).role === 'key' : undefined;
-      const n = neighborDrawings(p.exposures, this.frame, o.before, o.after, keys);
+      const n = neighborDrawings(p.exposures, this.lf, o.before, o.after, keys);
       for (const nb of [...n.before, ...n.after]) out.add(p.drawing(nb.drawing));
     }
     if (this.playing) {
       const ahead = Math.ceil(p.fps * 1.5);
       const len = p.length;
       for (let i = 1; i <= ahead && i < len; i++) {
-        const id = drawingAt(p.exposures, (this.frame + i) % len);
+        const id = drawingAt(p.exposures, (this.lf + i) % len);
         if (id) out.add(p.drawing(id));
       }
     }
@@ -1302,7 +1432,7 @@ export class App {
     const o = this.onion;
     if (!o.enabled || this.playing || (this.scrubbing && !o.whileScrubbing)) return;
     const keys = o.keysOnly ? (id: string) => this.project.drawing(id).role === 'key' : undefined;
-    const n = neighborDrawings(this.project.exposures, this.frame, o.before, o.after, keys);
+    const n = neighborDrawings(this.project.exposures, this.lf, o.before, o.after, keys);
     const draw = (list: typeof n.before, color: string) => {
       for (const nb of list) {
         const d = this.project.drawing(nb.drawing);

@@ -42,6 +42,11 @@
       </section>
       <section>
         <h3>Interface</h3>
+        <div class="menu-grid three">
+          <button type="button" data-ws="draw">Draw</button>
+          <button type="button" data-ws="time">Time</button>
+          <button type="button" data-ws="motion">Motion</button>
+        </div>
         <div class="menu-grid">
           <button type="button" data-menu="quick" title="Quick Animate (Tab)">Quick Animate</button>
           <button type="button" data-menu="panel" title="Brush settings and X-sheet">Brush / X-sheet panel</button>
@@ -52,6 +57,11 @@
     </div>
     <header class="topbar">
       <button type="button" id="open-gallery" class="gbtn" title="All your projects">Projects</button>
+      <div class="group seg ws" id="ws" role="group" aria-label="Workspace">
+        <button type="button" data-ws="draw" title="Draw: the canvas and the flipbook strip">Draw</button>
+        <button type="button" data-ws="time" title="Time: the exposure sheet">Time</button>
+        <button type="button" data-ws="motion" title="Motion: layers, keyframes and the camera">Motion</button>
+      </div>
       <div class="group file" role="group" aria-label="Project">
         <input id="pname" type="text" placeholder="Untitled" maxlength="60" aria-label="Project name" />
         <span id="savestatus" class="readout" role="status"></span>
@@ -82,7 +92,9 @@
           <canvas id="canvas" aria-label="Drawing canvas"></canvas>
           <div id="stats" class="stats">Draw with a pen, mouse or (with Finger paints on) a finger. Alt + mouse = tilted pencil.</div>
         </div>
+        <div id="splitter" class="splitter" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the timeline (double-tap to reset)" tabindex="0"></div>
         <section id="strip" class="strip" aria-label="Flipbook"></section>
+        <section id="motion" class="motion" aria-label="Layers and keyframes"></section>
       </div>
       <aside id="panel" class="panel" aria-label="Side panel">
         <div class="tabs" role="tablist">

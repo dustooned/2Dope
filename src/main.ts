@@ -9,6 +9,8 @@ import { openStore } from './io/persist';
 import { ExportUI } from './ui/exportdialog';
 import { FileUI } from './ui/files';
 import { Gallery } from './ui/gallery';
+import { MotionPanel } from './ui/motion';
+import { Splitter } from './ui/splitter';
 import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
 import { Strip } from './ui/strip';
@@ -137,9 +139,54 @@ try {
 // Narrow screens: the side panel is an overlay opened from the Panel button; tapping the canvas closes it.
 const setPanel = (open: boolean) => document.body.classList.toggle('panel-open', open);
 $('#panel-toggle').addEventListener('click', () => setPanel(!document.body.classList.contains('panel-open')));
-$('#stage').addEventListener('pointerdown', () => setPanel(false), { capture: true });
+$('#stage').addEventListener('pointerdown', () => app.workspace !== 'time' && setPanel(false), { capture: true });
 
 const strip = new Strip(app, $('#strip'));
+const motion = new MotionPanel(app, $('#motion'));
+
+// The handle between the canvas and the timeline; each workspace remembers its own height.
+const splitter = new Splitter($('#splitter'), $('.stage-col'), () => (app.workspace === 'motion' ? { name: '--motion-h', min: 120, def: 230 } : { name: '--track-h', min: 60, def: 96 }));
+
+// Workspaces: Draw, Time, Motion. The same project, arranged differently.
+const wsButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-ws]')];
+const WS_KEY = '2dope.m3.ws';
+let lastTab: 'brush' | 'xsheet' = 'brush';
+let prevWs: 'draw' | 'time' | 'motion' = 'draw';
+const applyWorkspace = () => {
+  const w = app.workspace;
+  document.body.classList.remove('ws-draw', 'ws-time', 'ws-motion');
+  document.body.classList.add(`ws-${w}`);
+  for (const b of wsButtons) b.setAttribute('aria-pressed', String(b.dataset.ws === w));
+  if (w === 'time') {
+    if (prevWs !== 'time') lastTab = $('#tab-xsheet').hidden ? 'brush' : 'xsheet';
+    showTab('xsheet');
+    setPanel(true);
+  } else if (w === 'draw') {
+    if (prevWs === 'time') showTab(lastTab);
+    setPanel(false);
+  } else {
+    setPanel(false);
+  }
+  prevWs = w;
+  splitter.restore();
+  motion.update();
+  strip.update();
+  try {
+    localStorage.setItem(WS_KEY, w);
+  } catch {
+    // not remembered
+  }
+  setTimeout(() => app.fit(), 60);
+};
+app.onWorkspaceChange = applyWorkspace;
+for (const b of wsButtons)
+  b.addEventListener('click', () => {
+    // Quick Animate is a Draw view: picking another workspace leaves it
+    if (document.body.classList.contains('quick') && b.dataset.ws !== 'draw') quick.set(false);
+    app.setWorkspace(b.dataset.ws as 'draw' | 'time' | 'motion');
+  });
+document.body.classList.add('ws-draw');
+for (const b of wsButtons) b.setAttribute('aria-pressed', String(b.dataset.ws === 'draw'));
 
 // Quick Animate (a lighter view of the same project)
 let files: FileUI | null = null;
@@ -204,12 +251,14 @@ app.onFrameChange = () => {
   strip.update();
   xsheet.update();
   quick.update();
+  if (app.workspace === 'motion') motion.update();
 };
 app.onToolChange = chain(app.onToolChange, () => quick.update());
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
 app.onThumbs = () => strip.update();
 app.onProjectLoaded = () => {
+  motion.update();
   strip.reset();
   xsheet.reset();
   quick.update();

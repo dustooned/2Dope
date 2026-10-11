@@ -115,7 +115,7 @@ export class XSheet {
         this.anchor = index;
         app.setSelection([index]);
       }
-      app.setFrame(frame);
+      app.setLayerFrame(frame);
     });
     this.body.addEventListener('pointermove', (e) => {
       if (!this.dragging || this.anchor === null) return;
@@ -162,14 +162,14 @@ export class XSheet {
     if (mod) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      app.setFrame(app.frame + (e.key === 'ArrowDown' ? 1 : -1));
+      app.setLayerFrame(app.lf + (e.key === 'ArrowDown' ? 1 : -1));
       this.anchor = app.targets[0] ?? null;
       app.setSelection(app.targets.slice(0, 1));
       return;
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      const row = this.body.querySelector<HTMLElement>(`.xs-row[data-frame="${app.frame}"]`);
+      const row = this.body.querySelector<HTMLElement>(`.xs-row[data-frame="${app.lf}"]`);
       if (row) this.editCell(row);
       return;
     }
@@ -185,7 +185,7 @@ export class XSheet {
     // typing a digit starts typing a drawing number into the current frame
     if (/^[0-9]$/.test(e.key)) {
       e.preventDefault();
-      const row = this.body.querySelector<HTMLElement>(`.xs-row[data-frame="${app.frame}"]`);
+      const row = this.body.querySelector<HTMLElement>(`.xs-row[data-frame="${app.lf}"]`);
       if (row) this.editCell(row, e.key);
       return;
     }
@@ -236,7 +236,7 @@ export class XSheet {
     const isStart = row.dataset.start === '1';
     if (!isStart) {
       // notes live on the first frame of a drawing
-      this.app.setFrame(Number(row.dataset.frame));
+      this.app.setLayerFrame(Number(row.dataset.frame));
       const start = this.body.querySelector<HTMLElement>(`.xs-row[data-exp="${index}"][data-start="1"] .xs-note`);
       start?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       return;
@@ -279,8 +279,8 @@ export class XSheet {
       this.rebuild();
     }
     const cur = this.body.querySelector<HTMLElement>('.xs-row.current');
-    if (cur && Number(cur.dataset.frame) !== app.frame) cur.classList.remove('current');
-    const row = this.body.querySelector<HTMLElement>(`.xs-row[data-frame="${app.frame}"]`);
+    if (cur && Number(cur.dataset.frame) !== app.lf) cur.classList.remove('current');
+    const row = this.body.querySelector<HTMLElement>(`.xs-row[data-frame="${app.lf}"]`);
     if (row && !row.classList.contains('current')) {
       row.classList.add('current');
       const top = row.offsetTop;

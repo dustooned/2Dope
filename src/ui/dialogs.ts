@@ -102,3 +102,39 @@ export function pickBox<T>(title: string, choices: Choice<T>[], extra?: { label:
     dialog.showModal();
   });
 }
+
+/** Ask for one or more numbers (a position's x and y, say). Resolves to null when cancelled. */
+export function askNumbers(title: string, fields: { label: string; value: number; step?: number; unit?: string }[], okLabel = 'Apply'): Promise<number[] | null> {
+  return new Promise((resolve) => {
+    const { dialog, body, foot } = modal(title);
+    const inputs = fields.map((f) => {
+      const row = el('label', { class: 'nfield' });
+      const input = el('input', { type: 'number', step: String(f.step ?? 1), value: String(Math.round(f.value * 1000) / 1000), 'aria-label': f.label, class: 'textbox' });
+      row.append(el('span', { class: 'name' }, f.label), input, el('span', { class: 'hint' }, f.unit ?? ''));
+      body.append(row);
+      return input;
+    });
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    const ok = el('button', { type: 'button', class: 'primary' }, okLabel);
+    foot.append(cancel, ok);
+    let result: number[] | null = null;
+    const accept = () => {
+      const nums = inputs.map((i) => Number(i.value));
+      if (nums.every((n) => Number.isFinite(n))) result = nums;
+      dialog.close();
+    };
+    cancel.addEventListener('click', () => dialog.close());
+    ok.addEventListener('click', accept);
+    for (const i of inputs) {
+      i.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') accept();
+      });
+      i.addEventListener('keyup', (e) => e.stopPropagation());
+    }
+    dialog.addEventListener('close', () => resolve(result));
+    dialog.showModal();
+    inputs[0]?.focus();
+    inputs[0]?.select();
+  });
+}
