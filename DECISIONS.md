@@ -102,6 +102,13 @@
 - **Flipbook blank page**: stepping past the last frame shows a blank page with the last drawing as onion skin; the first stroke adds the frame. Nothing is created by flipping alone.
 - Existing taps stay: 2 fingers undo, 3 redo, 4 hide the interface.
 
+## 2026-10-11: Device profile, Lite mode (step 2 of doc 13)
+
+- **One profile for phones and weak devices** (core/device.ts, pure + tested): form (phone / tablet / desktop) from screen size and the main pointer (a touchscreen laptop stays desktop), tier (low / normal / high) from deviceMemory, cores, and for iOS the screen class (1024×768 iPads and 667-pt iPhones are low). Lite = phone or low tier, or the user's choice (☰ → Device: Auto / Lite / Full, applies on reload).
+- **Lite limits**: pages up to 720p (low) or 1080p, 120 / 200 MB of live drawings, 2 / 3 onion skins, 40 / 80 undo steps, screen canvas at 1× / 2× pixel ratio. Full keeps 900 MB on strong desktops, 200 MB on iPad (Safari kills big tabs).
+- **Nothing is removed from a project**: a big project opens in Lite with a warning.
+- The phone layout (body classes `lite`, `form-phone`) comes in step 9.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

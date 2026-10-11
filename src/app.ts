@@ -8,6 +8,7 @@ import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
+import { currentProfile, type Profile } from './core/device';
 import { compLength, frameContent, invert, worldMatrix, type Layer } from './core/comp';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { CompEditor } from './compedit';
@@ -170,12 +171,14 @@ export class App {
   onToggleXSheet: () => void = () => {};
   /** Fires after a different project replaced the current one. */
   onProjectLoaded: () => void = () => {};
-  readonly history = new History();
+  /** What this device can take (phone / weak tablet → Lite). Read once at start; see core/device.ts. */
+  readonly device: Profile = currentProfile();
+  readonly history = new History(this.device.limits.undoDepth);
   readonly view = new Viewport();
   /** Where parked drawings' stored images are read from (the library sets this). */
   assets: AssetSource = async () => null;
   /** Keeps only the drawings that matter in memory (see core/residency.ts). */
-  readonly residency = new Residency(domPlaneOps, (k) => this.assets(k));
+  readonly residency = new Residency(domPlaneOps, (k) => this.assets(k), this.device.limits.budget);
   /** Fires when timeline thumbnails changed (a parked drawing came back or was redrawn). */
   onThumbs: () => void = () => {};
 
@@ -222,6 +225,7 @@ export class App {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas unavailable');
     this.ctx = ctx;
+    this.clampOnion();
     // Merge over the default so brushes saved by older builds gain new fields.
     this.brush = { ...cloneBrush(PRESETS[0]!), ...(loadJSON<Partial<BrushSettings>>(BRUSH_KEY) ?? {}) };
     this.color = loadJSON<string>(COLOR_KEY) ?? '#1d1d24';
@@ -558,7 +562,15 @@ export class App {
   // -------------------------------------------------------------------------------------------
   // Onion skin and scrub lock
 
+  /** Lite keeps fewer onion skins (each one is a whole drawing in memory). */
+  private clampOnion(): void {
+    const max = this.device.limits.onionMax;
+    this.onion.before = Math.min(this.onion.before, max);
+    this.onion.after = Math.min(this.onion.after, max);
+  }
+
   onionChanged(): void {
+    this.clampOnion();
     saveJSON(ONION_KEY, this.onion);
     this.requestRender();
     this.onFrameChange();
@@ -1632,7 +1644,8 @@ export class App {
   // Rendering
 
   private resize(): void {
-    this.dpr = window.devicePixelRatio || 1;
+    // Lite draws the screen canvas at fewer pixels (less memory and GPU work on weak devices)
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.device.limits.maxDpr);
     const w = Math.max(1, Math.round(this.viewW * this.dpr));
     const h = Math.max(1, Math.round(this.viewH * this.dpr));
     if (this.canvas.width !== w || this.canvas.height !== h) {

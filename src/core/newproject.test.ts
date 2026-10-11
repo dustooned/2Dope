@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASPECTS, clampFps, clampSide, DEFAULT_NEW, framesFor, LENGTHS, MAX_SIDE, readNewSettings, sizeFor, sizeNote } from './newproject';
+import { ASPECTS, clampFps, clampSide, DEFAULT_NEW, fitPixels, framesFor, LENGTHS, MAX_SIDE, readNewSettings, sizeFor, sizeNote } from './newproject';
 
 const a = (id: string) => ASPECTS.find((x) => x.id === id)!;
 
@@ -46,5 +46,17 @@ describe('new project presets', () => {
     const ok = readNewSettings({ aspect: '9:16', tier: 720, fps: 24.4, length: '5s', custom: { width: 900, height: 99999 } });
     expect(ok).toEqual({ aspect: '9:16', tier: 720, fps: 24, length: '5s', custom: { width: 900, height: MAX_SIDE } });
     expect(clampFps(500)).toBe(120);
+  });
+});
+
+describe('device limits', () => {
+  it('fitPixels scales a page down to the pixel cap, keeping its shape and even sides', () => {
+    expect(fitPixels(1280, 720, 1280 * 720)).toEqual({ width: 1280, height: 720 });
+    const r = fitPixels(3840, 2160, 1280 * 720);
+    expect(r).toEqual({ width: 1280, height: 720 });
+    const v = fitPixels(2000, 3000, 1280 * 720);
+    expect(v.width * v.height).toBeLessThanOrEqual(1280 * 720);
+    expect((v.width % 2) + (v.height % 2)).toBe(0);
+    expect(v.width / v.height).toBeCloseTo(2 / 3, 2);
   });
 });

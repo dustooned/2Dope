@@ -36,6 +36,14 @@ export function sizeFor(aspect: { w: number; h: number }, tier: number): { width
   return { width: clampSide(even(aspect.w * k)), height: clampSide(even(aspect.h * k)) };
 }
 
+/** Scale a page down (keeping its shape, even sides) so it has at most `maxPixels` pixels. */
+export function fitPixels(width: number, height: number, maxPixels: number): { width: number; height: number } {
+  if (width * height <= maxPixels) return { width, height };
+  const k = Math.sqrt(maxPixels / (width * height));
+  const fit = (n: number) => Math.max(MIN_SIDE, Math.floor((n * k) / 2) * 2);
+  return { width: fit(width), height: fit(height) };
+}
+
 /** Bytes one plane (line or fill) of a drawing takes while it is on screen. */
 export function planeBytes(width: number, height: number): number {
   return width * height * 4;

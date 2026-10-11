@@ -4,6 +4,7 @@ import './style.css';
 (window as unknown as { __2dopeBooted?: boolean }).__2dopeBooted = true;
 import { App } from './app';
 import type { Tool } from './core/stroke';
+import { saveMode, type DeviceMode } from './core/device';
 import { buildPanel } from './ui/panel';
 import { openStore } from './io/persist';
 import { ExportUI } from './ui/exportdialog';
@@ -259,7 +260,11 @@ async function exportForBlender(): Promise<void> {
     t?.remove();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([r.zip as BlobPart], { type: 'application/zip' }));
-    const base = app.project.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'shot';
+    const base =
+      app.project.name
+        .replace(/[^\w\- ]+/g, '')
+        .trim()
+        .replace(/\s+/g, '-') || 'shot';
     a.download = `${base}-blender.zip`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
@@ -290,7 +295,11 @@ const showCrumb = () => {
   const inside = crumbs.length > 1;
   crumbBtn.hidden = !inside;
   backOut.hidden = !inside;
-  if (inside) crumbBtn.textContent = `⤴ ${crumbs.map((c) => c.comp.name).slice(1).join(' › ')}`;
+  if (inside)
+    crumbBtn.textContent = `⤴ ${crumbs
+      .map((c) => c.comp.name)
+      .slice(1)
+      .join(' › ')}`;
 };
 crumbBtn.addEventListener('click', () => app.editor.exit());
 backOut.addEventListener('click', () => app.editor.exit());
@@ -301,12 +310,42 @@ app.onCompChanged = () => {
   showCrumb();
 };
 app.onProjectLoaded = () => {
+  warnIfTooBig();
   showCrumb();
   motion.update();
   strip.reset();
   xsheet.reset();
   quick.update();
 };
+// ---------------------------------------------------------------------------------------------
+// Device profile: Lite (phones, older tablets) or Full. See core/device.ts.
+
+const device = app.device;
+document.body.classList.toggle('lite', device.lite);
+document.body.classList.add(`form-${device.form}`);
+const deviceInfo = $<HTMLElement>('#device-info');
+const MB = 1024 * 1024;
+deviceInfo.textContent =
+  `${device.lite ? 'Lite' : 'Full'}: ${device.reasons.join('; ')}. ` +
+  `Pages up to ${device.limits.maxShort}p, ${Math.round(device.limits.budget / MB)} MB for drawings, ${device.limits.onionMax} onion skins each side, ${device.limits.undoDepth} undo steps.`;
+menu.querySelectorAll<HTMLButtonElement>('[data-device]').forEach((b) => {
+  b.setAttribute('aria-pressed', String(b.dataset.device === device.mode));
+  b.addEventListener('click', () => {
+    const m = b.dataset.device as DeviceMode;
+    saveMode(m);
+    menu.querySelectorAll<HTMLButtonElement>('[data-device]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    if (m === device.mode) return;
+    files?.toast('The device setting applies when 2Dope opens again.', [{ label: 'Reload now', run: () => location.reload() }], 8000);
+  });
+});
+
+/** In Lite, a project bigger than this device's pages still opens, with a word of warning. */
+function warnIfTooBig(): void {
+  const p = app.project;
+  if (!device.lite || p.width * p.height <= device.limits.maxPixels) return;
+  files?.toast(`This project is ${p.width}×${p.height}, larger than Lite mode makes on this device. It may be slow or run out of memory; keep onion skins low.`, [], 9000);
+}
+
 // The strip takes height from the stage, so fit again now that the layout is final.
 app.fit();
 
@@ -315,7 +354,7 @@ const { store, persistent } = await openStore();
 files = new FileUI(app, store, persistent);
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;
 exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
-const newUI = new NewProjectUI();
+const newUI = new NewProjectUI(app.device.lite ? app.device.limits : null);
 const gallery = new Gallery(files, newUI, $('#gallery'));
 const showGallery = () => void gallery.open();
 $('#open-gallery').addEventListener('click', showGallery);

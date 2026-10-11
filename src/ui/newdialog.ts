@@ -1,17 +1,4 @@
-import {
-  ASPECTS,
-  clampFps,
-  clampSide,
-  framesFor,
-  FPS_NAMES,
-  LENGTHS,
-  planeBytes,
-  readNewSettings,
-  sizeFor,
-  sizeNote,
-  TIERS,
-  type NewSettings,
-} from '../core/newproject';
+import { ASPECTS, clampFps, clampSide, framesFor, FPS_NAMES, LENGTHS, planeBytes, readNewSettings, fitPixels, sizeFor, sizeNote, TIERS, type NewSettings } from '../core/newproject';
 import type { NewProjectOptions } from './files';
 
 const KEY = '2dope.m2.new';
@@ -55,7 +42,8 @@ export class NewProjectUI {
   private folder: string | null = null;
   private resolve: ((o: NewProjectOptions | null) => void) | null = null;
 
-  constructor() {
+  /** `limits`: the device's page limits in Lite mode (null = no limits). */
+  constructor(private readonly limits: { maxShort: number; maxPixels: number } | null = null) {
     document.body.append(this.dialog);
     this.dialog.addEventListener('close', () => {
       this.resolve?.(null);
@@ -78,10 +66,15 @@ export class NewProjectUI {
   /** The page size the current choice gives. */
   private size(): { width: number; height: number } {
     const s = this.s;
-    if (s.aspect === 'custom') return { ...s.custom };
-    if (s.aspect === 'screen') return sizeFor(screenShape(), s.tier);
-    const a = ASPECTS.find((x) => x.id === s.aspect) ?? ASPECTS[0]!;
-    return sizeFor(a, s.tier);
+    const sz = s.aspect === 'custom' ? { ...s.custom } : this.sizeAt(this.tier());
+    return this.limits ? fitPixels(sz.width, sz.height, this.limits.maxPixels) : sz;
+  }
+
+  /** The chosen quality, lowered to what this device allows in Lite mode. */
+  private tier(): number {
+    const max = this.limits?.maxShort ?? Infinity;
+    if (this.s.tier <= max) return this.s.tier;
+    return [...TIERS].reverse().find((t) => t <= max) ?? TIERS[0];
   }
 
   private save(): void {
@@ -145,14 +138,27 @@ export class NewProjectUI {
         i.addEventListener('keyup', (e) => e.stopPropagation());
         return i;
       };
-      d.append(row('Size', num(s.custom.width, 'Width', (n) => (s.custom.width = n)), el('span', {}, '×'), num(s.custom.height, 'Height', (n) => (s.custom.height = n)), el('span', { class: 'hint' }, 'pixels')));
+      d.append(
+        row(
+          'Size',
+          num(s.custom.width, 'Width', (n) => (s.custom.width = n)),
+          el('span', {}, '×'),
+          num(s.custom.height, 'Height', (n) => (s.custom.height = n)),
+          el('span', { class: 'hint' }, 'pixels'),
+        ),
+      );
     } else {
       d.append(
         row(
           'Quality',
           ...TIERS.map((t) => {
             const sz = this.sizeAt(t);
-            return chip(`${t}p`, s.tier === t, () => ((s.tier = t), this.render()), `${sz.width}×${sz.height}`, `${sz.width}×${sz.height}`);
+            const b = chip(`${t}p`, this.tier() === t, () => ((s.tier = t), this.render()), `${sz.width}×${sz.height}`, `${sz.width}×${sz.height}`);
+            if (this.limits && t > this.limits.maxShort) {
+              b.disabled = true;
+              b.title = `Lite mode: up to ${this.limits.maxShort}p on this device (Settings → Device to change)`;
+            }
+            return b;
           }),
         ),
       );
@@ -176,7 +182,9 @@ export class NewProjectUI {
       ),
     );
 
-    d.append(row('Length', ...LENGTHS.map((l) => chip(l.label, s.length === l.id, () => ((s.length = l.id), this.render()), l.seconds ? `The first drawing is held for ${l.label}` : 'One blank frame'))));
+    d.append(
+      row('Length', ...LENGTHS.map((l) => chip(l.label, s.length === l.id, () => ((s.length = l.id), this.render()), l.seconds ? `The first drawing is held for ${l.label}` : 'One blank frame'))),
+    );
 
     d.append(el('p', { class: 'hint nsummary', 'aria-live': 'polite' }), el('p', { class: 'nnote', hidden: '' }));
 
@@ -207,7 +215,8 @@ export class NewProjectUI {
     const len = LENGTHS.find((l) => l.id === this.s.length) ?? LENGTHS[0]!;
     const frames = framesFor(len, this.s.fps);
     const sum = this.dialog.querySelector<HTMLElement>('.nsummary');
-    if (sum) sum.textContent = `${sz.width}×${sz.height} · ${this.s.fps} fps · ${frames} frame${frames === 1 ? '' : 's'} · about ${mb(planeBytes(sz.width, sz.height))} of memory per drawing plane while it is on screen`;
+    if (sum)
+      sum.textContent = `${sz.width}×${sz.height} · ${this.s.fps} fps · ${frames} frame${frames === 1 ? '' : 's'} · about ${mb(planeBytes(sz.width, sz.height))} of memory per drawing plane while it is on screen${this.limits ? ` · Lite mode: up to ${this.limits.maxShort}p` : ''}`;
     const note = this.dialog.querySelector<HTMLElement>('.nnote');
     const n = sizeNote(sz.width, sz.height);
     if (note) {

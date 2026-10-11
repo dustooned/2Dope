@@ -139,7 +139,7 @@ export class Strip {
     this.onionBtn = btn('Onion', 'Onion skin on/off (O)', () => app.toggleOnion());
     const count = (label: string, title: string, get: () => number, set: (n: number) => void) => {
       const sel = el('select', { 'aria-label': title, title });
-      for (let n = 0; n <= 5; n++) sel.append(el('option', { value: String(n) }, String(n)));
+      for (let n = 0; n <= app.device.limits.onionMax; n++) sel.append(el('option', { value: String(n) }, String(n)));
       sel.value = String(get());
       sel.addEventListener('change', () => {
         set(Number(sel.value));
