@@ -48,6 +48,7 @@
           <button type="button" data-ws="motion">Motion</button>
         </div>
         <div class="menu-grid">
+          <button type="button" data-menu="backout" title="Leave the precomp you are in" hidden>⤴ Back out of comp</button>
           <button type="button" data-menu="quick" title="Quick Animate (Tab)">Quick Animate</button>
           <button type="button" data-menu="panel" title="Brush settings and X-sheet">Brush / X-sheet panel</button>
           <button type="button" data-menu="bar" title="Show or hide the toolbar">Toolbar on/off</button>
@@ -64,6 +65,7 @@
       </div>
       <div class="group file" role="group" aria-label="Project">
         <input id="pname" type="text" placeholder="Untitled" maxlength="60" aria-label="Project name" />
+        <button type="button" id="crumb" class="crumbbtn" hidden title="You are inside a precomp. Tap to go back out."></button>
         <span id="savestatus" class="readout" role="status"></span>
       </div>
       <div class="group" role="group" aria-label="Tools">

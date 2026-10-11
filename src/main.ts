@@ -257,7 +257,26 @@ app.onToolChange = chain(app.onToolChange, () => quick.update());
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
 app.onThumbs = () => strip.update();
+// Inside a precomp: the toolbar shows where you are, and ☰ has a way back out.
+const crumbBtn = $<HTMLButtonElement>('#crumb');
+const backOut = $<HTMLButtonElement>('[data-menu="backout"]');
+const showCrumb = () => {
+  const crumbs = app.editor.crumbs();
+  const inside = crumbs.length > 1;
+  crumbBtn.hidden = !inside;
+  backOut.hidden = !inside;
+  if (inside) crumbBtn.textContent = `⤴ ${crumbs.map((c) => c.comp.name).slice(1).join(' › ')}`;
+};
+crumbBtn.addEventListener('click', () => app.editor.exit());
+backOut.addEventListener('click', () => app.editor.exit());
+app.onCompChanged = () => {
+  strip.reset();
+  xsheet.reset();
+  motion.update();
+  showCrumb();
+};
 app.onProjectLoaded = () => {
+  showCrumb();
   motion.update();
   strip.reset();
   xsheet.reset();

@@ -54,7 +54,23 @@ export interface CompLayer extends LayerBase {
   kind: 'comp';
   comp: string;
   loop: boolean;
+  /**
+   * This instance's own values for the comp's pinned properties, by pin key ("layerId:prop").
+   * Keys are in the nested layer's time, like the property they replace.
+   */
+  overrides: Record<string, Prop>;
 }
+
+/** A property of a layer inside a comp, shown as a control on every instance of that comp. */
+export interface Pin {
+  layer: string;
+  prop: PinProp;
+}
+
+export type PinProp = 'position' | 'scale' | 'rotation' | 'opacity' | 'anchor' | 'zoom';
+export const PIN_PROPS: PinProp[] = ['position', 'scale', 'rotation', 'opacity', 'anchor', 'zoom'];
+
+export const pinKey = (p: Pin) => `${p.layer}:${p.prop}`;
 
 /** A 2D camera. The topmost visible camera frames the comp; `zoom` 100 % shows the comp as is. */
 export interface CameraLayer extends LayerBase {
@@ -84,6 +100,8 @@ export interface Comp {
   folder: string | null;
   /** Top of the stack first. */
   layers: Layer[];
+  /** Properties exposed to instances (After Effects' Essential Properties, simplified). */
+  pins: Pin[];
 }
 
 /** A folder in the project bin (comps, later images and audio). */
@@ -128,7 +146,7 @@ export function drawingsLayer(id: string, name: string, exposures: Exposure[], w
 }
 
 export function compLayer(id: string, name: string, nested: Comp, parent: Comp): CompLayer {
-  return { ...base(id, name, nested.width, nested.height, parent.width, parent.height), kind: 'comp', comp: nested.id, loop: false };
+  return { ...base(id, name, nested.width, nested.height, parent.width, parent.height), kind: 'comp', comp: nested.id, loop: false, overrides: {} };
 }
 
 export function cameraLayer(id: string, comp: Comp): CameraLayer {
@@ -140,7 +158,33 @@ export function nullLayer(id: string, name: string, comp: Comp): NullLayer {
 }
 
 export function newComp(id: string, name: string, width: number, height: number, fps: number): Comp {
-  return { id, name, width, height, fps, duration: null, background: null, folder: null, layers: [] };
+  return { id, name, width, height, fps, duration: null, background: null, folder: null, layers: [], pins: [] };
+}
+
+/**
+ * The comp as one instance shows it: pinned properties take this instance's overrides. Without
+ * overrides it is the comp itself (no copy).
+ */
+export function instanceComp(nested: Comp, l: CompLayer): Comp {
+  const keys = Object.keys(l.overrides ?? {});
+  if (!keys.length) return nested;
+  const live = new Set(nested.pins.map(pinKey));
+  let changed = false;
+  const layers = nested.layers.map((x) => {
+    let copy: Layer | null = null;
+    for (const k of keys) {
+      const [id, prop] = k.split(':') as [string, PinProp];
+      if (id !== x.id || !live.has(k)) continue;
+      copy ??= { ...x, transform: { ...x.transform } } as Layer;
+      const p = l.overrides[k]!;
+      if (prop === 'zoom') {
+        if (copy.kind === 'camera') copy.zoom = p as Prop<number>;
+      } else (copy.transform as unknown as Record<string, Prop>)[prop] = p;
+      changed = true;
+    }
+    return copy ?? x;
+  });
+  return changed ? { ...nested, layers } : nested;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -389,8 +433,8 @@ export interface FrameContent {
 const round = (m: Mat) => m.map((x) => Math.round(x * 1e4) / 1e4).join(',');
 
 /** Describe a comp frame without drawing it. */
-export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string, frame: number, depth = 0): FrameContent {
-  const c = comps.get(compId);
+export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | Comp, frame: number, depth = 0): FrameContent {
+  const c = typeof compId === 'string' ? comps.get(compId) : compId;
   const drawings = new Set<string>();
   if (!c || depth > 8) return { key: '', drawings };
   const parts: string[] = [c.background ?? '-', round(viewMatrix(c, frame, comps))];
@@ -406,7 +450,7 @@ export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string, f
       const n = comps.get(l.comp);
       const nf = n ? nestedFrame(l, frame, c.fps, n, comps) : null;
       if (!n || nf === null) continue;
-      const inner = frameContent(comps, n.id, nf, depth + 1);
+      const inner = frameContent(comps, instanceComp(n, l), nf, depth + 1);
       for (const d of inner.drawings) drawings.add(d);
       parts.push(`${l.id}:[${inner.key}]@${look}`);
     }

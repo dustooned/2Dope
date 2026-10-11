@@ -2023,3 +2023,55 @@ body.ws-time .panel {
     flex-basis: 196px;
   }
 }
+
+/* ---- Precomps: breadcrumb, pins ---- */
+
+.crumbbtn {
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  margin-right: 4px;
+  border-right: 1px solid var(--line);
+}
+
+.mcrumbs .crumb {
+  font-size: 13px;
+  padding: 0 6px;
+}
+
+.mcrumbs .crumb[aria-current='true'] {
+  color: var(--accent);
+}
+
+.pname.pin {
+  flex: 1 1 auto;
+  padding-left: 22px;
+  color: #ffd24a;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pval.over {
+  color: #ffd24a;
+}
+
+.pstar {
+  flex: 0 0 26px;
+  color: #55555f;
+}
+
+.pstar.on {
+  color: #ffd24a;
+}

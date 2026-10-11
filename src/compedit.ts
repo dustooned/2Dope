@@ -16,6 +16,9 @@ import {
 import {
   apply,
   cameraLayer,
+  compLayer,
+  instanceComp,
+  newComp,
   compLength,
   drawingsLayer,
   invert,
@@ -31,6 +34,7 @@ import {
   type Layer,
   type Mat,
 } from './core/comp';
+import { nestedFrame } from './core/comp';
 import type { Command } from './core/history';
 import type { App } from './app';
 
@@ -63,9 +67,14 @@ function setPropOn(l: Layer, n: PropName, p: Prop): void {
   else (l.transform as unknown as Record<string, Prop>)[n] = p;
 }
 
+/** A property row: a layer's own property, or `pin:<layerId>:<prop>` on a precomp layer (a pinned property of its comp). */
+export type PropKey = PropName | `pin:${string}`;
+
+export const isPin = (k: string): k is `pin:${string}` => k.startsWith('pin:');
+
 export interface KeyRef {
   layer: string;
-  prop: PropName;
+  prop: PropKey;
   f: number;
 }
 
@@ -107,6 +116,8 @@ export class CompEditor {
   keyAtStart = true;
   /** New keys get the easing used last. */
   lastEase: Easing = 'linear';
+  /** Taps add to the layer selection instead of replacing it (grouping by touch). */
+  multiSelect = false;
   /** Look through the topmost camera (off = see the whole comp and the camera's frame). */
   throughCamera = true;
   onChange: () => void = () => {};
@@ -130,9 +141,105 @@ export class CompEditor {
     return id ? this.layer(id) : undefined;
   }
 
-  /** The playhead in a layer's own time. */
-  frameOf(l: Layer): number {
+  /**
+   * The playhead in the time a property's keys use: the layer's own time, or for a pinned
+   * property the time of the layer inside the precomp.
+   */
+  frameOf(l: Layer, n?: PropKey): number {
+    if (n && isPin(n) && l.kind === 'comp') {
+      const nested = this.app.project.comps.get(l.comp);
+      const [, id] = n.split(':');
+      const inner = nested?.layers.find((x) => x.id === id);
+      if (!nested || !inner) return 0;
+      const nf = nestedFrame(l, this.app.frame, this.comp.fps, nested, this.app.project.comps) ?? Math.max(0, Math.floor(((this.app.frame - l.start) * nested.fps) / this.comp.fps));
+      return layerFrame(inner, nf);
+    }
     return layerFrame(l, this.app.frame);
+  }
+
+  /** A property of a layer, including pinned properties of a precomp (this instance's value). */
+  getProp(l: Layer, n: PropKey): Prop {
+    if (isPin(n)) {
+      if (l.kind !== 'comp') return l.transform.opacity as Prop;
+      const key = n.slice(4);
+      const own = l.overrides[key];
+      if (own) return own;
+      const [id, prop] = key.split(':') as [string, PropName];
+      const inner = this.app.project.comps.get(l.comp)?.layers.find((x) => x.id === id);
+      return inner ? getProp(inner, prop) : (l.transform.opacity as Prop);
+    }
+    return getProp(l, n);
+  }
+
+  private setProp(l: Layer, n: PropKey, p: Prop): void {
+    if (isPin(n)) {
+      if (l.kind === 'comp') l.overrides = { ...l.overrides, [n.slice(4)]: p };
+      return;
+    }
+    setPropOn(l, n, p);
+  }
+
+  /** The rows a layer shows: its own properties, then a precomp's pinned ones. */
+  rowsOf(l: Layer): PropKey[] {
+    const rows: PropKey[] = [...propsOf(l)];
+    if (l.kind === 'comp') {
+      const nested = this.app.project.comps.get(l.comp);
+      for (const p of nested?.pins ?? []) if (nested?.layers.some((x) => x.id === p.layer)) rows.push(`pin:${p.layer}:${p.prop}`);
+    }
+    return rows;
+  }
+
+  /** "★ Ball Position" for a pin row, "Position" otherwise. */
+  rowLabel(l: Layer, n: PropKey): string {
+    if (!isPin(n)) return PROP_LABEL[n];
+    const [, id, prop] = n.split(':') as [string, string, PropName];
+    const inner = l.kind === 'comp' ? this.app.project.comps.get(l.comp)?.layers.find((x) => x.id === id) : undefined;
+    return `★ ${inner?.name ?? '?'} ${PROP_LABEL[prop] ?? prop}`;
+  }
+
+  /** The value kind of a row (for formatting and the value editor). */
+  rowProp(n: PropKey): PropName {
+    return isPin(n) ? (n.split(':')[2] as PropName) : n;
+  }
+
+  /** Has this instance changed a pinned property? */
+  isOverridden(l: Layer, n: PropKey): boolean {
+    return isPin(n) && l.kind === 'comp' && !!l.overrides[n.slice(4)];
+  }
+
+  /** Go back to the comp's own value for a pinned property on this instance. */
+  resetPin(id: string, n: PropKey): void {
+    if (!isPin(n)) return;
+    this.edit('Reset to the comp', (c) => {
+      const l = c.layers.find((x) => x.id === id);
+      if (l && l.kind === 'comp') {
+        const o = { ...l.overrides };
+        delete o[n.slice(4)];
+        l.overrides = o;
+      }
+    });
+  }
+
+  /** Is a property of a layer in the open comp pinned (shown on its instances)? */
+  isPinned(layerId: string, n: PropName): boolean {
+    return this.comp.pins.some((p) => p.layer === layerId && p.prop === n);
+  }
+
+  /** Pin or unpin a property of a layer in the open comp. */
+  togglePin(layerId: string, n: PropName): void {
+    const c = this.comp;
+    const before = structuredClone(c.pins);
+    const has = this.isPinned(layerId, n);
+    c.pins = has ? c.pins.filter((p) => !(p.layer === layerId && p.prop === n)) : [...c.pins, { layer: layerId, prop: n }];
+    const after = structuredClone(c.pins);
+    const id = c.id;
+    const set = (pins: typeof before) => {
+      const cc = this.app.project.comps.get(id);
+      if (cc) cc.pins = structuredClone(pins);
+      this.changed();
+    };
+    this.app.history.push({ label: has ? 'Unpin property' : 'Pin property', do: () => set(after), undo: () => set(before) }, true);
+    this.changed();
   }
 
   changed(): void {
@@ -156,7 +263,268 @@ export class CompEditor {
     this.keys.clear();
     this.open.clear();
     this.gesture = null;
+    this.trail = [];
   }
+
+  // -------------------------------------------------------------------------------------------
+  // Precomps: group, ungroup, make unique, go inside and back out
+
+  /** How we got into the open comp: each step is a precomp layer of the comp above. */
+  private trail: { comp: string; layer: string }[] = [];
+
+  /** One undo step that may change several comps (group, ungroup, make unique). */
+  editProject(label: string, fn: () => void): void {
+    const p = this.app.project;
+    const snap = () => ({ comps: structuredClone([...p.comps.values()]), active: p.activeComp, trail: [...this.trail] });
+    const before = snap();
+    fn();
+    const after = snap();
+    const set = (st: typeof before) => {
+      p.comps.clear();
+      for (const c of structuredClone(st.comps)) p.comps.set(c.id, c);
+      const was = p.activeComp;
+      p.activeComp = st.active;
+      this.trail = [...st.trail];
+      this.tidy();
+      if (was !== st.active) this.app.onCompChange();
+      this.changed();
+    };
+    this.app.history.push({ label, do: () => set(after), undo: () => set(before) }, true);
+    this.tidy();
+    this.changed();
+  }
+
+  /**
+   * Put layers into a new comp, replaced by one layer showing it (After Effects' "move all
+   * attributes"). The new comp has this comp's size and speed, so nothing moves or retimes.
+   * Layers left outside that were parented to a grouped layer keep their place, unparented.
+   */
+  group(ids: string[] = this.selected, name?: string): string | null {
+    const c = this.comp;
+    const p = this.app.project;
+    const picked = c.layers.filter((l) => ids.includes(l.id));
+    if (!picked.length) return null;
+    const nid = p.newId('c');
+    let made: string | null = null;
+    this.editProject('Group into comp', () => {
+      const set = new Set(ids);
+      for (const l of c.layers) if (!set.has(l.id) && l.parent && set.has(l.parent)) setParent(c, l, null, this.app.frame);
+      const nested = newComp(nid, name?.trim() || `${picked[0]!.name} comp`, c.width, c.height, c.fps);
+      nested.folder = c.folder;
+      nested.layers = picked.map((l) => ({ ...l, parent: l.parent && set.has(l.parent) ? l.parent : null }));
+      p.comps.set(nid, nested);
+      const at = c.layers.findIndex((l) => set.has(l.id));
+      const layer = compLayer(p.newId('L'), nested.name, nested, c);
+      c.layers = c.layers.filter((l) => !set.has(l.id));
+      c.layers.splice(Math.max(0, at), 0, layer);
+      made = layer.id;
+    });
+    if (made) this.select(made);
+    return made;
+  }
+
+  /**
+   * Put a precomp's layers back into this comp (Harmony's "explode"). Their times shift by the
+   * precomp layer's start. If the precomp layer was moved, scaled or animated, its layers ride a
+   * new null that carries that transform, so nothing jumps. Other instances keep the comp.
+   */
+  ungroup(id: string): boolean {
+    const c = this.comp;
+    const p = this.app.project;
+    const l = c.layers.find((x) => x.id === id);
+    if (!l || l.kind !== 'comp') return false;
+    const nested = p.comps.get(l.comp);
+    if (!nested || nested.fps !== c.fps) return false;
+    this.editProject('Ungroup comp', () => {
+      const inner = structuredClone(instanceComp(nested, l).layers);
+      // fresh ids, so the same comp can be ungrouped twice
+      const ids = new Map<string, string>();
+      for (const x of inner) {
+        const nid = p.newId('L');
+        ids.set(x.id, nid);
+        x.id = nid;
+        // reserve the id at once (newId looks at the comps)
+        c.layers.push({ ...x, visible: false } as Layer);
+      }
+      c.layers = c.layers.filter((x) => ![...ids.values()].includes(x.id));
+      const t = l.transform;
+      const still = [t.anchor, t.position, t.scale, t.rotation].every((q) => !q.keys.length);
+      const plain = still && t.anchor.value[0] === t.position.value[0] && t.anchor.value[1] === t.position.value[1] && t.scale.value[0] === 100 && t.scale.value[1] === 100 && t.rotation.value === 0 && !l.parent;
+      let holder: string | null = null;
+      const out: Layer[] = [];
+      if (!plain) {
+        const n = nullLayer(p.newId('L'), `${l.name} (group)`, c);
+        n.transform = structuredClone(l.transform);
+        n.transform.opacity = { value: 100, keys: [] };
+        n.parent = l.parent;
+        n.start = l.start;
+        n.in = l.in;
+        n.out = l.out;
+        holder = n.id;
+        out.push(n);
+      }
+      for (const x of inner) {
+        x.parent = x.parent ? (ids.get(x.parent) ?? null) : holder;
+        x.start += l.start;
+        x.in += l.start;
+        if (x.out !== null) x.out += l.start;
+        out.push(x);
+      }
+      const at = c.layers.findIndex((x) => x.id === id);
+      c.layers.splice(at, 1, ...out);
+    });
+    this.select(null);
+    return true;
+  }
+
+  /** Give this instance its own copy of the comp, so changing it leaves the other instances alone. */
+  makeUnique(id: string): void {
+    const c = this.comp;
+    const p = this.app.project;
+    const l = c.layers.find((x) => x.id === id);
+    if (!l || l.kind !== 'comp') return;
+    const nested = p.comps.get(l.comp);
+    if (!nested) return;
+    this.editProject('Make unique', () => {
+      const copy = structuredClone(nested);
+      copy.id = p.newId('c');
+      copy.name = `${nested.name} copy`;
+      p.comps.set(copy.id, copy);
+      const live = c.layers.find((x) => x.id === id);
+      if (live && live.kind === 'comp') live.comp = copy.id;
+    });
+  }
+
+  /** Another instance of a precomp (shares its content), or a copy of a null or camera, above it. */
+  duplicate(id: string): void {
+    const c = this.comp;
+    const l = c.layers.find((x) => x.id === id);
+    if (!l || l.kind === 'drawings') return;
+    let made: string | null = null;
+    this.edit('Duplicate layer', (cc) => {
+      const copy = structuredClone(l);
+      copy.id = this.app.project.newId('L');
+      copy.name = `${l.name} 2`;
+      cc.layers.splice(cc.layers.findIndex((x) => x.id === id), 0, copy);
+      made = copy.id;
+    });
+    if (made) this.select(made);
+  }
+
+  /** How many layers (in all comps) show this comp. */
+  instances(compId: string): number {
+    let n = 0;
+    for (const c of this.app.project.comps.values()) for (const l of c.layers) if (l.kind === 'comp' && l.comp === compId) n++;
+    return n;
+  }
+
+  /** Go inside a precomp layer: its comp becomes the one you edit, at the frame it was showing. */
+  enter(id: string): boolean {
+    const c = this.comp;
+    const l = c.layers.find((x) => x.id === id);
+    if (!l || l.kind !== 'comp') return false;
+    const p = this.app.project;
+    const nested = p.comps.get(l.comp);
+    if (!nested) return false;
+    const nf = nestedFrame(l, this.app.frame, c.fps, nested, p.comps) ?? 0;
+    this.gestureEnd(true);
+    this.trail.push({ comp: c.id, layer: l.id });
+    this.switchTo(nested.id, nf);
+    return true;
+  }
+
+  /** Back out to the comp above (or to `depth` steps from the top: 0 = the shot). */
+  exit(depth = this.crumbs().length - 2): boolean {
+    const crumbs = this.crumbs();
+    if (crumbs.length < 2 || depth < 0 || depth >= crumbs.length - 1) return false;
+    const p = this.app.project;
+    // map the playhead out through every level we leave
+    let frame = this.app.frame;
+    for (let i = crumbs.length - 1; i > depth; i--) {
+      const via = crumbs[i]!.via!;
+      const parent = crumbs[i - 1]!.comp;
+      const inner = crumbs[i]!.comp;
+      frame = via.start + Math.floor((frame * parent.fps) / inner.fps + 1e-9);
+    }
+    this.trail = this.trail.slice(0, depth);
+    this.gestureEnd(true);
+    this.switchTo(crumbs[depth]!.comp.id, frame);
+    void p;
+    return true;
+  }
+
+  private switchTo(compId: string, frame: number): void {
+    const p = this.app.project;
+    p.activeComp = compId;
+    const first = p.comp.layers.find((x) => x.kind === 'drawings');
+    if (first) p.activeLayer = first.id;
+    this.selected = [];
+    this.keys.clear();
+    this.app.frame = Math.max(0, Math.min(frame, this.app.compEnd - 1));
+    this.app.onCompChange();
+    this.rev++;
+    this.app.requestRender();
+    this.app.onFrameChange();
+    this.onChange();
+  }
+
+  /**
+   * The way from the shot to the open comp, each step with the precomp layer it went through.
+   * Rebuilt from the project when the remembered trail no longer leads there (after an undo).
+   */
+  crumbs(): { comp: Comp; via: Extract<Layer, { kind: 'comp' }> | null }[] {
+    const p = this.app.project;
+    const main = p.comps.get(p.main);
+    if (!main) return [];
+    const out: { comp: Comp; via: Extract<Layer, { kind: 'comp' }> | null }[] = [{ comp: main, via: null }];
+    let ok = true;
+    for (const step of this.trail) {
+      const here = out[out.length - 1]!.comp;
+      const l = p.comps.get(step.comp) === here ? here.layers.find((x) => x.id === step.layer) : undefined;
+      const next = l && l.kind === 'comp' ? p.comps.get(l.comp) : undefined;
+      if (!l || l.kind !== 'comp' || !next) {
+        ok = false;
+        break;
+      }
+      out.push({ comp: next, via: l });
+    }
+    if (ok && out[out.length - 1]!.comp.id === p.activeComp) return out;
+    // search: shortest path of precomp layers from the shot to the open comp
+    const queue: { comp: Comp; path: typeof out }[] = [{ comp: main, path: [{ comp: main, via: null }] }];
+    const seen = new Set([main.id]);
+    while (queue.length) {
+      const { comp, path } = queue.shift()!;
+      if (comp.id === p.activeComp) {
+        this.trail = path.slice(1).map((s, i) => ({ comp: path[i]!.comp.id, layer: s.via!.id }));
+        return path;
+      }
+      for (const l of comp.layers) {
+        if (l.kind !== 'comp' || seen.has(l.comp)) continue;
+        const n = p.comps.get(l.comp);
+        if (!n) continue;
+        seen.add(n.id);
+        queue.push({ comp: n, path: [...path, { comp: n, via: l }] });
+      }
+    }
+    // not reachable from the shot (a comp only in the bin): show it on its own
+    const solo = p.comp;
+    this.trail = [];
+    return solo.id === main.id ? out.slice(0, 1) : [{ comp: main, via: null }, { comp: solo, via: null }];
+  }
+
+  /** While inside a precomp: the comp above, the layer we came through, and the frame it shows. */
+  context(): { parent: Comp; layer: Extract<Layer, { kind: 'comp' }>; frame: number } | null {
+    const crumbs = this.crumbs();
+    if (crumbs.length < 2) return null;
+    const last = crumbs[crumbs.length - 1]!;
+    const parent = crumbs[crumbs.length - 2]!.comp;
+    if (!last.via) return null;
+    const frame = last.via.start + Math.floor((this.app.frame * parent.fps) / last.comp.fps + 1e-9);
+    return { parent, layer: last.via, frame };
+  }
+
+  /** Show the comp above, faintly, behind a precomp you are editing. */
+  showContext = true;
 
   // -------------------------------------------------------------------------------------------
   // History: one step = the layer list of one comp, before and after
@@ -178,8 +546,10 @@ export class CompEditor {
       const c = this.app.project.comps.get(compId);
       if (!c) return;
       c.layers = structuredClone(layers);
+      const was = this.app.project.activeComp;
       this.app.project.activeComp = compId;
       this.tidy();
+      if (was !== compId) this.app.onCompChange();
       this.changed();
     };
     const cmd: Command = { label, do: () => set(after), undo: () => set(before) };
@@ -314,45 +684,45 @@ export class CompEditor {
   // Properties and keys
 
   /** The value a property has at the playhead. */
-  valueNow(l: Layer, n: PropName): number | Vec2 {
-    return valueAt(getProp(l, n), this.frameOf(l));
+  valueNow(l: Layer, n: PropKey): number | Vec2 {
+    return valueAt(this.getProp(l, n), this.frameOf(l, n));
   }
 
   /** The prop after setting `value` at the playhead: a key if animated (or auto-key), else the still value. */
-  private withValue(l: Layer, n: PropName, value: number | Vec2): Prop {
-    const p = getProp(l, n);
-    const f = this.frameOf(l);
+  private withValue(l: Layer, n: PropKey, value: number | Vec2): Prop {
+    const p = this.getProp(l, n);
+    const f = this.frameOf(l, n);
     if (isAnimated(p) || this.autoKey) return setKey(p, f, value as never, this.lastEase, this.keyAtStart && !isAnimated(p) ? 0 : undefined) as Prop;
     return { ...p, value } as Prop;
   }
 
-  setValue(id: string, n: PropName, value: number | Vec2, label = 'Change value'): void {
+  setValue(id: string, n: PropKey, value: number | Vec2, label = 'Change value'): void {
     this.edit(label, (c) => {
       const l = c.layers.find((x) => x.id === id);
-      if (l) setPropOn(l, n, this.withValue(l, n, value));
+      if (l) this.setProp(l, n, this.withValue(l, n, value));
     });
   }
 
   /** The diamond: add a key at the playhead holding the current value, or remove the one there. */
-  toggleKey(id: string, n: PropName): void {
+  toggleKey(id: string, n: PropKey): void {
     this.edit('Toggle keyframe', (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (!l) return;
-      const p = getProp(l, n);
-      const f = this.frameOf(l);
-      if (p.keys.some((k) => k.f === f)) setPropOn(l, n, removeKey(p, f));
-      else setPropOn(l, n, setKey(p, f, valueAt(p, f) as never, this.lastEase, this.keyAtStart && !isAnimated(p) ? 0 : undefined) as Prop);
+      const p = this.getProp(l, n);
+      const f = this.frameOf(l, n);
+      if (p.keys.some((k) => k.f === f)) this.setProp(l, n, removeKey(p, f));
+      else this.setProp(l, n, setKey(p, f, valueAt(p, f) as never, this.lastEase, this.keyAtStart && !isAnimated(p) ? 0 : undefined) as Prop);
     });
     this.keys.clear();
   }
 
   /** Drop all animation on a property, keeping what it shows now. */
-  clearAnimation(id: string, n: PropName): void {
+  clearAnimation(id: string, n: PropKey): void {
     this.edit('Clear animation', (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (!l) return;
-      const p = getProp(l, n);
-      setPropOn(l, n, { value: valueAt(p, this.frameOf(l)), keys: [] } as Prop);
+      const p = this.getProp(l, n);
+      this.setProp(l, n, { value: valueAt(p, this.frameOf(l, n)), keys: [] } as Prop);
     });
     this.keys.clear();
   }
@@ -372,7 +742,7 @@ export class CompEditor {
   selectedKeys(): KeyRef[] {
     return [...this.keys].map((s) => {
       const [layer, prop, f] = s.split('|');
-      return { layer: layer!, prop: prop as PropName, f: Number(f) };
+      return { layer: layer!, prop: prop as PropKey, f: Number(f) };
     });
   }
 
@@ -386,7 +756,7 @@ export class CompEditor {
       for (const r of order) {
         const l = c.layers.find((x) => x.id === r.layer);
         if (!l) continue;
-        setPropOn(l, r.prop, moveKey(getProp(l, r.prop), r.f, r.f + df));
+        this.setProp(l, r.prop, moveKey(this.getProp(l, r.prop), r.f, r.f + df));
         moved.set(keyId(r), r.f + df);
       }
       this.keys = new Set(refs.map((r) => keyId({ ...r, f: r.f + df })));
@@ -398,7 +768,7 @@ export class CompEditor {
     this.edit('Delete keys', (c) => {
       for (const r of refs) {
         const l = c.layers.find((x) => x.id === r.layer);
-        if (l) setPropOn(l, r.prop, removeKey(getProp(l, r.prop), r.f));
+        if (l) this.setProp(l, r.prop, removeKey(this.getProp(l, r.prop), r.f));
       }
     });
     this.keys.clear();
@@ -412,7 +782,7 @@ export class CompEditor {
       this.edit('Set easing', (c) => {
         for (const r of refs) {
           const l = c.layers.find((x) => x.id === r.layer);
-          if (l) setPropOn(l, r.prop, setSegmentEasing(getProp(l, r.prop), r.f, e));
+          if (l) this.setProp(l, r.prop, setSegmentEasing(this.getProp(l, r.prop), r.f, e));
         }
       });
     }
@@ -420,11 +790,11 @@ export class CompEditor {
   }
 
   /** Dreams' "Set all easings" for a property's whole key row. */
-  setAllEasing(id: string, n: PropName, e: Easing): void {
+  setAllEasing(id: string, n: PropKey, e: Easing): void {
     this.lastEase = e;
     this.edit('Set all easings', (c) => {
       const l = c.layers.find((x) => x.id === id);
-      if (l) setPropOn(l, n, setAllEasings(getProp(l, n), e));
+      if (l) this.setProp(l, n, setAllEasings(this.getProp(l, n), e));
     });
   }
 
@@ -434,7 +804,7 @@ export class CompEditor {
     for (const r of this.selectedKeys()) {
       const l = this.layer(r.layer);
       if (!l) continue;
-      const p = getProp(l, r.prop);
+      const p = this.getProp(l, r.prop);
       const i = p.keys.findIndex((k) => k.f === r.f);
       const a = p.keys[i];
       const b = p.keys[i + 1];
@@ -458,8 +828,8 @@ export class CompEditor {
         const frames = list.map((r) => r.f);
         const a = Math.min(...frames);
         const b = Math.max(...frames);
-        const p = getProp(l, list[0]!.prop);
-        setPropOn(l, list[0]!.prop, reverseKeys(p, a, b));
+        const p = this.getProp(l, list[0]!.prop);
+        this.setProp(l, list[0]!.prop, reverseKeys(p, a, b));
       }
     });
     // selection follows the mirrored positions
@@ -584,9 +954,9 @@ export class CompEditor {
     g.moved = true;
     const f = this.frameOf(original);
     const set = (n: PropName, value: number | Vec2) => {
-      const base = getProp(original, n);
+      const base = this.getProp(original, n);
       const p = isAnimated(base) || this.autoKey ? setKey(base, f, value as never, this.lastEase, this.keyAtStart && !isAnimated(base) ? 0 : undefined) : { ...base, value };
-      setPropOn(live, n, p as Prop);
+      this.setProp(live, n, p as Prop);
     };
     const dx = pt[0] - g.startPt[0];
     const dy = pt[1] - g.startPt[1];

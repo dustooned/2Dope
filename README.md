@@ -59,6 +59,14 @@ npm run dev:lan
 - **Mark K / B / I:** label drawings as **key**, **breakdown** or **inbetween** (badge on the block; click again to clear). **Keys only** limits onion skin to key drawings.
 - **Zoom** slider for long shots. **Delete** removes all selected drawings (undoable).
 
+## Precomps (comps inside comps)
+
+- **Group**: in Motion, pick layers (tap **Select**, then tap layers, or Shift-click) and tap **Group**. They move into a new comp the same size and speed as this one, replaced by one layer; nothing moves or retimes. Undo puts them back.
+- **Go inside**: double-tap the precomp's name in the layer list, or double-tap it on the canvas, or ⋯ → Go inside. The toolbar shows **⤴ Walk** (tap to come back out), the Motion view shows **Shot › Walk** (tap any step), and ☰ has **Back out of comp**. The comp around it shows faintly behind, placed where its layer puts it. Draw and Time work inside too.
+- **Instances**: ⋯ → Duplicate makes another instance (same content: edit one, all change). **Make unique** gives one its own copy. **Ungroup** puts the layers back (shifted to the precomp's start; if the precomp was moved or animated, they ride a new null so nothing jumps).
+- **Pins (★)**: inside a comp, tap ★ on a property row to pin it. Every instance then shows it as **★ Ball Rotation** in its own rows; change it there to override that instance only (yellow), **↺** goes back to the comp's value. Pins and overrides are saved.
+- Export always renders the shot, even while you are inside a precomp.
+
 ## Workspaces: Draw, Time, Motion
 
 One project, one playhead, one selection. The three buttons at the top (or ☰ → Interface) only change what you look at, so nothing is converted when you switch.

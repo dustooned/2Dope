@@ -16,6 +16,7 @@ Open-source Craft repos (Apache-2.0) may be reused with attribution.
 | 09 | [EffectCraft layers, precomp, keyframes](09-effectcraft-layers-precomp-keyframes.md) | EffectCraft source (comp/layer model, time mapping, Essential Graphics, bezier keys) |
 | 10 | [Harmony nodes, groups, workspaces](10-harmony-nodes-groups-workspaces.md) | Harmony shipped editors, layouts, scripts |
 | 11 | [Design: workspaces + precomps by touch](11-views-layers-precomp-design.md) | Our proposal built from 07-10 |
+| 12 | [Nemo: motion + 2D in one app](12-nemo-motion-and-2d.md) | Nemo source (GPL-3.0, design only): component play modes, frame-pick swaps, paint pins, key loops |
 
 Reference clones: `E:\2026\Dev\Apps\2Dope\reference\` (+ `C:\Users\dusto\effectcraft`).
 

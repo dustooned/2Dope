@@ -157,11 +157,14 @@ export class ExportUI {
   private summary(): void {
     const o = this.opts;
     const p = this.app.project;
-    const plain = isPlainFlipbook(p.comp);
-    const picked = framesToExport(p.exposures, o.range, this.app.selection);
-    const frames = plain || o.range === 'selected' ? picked : Array.from({ length: compLength(p.comp, p.comps) });
+    const shot = p.comps.get(p.main) ?? p.comp;
+    const plain = isPlainFlipbook(shot);
+    const only = shot.layers[0];
+    const ex = plain && only && only.kind === 'drawings' ? only.exposures : p.exposures;
+    const picked = framesToExport(ex, o.range, p.activeComp === shot.id ? this.app.selection : []);
+    const frames = plain || o.range === 'selected' ? picked : Array.from({ length: compLength(shot, p.comps) });
     const unique = plain ? new Set(picked.map((f) => f.drawing)).size : frames.length;
-    const sz = plain ? scaledSize(p.width, p.height, o.scale) : scaledSize(p.comp.width, p.comp.height, o.scale);
+    const sz = plain ? scaledSize(p.width, p.height, o.scale) : scaledSize(shot.width, shot.height, o.scale);
     const s = this.dialog.querySelector<HTMLElement>('.xsummary');
     const go = this.dialog.querySelector<HTMLButtonElement>('.xgo');
     if (go) go.disabled = !frames.length || !o.passes.length;

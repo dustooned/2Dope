@@ -1,6 +1,6 @@
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
-import { activeAt, drawingOf, mul, nestedFrame, opacityAt, viewMatrix, worldMatrix, type BlendMode, type Comp, type Layer, type Mat } from '../core/comp';
+import { activeAt, drawingOf, instanceComp, mul, nestedFrame, opacityAt, viewMatrix, worldMatrix, type BlendMode, type Comp, type Layer, type Mat } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { strokeLength } from '../core/stroke';
 
@@ -13,6 +13,10 @@ export interface CompositeOptions {
   backgrounds?: boolean;
   /** Look through the topmost camera of the top comp (default true). */
   camera?: boolean;
+  /** A layer of the top comp to leave out (the precomp being edited, when its context is shown). */
+  skip?: string;
+  /** Multiply the top comp's layers' opacity (context drawn faintly). */
+  alpha?: number;
   /** Draw this drawing's pixels from other canvases (the stroke being painted right now). */
   source?: (d: Drawing) => { line: HTMLCanvasElement; fill: HTMLCanvasElement | null } | null;
 }
@@ -72,9 +76,9 @@ const toDom = (m: Mat) => new DOMMatrix(m);
  * parenting, opacity and blend mode; precomps render into a scratch canvas first and then place
  * like any layer. The drawings a frame needs must be live (see core/residency.ts).
  */
-export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: string, frame: number, opt: CompositeOptions = {}, depth = 0): void {
+export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: string | Comp, frame: number, opt: CompositeOptions = {}, depth = 0): void {
   const comps = project.comps;
-  const c = comps.get(compId);
+  const c = typeof compId === 'string' ? comps.get(compId) : compId;
   if (!c || depth > MAX_DEPTH) return;
   const planes = opt.planes ?? 'all';
   const base = g.getTransform();
@@ -86,7 +90,8 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
   for (let i = c.layers.length - 1; i >= 0; i--) {
     const l = c.layers[i]!;
     if (l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps)) continue;
-    const alpha = opacityAt(l, frame);
+    if (depth === 0 && opt.skip === l.id) continue;
+    const alpha = opacityAt(l, frame) * (depth === 0 ? (opt.alpha ?? 1) : 1);
     if (alpha <= 0) continue;
     const m = base.multiply(toDom(mul(view, worldMatrix(c, l, frame))));
     drawLayer(g, project, c, l, frame, m, alpha, planes, opt, depth);
@@ -118,7 +123,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     source = scratchFor(`c${depth}`, n.width, n.height);
     const sg = source.getContext('2d')!;
     sg.setTransform(1, 0, 0, 1, 0, 0);
-    drawComp(sg, project, n.id, nf, opt, depth + 1);
+    drawComp(sg, project, instanceComp(n, l), nf, opt, depth + 1);
   }
   g.setTransform(m);
   g.globalAlpha = alpha;

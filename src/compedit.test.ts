@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CompEditor } from './compedit';
 import { setKey, staticProp, valueAt, type Vec2 } from './core/anim';
-import { apply, cameraLayer, drawingsLayer, newComp, nullLayer, worldMatrix, type Comp } from './core/comp';
+import { apply, cameraLayer, compLength, drawingsLayer, instanceComp, newComp, nullLayer, worldMatrix, type Comp, type CompLayer } from './core/comp';
 import { History } from './core/history';
 import type { App } from './app';
 
@@ -13,6 +13,7 @@ function rig() {
   let n = 1;
   const project = {
     comps,
+    main: 'c1',
     activeComp: 'c1',
     activeLayer: 'L1',
     width: 400,
@@ -33,6 +34,10 @@ function rig() {
     focusLayer(id: string) {
       project.activeLayer = id;
     },
+    get compEnd() {
+      return Math.max(1, compLength(project.comp, comps));
+    },
+    onCompChange() {},
   };
   const ed = new CompEditor(app as unknown as App);
   return { app, ed, comp: comp as Comp, project };
@@ -272,5 +277,134 @@ describe('keys survive a layer moving in time', () => {
     l.transform.position = setKey(setKey(staticProp<Vec2>([0, 0]), 0, [0, 0]), 10, [100, 0]);
     l.start = 20;
     expect(valueAt(l.transform.position, 25 - l.start)[0]).toBeCloseTo(50);
+  });
+});
+
+describe('precomps', () => {
+  /** A shot with two drawing layers and a null. */
+  function three() {
+    const r = rig();
+    r.comp.layers.push(drawingsLayer('L2', 'Leg', [{ drawing: 'd2', length: 8 }], 400, 300));
+    r.comp.layers.unshift(nullLayer('N', 'Handle', r.comp));
+    return r;
+  }
+
+  it('group puts the layers in a new comp, in place of one layer, and nothing moves', () => {
+    const { ed, project } = three();
+    const before = apply(worldMatrix(ed.comp, ed.layer('L2')!, 0), [10, 10]);
+    const id = ed.group(['L1', 'L2'], 'Walk')!;
+    const c = ed.comp;
+    expect(c.layers.map((l) => l.kind)).toEqual(['null', 'comp']);
+    const pl = c.layers[1] as CompLayer;
+    expect(pl.id).toBe(id);
+    const nested = project.comps.get(pl.comp)!;
+    expect(nested.name).toBe('Walk');
+    expect(nested.layers.map((l) => l.id)).toEqual(['L1', 'L2']);
+    // the precomp layer sits exactly over the comp, so the drawing lands where it was
+    const after = apply(worldMatrix(c, pl, 0), apply(worldMatrix(nested, nested.layers[1]!, 0), [10, 10]));
+    close(after, before);
+  });
+
+  it('group is one undo step and undo restores the old layers and no new comp', () => {
+    const { ed, project, app } = three();
+    ed.group(['L1', 'L2']);
+    expect(project.comps.size).toBe(2);
+    app.history.undo();
+    expect(project.comps.size).toBe(1);
+    expect(ed.comp.layers.map((l) => l.id)).toEqual(['N', 'L1', 'L2']);
+    app.history.redo();
+    expect(project.comps.size).toBe(2);
+  });
+
+  it('enter goes inside at the frame the layer shows; exit comes back to the matching frame', () => {
+    const { ed, app, project } = three();
+    const id = ed.group(['L1', 'L2'])!;
+    ed.setTiming(id, { start: 5 });
+    app.frame = 8;
+    expect(ed.enter(id)).toBe(true);
+    expect(project.activeComp).not.toBe('c1');
+    expect(app.frame).toBe(3);
+    expect(ed.crumbs().map((c) => c.comp.id)).toEqual(['c1', project.activeComp]);
+    expect(ed.context()?.frame).toBe(8);
+    app.frame = 4;
+    expect(ed.exit()).toBe(true);
+    expect(project.activeComp).toBe('c1');
+    expect(app.frame).toBe(9);
+  });
+
+  it('the breadcrumb is rebuilt when undo changes which comp is open', () => {
+    const { ed, project } = three();
+    const id = ed.group(['L1'])!;
+    const inner = (ed.layer(id) as CompLayer).comp;
+    project.activeComp = inner; // as an undo of an edit inside it would do
+    expect(ed.crumbs().map((c) => c.comp.id)).toEqual(['c1', inner]);
+    expect(ed.context()?.layer.id).toBe(id);
+  });
+
+  it('ungroup puts the layers back, shifted by the precomp start, and keeps a moved precomp on a null', () => {
+    const { ed } = three();
+    const id = ed.group(['L1', 'L2'])!;
+    ed.setTiming(id, { start: 4 });
+    expect(ed.ungroup(id)).toBe(true);
+    let kinds = ed.comp.layers.map((l) => l.kind);
+    expect(kinds).toEqual(['null', 'drawings', 'drawings']);
+    expect(ed.comp.layers[1]!.start).toBe(4);
+    // moved: the layers ride a new null so they stay put
+    const id2 = ed.group([ed.comp.layers[1]!.id])!;
+    ed.setValue(id2, 'position', [260, 150]);
+    const before = apply(worldMatrix(ed.comp, ed.layer(id2)!, 4), [200, 150]);
+    ed.ungroup(id2);
+    kinds = ed.comp.layers.map((l) => l.kind);
+    expect(kinds).toEqual(['null', 'null', 'drawings', 'drawings']);
+    const kid = ed.comp.layers[2]!;
+    close(apply(worldMatrix(ed.comp, kid, 4), [200, 150]), before);
+  });
+
+  it('instances share the comp; make unique gives one its own copy', () => {
+    const { ed, project } = three();
+    const id = ed.group(['L1'])!;
+    ed.duplicate(id);
+    expect(ed.comp.layers.filter((l) => l.kind === 'comp')).toHaveLength(2);
+    const shared = (ed.layer(id) as CompLayer).comp;
+    expect(ed.instances(shared)).toBe(2);
+    ed.makeUnique(id);
+    expect((ed.layer(id) as CompLayer).comp).not.toBe(shared);
+    expect(ed.instances(shared)).toBe(1);
+    expect(project.comps.size).toBe(3);
+  });
+
+  it('a pinned property shows on each instance and can differ per instance; reset goes back', () => {
+    const { ed, app, project } = three();
+    const id = ed.group(['L1'])!;
+    const inner = (ed.layer(id) as CompLayer).comp;
+    ed.enter(id);
+    ed.togglePin('L1', 'rotation');
+    expect(ed.isPinned('L1', 'rotation')).toBe(true);
+    ed.exit();
+    ed.duplicate(id);
+    const other = ed.selected[0]!;
+    const rows = ed.rowsOf(ed.layer(id)!);
+    expect(rows).toContain('pin:L1:rotation');
+    expect(ed.rowLabel(ed.layer(id)!, 'pin:L1:rotation')).toBe('★ Ball Rotation');
+    ed.setValue(id, 'pin:L1:rotation', 45);
+    expect(ed.valueNow(ed.layer(id)!, 'pin:L1:rotation')).toBe(45);
+    expect(ed.valueNow(ed.layer(other)!, 'pin:L1:rotation')).toBe(0);
+    // what renders: the instance's comp has the override
+    const n = project.comps.get(inner)!;
+    expect(instanceComp(n, ed.layer(id) as CompLayer).layers[0]!.transform.rotation.value).toBe(45);
+    expect(instanceComp(n, ed.layer(other) as CompLayer)).toBe(n);
+    expect(ed.isOverridden(ed.layer(id)!, 'pin:L1:rotation')).toBe(true);
+    ed.resetPin(id, 'pin:L1:rotation');
+    expect(ed.valueNow(ed.layer(id)!, 'pin:L1:rotation')).toBe(0);
+    void app;
+  });
+
+  it('an unpinned property stops overriding even if a value was stored', () => {
+    const { ed, project } = three();
+    const id = ed.group(['L1'])!;
+    ed.setValue(id, 'pin:L1:opacity' as never, 20);
+    const l = ed.layer(id) as CompLayer;
+    const n = project.comps.get(l.comp)!;
+    expect(instanceComp(n, l)).toBe(n); // not pinned: ignored
   });
 });

@@ -87,8 +87,13 @@ export async function exportSequence(
   hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void } = { pin: async () => {}, unpin: () => {} },
 ): Promise<{ zip: Uint8Array; frames: number; images: number }> {
   if (!opts.passes.length) throw new Error('Pick at least one pass to export.');
-  const comp = project.comp;
+  // always the shot, even while a precomp is open for editing
+  const comp = project.comps.get(project.main) ?? project.comp;
   const composite = !isPlainFlipbook(comp);
+  const only = comp.layers[0];
+  const flipbook = !composite && only && only.kind === 'drawings' ? only.exposures : project.exposures;
+  // "selected drawings" refers to the strip's layer; it only applies when that is the shot's layer
+  const pickSel = project.activeComp === comp.id ? selected : [];
   const pageW = composite ? comp.width : project.width;
   const pageH = composite ? comp.height : project.height;
   const { w, h } = scaledSize(pageW, pageH, opts.scale);
@@ -98,7 +103,7 @@ export async function exportSequence(
   const units = new Map<string, Unit>();
   let planned: PlannedFrame[];
   if (!composite) {
-    planned = framesToExport(project.exposures, opts.range, selected);
+    planned = framesToExport(flipbook, opts.range, pickSel);
     for (const f of planned) {
       frameKeys.push(f.drawing);
       if (!units.has(f.drawing)) {
@@ -109,7 +114,7 @@ export async function exportSequence(
   } else {
     // the whole comp, frame by frame ("selected" still picks the frames of the selected drawings)
     const length = compLength(comp, project.comps);
-    const pick = opts.range === 'selected' && selected.length ? new Set(framesToExport(project.exposures, 'selected', selected).map((f) => f.frame)) : null;
+    const pick = opts.range === 'selected' && pickSel.length ? new Set(framesToExport(project.exposures, 'selected', pickSel).map((f) => f.frame + project.layer.start)) : null;
     planned = [];
     for (let frame = 0; frame < length; frame++) {
       if (pick && !pick.has(frame)) continue;
@@ -183,13 +188,13 @@ export async function exportSequence(
   onProgress({ done: total, total, label: 'Packing files' });
 
   let from = 0;
-  const exposures = project.exposures.map((e) => {
+  const exposures = flipbook.map((e) => {
     const d = project.drawing(e.drawing);
     const row = { drawing: d.num, fromFrame: from, length: e.length, ...(d.role ? { role: d.role } : {}) };
     from += e.length;
     return row;
   });
-  const manifest = buildManifest({ opts, savedBy: APP_VERSION, fps: project.fps, width: pageW, height: pageH, frames: planned, exposures });
+  const manifest = buildManifest({ opts, savedBy: APP_VERSION, fps: comp.fps, width: pageW, height: pageH, frames: planned, exposures });
   const files: ZipFile[] = [{ name: `${opts.name}/export.json`, data: new TextEncoder().encode(JSON.stringify(manifest, null, 1)) }];
   frameKeys.forEach((k, i) => {
     for (const pass of opts.passes) files.push({ name: entryPath(opts.name, pass, opts.start + i), data: bytes.get(`${k}|${pass}`)! });

@@ -144,11 +144,33 @@ export class Project {
       this.activeLayer = first.id;
       return first;
     }
-    // a comp without drawings: give it one so the editors always have something to work on
-    const d = this.newDrawing();
-    const l = drawingsLayer(this.newId('L'), 'Drawing', [{ drawing: d.id, length: 1 }], this.width, this.height, c.width, c.height);
-    c.layers.push(l);
-    this.activeLayer = l.id;
+    // A comp without drawings: the strip shows a blank placeholder. It joins the comp only when
+    // someone draws or edits timing on it (editLayer), so looking never changes the project.
+    if (!this.ghost || this.ghostComp !== c.id) {
+      const d = this.newDrawing();
+      this.ghost = drawingsLayer('__new', 'Drawing', [{ drawing: d.id, length: 1 }], this.width, this.height, c.width, c.height);
+      this.ghostComp = c.id;
+    }
+    return this.ghost;
+  }
+
+  private ghost: DrawingsLayer | null = null;
+  private ghostComp = '';
+
+  /** Is the strip showing the placeholder of a comp that has no drawings layer yet? */
+  get isPlaceholder(): boolean {
+    return this.layer === this.ghost;
+  }
+
+  /** The layer the editors write to: the placeholder becomes a real layer of the comp here. */
+  editLayer(): DrawingsLayer {
+    const l = this.layer;
+    if (l === this.ghost) {
+      l.id = this.newId('L');
+      this.comp.layers.push(l);
+      this.activeLayer = l.id;
+      this.ghost = null;
+    }
     return l;
   }
 
@@ -158,7 +180,7 @@ export class Project {
   }
 
   set exposures(ex: Exposure[]) {
-    this.layer.exposures = ex;
+    this.editLayer().exposures = ex;
   }
 
   /** The active comp's frame rate. */

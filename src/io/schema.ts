@@ -1,6 +1,6 @@
 import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
 import { PRESETS, type BrushSettings } from '../core/brush';
-import { BLEND_MODES, compLength, wouldCycle, type BinFolder, type BlendMode, type Comp, type Layer, type Transform } from '../core/comp';
+import { BLEND_MODES, compLength, PIN_PROPS, wouldCycle, type BinFolder, type BlendMode, type Comp, type Layer, type PinProp, type Transform } from '../core/comp';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
 
 /**
@@ -72,6 +72,8 @@ export interface LayerFile {
   comp?: string;
   /** camera: 100 = the comp as is. */
   zoom?: PropFile<number>;
+  /** comp: this instance's values for the comp's pinned properties, by "layerId:prop". */
+  overrides?: Record<string, PropFile>;
 }
 
 export interface CompFile {
@@ -84,6 +86,8 @@ export interface CompFile {
   folder: string | null;
   /** Top of the stack first. */
   layers: LayerFile[];
+  /** Properties shown as controls on every instance of this comp. */
+  pins?: { layer: string; prop: PinProp }[];
 }
 
 export interface DrawingFile {
@@ -337,6 +341,15 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
     if (!isObj(comps[c])) throw new SchemaError(`${what} refers to a missing comp "${c}"`);
     out.comp = c;
     out.loop = v.loop === true;
+    if (isObj(v.overrides)) {
+      const o: Record<string, PropFile> = {};
+      for (const [k, p] of Object.entries(v.overrides)) {
+        const m = /^([A-Za-z0-9_-]{1,64}):(position|scale|rotation|opacity|anchor|zoom)$/.exec(k);
+        if (!m) continue;
+        o[k] = prop(p, `${what} override ${k}`, m[2] === 'position' || m[2] === 'scale' || m[2] === 'anchor' ? 2 : 1);
+      }
+      if (Object.keys(o).length) out.overrides = o;
+    }
   } else if (kind === 'camera') {
     out.zoom = v.zoom === undefined ? still(100) : prop<number>(v.zoom, `${what} zoom`, 1);
   }
@@ -427,6 +440,12 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
       folder: typeof c.folder === 'string' && folders[c.folder] ? c.folder : null,
       layers,
     };
+    if (Array.isArray(c.pins)) {
+      const pins = c.pins
+        .filter((p): p is { layer: string; prop: PinProp } => isObj(p) && typeof p.layer === 'string' && layerIds.has(p.layer) && PIN_PROPS.includes(p.prop as PinProp))
+        .map((p) => ({ layer: p.layer, prop: p.prop }));
+      if (pins.length) comps[id]!.pins = pins;
+    }
   }
   const main = typeof raw.main === 'string' && comps[raw.main] ? raw.main : compIds[0]!;
   // a comp may not contain itself, directly or through other comps
@@ -515,18 +534,18 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
     const layers: Layer[] = c.layers.map((l): Layer => {
       const base = { id: l.id, name: l.name, start: l.start, in: l.in, out: l.out, parent: l.parent, visible: l.visible, locked: l.locked, label: l.label, blend: l.blend, transform: transformOf(l.transform) };
       if (l.kind === 'drawings') return { ...base, kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), loop: !!l.loop };
-      if (l.kind === 'comp') return { ...base, kind: 'comp', comp: l.comp!, loop: !!l.loop };
+      if (l.kind === 'comp') return { ...base, kind: 'comp', comp: l.comp!, loop: !!l.loop, overrides: Object.fromEntries(Object.entries(l.overrides ?? {}).map(([k, p]) => [k, propOf(p)])) };
       if (l.kind === 'camera') return { ...base, kind: 'camera', zoom: propOf(l.zoom ?? still(100)) };
       return { ...base, kind: 'null' };
     });
-    out.set(id, { id, name: c.name, width: c.width, height: c.height, fps: c.fps, duration: c.duration, background: c.background, folder: c.folder, layers });
+    out.set(id, { id, name: c.name, width: c.width, height: c.height, fps: c.fps, duration: c.duration, background: c.background, folder: c.folder, layers, pins: (c.pins ?? []).map((p) => ({ ...p })) });
   }
   return out;
 }
 
 /** A comp as written in files. */
 export function compFile(c: Comp): CompFile {
-  return {
+  const out: CompFile = {
     name: c.name,
     width: c.width,
     height: c.height,
@@ -537,11 +556,16 @@ export function compFile(c: Comp): CompFile {
     layers: c.layers.map((l): LayerFile => {
       const base: LayerFile = { id: l.id, name: l.name, kind: l.kind, start: l.start, in: l.in, out: l.out, parent: l.parent, visible: l.visible, locked: l.locked, label: l.label, blend: l.blend, transform: transformFile(l.transform) };
       if (l.kind === 'drawings') return { ...base, exposures: l.exposures.map((e) => ({ ...e })), loop: l.loop };
-      if (l.kind === 'comp') return { ...base, comp: l.comp, loop: l.loop };
+      if (l.kind === 'comp') {
+        const o = Object.entries(l.overrides ?? {});
+        return o.length ? { ...base, comp: l.comp, loop: l.loop, overrides: Object.fromEntries(o.map(([k, p]) => [k, propFile(p)])) } : { ...base, comp: l.comp, loop: l.loop };
+      }
       if (l.kind === 'camera') return { ...base, zoom: propFile(l.zoom) };
       return base;
     }),
   };
+  if (c.pins.length) out.pins = c.pins.map((p) => ({ ...p }));
+  return out;
 }
 
 export function foldersOf(file: Pick<ProjectFile, 'folders'>): BinFolder[] {

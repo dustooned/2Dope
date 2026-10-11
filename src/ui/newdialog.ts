@@ -182,7 +182,12 @@ export class NewProjectUI {
 
     const foot = el('div', { class: 'vfoot' });
     const cancel = el('button', { type: 'button' }, 'Cancel');
-    cancel.addEventListener('click', () => d.close());
+    cancel.addEventListener('click', () => {
+      const res = this.resolve;
+      this.resolve = null;
+      res?.(null);
+      d.close();
+    });
     const create = el('button', { type: 'button', class: 'primary' }, 'Create');
     create.addEventListener('click', () => this.finish());
     foot.append(cancel, create);

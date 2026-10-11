@@ -8,7 +8,7 @@ import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
-import { compLength, frameContent } from './core/comp';
+import { compLength, frameContent, invert, worldMatrix } from './core/comp';
 import { CompEditor } from './compedit';
 import { drawComp } from './view/composite';
 import { drawMotionOverlay } from './view/overlay';
@@ -94,6 +94,18 @@ export class App {
 
   get docH(): number {
     return this.workspace === 'motion' ? this.project.comp.height : this.project.height;
+  }
+
+  /** UI hook: a different comp is open (entered or left a precomp). */
+  onCompChanged: () => void = () => {};
+
+  /** Called by the editor after it opened another comp. */
+  onCompChange(): void {
+    this.selection = [];
+    this.lockFrame = null;
+    this.onionCache.clear();
+    if (this.workspace === 'motion') this.fit();
+    this.onCompChanged();
   }
 
   /** Switch workspace (Draw / Time / Motion): the same project, a different arrangement. */
@@ -246,6 +258,7 @@ export class App {
    * (what you see as line art); the color goes on the fill plane, under the lines.
    */
   private fillAt(e: PointerEvent): void {
+    if (this.project.isPlaceholder) this.project.editLayer();
     const d = this.drawing;
     if (!this.residency.isReady(d)) return;
     const p = this.toPoint(e, e.timeStamp);
@@ -544,7 +557,7 @@ export class App {
   /** Run a timeline edit as an undoable command. */
   private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, keepSelection = false): void {
     if (this.live) return;
-    const layer = this.project.layer;
+    const layer = this.project.editLayer();
     const compId = this.project.comp.id;
     const layerId = layer.id;
     const beforeEx = layer.exposures;
@@ -681,7 +694,7 @@ export class App {
   commitExposures(label: string, before: Exposure[], after: Exposure[]): void {
     if (after === before) return;
     const compId = this.project.comp.id;
-    const layerId = this.project.layer.id;
+    const layerId = this.project.editLayer().id;
     const set = (ex: Exposure[]) => {
       this.selection = [];
       this.project.activeComp = compId;
@@ -771,6 +784,11 @@ export class App {
       return;
     }
     const tool = this.tool;
+    // drawing on a comp's placeholder makes it a real layer of that comp
+    if (this.project.isPlaceholder) {
+      this.project.editLayer();
+      this.onDocChanged();
+    }
     const drawing = this.drawing;
     // Its pixels are still coming back (a few ms after changing frame): ignore this touch.
     if (!this.residency.isReady(drawing)) return;
@@ -987,9 +1005,21 @@ export class App {
     return [d.x, d.y];
   }
 
-  /** Motion workspace: grab a layer (or its handles) under the pointer. */
+  private lastTap = { at: 0, layer: '' };
+
+  /** Motion workspace: grab a layer (or its handles) under the pointer. Double-tap a precomp to go inside. */
   private motionDown(e: PointerEvent): boolean {
-    const grabbed = this.editor.gestureStart(this.stagePoint(e), this.view.zoom, e.shiftKey);
+    const ed = this.editor;
+    const grabbed = ed.gestureStart(this.stagePoint(e), this.view.zoom, e.shiftKey || ed.multiSelect);
+    const hit = grabbed ? (ed.primary?.id ?? '') : '';
+    const now = performance.now();
+    if (grabbed && hit === this.lastTap.layer && now - this.lastTap.at < 350 && ed.primary?.kind === 'comp') {
+      ed.gestureEnd(true);
+      this.lastTap = { at: 0, layer: '' };
+      ed.enter(hit);
+      return true;
+    }
+    this.lastTap = { at: now, layer: hit };
     this.motionPointer = grabbed ? e.pointerId : null;
     this.requestRender();
     return grabbed;
@@ -1348,6 +1378,15 @@ export class App {
     g.imageSmoothingEnabled = this.view.zoom < 2;
     this.residency.use(this.workingSet());
     if (this.workspace === 'motion') {
+      // inside a precomp: the comp above, faint, placed so this comp sits where its layer puts it
+      const ctx = this.editor.showContext ? this.editor.context() : null;
+      if (ctx) {
+        g.save();
+        const m = invert(worldMatrix(ctx.parent, ctx.layer, ctx.frame));
+        g.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+        drawComp(g, this.project, ctx.parent, ctx.frame, { camera: false, skip: ctx.layer.id, alpha: 0.28 });
+        g.restore();
+      }
       drawComp(g, this.project, this.project.comp.id, this.frame, { camera: this.editor.throughCamera });
       drawMotionOverlay(g, this.editor, this.view, this.dpr);
       return;
@@ -1403,6 +1442,12 @@ export class App {
         }
       };
       add(this.frame);
+      const ctx = this.editor.showContext ? this.editor.context() : null;
+      if (ctx)
+        for (const id of frameContent(p.comps, ctx.parent, ctx.frame).drawings) {
+          const d = p.drawings.get(id);
+          if (d) out.add(d);
+        }
       if (this.playing) {
         const len = this.compEnd;
         for (let i = 1; i <= Math.ceil(p.fps * 1.5) && i < len; i++) add((this.frame + i) % len);

@@ -2,7 +2,7 @@ import type { App } from '../app';
 import { easingOf, EASINGS, isAnimated, spacingTicks, type Easing, type Prop, type Vec2 } from '../core/anim';
 import { compLength, layerEnd, type Layer } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
-import { getProp, keyId, PROP_LABEL, propsOf, type PropName } from '../compedit';
+import { isPin, keyId, PROP_LABEL, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
 
 const ZOOM_KEY = '2dope.m3.mcell';
@@ -43,7 +43,7 @@ function fmt(n: number): string {
   return String(Math.round(n * 10) / 10);
 }
 
-function show(l: Layer, n: PropName, v: number | Vec2): string {
+function show(n: PropName, v: number | Vec2): string {
   if (Array.isArray(v)) return n === 'scale' ? `${fmt(v[0])}, ${fmt(v[1])} %` : `${fmt(v[0])}, ${fmt(v[1])}`;
   if (n === 'rotation') return `${fmt(v)}°`;
   return `${fmt(v)} %`;
@@ -52,7 +52,7 @@ function show(l: Layer, n: PropName, v: number | Vec2): string {
 type Drag =
   | { kind: 'scrub' }
   | { kind: 'bar'; layer: string; mode: 'move' | 'in' | 'out'; x0: number; el: HTMLElement; l0: number; w0: number; moved: boolean }
-  | { kind: 'key'; ref: { layer: string; prop: PropName; f: number }; x0: number; el: HTMLElement; moved: boolean; shift: boolean };
+  | { kind: 'key'; ref: { layer: string; prop: PropKey; f: number }; x0: number; el: HTMLElement; moved: boolean; shift: boolean };
 
 /**
  * The Motion view: the comp's layers as rows with timing bars, twirl-down property rows with
@@ -81,6 +81,9 @@ export class MotionPanel {
   private readonly camBtn: HTMLButtonElement;
   private readonly easeBtns = new Map<Easing, HTMLButtonElement>();
   private readonly delBtn: HTMLButtonElement;
+  private readonly groupBtn: HTMLButtonElement;
+  private readonly multiBtn: HTMLButtonElement;
+  private readonly crumbsEl = el('nav', { class: 'mcrumbs', 'aria-label': 'Where you are' });
 
   constructor(
     private readonly app: App,
@@ -110,12 +113,20 @@ export class MotionPanel {
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
     // Row 1: layers
     this.delBtn = btn('Delete', 'Delete the selected layers (Delete)', () => ed.deleteLayers());
+    this.multiBtn = btn('Select', 'Tap layers to pick several (to group them into a comp)', () => {
+      this.ed.multiSelect = !this.ed.multiSelect;
+      this.update();
+    });
+    this.groupBtn = btn('Group', 'Put the selected layers into a new comp (a precomp)', () => void this.groupSelected());
     const rowA = row(
+      this.crumbsEl,
       group(btn('◀', 'Previous frame (←)', () => app.prevFrame()), this.playBtn, btn('▶', 'Next frame (→)', () => app.nextFrame()), this.frameLabel, this.fpsSel),
       group(btn('+ Drawing', 'A new drawings layer at the playhead', () => ed.addLayer('drawings')), btn('+ Null', 'An empty handle to parent other layers to', () => ed.addLayer('null')), btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera'))),
       group(
         btn('↑', 'Move the selected layer up', () => ed.primary && ed.reorder(ed.primary.id, -1)),
         btn('↓', 'Move the selected layer down', () => ed.primary && ed.reorder(ed.primary.id, 1)),
+        this.multiBtn,
+        this.groupBtn,
         this.delBtn,
       ),
     );
@@ -223,6 +234,9 @@ export class MotionPanel {
     this.camBtn.setAttribute('aria-pressed', String(ed.throughCamera));
     this.camBtn.hidden = !ed.hasCamera();
     this.delBtn.disabled = !ed.selected.length;
+    this.groupBtn.disabled = !ed.selected.length;
+    this.multiBtn.setAttribute('aria-pressed', String(this.ed.multiSelect));
+    this.renderCrumbs();
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));
     // playhead and live values
@@ -230,17 +244,46 @@ export class MotionPanel {
     this.playhead.style.transform = `translateX(${LEFT_W + app.frame * this.cell}px)`;
     for (const v of this.grid.querySelectorAll<HTMLElement>('[data-val]')) {
       const l = ed.layer(v.dataset.layer ?? '');
-      if (l) v.textContent = show(l, v.dataset.val as PropName, ed.valueNow(l, v.dataset.val as PropName));
+      if (l) v.textContent = show(ed.rowProp(v.dataset.val as PropKey), ed.valueNow(l, v.dataset.val as PropKey));
     }
     for (const k of this.grid.querySelectorAll<HTMLElement>('[data-diamond]')) {
       const l = ed.layer(k.dataset.layer ?? '');
       if (!l) continue;
-      const p = getProp(l, k.dataset.diamond as PropName);
-      const on = p.keys.some((x) => x.f === ed.frameOf(l));
+      const n = k.dataset.diamond as PropKey;
+      const p = ed.getProp(l, n);
+      const on = p.keys.some((x) => x.f === ed.frameOf(l, n));
       k.classList.toggle('on', on);
       k.title = on ? 'Remove the keyframe at the playhead' : 'Add a keyframe at the playhead';
     }
     this.keepVisible();
+  }
+
+  /** "Shot › Walk cycle": tap a step to go back out to it. Hidden at the top level. */
+  private renderCrumbs(): void {
+    const crumbs = this.ed.crumbs();
+    const sig = crumbs.map((c) => `${c.comp.id}:${c.comp.name}`).join('/');
+    if (this.crumbsEl.dataset.sig === sig) return;
+    this.crumbsEl.dataset.sig = sig;
+    this.crumbsEl.replaceChildren();
+    this.crumbsEl.hidden = crumbs.length < 2;
+    crumbs.forEach((c, i) => {
+      if (i) this.crumbsEl.append(el('span', { class: 'sep' }, '›'));
+      const last = i === crumbs.length - 1;
+      const b = el('button', { type: 'button', class: 'crumb', 'aria-current': String(last), title: last ? 'You are editing this comp' : `Back out to ${c.comp.name}` }, c.comp.name);
+      if (!last) b.addEventListener('click', () => this.ed.exit(i));
+      this.crumbsEl.append(b);
+    });
+  }
+
+  private async groupSelected(): Promise<void> {
+    const ed = this.ed;
+    if (!ed.selected.length) return;
+    const first = ed.layer(ed.selected[0]!);
+    const name = await askText('Group into a comp', `${first?.name ?? 'Layers'} comp`, 'Group');
+    if (name === null) return;
+    ed.group([...ed.selected], name);
+    this.ed.multiSelect = false;
+    this.update();
   }
 
   private keepVisible(): void {
@@ -286,7 +329,7 @@ export class MotionPanel {
     // layers
     for (const l of c.layers) {
       this.grid.append(this.layerRow(l, end));
-      if (ed.open.has(l.id)) for (const n of propsOf(l)) this.grid.append(this.propRow(l, n, end));
+      if (ed.open.has(l.id)) for (const n of ed.rowsOf(l)) this.grid.append(this.propRow(l, n, end));
     }
     if (!c.layers.length) {
       const empty = el('div', { class: 'mempty' });
@@ -333,19 +376,28 @@ export class MotionPanel {
     return row;
   }
 
-  private propRow(l: Layer, n: PropName, end: number): HTMLElement {
+  private propRow(l: Layer, n: PropKey, end: number): HTMLElement {
     const ed = this.ed;
-    const p = getProp(l, n);
+    const p = ed.getProp(l, n);
+    const kind = ed.rowProp(n);
+    // inside a precomp, a ★ pins a property so every instance of this comp gets a control for it
+    const inside = ed.crumbs().length > 1 || ed.instances(ed.comp.id) > 0;
     const row = el('div', { class: `mrow prop${ed.selected.includes(l.id) ? ' selected' : ''}`, 'data-layer': l.id, 'data-prop': n });
     const left = el('div', { class: 'mleft' });
     left.append(
-      el('span', { class: 'pname' }, PROP_LABEL[n]),
-      el('button', { type: 'button', class: 'pval', 'data-val': n, 'data-layer': l.id, 'data-act': 'value', title: 'Tap to type a value' }, show(l, n, ed.valueNow(l, n))),
-      el('button', { type: 'button', class: `pkey${isAnimated(p) ? ' anim' : ''}`, 'data-diamond': n, 'data-layer': l.id, 'data-act': 'diamond', 'aria-label': `Keyframe for ${PROP_LABEL[n]}` }, '◆'),
+      el('span', { class: `pname${isPin(n) ? ' pin' : ''}`, title: ed.rowLabel(l, n) }, isPin(n) ? ed.rowLabel(l, n) : PROP_LABEL[kind]),
+      el('button', { type: 'button', class: `pval${ed.isOverridden(l, n) ? ' over' : ''}`, 'data-val': n, 'data-layer': l.id, 'data-act': 'value', title: isPin(n) ? 'This instance\'s value. Tap to type one.' : 'Tap to type a value' }, show(kind, ed.valueNow(l, n))),
     );
+    if (isPin(n) && ed.isOverridden(l, n)) left.append(el('button', { type: 'button', class: 'pstar', 'data-act': 'reset', 'data-row': n, title: 'Back to the comp\'s own value' }, '↺'));
+    else if (!isPin(n) && inside) {
+      const on = ed.isPinned(l.id, n as PropName);
+      left.append(el('button', { type: 'button', class: `pstar${on ? ' on' : ''}`, 'data-act': 'pin', 'data-row': n, 'aria-pressed': String(on), title: on ? 'Pinned: every instance of this comp shows this property. Tap to unpin.' : 'Pin: show this property on every instance of this comp' }, '★'));
+    }
+    left.append(el('button', { type: 'button', class: `pkey${isAnimated(p) ? ' anim' : ''}`, 'data-diamond': n, 'data-layer': l.id, 'data-act': 'diamond', 'aria-label': `Keyframe for ${ed.rowLabel(l, n)}` }, '◆'));
     const right = el('div', { class: 'mright' });
     right.style.width = `${end * this.cell}px`;
-    const x = (f: number) => (f + l.start) * this.cell + this.cell / 2;
+    const off = this.keyOffset(l, n);
+    const x = (f: number) => (f + off) * this.cell + this.cell / 2;
     // segments, spacing ticks and easing label for segments that start at a selected key
     for (let i = 0; i < p.keys.length; i++) {
       const k = p.keys[i]!;
@@ -425,10 +477,14 @@ export class MotionPanel {
         break;
       case 'name':
         if (e.detail >= 2) {
-          const name = await askText('Layer name', l.name, 'Rename');
-          if (name !== null) ed.rename(id, name);
+          // double-tap: go inside a precomp; rename anything else
+          if (l.kind === 'comp') ed.enter(id);
+          else {
+            const name = await askText('Layer name', l.name, 'Rename');
+            if (name !== null) ed.rename(id, name);
+          }
         } else {
-          ed.select(id, e.shiftKey || e.ctrlKey || e.metaKey);
+          ed.select(id, ed.multiSelect || e.shiftKey || e.ctrlKey || e.metaKey);
           ed.open.add(id);
           this.signature = '';
           this.update();
@@ -444,28 +500,48 @@ export class MotionPanel {
         await this.pickParent(l);
         break;
       case 'diamond':
-        ed.toggleKey(id, act.dataset.diamond as PropName);
+        ed.toggleKey(id, act.dataset.diamond as PropKey);
         break;
       case 'value':
-        await this.editValue(l, act.dataset.val as PropName);
+        await this.editValue(l, act.dataset.val as PropKey);
+        break;
+      case 'pin':
+        ed.togglePin(id, act.dataset.row as PropName);
+        break;
+      case 'reset':
+        ed.resetPin(id, act.dataset.row as PropKey);
         break;
     }
   }
 
-  private async editValue(l: Layer, n: PropName): Promise<void> {
+  private async editValue(l: Layer, n: PropKey): Promise<void> {
     const v = this.ed.valueNow(l, n);
-    const title = `${l.name}: ${PROP_LABEL[n]}`;
+    const kind = this.ed.rowProp(n);
+    const title = `${l.name}: ${this.ed.rowLabel(l, n)}`;
     if (Array.isArray(v)) {
-      const unit = n === 'scale' ? '%' : 'px';
+      const unit = kind === 'scale' ? '%' : 'px';
       const r = await askNumbers(title, [
         { label: 'X', value: v[0], unit },
         { label: 'Y', value: v[1], unit },
       ]);
-      if (r) this.ed.setValue(l.id, n, [r[0]!, r[1]!], `Change ${PROP_LABEL[n].toLowerCase()}`);
+      if (r) this.ed.setValue(l.id, n, [r[0]!, r[1]!], `Change ${PROP_LABEL[kind].toLowerCase()}`);
     } else {
-      const r = await askNumbers(title, [{ label: PROP_LABEL[n], value: v, unit: n === 'rotation' ? '°' : '%' }]);
-      if (r) this.ed.setValue(l.id, n, n === 'opacity' ? Math.max(0, Math.min(100, r[0]!)) : r[0]!, `Change ${PROP_LABEL[n].toLowerCase()}`);
+      const r = await askNumbers(title, [{ label: PROP_LABEL[kind], value: v, unit: kind === 'rotation' ? '°' : '%' }]);
+      if (r) this.ed.setValue(l.id, n, kind === 'opacity' ? Math.max(0, Math.min(100, r[0]!)) : r[0]!, `Change ${PROP_LABEL[kind].toLowerCase()}`);
     }
+  }
+
+  /**
+   * Where a row's keys sit on this comp's time: a layer's keys are in its own time (shift by its
+   * start); a pinned property's keys are in the time of the layer inside the precomp.
+   */
+  private keyOffset(l: Layer, n: PropKey): number {
+    if (!isPin(n) || l.kind !== 'comp') return l.start;
+    const nested = this.app.project.comps.get(l.comp);
+    const inner = nested?.layers.find((x) => x.id === n.split(':')[1]);
+    if (!nested || !inner) return l.start;
+    // same fps is the normal case; otherwise this is approximate (the playhead mapping is exact)
+    return l.start + Math.round((inner.start * this.ed.comp.fps) / nested.fps);
   }
 
   private async pickParent(l: Layer): Promise<void> {
@@ -477,20 +553,37 @@ export class MotionPanel {
 
   private async layerMenu(l: Layer): Promise<void> {
     const ed = this.ed;
-    type Act = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'loop' | 'delete';
-    const items: { label: string; value: Act }[] = [
+    type Act = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'loop' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique';
+    const items: { label: string; value: Act }[] = [];
+    if (l.kind === 'comp') {
+      items.push({ label: 'Go inside', value: 'enter' }, { label: 'Ungroup (put its layers back here)', value: 'ungroup' }, { label: 'Duplicate (another instance)', value: 'dup' });
+      if (ed.instances(l.comp) > 1) items.push({ label: 'Make unique (its own copy)', value: 'unique' });
+    } else if (l.kind !== 'drawings') items.push({ label: 'Duplicate', value: 'dup' });
+    items.push(
       { label: 'Rename', value: 'rename' },
       { label: 'Move up', value: 'up' },
       { label: 'Move down', value: 'down' },
       { label: 'Parent to…', value: 'parent' },
       { label: l.locked ? 'Unlock' : 'Lock', value: 'lock' },
       { label: 'Colour…', value: 'colour' },
-    ];
+    );
     if (l.kind === 'drawings' || l.kind === 'comp') items.push({ label: l.loop ? 'Stop looping' : 'Loop', value: 'loop' });
     items.push({ label: 'Delete', value: 'delete' });
     const pick = await pickBox<Act>(l.name, items);
     if (!pick) return;
     switch (pick) {
+      case 'enter':
+        ed.enter(l.id);
+        break;
+      case 'ungroup':
+        if (!ed.ungroup(l.id)) await confirmBox('Cannot ungroup', 'This comp runs at a different frame rate than the one it is in. Change one of them first.', 'OK');
+        break;
+      case 'dup':
+        ed.duplicate(l.id);
+        break;
+      case 'unique':
+        ed.makeUnique(l.id);
+        break;
       case 'rename': {
         const name = await askText('Layer name', l.name, 'Rename');
         if (name !== null) ed.rename(l.id, name);
@@ -542,7 +635,7 @@ export class MotionPanel {
     this.startX = e.clientX;
     if (key) {
       const [layer, prop, f] = key.dataset.key!.split('|');
-      const ref = { layer: layer!, prop: prop as PropName, f: Number(f) };
+      const ref = { layer: layer!, prop: prop as PropKey, f: Number(f) };
       const add = e.shiftKey || e.ctrlKey || e.metaKey;
       this.drag = { kind: 'key', ref, x0: e.clientX, el: key, moved: false, shift: add };
       if (!this.ed.keys.has(keyId(ref)) || add) this.ed.selectKey(ref, add);
@@ -637,12 +730,12 @@ export class MotionPanel {
   }
 
   /** A long-press on a key row's label cell resets its animation (kept off the main taps). */
-  clearRow(l: Layer, n: PropName): void {
+  clearRow(l: Layer, n: PropKey): void {
     this.ed.clearAnimation(l.id, n);
   }
 
   /** Is this property animated? (used by tests) */
-  isAnimated(l: Layer, n: PropName): boolean {
-    return isAnimated(getProp(l, n) as Prop);
+  isAnimated(l: Layer, n: PropKey): boolean {
+    return isAnimated(this.ed.getProp(l, n) as Prop);
   }
 }
