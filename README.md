@@ -59,6 +59,10 @@ npm run dev:lan
 - **Mark K / B / I:** label drawings as **key**, **breakdown** or **inbetween** (badge on the block; click again to clear). **Keys only** limits onion skin to key drawings.
 - **Zoom** slider for long shots. **Delete** removes all selected drawings (undoable).
 
+## Export for Blender
+
+**☰ → Export for Blender** saves a .zip with the scene, the drawings and the Blender add-on. In Blender 4.2+: install `2dope_import.py` from the zip once (Preferences → Add-ons → Install from Disk), then **File → Import → 2Dope scene**. Drawings become image planes with their timing, keys become F-curves with the same easing, nulls become empties, the camera an orthographic camera, precomps collection instances (or rendered frames when they run on their own clock). Details: `docs/blender.md`. Checked frame for frame against 2Dope's own render in Blender 4.5 LTS and 5.1.
+
 ## Playback modes and frame swaps
 
 - **⋯ → Playback** on a drawings or precomp layer: **Once** (plays through, then ends; make the layer longer and it holds its last frame), **Loop**, **Ping-pong** (forwards then backwards), **Hold one frame** (always shows one frame: a pose or mouth library), and **Speed** (0.5× = half speed). The layer's bar shows ↻ ⇋ ▣ for the mode.

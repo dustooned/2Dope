@@ -85,6 +85,13 @@
 - **Export renders the comp** when it is more than one plain layer; identical frames are written once (frame signature of drawings + matrices + opacity).
 - Not built yet: Motion workspace UI, precompose/enter/exit, pins (exposed properties), time remap, masks/mattes, motion paths, expressions.
 
+## 2026-10-11: Precomps, play modes, Blender add-on (steps 5-6)
+
+- **Precomps by touch**: Group / double-tap to enter / breadcrumb / Back out; instances share content, Make unique copies; pins (★) expose properties per instance (After Effects' Essential Properties, simplified).
+- **Play modes and frame picking** (from studying Nemo, doc 12): once (holds the last frame when made longer) / loop / ping-pong / single frame, speed, and time remap with hold keys for swaps. One function (`contentFrameAt`) decides the content frame everywhere.
+- **Blender handoff = a package + a single-file add-on** (no server, no Blender-side state): image planes with baked image sequences (timing is always exact), F-curves with exact Bezier handles, collection instances only when a precomp runs on the shot's clock, otherwise rendered frames. Tested headless in Blender 4.5 LTS and 5.1 against 2Dope's own render.
+- Not yet: separate line/fill planes in Blender, blend modes, animated anchors, OCA export.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?
