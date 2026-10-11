@@ -13,6 +13,9 @@ Open-source Craft repos (Apache-2.0) may be reused with attribution.
 | 06 | [Craft source: brushes, vectors, audio](06-craft-source-brushes-vectors.md) | photocraft, vectorcraft, soundcraft source |
 | 07 | [Procreate Dreams](07-procreate-dreams-handbook.md) | Official public handbook (no API exists) |
 | 08 | [Dreams clean-room spec](08-dreams-cleanroom-spec.md) | Full handbook re-read as testable rules, mapped to 2Dope status and milestones |
+| 09 | [EffectCraft layers, precomp, keyframes](09-effectcraft-layers-precomp-keyframes.md) | EffectCraft source (comp/layer model, time mapping, Essential Graphics, bezier keys) |
+| 10 | [Harmony nodes, groups, workspaces](10-harmony-nodes-groups-workspaces.md) | Harmony shipped editors, layouts, scripts |
+| 11 | [Design: workspaces + precomps by touch](11-views-layers-precomp-design.md) | Our proposal built from 07-10 |
 
 Reference clones: `E:\2026\Dev\Apps\2Dope\reference\` (+ `C:\Users\dusto\effectcraft`).
 
@@ -34,7 +37,7 @@ Reference clones: `E:\2026\Dev\Apps\2Dope\reference\` (+ `C:\Users\dusto\effectc
 15. **Auto recovery point** when the user undoes 3+ steps then edits. (07)
 
 ## Still to do
-- Harmony node/compositing view, export/render settings, preferences (onion skin, light table).
+- Harmony export/render settings and preferences (onion skin, light table); EffectCraft expressions and masks.
 - REA/Ghidra pass on `toonboom.exe` after app restart (DLLs unsupported by REA on Windows).
 - Procreate Dreams: handbook done (07); add hands-on notes from the owner's own use if anything differs.
 - Decide: port Craft algorithms to TypeScript vs. compile Rust crates to WASM.
