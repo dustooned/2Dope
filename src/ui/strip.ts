@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { FPS_PRESETS, paintDrawing, ROLES, type Drawing, type Role } from '../core/project';
+import { FPS_PRESETS, ROLES, type Drawing, type Role } from '../core/project';
 import { commonHold, dropIndex, indicesInFrames, locate, moveExposure, setHolds, startOf, type Exposure } from '../core/timeline';
 
 const THUMB_W = 56;
@@ -318,7 +318,7 @@ export class Strip {
     const app = this.app;
     const p = app.project;
     const sel = new Set(app.selection);
-    const sig = `${this.cell}#` + p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).rev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
+    const sig = `${this.cell}#` + p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).thumbRev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
     if (sig !== this.signature) {
       this.signature = sig;
       this.rebuild();
@@ -392,18 +392,21 @@ export class Strip {
 
   private thumb(d: Drawing): HTMLCanvasElement {
     const hit = this.thumbs.get(d.id);
-    if (hit && hit.rev === d.rev) return hit.canvas;
+    if (hit && hit.rev === d.thumbRev) return hit.canvas;
     const c = hit?.canvas ?? el('canvas', { width: String(THUMB_W * 2), height: String(THUMB_H * 2), class: 'thumb' });
     const g = c.getContext('2d');
     if (g) {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.fillStyle = '#ffffff';
       g.fillRect(0, 0, c.width, c.height);
-      const s = Math.min(c.width / d.line.width, c.height / d.line.height);
-      g.setTransform(s, 0, 0, s, 0, 0);
-      paintDrawing(g, d);
+      // the drawing keeps its own small preview, even while its pixels are parked
+      const t = d.thumb;
+      if (t) {
+        const s = Math.min(c.width / t.width, c.height / t.height);
+        g.drawImage(t, 0, 0, t.width * s, t.height * s);
+      }
     }
-    this.thumbs.set(d.id, { rev: d.rev, canvas: c });
+    this.thumbs.set(d.id, { rev: d.thumbRev, canvas: c });
     return c;
   }
 

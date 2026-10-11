@@ -71,6 +71,11 @@ export async function exportSequence(
   selected: number[],
   onProgress: (p: ExportProgress) => void,
   signal?: AbortSignal,
+  /** Keep a drawing's pixels live while it renders (parked drawings come back first). */
+  hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void } = {
+    pin: async () => {},
+    unpin: () => {},
+  },
 ): Promise<{ zip: Uint8Array; frames: number; images: number }> {
   const frames = framesToExport(project.exposures, opts.range, selected);
   if (!frames.length) throw new Error('There are no frames to export.');
@@ -98,29 +103,35 @@ export async function exportSequence(
   };
   for (const id of unique) {
     const d = project.drawing(id);
-    for (const pass of opts.passes) {
-      check();
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.clearRect(0, 0, w, h);
-      g.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
-      drawPass(g, d, pass, opts, w, h);
-      const key = `${id}|${pass}`;
-      const label = `Drawing ${d.num}, ${pass}`;
-      const job: Promise<void> = encodePng(canvas).then(
-        (b) => {
-          bytes.set(key, b);
-          done++;
-          onProgress({ done, total, label });
-        },
-        (e) => {
-          failure ??= e;
-        },
-      );
-      const tracked = job.finally(() => pending.delete(tracked));
-      pending.add(tracked);
-      if (pending.size >= MAX_IN_FLIGHT) await Promise.race(pending);
-      // let the browser paint the progress bar between renders
-      await yieldToBrowser();
+    check();
+    await hold.pin(d);
+    try {
+      for (const pass of opts.passes) {
+        check();
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.clearRect(0, 0, w, h);
+        g.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
+        drawPass(g, d, pass, opts, w, h);
+        const key = `${id}|${pass}`;
+        const label = `Drawing ${d.num}, ${pass}`;
+        const job: Promise<void> = encodePng(canvas).then(
+          (b) => {
+            bytes.set(key, b);
+            done++;
+            onProgress({ done, total, label });
+          },
+          (e) => {
+            failure ??= e;
+          },
+        );
+        const tracked = job.finally(() => pending.delete(tracked));
+        pending.add(tracked);
+        if (pending.size >= MAX_IN_FLIGHT) await Promise.race(pending);
+        // let the browser paint the progress bar between renders
+        await yieldToBrowser();
+      }
+    } finally {
+      hold.unpin(d);
     }
   }
   await Promise.all(pending);
@@ -130,14 +141,40 @@ export async function exportSequence(
   let from = 0;
   const exposures = project.exposures.map((e) => {
     const d = project.drawing(e.drawing);
-    const row = { drawing: d.num, fromFrame: from, length: e.length, ...(d.role ? { role: d.role } : {}) };
+    const row = {
+      drawing: d.num,
+      fromFrame: from,
+      length: e.length,
+      ...(d.role ? { role: d.role } : {}),
+    };
     from += e.length;
     return row;
   });
-  const manifest = buildManifest({ opts, savedBy: APP_VERSION, fps: project.fps, width: project.width, height: project.height, frames, exposures });
-  const files: ZipFile[] = [{ name: `${opts.name}/export.json`, data: new TextEncoder().encode(JSON.stringify(manifest, null, 1)) }];
-  frames.forEach((f, i) => {
-    for (const pass of opts.passes) files.push({ name: entryPath(opts.name, pass, opts.start + i), data: bytes.get(`${f.drawing}|${pass}`)! });
+  const manifest = buildManifest({
+    opts,
+    savedBy: APP_VERSION,
+    fps: project.fps,
+    width: project.width,
+    height: project.height,
+    frames,
+    exposures,
   });
-  return { zip: writeZip(files), frames: frames.length, images: files.length - 1 };
+  const files: ZipFile[] = [
+    {
+      name: `${opts.name}/export.json`,
+      data: new TextEncoder().encode(JSON.stringify(manifest, null, 1)),
+    },
+  ];
+  frames.forEach((f, i) => {
+    for (const pass of opts.passes)
+      files.push({
+        name: entryPath(opts.name, pass, opts.start + i),
+        data: bytes.get(`${f.drawing}|${pass}`)!,
+      });
+  });
+  return {
+    zip: writeZip(files),
+    frames: frames.length,
+    images: files.length - 1,
+  };
 }

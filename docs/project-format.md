@@ -62,5 +62,26 @@ Display order of a drawing: fill, then line, then vector strokes.
 
 ## Local storage (not part of the file)
 
-Autosave lives in the browser's IndexedDB (`2dope` database): `meta/autosave` (the project JSON), `assets` (PNG bytes by path),
-`versions` (named and automatic restore points). Unreferenced assets are cleaned up about once a minute.
+The project library lives in the browser's IndexedDB (`2dope` database, version 2):
+
+| Store | Holds |
+|---|---|
+| `projects` | one card per project: name, folder, dates, frame/drawing counts, size, fps, a small PNG thumbnail |
+| `heads` | the latest autosaved `project.json` of each project (read only when it is opened) |
+| `versions` | restore points, each tagged with its `project` (indexed) |
+| `refs` | the asset paths each head (`h:<id>`) and version (`v:<id>`) uses |
+| `assets` | PNG bytes by content hash, shared by every project and version |
+| `folders` | gallery folders |
+| `meta` | small settings (`lastProject`) |
+
+A save writes its new assets, card, head and refs in one transaction. Assets no head, version or
+drawing in memory refers to are cleaned up about once a minute. A database from before the library
+(version 1: one `meta/autosave` plus versions) is turned into the first project on open.
+
+### Memory: parked drawings
+
+Only the drawings in use keep live canvases (current, onion neighbours, playback look-ahead, and the
+most recent ones within a budget: about 200 MB on iPad, 900 MB on desktop). The others are
+**parked**: canvases shrink to 0×0 and the pixels stay as stored assets (or PNG bytes until the next
+autosave). Opening a project decodes nothing up front; drawings come back as they are shown.
+See `src/core/residency.ts`.

@@ -5,8 +5,10 @@ import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type To
 import { DabWalker } from './brush/dabs';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
+import { Residency, type AssetSource } from './core/residency';
+import { domPlaneOps } from './view/planeops';
 import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
-import { addAfter, adjustHolds, duplicateAt, exposeAt, setNote, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, removeIndices, setHolds, totalFrames, type Edit, type Exposure } from './core/timeline';
+import { addAfter, adjustHolds, drawingAt, duplicateAt, exposeAt, setNote, locate, neighborDrawings, nextDrawing, prevDrawing, removeAt, removeIndices, setHolds, totalFrames, type Edit, type Exposure } from './core/timeline';
 import { Smoother } from './brush/smoothing';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
@@ -101,6 +103,12 @@ export class App {
   onProjectLoaded: () => void = () => {};
   readonly history = new History();
   readonly view = new Viewport();
+  /** Where parked drawings' stored images are read from (the library sets this). */
+  assets: AssetSource = async () => null;
+  /** Keeps only the drawings that matter in memory (see core/residency.ts). */
+  readonly residency = new Residency(domPlaneOps, (k) => this.assets(k));
+  /** Fires when timeline thumbnails changed (a parked drawing came back or was redrawn). */
+  onThumbs: () => void = () => {};
 
   brush: BrushSettings;
   color: string;
@@ -134,6 +142,9 @@ export class App {
   private spacePanned = false;
   private fillScratch: HTMLCanvasElement | null = null;
   private readonly onionCache = new OnionCache(this.docW, this.docH);
+  private thumbsChanged = false;
+  /** Undo/redo wait for parked drawings to come back; this keeps them in order. */
+  private historyChain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -147,9 +158,16 @@ export class App {
     this.color = loadJSON<string>(COLOR_KEY) ?? '#1d1d24';
     this.bindEvents();
     this.resize();
+    this.residency.onReady = () => this.requestRender();
+    this.residency.onThumb = () => (this.thumbsChanged = true);
+    this.residency.setProject(this.project);
     const loop = (now: number) => {
       if (this.playing) this.tickPlayback(now);
       if (this.needsRender) this.render();
+      if (this.thumbsChanged) {
+        this.thumbsChanged = false;
+        this.onThumbs();
+      }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -196,6 +214,7 @@ export class App {
    */
   private fillAt(e: PointerEvent): void {
     const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
     const p = this.toPoint(e, e.timeStamp);
     const x = Math.floor(p.x);
     const y = Math.floor(p.y);
@@ -235,6 +254,7 @@ export class App {
     putPixels(target, rect, after);
     this.history.push({
       label: 'Fill',
+      drawings: [d],
       do: () => {
         putPixels(target, rect, after);
         this.touch(d);
@@ -267,22 +287,34 @@ export class App {
   // Commands
 
   undo(): void {
-    if (this.live) return;
-    this.history.undo();
-    this.requestRender();
+    this.stepHistory('undo');
   }
 
   redo(): void {
+    this.stepHistory('redo');
+  }
+
+  /** Undo/redo, first bringing back any parked drawing the step touches. Steps run in order. */
+  private stepHistory(dir: 'undo' | 'redo'): void {
     if (this.live) return;
-    this.history.redo();
-    this.requestRender();
+    this.historyChain = this.historyChain.then(async () => {
+      if (this.live) return;
+      const cmd = dir === 'undo' ? this.history.peekUndo() : this.history.peekRedo();
+      if (!cmd) return;
+      const need = (cmd.drawings ?? []).map((x) => this.project.drawings.get(x.id)).filter((d): d is Drawing => !!d && !this.residency.isReady(d));
+      if (need.length) await Promise.all(need.map((d) => this.residency.ensure(d)));
+      if (dir === 'undo') this.history.undo();
+      else this.history.redo();
+      this.requestRender();
+    });
   }
 
   /** Clear the current drawing (undoable). */
   clearFrame(): void {
     if (this.live) return;
-    this.onRisky('Before clear drawing');
     const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    this.onRisky('Before clear drawing');
     const g = d.line.getContext('2d');
     if (!g) return;
     const full = { x: 0, y: 0, w: this.docW, h: this.docH };
@@ -294,6 +326,7 @@ export class App {
     this.history.push(
       {
         label: 'Clear drawing',
+        drawings: [d],
         do: () => {
           g.clearRect(0, 0, this.docW, this.docH);
           fg?.clearRect(0, 0, this.docW, this.docH);
@@ -321,6 +354,7 @@ export class App {
     this.selection = [];
     this.frame = 0;
     this.onionCache.clear();
+    this.residency.setProject(p);
     this.history.clear();
     this.requestRender();
     this.onFrameChange();
@@ -338,6 +372,8 @@ export class App {
   /** Mark a drawing changed (thumbnails, render). */
   private touch(d: Drawing): void {
     d.rev += 1;
+    this.residency.touch(d);
+    if (!this.live) this.residency.updateThumb(d);
     this.requestRender();
     this.onFrameChange();
     this.onDocChanged();
@@ -466,6 +502,7 @@ export class App {
   }
 
   duplicateFrame(): void {
+    if (!this.residency.isReady(this.drawing)) return;
     const d = this.project.cloneDrawing(this.drawing);
     this.editTimeline('Duplicate frame', (ex) => duplicateAt(ex, this.frame, d.id));
   }
@@ -589,7 +626,8 @@ export class App {
     this.brushChanged();
   }
 
-  exportPNG(): void {
+  async exportPNG(): Promise<void> {
+    await this.residency.ensure(this.drawing);
     const c = document.createElement('canvas');
     c.width = this.docW;
     c.height = this.docH;
@@ -639,6 +677,8 @@ export class App {
     }
     const tool = this.tool;
     const drawing = this.drawing;
+    // Its pixels are still coming back (a few ms after changing frame): ignore this touch.
+    if (!this.residency.isReady(drawing)) return;
     const plane: Plane = tool === 'pen' ? 'line' : this.plane;
     const canvas = planeCanvas(drawing, plane);
     this.raster.bind(canvas);
@@ -704,6 +744,7 @@ export class App {
       this.history.push(
         {
           label: 'Vector stroke',
+          drawings: [d],
           do: () => {
             d.vectors = [...d.vectors, rec];
             this.touch(d);
@@ -720,6 +761,7 @@ export class App {
       if (c) {
         this.history.push({
           label: rec.tool === 'eraser' ? 'Erase' : 'Brush stroke',
+          drawings: [d],
           do: () => {
             putPixels(live.canvas, c.rect, c.after);
             this.touch(d);
@@ -732,6 +774,7 @@ export class App {
         this.touch(d);
       }
     }
+    this.residency.updateThumb(d);
     this.requestRender();
   }
 
@@ -1165,9 +1208,16 @@ export class App {
     g.shadowColor = 'transparent';
 
     g.imageSmoothingEnabled = this.view.zoom < 2;
+    this.residency.use(this.workingSet());
     this.drawOnion(g);
     const live = this.live;
     const d = live ? live.drawing : this.drawing;
+    if (d.parked) {
+      // Coming back from storage (a few ms): show its thumbnail stretched meanwhile.
+      if (d.thumb) g.drawImage(d.thumb, 0, 0, this.docW, this.docH);
+      for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
+      return;
+    }
     const rasterLive = live && live.record.tool !== 'pen' ? live : null;
     const fillSrc = rasterLive && rasterLive.plane === 'fill' ? this.raster.displaySource() : d.fill;
     const lineSrc = rasterLive && rasterLive.plane === 'line' ? this.raster.displaySource() : d.line;
@@ -1194,6 +1244,30 @@ export class App {
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
   }
 
+  /**
+   * The drawings that must be live right now, most important first: the current one, its onion
+   * neighbours, and during playback the drawings coming up in the next second and a half.
+   */
+  private workingSet(): Drawing[] {
+    const p = this.project;
+    const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
+    const o = this.onion;
+    if (o.enabled) {
+      const keys = o.keysOnly ? (id: string) => p.drawing(id).role === 'key' : undefined;
+      const n = neighborDrawings(p.exposures, this.frame, o.before, o.after, keys);
+      for (const nb of [...n.before, ...n.after]) out.add(p.drawing(nb.drawing));
+    }
+    if (this.playing) {
+      const ahead = Math.ceil(p.fps * 1.5);
+      const len = p.length;
+      for (let i = 1; i <= ahead && i < len; i++) {
+        const id = drawingAt(p.exposures, (this.frame + i) % len);
+        if (id) out.add(p.drawing(id));
+      }
+    }
+    return [...out];
+  }
+
   /** Ghosts of the neighboring drawings: previous in blue, next in red, fading with distance. */
   private drawOnion(g: CanvasRenderingContext2D): void {
     const o = this.onion;
@@ -1203,8 +1277,10 @@ export class App {
     const draw = (list: typeof n.before, color: string) => {
       for (const nb of list) {
         const d = this.project.drawing(nb.drawing);
+        const ghost = this.onionCache.ghost(d, o.tint ? color : null);
+        if (!ghost) continue; // still coming back; drawn on the next frame
         g.globalAlpha = o.opacity * Math.pow(o.falloff, nb.distance - 1);
-        g.drawImage(this.onionCache.ghost(d, o.tint ? color : null), 0, 0);
+        g.drawImage(ghost, 0, 0);
       }
     };
     // Farther ghosts first so the nearest sits on top.

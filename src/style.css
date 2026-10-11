@@ -1216,3 +1216,56 @@ fieldset.collapsed {
     display: none;
   }
 }
+
+/* Projects dialog (a plain list until the gallery screen) */
+dialog.projects {
+  width: min(760px, calc(100vw - 24px));
+}
+
+.phead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.phead h2 {
+  flex: 1;
+  margin: 0;
+}
+
+.plist {
+  max-height: 64vh;
+  overflow-y: auto;
+}
+
+.prow,
+.pfolder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.prow.current {
+  box-shadow: inset 3px 0 0 var(--accent);
+  padding-left: 8px;
+}
+
+.pfolder strong {
+  flex: 1;
+}
+
+.pthumb {
+  width: 96px;
+  height: 54px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.prow .vinfo {
+  flex: 1 1 200px;
+}

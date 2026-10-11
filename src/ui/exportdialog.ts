@@ -195,6 +195,7 @@ export class ExportUI {
           status.textContent = `${p.done} of ${p.total} · ${p.label}`;
         },
         this.abort.signal,
+        this.app.residency,
       );
       const blob = new Blob([r.zip as BlobPart], { type: 'application/zip' });
       const a = document.createElement('a');

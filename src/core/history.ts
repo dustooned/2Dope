@@ -6,6 +6,11 @@ export interface Command {
   label: string;
   do(): void;
   undo(): void;
+  /**
+   * Drawings whose pixels this command reads or writes. Their pixels must be live (not parked,
+   * see core/residency.ts) before the command runs again.
+   */
+  drawings?: { id: string }[];
 }
 
 export class History {
@@ -22,6 +27,16 @@ export class History {
     if (this.done.length > this.limit) this.done.shift();
     this.undone = [];
     this.onChange();
+  }
+
+  /** The command `undo()` would run next. */
+  peekUndo(): Command | null {
+    return this.done[this.done.length - 1] ?? null;
+  }
+
+  /** The command `redo()` would run next. */
+  peekRedo(): Command | null {
+    return this.undone[this.undone.length - 1] ?? null;
   }
 
   undo(): Command | null {

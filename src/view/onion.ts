@@ -33,7 +33,7 @@ export const DEFAULT_ONION: OnionSettings = {
   keysOnly: false,
 };
 
-const MAX_CACHE = 8;
+const MAX_CACHE = 6;
 
 /**
  * Tinted ghost images, cached by drawing, revision and color so a render frame is just a few
@@ -48,10 +48,13 @@ export class OnionCache {
   ) {}
 
   clear(): void {
+    for (const c of this.map.values()) free(c);
     this.map.clear();
   }
 
-  ghost(d: Drawing, color: string | null): HTMLCanvasElement {
+  /** The tinted ghost of a drawing, or null while its pixels are parked. */
+  ghost(d: Drawing, color: string | null): HTMLCanvasElement | null {
+    if (d.parked) return null;
     const key = `${d.id}|${d.rev}|${color ?? '-'}`;
     const hit = this.map.get(key);
     if (hit) {
@@ -74,8 +77,16 @@ export class OnionCache {
     while (this.map.size > MAX_CACHE) {
       const oldest = this.map.keys().next().value;
       if (oldest === undefined) break;
+      const c = this.map.get(oldest);
+      if (c) free(c);
       this.map.delete(oldest);
     }
     return c;
   }
+}
+
+/** Give a canvas's memory back now instead of whenever the garbage collector runs (matters on iPad). */
+function free(c: HTMLCanvasElement): void {
+  c.width = 0;
+  c.height = 0;
 }

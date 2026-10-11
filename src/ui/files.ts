@@ -1,14 +1,18 @@
 import type { App } from '../app';
 import { Project } from '../core/project';
+import { referencedKeys } from '../core/residency';
 import { Autosaver } from '../io/autosave';
-import { hasContent, requestPersistence, storageEstimate, type Store, type VersionRecord } from '../io/persist';
-import { captureProject, loadProjectFile, type PlaneCache } from '../io/projectio';
+import { encodePng } from '../io/codec';
+import { assetsOf, hasContent, metaFromFile, newId, requestPersistence, storageEstimate, type FolderRecord, type ProjectMeta, type Store, type VersionRecord } from '../io/persist';
+import { captureProject, loadProjectFile } from '../io/projectio';
 import { parseProjectFile, SchemaError, stringifyProjectFile, type ProjectFile } from '../io/schema';
 import { readZip, writeZip, ZipError } from '../io/zip';
+import { THUMB_H, THUMB_W } from '../view/planeops';
 
 const BACKUP_AFTER_MS = 30 * 60_000;
 const BACKUP_MIN_CHANGES = 15;
 const RISKY_VERSION_GAP_MS = 30_000;
+const LAST_PROJECT = 'lastProject';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -48,31 +52,50 @@ function fileName(name: string, ext: string): string {
   return `${base}.${ext}`;
 }
 
-/** Save/open, autosave status, versions, recovery and backup prompts. */
+/** Options for a new project (the New dialog fills these in; defaults match the app today). */
+export interface NewProjectOptions {
+  name?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+  folder?: string | null;
+}
+
+/**
+ * The project library: every project lives on this device and is always saved (like Procreate
+ * Dreams' Theater). This class opens, creates, imports, exports, duplicates and deletes projects,
+ * shows autosave status, and keeps restore points. The gallery screen builds on its methods.
+ */
 export class FileUI {
   readonly autosaver: Autosaver;
-  private readonly cache: PlaneCache = new WeakMap();
+  /** Fires when the library changed (a project was added, renamed, moved, deleted). */
+  onLibraryChanged: () => void = () => {};
   private readonly status = document.querySelector<HTMLElement>('#savestatus');
   private readonly storageEl = document.querySelector<HTMLElement>('#storage');
   private readonly nameInput = document.querySelector<HTMLInputElement>('#pname');
   private readonly toasts = document.querySelector<HTMLElement>('#toasts');
   private readonly dialog = document.querySelector<HTMLDialogElement>('#versions');
+  private projectsDialog: HTMLDialogElement | null = null;
   private lastRiskyAt = 0;
   private lastExportAt = Date.now();
   private lastExportChanges = 0;
   private remindedAt = 0;
   private persisted = false;
+  private tabs: BroadcastChannel | null = null;
+  private readonly tabId = Math.random().toString(36).slice(2);
 
   constructor(
     private readonly app: App,
-    private readonly store: Store,
+    readonly store: Store,
     private readonly durable: boolean,
   ) {
-    this.autosaver = new Autosaver(
-      store,
-      () => captureProject(app.project, this.cache),
-      () => app.strokeActive,
-    );
+    app.assets = (k) => store.getAsset(k);
+    app.residency.onWarning = (m) => this.toast(m);
+    this.autosaver = new Autosaver(store, () => captureProject(app.project), {
+      busy: () => app.strokeActive,
+      thumb: () => this.makeThumb(),
+      keep: () => referencedKeys(app.project),
+    });
     this.autosaver.onStatus = () => this.renderStatus();
     app.onDocChanged = () => this.autosaver.markDirty();
     app.onRisky = (label) => {
@@ -102,6 +125,11 @@ export class FileUI {
     this.watchOtherTabs();
   }
 
+  /** The open project's library card. */
+  get current(): ProjectMeta | null {
+    return this.autosaver.meta;
+  }
+
   // -------------------------------------------------------------------------------------------
 
   private bind(): void {
@@ -109,12 +137,13 @@ export class FileUI {
     q('[data-file="save"]')?.addEventListener('click', () => void this.exportProject());
     q('[data-file="new"]')?.addEventListener('click', () => void this.newProject());
     q('[data-file="versions"]')?.addEventListener('click', () => void this.openVersions());
+    q('[data-file="projects"]')?.addEventListener('click', () => void this.openProjects());
     const input = q<HTMLInputElement>('#openfile');
     q('[data-file="open"]')?.addEventListener('click', () => input?.click());
     input?.addEventListener('change', () => {
       const f = input.files?.[0];
       input.value = '';
-      if (f) void this.openFile(f);
+      if (f) void this.importFile(f);
     });
     this.nameInput?.addEventListener('input', () => {
       this.app.project.name = this.nameInput?.value.trim() || 'Untitled';
@@ -158,7 +187,7 @@ export class FileUI {
         : a.state === 'dirty'
           ? 'Unsaved changes'
           : a.state === 'error'
-            ? `Could not autosave: ${a.error ?? 'unknown error'}`
+            ? `Could not save: ${a.error ?? 'unknown error'}`
             : a.state === 'saved' && a.lastSavedAt
               ? `Saved ${clock(a.lastSavedAt)}`
               : 'Autosave on';
@@ -171,17 +200,212 @@ export class FileUI {
     if (!this.persisted && this.durable) this.persisted = await requestPersistence();
     const e = await storageEstimate();
     const where = this.durable ? (this.persisted ? 'protected' : 'may be cleared by the browser') : 'NOT saved (private mode?)';
-    el.textContent = e ? `${bytes(e.used)} of ${bytes(e.quota)}` : '';
+    el.textContent = e ? `${bytes(e.used)} of ${bytes(e.quota)} used on this device` : '';
     el.title = `Local storage: ${where}. Export a .2dope file for a backup you control.`;
     el.dataset.risk = this.durable && this.persisted ? 'ok' : 'warn';
   }
 
-  // -------------------------------------------------------------------------------------------
-  // Export / open
+  /** The gallery card picture: the current drawing on white. */
+  private async makeThumb(): Promise<Uint8Array | null> {
+    const t = this.app.drawing.thumb;
+    if (!t) return null;
+    const c = el('canvas', { width: String(THUMB_W), height: String(THUMB_H) });
+    const g = c.getContext('2d');
+    if (!g) return null;
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, THUMB_W, THUMB_H);
+    const s = Math.min(THUMB_W / t.width, THUMB_H / t.height);
+    g.drawImage(t, (THUMB_W - t.width * s) / 2, (THUMB_H - t.height * s) / 2, t.width * s, t.height * s);
+    return encodePng(c);
+  }
 
-  /** Build the files of a .2dope archive (everything re-encoded, so it never depends on local storage). */
+  // -------------------------------------------------------------------------------------------
+  // The library
+
+  /** On start: reopen the last project, or start the first one. Nothing to "restore": it is all saved. */
+  async start(): Promise<void> {
+    try {
+      const last = await this.store.getSetting<string>(LAST_PROJECT);
+      const all = await this.store.listProjects();
+      const pick = all.find((p) => p.id === last) ?? all.sort((a, b) => b.opened - a.opened)[0];
+      if (pick && (await this.openProject(pick.id, true))) return;
+    } catch (e) {
+      this.toast(`The library could not be read: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    await this.createProject({});
+  }
+
+  /** Open a project from the library. Saves the current one first. False if it could not be read. */
+  async openProject(id: string, quiet = false): Promise<boolean> {
+    try {
+      await this.autosaver.flush();
+      const meta = await this.store.getProject(id);
+      const head = await this.store.getHead(id);
+      if (!meta || !head) throw new Error('it is not in the library any more');
+      const file = parseProjectFile(head.json);
+      const { project, warnings } = loadProjectFile(file);
+      const card = { ...meta, opened: Date.now() };
+      // load first, then tell the autosaver: loading counts as a change, opening must not
+      this.app.loadProject(project);
+      this.autosaver.open(card, true);
+      await this.store.putProjectMeta(card);
+      await this.store.putSetting(LAST_PROJECT, id);
+      this.announceOpen();
+      if (!quiet) this.toast(`Opened “${meta.name}”.`, [], 3000);
+      for (const w of warnings.slice(0, 3)) this.toast(w);
+      this.onLibraryChanged();
+      return true;
+    } catch (e) {
+      this.toast(`Could not open that project: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  }
+
+  /** Start a new project in the library (the current one stays, saved). An untouched one is removed. */
+  async newProject(opts: NewProjectOptions = {}): Promise<void> {
+    await this.createProject(opts);
+  }
+
+  private async createProject(opts: NewProjectOptions): Promise<void> {
+    const prev = this.current;
+    const prevEmpty = prev ? !(await this.projectHasContent()) : false;
+    await this.autosaver.flush();
+    const p = new Project(opts.width ?? this.app.docW, opts.height ?? this.app.docH);
+    p.name = opts.name?.trim() || 'Untitled';
+    if (opts.fps) p.fps = opts.fps;
+    const now = Date.now();
+    const meta: ProjectMeta = {
+      id: newId('p'),
+      name: p.name,
+      folder: opts.folder ?? null,
+      created: now,
+      modified: now,
+      opened: now,
+      frames: 1,
+      drawings: 1,
+      fps: p.fps,
+      width: p.width,
+      height: p.height,
+      thumb: null,
+    };
+    this.app.loadProject(p);
+    this.autosaver.open(meta, false);
+    await this.store.putSetting(LAST_PROJECT, meta.id);
+    await this.autosaver.flush();
+    if (prev && prevEmpty) await this.autosaver.then(() => this.store.deleteProject(prev.id));
+    this.announceOpen();
+    this.onLibraryChanged();
+  }
+
+  private async projectHasContent(): Promise<boolean> {
+    try {
+      return hasContent((await captureProject(this.app.project).settle()).file);
+    } catch {
+      return true;
+    }
+  }
+
+  /** Bring a .2dope (or project.json) into the library as a new project and open it. */
+  async importFile(f: File): Promise<void> {
+    try {
+      const buf = new Uint8Array(await f.arrayBuffer());
+      let file: ProjectFile;
+      const assets = new Map<string, Uint8Array>();
+      if (buf[0] === 0x50 && buf[1] === 0x4b) {
+        const zip = await readZip(buf);
+        const json = zip.get('project.json');
+        if (!json) throw new SchemaError('this zip has no project.json, so it is not a 2Dope project');
+        file = parseProjectFile(new TextDecoder().decode(json));
+        for (const path of assetsOf(file)) {
+          const b = zip.get(path);
+          if (b) assets.set(path, b);
+        }
+      } else {
+        file = parseProjectFile(new TextDecoder().decode(buf));
+      }
+      const missing = [...assetsOf(file)].filter((p) => !assets.has(p));
+      const id = newId('p');
+      const now = Date.now();
+      const meta = metaFromFile(id, file, { folder: null, created: now, modified: now, opened: now });
+      await this.store.saveHead(meta, { id, json: stringifyProjectFile(file), savedAt: now }, assets, [...assetsOf(file)]);
+      if (await this.openProject(id, true)) this.toast(`Imported ${f.name} into your projects.`, [], 4000);
+      if (missing.length) this.toast(`${missing.length} image${missing.length === 1 ? ' is' : 's are'} missing from ${f.name}; those drawings open blank.`);
+    } catch (e) {
+      const why = e instanceof SchemaError || e instanceof ZipError ? e.message : e instanceof Error ? e.message : String(e);
+      this.toast(`Could not open ${f.name}: ${why}`);
+    }
+  }
+
+  async renameProject(id: string, name: string): Promise<void> {
+    const clean = name.trim().slice(0, 120) || 'Untitled';
+    if (this.current?.id === id) {
+      this.app.project.name = clean;
+      if (this.nameInput) this.nameInput.value = clean === 'Untitled' ? '' : clean;
+      this.autosaver.meta = { ...this.current, name: clean };
+      this.autosaver.markDirty();
+    }
+    const m = await this.store.getProject(id);
+    if (m) await this.store.putProjectMeta({ ...m, name: clean });
+    this.onLibraryChanged();
+  }
+
+  async moveProject(id: string, folder: string | null): Promise<void> {
+    if (this.current?.id === id) this.autosaver.meta = { ...this.current, folder };
+    const m = await this.store.getProject(id);
+    if (m) await this.store.putProjectMeta({ ...m, folder });
+    this.onLibraryChanged();
+  }
+
+  /** A copy that shares the same stored images (no extra space until you change it). */
+  async duplicateProject(id: string): Promise<void> {
+    if (this.current?.id === id) await this.autosaver.flush();
+    const m = await this.store.getProject(id);
+    const head = await this.store.getHead(id);
+    if (!m || !head) return;
+    const file = parseProjectFile(head.json);
+    file.name = `${m.name} copy`;
+    const nid = newId('p');
+    const now = Date.now();
+    const meta: ProjectMeta = { ...m, id: nid, name: file.name, created: now, modified: now, opened: 0 };
+    await this.store.saveHead(meta, { id: nid, json: stringifyProjectFile(file), savedAt: now }, new Map(), [...assetsOf(file)]);
+    this.onLibraryChanged();
+  }
+
+  /** Delete a project for good. Opening another first when it is the open one. */
+  async deleteProject(id: string): Promise<void> {
+    if (this.current?.id === id) {
+      const others = (await this.store.listProjects()).filter((p) => p.id !== id).sort((a, b) => b.opened - a.opened);
+      const next = others[0];
+      if (!next || !(await this.openProject(next.id, true))) await this.createProject({});
+    }
+    await this.autosaver.then(() => this.store.deleteProject(id));
+    this.onLibraryChanged();
+  }
+
+  async newFolder(name: string): Promise<FolderRecord> {
+    const f: FolderRecord = { id: newId('f'), name: name.trim().slice(0, 80) || 'New folder', created: Date.now() };
+    await this.store.putFolder(f);
+    this.onLibraryChanged();
+    return f;
+  }
+
+  async renameFolder(f: FolderRecord, name: string): Promise<void> {
+    await this.store.putFolder({ ...f, name: name.trim().slice(0, 80) || f.name });
+    this.onLibraryChanged();
+  }
+
+  async deleteFolder(id: string): Promise<void> {
+    if (this.current?.folder === id) this.autosaver.meta = { ...this.current, folder: null };
+    await this.store.deleteFolder(id);
+    this.onLibraryChanged();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Export
+
+  /** Build the files of a .2dope archive (every image included, so it never depends on this device). */
   private async buildArchive(): Promise<{ file: ProjectFile; zip: Uint8Array }> {
-    const settled = await captureProject(this.app.project, null).settle();
+    const settled = await captureProject(this.app.project, { mode: 'archive', source: (k) => this.store.getAsset(k) }).settle();
     const text = stringifyProjectFile(settled.file);
     const files = [{ name: 'project.json', data: new TextEncoder().encode(text) }, ...[...settled.assets].map(([name, data]) => ({ name, data }))];
     return { file: settled.file, zip: writeZip(files) };
@@ -201,55 +425,21 @@ export class FileUI {
 
   private async exportJson(): Promise<void> {
     try {
-      const settled = await captureProject(this.app.project, null).settle();
+      const settled = await captureProject(this.app.project).settle();
       download(new Blob([stringifyProjectFile(settled.file)], { type: 'application/json' }), fileName(this.app.project.name, 'json'));
     } catch (e) {
       this.toast(`Could not export: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
-  async openFile(f: File): Promise<void> {
-    try {
-      const buf = new Uint8Array(await f.arrayBuffer());
-      let file: ProjectFile;
-      let getAsset: (p: string) => Promise<Uint8Array | null>;
-      if (buf[0] === 0x50 && buf[1] === 0x4b) {
-        const zip = await readZip(buf);
-        const json = zip.get('project.json');
-        if (!json) throw new SchemaError('this zip has no project.json, so it is not a 2Dope project');
-        file = parseProjectFile(new TextDecoder().decode(json));
-        getAsset = async (p) => zip.get(p) ?? null;
-      } else {
-        file = parseProjectFile(new TextDecoder().decode(buf));
-        getAsset = async () => null;
-      }
-      const { project, warnings } = await loadProjectFile(file, getAsset);
-      await this.keepCurrent(`Before opening ${f.name}`);
-      this.app.loadProject(project);
-      this.toast(`Opened ${f.name}.`, [], 4000);
-      for (const w of warnings.slice(0, 3)) this.toast(w);
-    } catch (e) {
-      const why = e instanceof SchemaError || e instanceof ZipError ? e.message : e instanceof Error ? e.message : String(e);
-      this.toast(`Could not open ${f.name}: ${why}`);
-    }
-  }
-
   /** Keep the current work as a restore point before it is replaced. Skips an untouched project. */
   private async keepCurrent(label: string): Promise<void> {
-    const cap = captureProject(this.app.project, this.cache);
-    const settled = await cap.settle();
-    if (!hasContent(settled.file)) return;
+    if (!(await this.projectHasContent())) return;
     await this.autosaver.saveVersion(label, true);
   }
 
-  async newProject(): Promise<void> {
-    if (!window.confirm('Start a new project? Your current one is kept under Versions.')) return;
-    await this.keepCurrent('Before new project');
-    this.app.loadProject(new Project(this.app.docW, this.app.docH));
-  }
-
   // -------------------------------------------------------------------------------------------
-  // Versions
+  // Versions (restore points of the open project)
 
   private async saveNamedVersion(): Promise<void> {
     const input = this.dialog?.querySelector<HTMLInputElement>('[data-v="name"]');
@@ -266,8 +456,9 @@ export class FileUI {
 
   private async renderVersions(): Promise<void> {
     const list = this.dialog?.querySelector<HTMLElement>('[data-v="list"]');
-    if (!list) return;
-    const versions = await this.store.listVersions();
+    const meta = this.current;
+    if (!list || !meta) return;
+    const versions = await this.store.listVersions(meta.id);
     list.replaceChildren();
     if (!versions.length) list.append(el('p', { class: 'hint' }, 'No versions yet. 2Dope saves one every 10 minutes while you work and before risky edits, or save your own with a name.'));
     for (const v of versions) list.append(this.versionRow(v));
@@ -290,10 +481,10 @@ export class FileUI {
 
   private async restoreVersion(v: VersionRecord): Promise<void> {
     try {
-      const file = parseProjectFile(v.json);
-      const { project, warnings } = await loadProjectFile(file, (p) => this.store.getAsset(p));
+      const { project, warnings } = loadProjectFile(parseProjectFile(v.json));
       await this.keepCurrent(`Before restoring "${v.name}"`);
       this.app.loadProject(project);
+      this.autosaver.markDirty();
       this.dialog?.close();
       this.toast(`Restored "${v.name}". What you had before is saved as a version.`, [], 5000);
       for (const w of warnings.slice(0, 3)) this.toast(w);
@@ -303,44 +494,111 @@ export class FileUI {
   }
 
   // -------------------------------------------------------------------------------------------
-  // Recovery and reminders
+  // Projects dialog (a plain list; the gallery screen replaces it)
 
-  /** On startup: offer to bring back the last autosave if it has real work in it. */
-  async offerRecovery(): Promise<void> {
-    try {
-      const rec = await this.store.getAutosave();
-      if (!rec) return;
-      const file = parseProjectFile(rec.json);
-      if (!hasContent(file)) return;
-      this.toast(
-        `Restore your last session? (“${file.name}”, saved ${ago(rec.savedAt)})`,
-        [
-          {
-            label: 'Restore',
-            run: async () => {
-              try {
-                const { project, warnings } = await loadProjectFile(file, (p) => this.store.getAsset(p));
-                this.app.loadProject(project);
-                this.autosaver.markDirty();
-                for (const w of warnings.slice(0, 3)) this.toast(w);
-              } catch (e) {
-                this.toast(`Could not restore: ${e instanceof Error ? e.message : String(e)}`);
-              }
-            },
-          },
-          {
-            label: 'Start fresh',
-            run: async () => {
-              // not lost: kept as a version before the next autosave replaces it
-              await this.store.putVersion({ id: `prev-${rec.savedAt}`, name: `Previous session (${file.name})`, auto: true, at: rec.savedAt, json: rec.json });
-            },
-          },
-        ],
-      );
-    } catch (e) {
-      this.toast(`The last session could not be read: ${e instanceof Error ? e.message : String(e)}`);
+  async openProjects(): Promise<void> {
+    if (!this.projectsDialog) {
+      const d = el('dialog', { class: 'projects', 'aria-label': 'Projects' });
+      document.body.append(d);
+      this.projectsDialog = d;
+      this.onLibraryChanged = () => {
+        if (d.open) void this.renderProjects();
+      };
     }
+    await this.renderProjects();
+    this.projectsDialog.showModal();
   }
+
+  private async renderProjects(): Promise<void> {
+    const d = this.projectsDialog;
+    if (!d) return;
+    const [projects, folders] = await Promise.all([this.store.listProjects(), this.store.listFolders()]);
+    projects.sort((a, b) => b.modified - a.modified);
+    folders.sort((a, b) => a.name.localeCompare(b.name));
+    d.replaceChildren();
+    const head = el('div', { class: 'phead' });
+    head.append(el('h2', {}, 'Projects'));
+    const newBtn = el('button', { type: 'button' }, 'New project');
+    newBtn.addEventListener('click', async () => {
+      d.close();
+      await this.newProject();
+    });
+    const folderBtn = el('button', { type: 'button' }, 'New folder');
+    folderBtn.addEventListener('click', async () => {
+      const name = window.prompt('Folder name', 'New folder');
+      if (name !== null) await this.newFolder(name);
+    });
+    const close = el('button', { type: 'button' }, 'Close');
+    close.addEventListener('click', () => d.close());
+    head.append(newBtn, folderBtn, close);
+    d.append(head);
+
+    const list = el('div', { class: 'plist' });
+    const groups: { folder: FolderRecord | null; items: ProjectMeta[] }[] = [
+      { folder: null, items: projects.filter((p) => !p.folder || !folders.some((f) => f.id === p.folder)) },
+      ...folders.map((f) => ({ folder: f, items: projects.filter((p) => p.folder === f.id) })),
+    ];
+    for (const g of groups) {
+      if (g.folder) {
+        const fh = el('div', { class: 'pfolder' });
+        fh.append(el('strong', {}, `📁 ${g.folder.name}`), el('span', { class: 'hint' }, `${g.items.length} project${g.items.length === 1 ? '' : 's'}`));
+        const f = g.folder;
+        const ren = el('button', { type: 'button' }, 'Rename');
+        ren.addEventListener('click', async () => {
+          const name = window.prompt('Folder name', f.name);
+          if (name !== null) await this.renameFolder(f, name);
+        });
+        const del = el('button', { type: 'button', title: 'Delete the folder (its projects move to the top level)' }, 'Remove');
+        del.addEventListener('click', () => void this.deleteFolder(f.id));
+        fh.append(ren, del);
+        list.append(fh);
+      }
+      for (const p of g.items) list.append(this.projectRow(p, folders));
+    }
+    d.append(list);
+  }
+
+  private projectRow(p: ProjectMeta, folders: FolderRecord[]): HTMLElement {
+    const row = el('div', { class: `prow${this.current?.id === p.id ? ' current' : ''}` });
+    const img = el('img', { class: 'pthumb', alt: '' });
+    if (p.thumb) {
+      const url = URL.createObjectURL(new Blob([p.thumb as BlobPart], { type: 'image/png' }));
+      img.src = url;
+      img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+    }
+    const info = el('div', { class: 'vinfo' });
+    info.append(
+      el('strong', {}, p.name + (this.current?.id === p.id ? ' (open)' : '')),
+      el('span', { class: 'hint' }, `${p.frames} frame${p.frames === 1 ? '' : 's'} · ${p.drawings} drawing${p.drawings === 1 ? '' : 's'} · ${p.width}×${p.height} · ${p.fps} fps · ${ago(p.modified)}`),
+    );
+    const open = el('button', { type: 'button' }, 'Open');
+    open.addEventListener('click', async () => {
+      this.projectsDialog?.close();
+      await this.openProject(p.id);
+    });
+    const ren = el('button', { type: 'button' }, 'Rename');
+    ren.addEventListener('click', async () => {
+      const name = window.prompt('Project name', p.name);
+      if (name !== null) await this.renameProject(p.id, name);
+    });
+    const move = el('select', { 'aria-label': 'Folder', title: 'Move to a folder' });
+    move.append(el('option', { value: '' }, 'No folder'));
+    for (const f of folders) move.append(el('option', { value: f.id }, f.name));
+    move.value = p.folder ?? '';
+    move.addEventListener('change', () => void this.moveProject(p.id, move.value || null));
+    const dup = el('button', { type: 'button' }, 'Duplicate');
+    dup.addEventListener('click', () => void this.duplicateProject(p.id));
+    const del = el('button', { type: 'button' }, 'Delete');
+    del.addEventListener('click', async () => {
+      if (!window.confirm(`Delete “${p.name}” and its versions from this device? Export a .2dope first if you want to keep a copy.`)) return;
+      await this.deleteProject(p.id);
+    });
+    row.append(img, info, open, ren, move, dup, del);
+    return row;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Reminders and other tabs
 
   private maybeRemindBackup(): void {
     const a = this.autosaver;
@@ -348,19 +606,31 @@ export class FileUI {
     if (a.changes - this.lastExportChanges < BACKUP_MIN_CHANGES) return;
     if (now - this.lastExportAt < BACKUP_AFTER_MS || now - this.remindedAt < BACKUP_AFTER_MS) return;
     this.remindedAt = now;
-    this.toast('It has been a while since you saved a backup file. Browsers can clear local storage, especially on shared computers.', [{ label: 'Save .2dope', run: () => void this.exportProject() }, ]);
+    this.toast('It has been a while since you saved a backup file. Browsers can clear local storage, especially on shared computers.', [{ label: 'Export .2dope', run: () => void this.exportProject() }]);
   }
 
-  /** Two tabs autosaving into the same slot would overwrite each other: warn the second one. */
+  /** Two tabs autosaving the same project would overwrite each other: warn when that happens. */
   private watchOtherTabs(): void {
     if (typeof BroadcastChannel === 'undefined') return;
     const ch = new BroadcastChannel('2dope-tabs');
-    const me = Math.random().toString(36).slice(2);
-    ch.onmessage = (e: MessageEvent<{ type: string; from: string }>) => {
-      if (e.data.from === me) return;
-      if (e.data.type === 'hello') ch.postMessage({ type: 'here', from: me });
-      else if (e.data.type === 'here') this.toast('2Dope is already open in another tab. Both tabs autosave to the same place and will overwrite each other: close one of them.');
+    this.tabs = ch;
+    ch.onmessage = (e: MessageEvent<{ type: string; from: string; project?: string }>) => {
+      if (e.data.from === this.tabId) return;
+      const mine = this.current?.id;
+      if (e.data.type === 'open' && mine && e.data.project === mine) {
+        ch.postMessage({ type: 'here', from: this.tabId, project: mine });
+        this.warnSameProject();
+      } else if (e.data.type === 'here' && mine && e.data.project === mine) {
+        this.warnSameProject();
+      }
     };
-    ch.postMessage({ type: 'hello', from: me });
+  }
+
+  private announceOpen(): void {
+    this.tabs?.postMessage({ type: 'open', from: this.tabId, project: this.current?.id });
+  }
+
+  private warnSameProject(): void {
+    this.toast('This project is also open in another 2Dope tab. Both save to the same place and will overwrite each other: close one of them, or open a different project there.');
   }
 }

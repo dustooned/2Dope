@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PRESETS } from '../core/brush';
-import { Autosaver, DEFAULTS, type Clock } from './autosave';
-import { hasContent, MemoryStore, unreferencedAssets, versionsToPrune, type VersionRecord } from './persist';
+import { Autosaver, DEFAULTS, type AutosaveHooks, type Clock } from './autosave';
+import { hasContent, MemoryStore, metaFromFile, unreferencedAssets, versionsToPrune, type VersionRecord } from './persist';
 import type { Capture } from './projectio';
 import { FORMAT, parseProjectFile, SCHEMA, type ProjectFile } from './schema';
 
@@ -66,12 +66,23 @@ function fakeCapture(state: { frames: number; asset?: string; encoded: number })
   };
 }
 
+const hooks = (busy: () => boolean = () => false, keep: Set<string> = new Set()): AutosaveHooks => ({ busy, thumb: async () => null, keep: () => keep });
+
+/** An autosaver with a project already open in the library. */
+function saver(store: MemoryStore, state: { frames: number; asset?: string; encoded: number }, clock: FakeClock, busy?: () => boolean, keep?: Set<string>) {
+  const a = new Autosaver(store, fakeCapture(state), hooks(busy, keep), DEFAULTS, clock);
+  a.open(metaFromFile('p1', file(1)), true);
+  return a;
+}
+
+const head = async (store: MemoryStore) => (await store.getHead('p1'))!.json;
+
 describe('autosave', () => {
   it('debounces rapid changes into one save and stores a readable project', async () => {
     const clock = new FakeClock();
     const store = new MemoryStore();
     const state = { frames: 3, asset: 'assets/a-1.png', encoded: 0 };
-    const a = new Autosaver(store, fakeCapture(state), () => false, DEFAULTS, clock);
+    const a = saver(store, state, clock);
     for (let i = 0; i < 10; i++) {
       a.markDirty();
       await clock.advance(200);
@@ -81,9 +92,11 @@ describe('autosave', () => {
     await a.idle();
     expect(state.encoded).toBeGreaterThanOrEqual(1);
     expect(a.state).toBe('saved');
-    const rec = await store.getAutosave();
-    expect(parseProjectFile(rec!.json).layers[0]!.exposures[0]!.length).toBe(3);
+    expect(parseProjectFile(await head(store)).layers[0]!.exposures[0]!.length).toBe(3);
     expect(store.assets.has('assets/a-1.png')).toBe(true);
+    // the library card follows the project
+    expect((await store.getProject('p1'))!.frames).toBe(3);
+    expect(await store.referencedAssets()).toEqual(new Set(['assets/a-1.png']));
   });
 
   it('waits while the user is mid-stroke', async () => {
@@ -91,7 +104,7 @@ describe('autosave', () => {
     const store = new MemoryStore();
     const state = { frames: 1, encoded: 0 };
     let busy = true;
-    const a = new Autosaver(store, fakeCapture(state), () => busy, DEFAULTS, clock);
+    const a = saver(store, state, clock, () => busy);
     a.markDirty();
     await clock.advance(3000);
     expect(state.encoded).toBe(0);
@@ -105,7 +118,7 @@ describe('autosave', () => {
     const clock = new FakeClock();
     const store = new MemoryStore();
     const state = { frames: 2, encoded: 0 };
-    const a = new Autosaver(store, fakeCapture(state), () => false, DEFAULTS, clock);
+    const a = saver(store, state, clock);
     a.markDirty();
     await a.flush();
     await a.flush();
@@ -116,26 +129,26 @@ describe('autosave', () => {
     const clock = new FakeClock();
     const store = new MemoryStore();
     const state = { frames: 2, asset: 'assets/a-1.png', encoded: 0 };
-    const a = new Autosaver(store, fakeCapture(state), () => false, DEFAULTS, clock);
+    const a = saver(store, state, clock);
     a.markDirty();
     await a.flush();
-    const good = (await store.getAutosave())!.json;
+    const good = await head(store);
     state.frames = 9;
-    store.putAutosave = async () => {
+    store.saveHead = async () => {
       throw new Error('QuotaExceededError');
     };
     a.markDirty();
     await a.flush();
     expect(a.state).toBe('error');
     expect(a.error).toMatch(/Quota/);
-    expect((await store.getAutosave())!.json).toBe(good);
+    expect(await head(store)).toBe(good);
   });
 
   it('a version captures the state at call time, even if the project changes right after', async () => {
     const clock = new FakeClock();
     const store = new MemoryStore();
     const state = { frames: 4, encoded: 0 };
-    const a = new Autosaver(store, fakeCapture(state), () => false, DEFAULTS, clock);
+    const a = saver(store, state, clock);
     const p = a.saveVersion('Before clear', true);
     state.frames = 1; // the destructive edit happens immediately after
     const v = (await p)!;
@@ -144,36 +157,77 @@ describe('autosave', () => {
 
   it('keeps only the newest automatic versions and never prunes manual ones', async () => {
     const list: VersionRecord[] = [];
-    for (let i = 0; i < 14; i++) list.push({ id: `a${i}`, name: 'Automatic', auto: true, at: i, json: '' });
-    list.push({ id: 'm1', name: 'Mine', auto: false, at: -5, json: '' });
+    for (let i = 0; i < 14; i++) list.push({ id: `a${i}`, project: 'p1', name: 'Automatic', auto: true, at: i, json: '' });
+    list.push({ id: 'm1', project: 'p1', name: 'Mine', auto: false, at: -5, json: '' });
     const prune = versionsToPrune(list, 10);
     expect(prune.sort()).toEqual(['a0', 'a1', 'a2', 'a3']);
     expect(prune).not.toContain('m1');
   });
 
-  it('garbage-collects only assets nothing refers to', async () => {
+  it('garbage-collects only assets nothing refers to, across projects and versions', async () => {
     const store = new MemoryStore();
-    await store.putAutosave({ json: JSON.stringify(file(1, 'assets/keep-1.png')), savedAt: 1 });
-    const ver: VersionRecord = { id: 'v', name: 'v', auto: false, at: 1, json: JSON.stringify(file(1, 'assets/ver-1.png')) };
-    const dead = unreferencedAssets(['assets/keep-1.png', 'assets/ver-1.png', 'assets/old-1.png'], await store.getAutosave(), [ver]);
-    expect(dead).toEqual(['assets/old-1.png']);
+    const f1 = file(1, 'assets/keep-1.png');
+    await store.saveHead(metaFromFile('p1', f1), { id: 'p1', json: JSON.stringify(f1), savedAt: 1 }, new Map([['assets/keep-1.png', new Uint8Array([1])]]), ['assets/keep-1.png']);
+    const ver: VersionRecord = { id: 'v', project: 'p2', name: 'v', auto: false, at: 1, json: JSON.stringify(file(1, 'assets/ver-1.png')) };
+    await store.putVersion(ver, new Map(), ['assets/ver-1.png']);
+    const all = ['assets/keep-1.png', 'assets/ver-1.png', 'assets/old-1.png', 'assets/undo-1.png'];
+    expect(unreferencedAssets(all, await store.referencedAssets(), new Set(['assets/undo-1.png']))).toEqual(['assets/old-1.png']);
+    // deleting a project frees what only it used
+    await store.deleteProject('p1');
+    expect(unreferencedAssets(all, await store.referencedAssets())).toEqual(['assets/keep-1.png', 'assets/old-1.png', 'assets/undo-1.png']);
   });
 
   it('automatic restore points need both time and changes', async () => {
     const clock = new FakeClock();
     const store = new MemoryStore();
     const state = { frames: 1, encoded: 0 };
-    const a = new Autosaver(store, fakeCapture(state), () => false, DEFAULTS, clock);
+    const a = saver(store, state, clock);
     await a.maybeAutoVersion();
-    expect(await store.listVersions()).toHaveLength(0); // nothing changed
+    expect(await store.listVersions('p1')).toHaveLength(0); // nothing changed
     a.markDirty();
     await clock.advance(DEFAULTS.versionEveryMs - 1000);
     await a.maybeAutoVersion();
-    expect(await store.listVersions()).toHaveLength(0); // too soon
+    expect(await store.listVersions('p1')).toHaveLength(0); // too soon
     await clock.advance(2000);
     await a.maybeAutoVersion();
     await a.idle();
-    expect(await store.listVersions()).toHaveLength(1);
+    expect(await store.listVersions('p1')).toHaveLength(1);
+  });
+
+  it('switching projects saves each one under its own id', async () => {
+    const clock = new FakeClock();
+    const store = new MemoryStore();
+    const state = { frames: 2, encoded: 0 };
+    const a = saver(store, state, clock);
+    a.markDirty();
+    await a.flush();
+    expect(parseProjectFile(await head(store)).layers[0]!.exposures[0]!.length).toBe(2);
+    a.open(metaFromFile('p2', file(1)), false);
+    state.frames = 7;
+    await a.flush();
+    expect(parseProjectFile((await store.getHead('p2'))!.json).layers[0]!.exposures[0]!.length).toBe(7);
+    expect(parseProjectFile(await head(store)).layers[0]!.exposures[0]!.length).toBe(2);
+    expect((await store.listProjects()).map((p) => p.id).sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('a project opened from the library is not saved again until it changes', async () => {
+    const clock = new FakeClock();
+    const store = new MemoryStore();
+    const state = { frames: 1, encoded: 0 };
+    const a = saver(store, state, clock);
+    await a.flush();
+    expect(state.encoded).toBe(0);
+    expect(a.state).toBe('saved');
+  });
+
+  it('renaming or moving the open project survives the next save', async () => {
+    const clock = new FakeClock();
+    const store = new MemoryStore();
+    const a = saver(store, { frames: 1, encoded: 0 }, clock);
+    a.meta = { ...a.meta!, folder: 'f1' };
+    a.markDirty();
+    await a.flush();
+    expect((await store.getProject('p1'))!.folder).toBe('f1');
   });
 });
 

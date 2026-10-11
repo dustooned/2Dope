@@ -1,21 +1,14 @@
-import { planeCanvas, Project, type Drawing } from '../core/project';
-import { decodePngInto, encodePng, isBlank } from './codec';
+import { Project, type Drawing, type PlaneRef } from '../core/project';
+import { recordSaved, type AssetSource } from '../core/residency';
+import { encodePng, isBlank } from './codec';
 import { hashBytes } from './hash';
 import { FORMAT, SCHEMA, type DrawingFile, type ProjectFile } from './schema';
 
-export const APP_VERSION = '2Dope 0.0.1';
-
-/** What we already stored for a drawing, valid while its `rev` is unchanged. */
-export interface PlaneKeys {
-  rev: number;
-  line: string | null;
-  fill: string | null;
-}
-export type PlaneCache = WeakMap<Drawing, PlaneKeys>;
+export const APP_VERSION = '2Dope 0.0.2';
 
 export interface Settled {
   file: ProjectFile;
-  /** Newly encoded assets (path -> PNG bytes). Unchanged drawings reuse their cached assets. */
+  /** Newly encoded assets (path -> PNG bytes). Unchanged drawings reuse their stored assets. */
   assets: Map<string, Uint8Array>;
   /** Call after the assets were stored, so later saves can skip these drawings. */
   commit(): void;
@@ -26,17 +19,27 @@ export interface Capture {
 }
 
 interface PlaneJob {
-  /** null = blank plane, string = already stored, promise = encoding now. */
+  /** null = blank plane, string = already stored, promise = bytes to store. */
   value: string | null | Promise<Uint8Array | null>;
+}
+
+export interface CaptureOptions {
+  /**
+   * `library`: reuse assets already stored on this device (autosave, versions).
+   * `archive`: every asset's bytes are included (a .2dope file that stands on its own).
+   */
+  mode: 'library' | 'archive';
+  /** Reads stored assets (archive mode needs the bytes of parked drawings). */
+  source?: AssetSource;
 }
 
 /**
  * Capture the project NOW (synchronously) and finish encoding later. Everything that must match
  * this exact moment is read or snapshotted before returning: exposures, vectors, fps, and each
  * changed plane's pixels (via toBlob). So callers can safely let the user keep editing while the
- * encode completes. With a `cache`, drawings whose `rev` did not change are not re-encoded.
+ * encode completes. Parked drawings are not decoded: their stored keys or bytes are used as is.
  */
-export function captureProject(project: Project, cache: PlaneCache | null): Capture {
+export function captureProject(project: Project, opt: CaptureOptions = { mode: 'library' }): Capture {
   const exposures = project.exposures.map((e) => ({ ...e }));
   const used = [...new Set(exposures.map((e) => e.drawing))];
   const base = {
@@ -47,26 +50,27 @@ export function captureProject(project: Project, cache: PlaneCache | null): Capt
     height: project.height,
   };
 
+  const fromRef = (ref: PlaneRef | null): PlaneJob => {
+    if (!ref) return { value: null };
+    if (ref.bytes) return { value: Promise.resolve(ref.bytes) };
+    if (opt.mode === 'library') return { value: ref.key };
+    const src = opt.source;
+    return { value: ref.key && src ? src(ref.key) : Promise.resolve(null) };
+  };
+
   const planes = used.map((id) => {
     const d = project.drawing(id);
-    const hit = cache?.get(d);
-    const reuse = hit && hit.rev === d.rev;
+    const rev = d.rev;
+    const parked = d.parked;
+    const saved = opt.mode === 'library' && d.saved && d.saved.rev === rev ? d.saved : null;
     const job = (plane: 'line' | 'fill'): PlaneJob => {
-      if (reuse) return { value: hit[plane] };
+      if (parked) return fromRef(parked[plane]);
+      if (saved) return { value: saved[plane] };
       const canvas = plane === 'line' ? d.line : d.fill;
       if (!canvas || isBlank(canvas)) return { value: null };
       return { value: encodePng(canvas) };
     };
-    return {
-      id,
-      num: d.num,
-      rev: d.rev,
-      vectors: [...d.vectors],
-      role: d.role,
-      line: job('line'),
-      fill: job('fill'),
-      drawing: d,
-    };
+    return { id, num: d.num, rev, vectors: [...d.vectors], role: d.role, line: job('line'), fill: job('fill'), drawing: d };
   });
 
   return {
@@ -105,8 +109,9 @@ export function captureProject(project: Project, cache: PlaneCache | null): Capt
         file,
         assets,
         commit() {
-          if (!cache) return;
-          for (const k of keys) cache.set(k.d, { rev: k.rev, line: k.line, fill: k.fill });
+          // Only library saves put the assets where later saves (and parking) can find them.
+          if (opt.mode !== 'library') return;
+          for (const k of keys) recordSaved(k.d, k.rev, k.line, k.fill);
         },
       };
     },
@@ -118,8 +123,12 @@ export interface Loaded {
   warnings: string[];
 }
 
-/** Build a Project from a validated file. Missing or broken assets become blank planes with a warning. */
-export async function loadProjectFile(file: ProjectFile, getAsset: (path: string) => Promise<Uint8Array | null>): Promise<Loaded> {
+/**
+ * Build a Project from a validated file. Nothing is decoded here: every drawing starts parked,
+ * pointing at its stored assets, and comes back when it is first shown. The assets must be
+ * readable through the residency manager's source (put a file's assets in the store first).
+ */
+export function loadProjectFile(file: ProjectFile): Loaded {
   const warnings: string[] = [];
   const project = new Project(file.canvas.width, file.canvas.height, false);
   project.name = file.name;
@@ -130,21 +139,9 @@ export async function loadProjectFile(file: ProjectFile, getAsset: (path: string
   const used = [...new Set(layer.exposures.map((e) => e.drawing))];
   for (const id of used) {
     const f = file.drawings[id]!;
-    const d = project.adopt(id, f.num, f.vectors, f.role ?? null);
-    for (const plane of ['line', 'fill'] as const) {
-      const path = f[plane];
-      if (!path) continue;
-      try {
-        const bytes = await getAsset(path);
-        if (!bytes) {
-          warnings.push(`Drawing ${f.num}: the ${plane} image is missing, so it was left blank.`);
-          continue;
-        }
-        await decodePngInto(planeCanvas(d, plane), bytes);
-      } catch {
-        warnings.push(`Drawing ${f.num}: the ${plane} image could not be read, so it was left blank.`);
-      }
-    }
+    const ref = (key: string | null): PlaneRef | null => (key ? { key, bytes: null } : null);
+    const d = project.adopt(id, f.num, f.vectors, f.role ?? null, { rev: 0, line: ref(f.line), fill: ref(f.fill) });
+    d.saved = { rev: 0, line: f.line, fill: f.fill };
   }
   project.exposures = layer.exposures.map((e) => ({ ...e }));
   return { project, warnings };

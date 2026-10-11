@@ -59,6 +59,13 @@ npm run dev:lan
 - **Mark K / B / I:** label drawings as **key**, **breakdown** or **inbetween** (badge on the block; click again to clear). **Keys only** limits onion skin to key drawings.
 - **Zoom** slider for long shots. **Delete** removes all selected drawings (undoable).
 
+## Library and memory (after M1)
+
+- **Projects** (☰ menu): every project stays on this device and is always saved, like Procreate Dreams' Theater. Open, rename, duplicate (shares images, no extra space), delete, and sort into **folders**. 2Dope reopens the last project on start; there is nothing to "restore".
+- **New project** keeps the current one in Projects (an untouched empty one is removed). **Import .2dope** adds a file as a new project; **Export .2dope** downloads a self-contained copy.
+- **Versions** are per project.
+- **Long shots no longer run out of memory**: drawings away from the playhead are packed away and come back in a few milliseconds when shown (their thumbnail fills in meanwhile). Undo, export and onion skins bring them back automatically.
+
 ## M1 slice 4: autosave, recovery, versions, files
 
 - **Autosave** to the browser (IndexedDB) about a second after every change (never mid-stroke). The status next to the project name shows Saved / Saving / Unsaved / error, and the storage meter shows how much space is used and whether the browser has promised not to clear it.

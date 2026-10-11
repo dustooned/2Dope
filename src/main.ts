@@ -143,7 +143,7 @@ const strip = new Strip(app, $('#strip'));
 let files: FileUI | null = null;
 let exporter: ExportUI | null = null;
 const quick = new Quick(app, $('#quickbar'), {
-  exportPng: () => app.exportPNG(),
+  exportPng: () => void app.exportPNG(),
   saveFile: () => void files?.exportProject(),
   exportSeq: () => exporter?.open(),
 });
@@ -206,6 +206,7 @@ app.onFrameChange = () => {
 app.onToolChange = chain(app.onToolChange, () => quick.update());
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
+app.onThumbs = () => strip.update();
 app.onProjectLoaded = () => {
   strip.reset();
   xsheet.reset();
@@ -221,5 +222,5 @@ if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = fi
 exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
 $('#export-seq').addEventListener('click', () => exporter?.open());
 if (import.meta.env.DEV) (window as unknown as { __export: ExportUI }).__export = exporter;
-await files.offerRecovery();
-if (!persistent) files.toast('Browser storage is unavailable here (private window?), so your work will not survive closing this tab. Use Save to keep a file.');
+await files.start();
+if (!persistent) files.toast('Browser storage is unavailable here (private window?), so your work will not survive closing this tab. Export a .2dope file to keep it.');
