@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { DEFAULT_EXPORT, framesToExport, PASSES, sanitizeName, scaledSize, type ExportOptions, type Pass } from '../io/exportplan';
 import { exportSequence } from '../io/exportseq';
+import { compLength, isPlainFlipbook } from '../core/comp';
 
 const KEY = '2dope.m1.export';
 
@@ -156,16 +157,18 @@ export class ExportUI {
   private summary(): void {
     const o = this.opts;
     const p = this.app.project;
-    const frames = framesToExport(p.exposures, o.range, this.app.selection);
-    const unique = new Set(frames.map((f) => f.drawing)).size;
-    const sz = scaledSize(p.width, p.height, o.scale);
+    const plain = isPlainFlipbook(p.comp);
+    const picked = framesToExport(p.exposures, o.range, this.app.selection);
+    const frames = plain || o.range === 'selected' ? picked : Array.from({ length: compLength(p.comp, p.comps) });
+    const unique = plain ? new Set(picked.map((f) => f.drawing)).size : frames.length;
+    const sz = plain ? scaledSize(p.width, p.height, o.scale) : scaledSize(p.comp.width, p.comp.height, o.scale);
     const s = this.dialog.querySelector<HTMLElement>('.xsummary');
     const go = this.dialog.querySelector<HTMLButtonElement>('.xgo');
     if (go) go.disabled = !frames.length || !o.passes.length;
     if (s)
       s.textContent = !o.passes.length
         ? 'Pick at least one pass.'
-        : `${frames.length} frames × ${o.passes.length} pass${o.passes.length === 1 ? '' : 'es'} = ${frames.length * o.passes.length} images, ${sz.w}×${sz.h}. ${unique} distinct drawing${unique === 1 ? '' : 's'} to render. Saved as ${o.name}/…/${o.name}_${String(o.start).padStart(4, '0')}.png in a .zip.`;
+        : `${frames.length} frames × ${o.passes.length} pass${o.passes.length === 1 ? '' : 'es'} = ${frames.length * o.passes.length} images, ${sz.w}×${sz.h}. ${plain ? `${unique} distinct drawing${unique === 1 ? '' : 's'} to render.` : `The whole shot (layers, motion, camera) is rendered; frames that do not change are written once.`} Saved as ${o.name}/…/${o.name}_${String(o.start).padStart(4, '0')}.png in a .zip.`;
   }
 
   private async run(): Promise<void> {

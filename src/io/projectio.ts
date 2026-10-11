@@ -2,7 +2,7 @@ import { Project, type Drawing, type PlaneRef } from '../core/project';
 import { recordSaved, type AssetSource } from '../core/residency';
 import { encodePng, isBlank } from './codec';
 import { hashBytes } from './hash';
-import { FORMAT, SCHEMA, type DrawingFile, type ProjectFile } from './schema';
+import { compFile, compsFromFile, foldersOf, FORMAT, SCHEMA, type CompFile, type DrawingFile, type ProjectFile } from './schema';
 
 export const APP_VERSION = '2Dope 0.0.2';
 
@@ -40,12 +40,17 @@ export interface CaptureOptions {
  * encode completes. Parked drawings are not decoded: their stored keys or bytes are used as is.
  */
 export function captureProject(project: Project, opt: CaptureOptions = { mode: 'library' }): Capture {
-  const exposures = project.exposures.map((e) => ({ ...e }));
-  const used = [...new Set(exposures.map((e) => e.drawing))];
+  // comps are plain data: serialising them now snapshots this exact moment
+  const comps: Record<string, CompFile> = {};
+  for (const c of project.comps.values()) comps[c.id] = compFile(c);
+  const folders: ProjectFile['folders'] = {};
+  for (const f of project.folders) folders[f.id] = { name: f.name, parent: f.parent };
+  const used = [...project.usedDrawings()];
+  const main = project.comps.has(project.main) ? project.main : [...project.comps.keys()][0]!;
   const base = {
     name: project.name,
     created: project.created,
-    fps: project.fps,
+    fps: project.comps.get(main)?.fps ?? 12,
     width: project.width,
     height: project.height,
   };
@@ -102,7 +107,9 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
         modified: new Date().toISOString(),
         canvas: { width: base.width, height: base.height },
         fps: base.fps,
-        layers: [{ id: 'layer1', type: 'drawing', name: 'Drawing', exposures }],
+        main,
+        comps,
+        folders,
         drawings,
       };
       return {
@@ -133,16 +140,17 @@ export function loadProjectFile(file: ProjectFile): Loaded {
   const project = new Project(file.canvas.width, file.canvas.height, false);
   project.name = file.name;
   project.created = file.created;
-  project.fps = file.fps;
-  if (file.layers.length > 1) warnings.push(`This project has ${file.layers.length} layers; this version of 2Dope only opens the first.`);
-  const layer = file.layers[0]!;
-  const used = [...new Set(layer.exposures.map((e) => e.drawing))];
-  for (const id of used) {
-    const f = file.drawings[id]!;
-    const ref = (key: string | null): PlaneRef | null => (key ? { key, bytes: null } : null);
+  for (const [id, c] of compsFromFile(file)) project.comps.set(id, c);
+  project.folders = foldersOf(file);
+  project.main = file.main;
+  project.activeComp = file.main;
+  const ref = (key: string | null): PlaneRef | null => (key ? { key, bytes: null } : null);
+  for (const [id, f] of Object.entries(file.drawings)) {
     const d = project.adopt(id, f.num, f.vectors, f.role ?? null, { rev: 0, line: ref(f.line), fill: ref(f.fill) });
     d.saved = { rev: 0, line: f.line, fill: f.fill };
   }
-  project.exposures = layer.exposures.map((e) => ({ ...e }));
+  // edit the first drawings layer of the shot
+  const first = project.comp.layers.find((l) => l.kind === 'drawings');
+  if (first) project.activeLayer = first.id;
   return { project, warnings };
 }

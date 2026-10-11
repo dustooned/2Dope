@@ -59,6 +59,14 @@ npm run dev:lan
 - **Mark K / B / I:** label drawings as **key**, **breakdown** or **inbetween** (badge on the block; click again to clear). **Keys only** limits onion skin to key drawings.
 - **Zoom** slider for long shots. **Delete** removes all selected drawings (undoable).
 
+## Comps, layers, keyframes, camera (data model)
+
+- A project now holds **comps** (the shot and any precomps). A comp is a stack of **layers**: drawings (what the strip and X-sheet edit), **precomps** (another comp placed as one layer, looping if you like), **cameras** (pan, rotate, zoom) and **nulls** (handles to parent to).
+- Every layer has a transform (anchor, position, scale, rotation, opacity), a blend mode, a parent, and in/out points. **Everything is keyframable** with Linear, Ease in, Ease out, Ease in-out or Hold, all built on one bezier model that maps 1:1 to Blender F-curves.
+- **Export** renders the whole shot (layers, motion, camera, precomps) when there is more than one plain layer; frames that do not change are written once. A plain flipbook exports exactly as before.
+- Files are now schema 2 (see `docs/project-format.md`); older projects upgrade on open.
+- The editing UI for layers and keys (the Motion workspace) comes next.
+
 ## Gallery and New project
 
 - **Projects** (top-left of the toolbar, or ☰ menu) opens the **gallery**: every project as a card with its picture, name, size and age. Tap to open; **Esc** or **← Drawing** goes back.

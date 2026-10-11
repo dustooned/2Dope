@@ -3,7 +3,9 @@ import { drawVectorStroke } from '../brush/vector';
 import { paintDrawing, type Drawing, type Project } from '../core/project';
 import { strokeLength } from '../core/stroke';
 import { encodePng } from './codec';
-import { buildManifest, entryPath, framesToExport, scaledSize, type ExportOptions, type Pass } from './exportplan';
+import { buildManifest, entryPath, framesToExport, scaledSize, type ExportOptions, type Pass, type PlannedFrame } from './exportplan';
+import { compLength, frameContent, isPlainFlipbook } from '../core/comp';
+import { drawComp, releaseScratch } from '../view/composite';
 import { APP_VERSION } from './projectio';
 import { writeZip, type ZipFile } from './zip';
 
@@ -60,10 +62,20 @@ function drawPass(g: CanvasRenderingContext2D, d: Drawing, pass: Pass, opts: Exp
   }
 }
 
+/** One distinct image to render (per pass); frames that look the same share one. */
+interface Unit {
+  key: string;
+  label: string;
+  drawings: Drawing[];
+  draw(g: CanvasRenderingContext2D, pass: Pass): void;
+}
+
 /**
  * Render the shot as PNG sequences (one folder per pass) plus an export.json describing them, and
- * return the ZIP. Each distinct drawing is rendered once per pass; frames that hold a drawing
- * reuse the same bytes. The caller should not edit the project while this runs.
+ * return the ZIP. A plain flipbook renders each distinct drawing once per pass; a shot with
+ * layers, motion or a camera renders the whole comp per frame, and frames that come out the same
+ * (a hold with nothing moving) still share one image. The caller should not edit the project
+ * while this runs.
  */
 export async function exportSequence(
   project: Project,
@@ -72,17 +84,46 @@ export async function exportSequence(
   onProgress: (p: ExportProgress) => void,
   signal?: AbortSignal,
   /** Keep a drawing's pixels live while it renders (parked drawings come back first). */
-  hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void } = {
-    pin: async () => {},
-    unpin: () => {},
-  },
+  hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void } = { pin: async () => {}, unpin: () => {} },
 ): Promise<{ zip: Uint8Array; frames: number; images: number }> {
-  const frames = framesToExport(project.exposures, opts.range, selected);
-  if (!frames.length) throw new Error('There are no frames to export.');
   if (!opts.passes.length) throw new Error('Pick at least one pass to export.');
-  const { w, h } = scaledSize(project.width, project.height, opts.scale);
-  const unique = [...new Set(frames.map((f) => f.drawing))];
-  const total = unique.length * opts.passes.length;
+  const comp = project.comp;
+  const composite = !isPlainFlipbook(comp);
+  const pageW = composite ? comp.width : project.width;
+  const pageH = composite ? comp.height : project.height;
+  const { w, h } = scaledSize(pageW, pageH, opts.scale);
+
+  // frame -> unit key, and the units in first-seen order
+  const frameKeys: string[] = [];
+  const units = new Map<string, Unit>();
+  let planned: PlannedFrame[];
+  if (!composite) {
+    planned = framesToExport(project.exposures, opts.range, selected);
+    for (const f of planned) {
+      frameKeys.push(f.drawing);
+      if (!units.has(f.drawing)) {
+        const d = project.drawing(f.drawing);
+        units.set(f.drawing, { key: f.drawing, label: `Drawing ${d.num}`, drawings: [d], draw: (g, pass) => drawPass(g, d, pass, opts, w, h) });
+      }
+    }
+  } else {
+    // the whole comp, frame by frame ("selected" still picks the frames of the selected drawings)
+    const length = compLength(comp, project.comps);
+    const pick = opts.range === 'selected' && selected.length ? new Set(framesToExport(project.exposures, 'selected', selected).map((f) => f.frame)) : null;
+    planned = [];
+    for (let frame = 0; frame < length; frame++) {
+      if (pick && !pick.has(frame)) continue;
+      planned.push({ frame, exposure: -1, drawing: '' });
+      const fc = frameContent(project.comps, comp.id, frame);
+      frameKeys.push(fc.key);
+      if (!units.has(fc.key)) {
+        const drawings = [...fc.drawings].map((id) => project.drawings.get(id)).filter((d): d is Drawing => !!d);
+        units.set(fc.key, { key: fc.key, label: `Frame ${frame + 1}`, drawings, draw: (g, pass) => drawCompPass(g, project, comp.id, frame, pass, opts, w, h) });
+      }
+    }
+  }
+  if (!planned.length) throw new Error('There are no frames to export.');
+  const total = units.size * opts.passes.length;
 
   const canvas = makeCanvas(w, h);
   const g = canvas.getContext('2d');
@@ -101,80 +142,78 @@ export async function exportSequence(
     if (failure) throw failure;
     if (signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
   };
-  for (const id of unique) {
-    const d = project.drawing(id);
-    check();
-    await hold.pin(d);
-    try {
-      for (const pass of opts.passes) {
-        check();
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        g.clearRect(0, 0, w, h);
-        g.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
-        drawPass(g, d, pass, opts, w, h);
-        const key = `${id}|${pass}`;
-        const label = `Drawing ${d.num}, ${pass}`;
-        const job: Promise<void> = encodePng(canvas).then(
-          (b) => {
-            bytes.set(key, b);
-            done++;
-            onProgress({ done, total, label });
-          },
-          (e) => {
-            failure ??= e;
-          },
-        );
-        const tracked = job.finally(() => pending.delete(tracked));
-        pending.add(tracked);
-        if (pending.size >= MAX_IN_FLIGHT) await Promise.race(pending);
-        // let the browser paint the progress bar between renders
-        await yieldToBrowser();
+  try {
+    for (const unit of units.values()) {
+      check();
+      for (const d of unit.drawings) await hold.pin(d);
+      try {
+        for (const pass of opts.passes) {
+          check();
+          g.setTransform(1, 0, 0, 1, 0, 0);
+          g.clearRect(0, 0, w, h);
+          g.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
+          unit.draw(g, pass);
+          const key = `${unit.key}|${pass}`;
+          const label = `${unit.label}, ${pass}`;
+          const job: Promise<void> = encodePng(canvas).then(
+            (b) => {
+              bytes.set(key, b);
+              done++;
+              onProgress({ done, total, label });
+            },
+            (e) => {
+              failure ??= e;
+            },
+          );
+          const tracked = job.finally(() => pending.delete(tracked));
+          pending.add(tracked);
+          if (pending.size >= MAX_IN_FLIGHT) await Promise.race(pending);
+          // let the browser paint the progress bar between renders
+          await yieldToBrowser();
+        }
+      } finally {
+        for (const d of unit.drawings) hold.unpin(d);
       }
-    } finally {
-      hold.unpin(d);
     }
+    await Promise.all(pending);
+  } finally {
+    if (composite) releaseScratch();
   }
-  await Promise.all(pending);
   check();
   onProgress({ done: total, total, label: 'Packing files' });
 
   let from = 0;
   const exposures = project.exposures.map((e) => {
     const d = project.drawing(e.drawing);
-    const row = {
-      drawing: d.num,
-      fromFrame: from,
-      length: e.length,
-      ...(d.role ? { role: d.role } : {}),
-    };
+    const row = { drawing: d.num, fromFrame: from, length: e.length, ...(d.role ? { role: d.role } : {}) };
     from += e.length;
     return row;
   });
-  const manifest = buildManifest({
-    opts,
-    savedBy: APP_VERSION,
-    fps: project.fps,
-    width: project.width,
-    height: project.height,
-    frames,
-    exposures,
+  const manifest = buildManifest({ opts, savedBy: APP_VERSION, fps: project.fps, width: pageW, height: pageH, frames: planned, exposures });
+  const files: ZipFile[] = [{ name: `${opts.name}/export.json`, data: new TextEncoder().encode(JSON.stringify(manifest, null, 1)) }];
+  frameKeys.forEach((k, i) => {
+    for (const pass of opts.passes) files.push({ name: entryPath(opts.name, pass, opts.start + i), data: bytes.get(`${k}|${pass}`)! });
   });
-  const files: ZipFile[] = [
-    {
-      name: `${opts.name}/export.json`,
-      data: new TextEncoder().encode(JSON.stringify(manifest, null, 1)),
-    },
-  ];
-  frames.forEach((f, i) => {
-    for (const pass of opts.passes)
-      files.push({
-        name: entryPath(opts.name, pass, opts.start + i),
-        data: bytes.get(`${f.drawing}|${pass}`)!,
-      });
-  });
-  return {
-    zip: writeZip(files),
-    frames: frames.length,
-    images: files.length - 1,
-  };
+  return { zip: writeZip(files), frames: planned.length, images: files.length - 1 };
+}
+
+/** One pass of a whole comp frame. */
+function drawCompPass(g: CanvasRenderingContext2D, project: Project, compId: string, frame: number, pass: Pass, opts: ExportOptions, w: number, h: number): void {
+  if (pass === 'combined' && opts.background === 'white') {
+    g.save();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, w, h);
+    g.restore();
+  }
+  const planes = pass === 'lines' ? 'line' : pass === 'fills' ? 'fill' : 'all';
+  drawComp(g, project, compId, frame, { planes, backgrounds: pass === 'combined' });
+  if (pass === 'matte') {
+    g.save();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, w, h);
+    g.restore();
+  }
 }

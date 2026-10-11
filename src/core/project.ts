@@ -1,6 +1,7 @@
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { strokeLength, type StrokeRecord } from './stroke';
+import { drawingsLayer, newComp, type BinFolder, type Comp, type DrawingsLayer } from './comp';
 import { drawingAt, totalFrames, type Exposure } from './timeline';
 
 /** What a drawing is for in the animation: a key pose, a breakdown between keys, or an inbetween. */
@@ -87,18 +88,32 @@ function blankDrawing(id: string, num: number): Omit<Drawing, 'line'> {
 }
 
 /**
- * The project for the current slice: one drawing layer (its exposures) plus the drawings it shows.
- * Drawings are never deleted from the map while undo may still need them.
+ * A project: comps (the shot and its precomps), the drawings their layers show, and the bin
+ * folders. Drawings live in one pool and are referenced by id, so a drawing can appear in several
+ * layers. Drawings are never deleted from the pool while undo may still need them.
+ *
+ * The flipbook strip and X-sheet edit one **active drawings layer** of one **active comp**;
+ * `exposures`, `fps` and `length` are shortcuts to them, so those views did not have to change.
  */
 export class Project {
   name = 'Untitled';
   created = new Date().toISOString();
-  fps = 12;
-  exposures: Exposure[];
   readonly drawings = new Map<string, Drawing>();
+  readonly comps = new Map<string, Comp>();
+  folders: BinFolder[] = [];
+  /** The comp that is "the shot" (what export and Blender take by default). */
+  main = 'c1';
+  /** The comp being edited. */
+  activeComp = 'c1';
+  /** The drawings layer the strip and X-sheet edit. */
+  activeLayer = 'L1';
   private nextNum = 1;
 
-  /** `blank = false` makes an empty shell for the loader to fill (no first drawing). */
+  /**
+   * `width`×`height` is the page size of every drawing. A blank project gets one comp of that
+   * size with one drawings layer showing one empty drawing. `blank = false` makes an empty shell
+   * for the loader to fill.
+   */
   constructor(
     readonly width: number,
     readonly height: number,
@@ -106,10 +121,72 @@ export class Project {
   ) {
     if (blank) {
       const d = this.newDrawing();
-      this.exposures = [{ drawing: d.id, length: 1 }];
-    } else {
-      this.exposures = [];
+      const c = newComp('c1', 'Shot', width, height, 12);
+      c.layers.push(drawingsLayer('L1', 'Drawing', [{ drawing: d.id, length: 1 }], width, height));
+      this.comps.set(c.id, c);
     }
+  }
+
+  /** The comp being edited. */
+  get comp(): Comp {
+    const c = this.comps.get(this.activeComp) ?? this.comps.get(this.main) ?? this.comps.values().next().value;
+    if (!c) throw new Error('the project has no comps');
+    return c;
+  }
+
+  /** The drawings layer being edited (the first one of the comp if the chosen one is gone). */
+  get layer(): DrawingsLayer {
+    const c = this.comp;
+    const chosen = c.layers.find((l) => l.id === this.activeLayer);
+    if (chosen && chosen.kind === 'drawings') return chosen;
+    const first = c.layers.find((l): l is DrawingsLayer => l.kind === 'drawings');
+    if (first) {
+      this.activeLayer = first.id;
+      return first;
+    }
+    // a comp without drawings: give it one so the editors always have something to work on
+    const d = this.newDrawing();
+    const l = drawingsLayer(this.newId('L'), 'Drawing', [{ drawing: d.id, length: 1 }], this.width, this.height, c.width, c.height);
+    c.layers.push(l);
+    this.activeLayer = l.id;
+    return l;
+  }
+
+  /** The active layer's exposures. */
+  get exposures(): Exposure[] {
+    return this.layer.exposures;
+  }
+
+  set exposures(ex: Exposure[]) {
+    this.layer.exposures = ex;
+  }
+
+  /** The active comp's frame rate. */
+  get fps(): number {
+    return this.comp.fps;
+  }
+
+  set fps(n: number) {
+    this.comp.fps = n;
+  }
+
+  /** Frames in the active layer (the strip's length). */
+  get length(): number {
+    return totalFrames(this.exposures);
+  }
+
+  /** A fresh id with a prefix (c = comp, L = layer, f = folder) not used anywhere in the project. */
+  newId(prefix: string): string {
+    const used = new Set<string>([...this.comps.keys(), ...this.folders.map((f) => f.id)]);
+    for (const c of this.comps.values()) for (const l of c.layers) used.add(l.id);
+    for (let i = 1; ; i++) if (!used.has(`${prefix}${i}`)) return `${prefix}${i}`;
+  }
+
+  /** Every drawing id some drawings layer shows (the ones a save must keep). */
+  usedDrawings(): Set<string> {
+    const used = new Set<string>();
+    for (const c of this.comps.values()) for (const l of c.layers) if (l.kind === 'drawings') for (const e of l.exposures) used.add(e.drawing);
+    return used;
   }
 
   /**
@@ -130,12 +207,9 @@ export class Project {
     return null;
   }
 
-  get length(): number {
-    return totalFrames(this.exposures);
-  }
-
   newDrawing(): Drawing {
-    const num = this.nextNum++;
+    let num = this.nextNum++;
+    while (this.drawings.has(`d${num}`)) num = this.nextNum++;
     const d: Drawing = { ...blankDrawing(`d${num}`, num), line: makeCanvas(this.width, this.height) };
     this.drawings.set(d.id, d);
     return d;
@@ -157,6 +231,7 @@ export class Project {
     return d;
   }
 
+  /** The drawing the active layer shows at a frame of its own time. */
   drawingAtFrame(frame: number): Drawing {
     const id = drawingAt(this.exposures, frame) ?? this.exposures[0]!.drawing;
     return this.drawing(id);

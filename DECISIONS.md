@@ -73,6 +73,18 @@
 - **export.json** is the seed of the Blender manifest (milestone 2).
 - Not built yet: exporting while you keep drawing, video/GIF/WebM/ProRes, in/out range markers, PNG-with-project bundle.
 
+## 2026-10-11: Library, memory, gallery, data model (steps 1-3 after M1)
+
+- **Library, not files**: every project lives on the device and is always saved (Procreate Dreams' Theater). `.2dope` is for backup and moving between devices. Assets are shared across projects by content hash; a save is one IndexedDB transaction.
+- **Residency instead of tiles (for now)**: only the drawings in use keep canvases; the rest are parked as stored PNGs. Simple, and it fixes the iPad memory crash; sparse tiles stay an option for 4K.
+- **One model, three workspaces** (doc 11): comps → layers (drawings, precomp, camera, null) → props with keys. The strip and X-sheet keep editing one active drawings layer through `project.exposures`, so they did not change.
+- **Keys follow After Effects semantics in a normalised form**: per side linear/bezier/hold with slope + influence. The four Dreams easings are presets; the numbers map 1:1 to Blender F-curve handles. Keys live in layer time.
+- **Parenting keeps the child in place** (re-expressed in the parent's space), like After Effects.
+- **Cameras**: several allowed, the topmost visible one frames the comp (After Effects rule). The UI will start with one.
+- **No node graph**: parenting, precomps and the layer list cover what Harmony's node view does for us, and work by touch.
+- **Export renders the comp** when it is more than one plain layer; identical frames are written once (frame signature of drawings + matrices + opacity).
+- Not built yet: Motion workspace UI, precompose/enter/exit, pins (exposed properties), time remap, masks/mattes, motion paths, expressions.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

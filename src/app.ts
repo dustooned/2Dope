@@ -478,10 +478,22 @@ export class App {
     }
   }
 
+  /**
+   * Make a layer the one the strip and X-sheet edit (undo of a timeline edit switches back to the
+   * layer it changed, so it never lands on another one).
+   */
+  focusLayer(id: string): void {
+    if (this.project.activeLayer === id) return;
+    this.project.activeLayer = id;
+    this.selection = [];
+    this.onionCache.clear();
+  }
+
   /** Run a timeline edit as an undoable command. */
   private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, keepSelection = false): void {
     if (this.live) return;
-    const beforeEx = this.project.exposures;
+    const layer = this.project.layer;
+    const beforeEx = layer.exposures;
     const beforeFrame = this.frame;
     const r = fn(beforeEx);
     if (r.ex === beforeEx) return;
@@ -490,7 +502,8 @@ export class App {
         label,
         do: () => {
           if (!keepSelection) this.selection = [];
-          this.project.exposures = r.ex;
+          this.focusLayer(layer.id);
+          layer.exposures = r.ex;
           this.frame = Math.min(r.frame, this.project.length - 1);
           this.requestRender();
           this.onFrameChange();
@@ -498,7 +511,8 @@ export class App {
         },
         undo: () => {
           if (!keepSelection) this.selection = [];
-          this.project.exposures = beforeEx;
+          this.focusLayer(layer.id);
+          layer.exposures = beforeEx;
           this.frame = Math.min(beforeFrame, this.project.length - 1);
           this.requestRender();
           this.onFrameChange();
@@ -602,9 +616,11 @@ export class App {
   /** At the end of a drag: record it as one undoable step (before = the exposures when the drag began). */
   commitExposures(label: string, before: Exposure[], after: Exposure[]): void {
     if (after === before) return;
+    const layer = this.project.layer;
     const set = (ex: Exposure[]) => {
       this.selection = [];
-      this.project.exposures = ex;
+      this.focusLayer(layer.id);
+      layer.exposures = ex;
       this.frame = Math.min(this.frame, this.project.length - 1);
       this.requestRender();
       this.onFrameChange();

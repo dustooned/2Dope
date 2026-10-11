@@ -1,5 +1,4 @@
-import { parseProjectFile, type ProjectFile } from './schema';
-import { totalFrames } from '../core/timeline';
+import { mainLength, parseProjectFile, type ProjectFile } from './schema';
 
 /**
  * The project library on this device: many projects, folders, restore points, and one shared pool
@@ -100,7 +99,6 @@ export function newId(prefix: string): string {
 /** A project card describing a project file. */
 export function metaFromFile(id: string, file: ProjectFile, base: Partial<ProjectMeta> = {}): ProjectMeta {
   const now = Date.now();
-  const layer = file.layers[0];
   return {
     id,
     name: file.name,
@@ -108,7 +106,7 @@ export function metaFromFile(id: string, file: ProjectFile, base: Partial<Projec
     created: base.created ?? (Date.parse(file.created) || now),
     modified: base.modified ?? (Date.parse(file.modified) || now),
     opened: base.opened ?? now,
-    frames: layer ? totalFrames(layer.exposures) : 0,
+    frames: mainLength(file),
     drawings: Object.keys(file.drawings).length,
     fps: file.fps,
     width: file.canvas.width,
@@ -459,9 +457,9 @@ export function assetsOf(p: ProjectFile): Set<string> {
 
 /** Does a saved project have anything worth keeping? */
 export function hasContent(file: ProjectFile): boolean {
-  const layer = file.layers[0];
-  if (!layer) return false;
-  if (layer.exposures.length > 1 || (layer.exposures[0]?.length ?? 0) > 1) return true;
+  const comps = Object.values(file.comps);
+  if (comps.length > 1 || comps.some((c) => c.layers.length > 1)) return true;
+  if (mainLength(file) > 1) return true;
   return Object.values(file.drawings).some((d) => d.line || d.fill || d.vectors.length > 0);
 }
 

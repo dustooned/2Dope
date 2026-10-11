@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { PRESETS } from '../core/brush';
 import { hashBytes } from './hash';
-import { assetPaths, parseProjectFile, SCHEMA, SchemaError, stringifyProjectFile, validateProjectFile, type ProjectFile } from './schema';
+import { assetPaths, compFile, compsFromFile, mainLength, parseProjectFile, SCHEMA, SchemaError, stringifyProjectFile, validateProjectFile, type ProjectFile } from './schema';
 import { crc32, readZip, safeName, writeZip, ZipError } from './zip';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
+
+const T = (w: number, h: number) => ({
+  anchor: { value: [w / 2, h / 2] as [number, number] },
+  position: { value: [w / 2, h / 2] as [number, number] },
+  scale: { value: [100, 100] as [number, number] },
+  rotation: { value: 0 },
+  opacity: { value: 100 },
+});
 
 function sample(): ProjectFile {
   return {
@@ -16,17 +24,40 @@ function sample(): ProjectFile {
     modified: '2026-10-10T00:00:00.000Z',
     canvas: { width: 1920, height: 1080 },
     fps: 12,
-    layers: [
-      {
-        id: 'layer1',
-        type: 'drawing',
-        name: 'Drawing',
-        exposures: [
-          { drawing: 'd1', length: 2 },
-          { drawing: 'd2', length: 1 },
+    main: 'c1',
+    folders: {},
+    comps: {
+      c1: {
+        name: 'Shot',
+        width: 1920,
+        height: 1080,
+        fps: 12,
+        duration: null,
+        background: null,
+        folder: null,
+        layers: [
+          {
+            id: 'layer1',
+            name: 'Drawing',
+            kind: 'drawings',
+            start: 0,
+            in: 0,
+            out: null,
+            parent: null,
+            visible: true,
+            locked: false,
+            label: 0,
+            blend: 'normal',
+            transform: T(1920, 1080),
+            exposures: [
+              { drawing: 'd1', length: 2 },
+              { drawing: 'd2', length: 1 },
+            ],
+            loop: false,
+          },
         ],
       },
-    ],
+    },
     drawings: {
       d1: { num: 1, line: 'assets/abc-1.png', fill: null, vectors: [] },
       d2: {
@@ -50,6 +81,9 @@ function sample(): ProjectFile {
     },
   };
 }
+
+/** The exposures of the shot's first layer. */
+const ex = (p: ProjectFile) => p.comps[p.main]!.layers[0]!.exposures!;
 
 describe('zip', () => {
   it('round-trips files byte for byte', async () => {
@@ -141,7 +175,7 @@ describe('project schema', () => {
   it('round-trips a valid project through stringify and parse', () => {
     const p = sample();
     const again = parseProjectFile(stringifyProjectFile(p));
-    expect(again.layers[0]!.exposures).toEqual(p.layers[0]!.exposures);
+    expect(ex(again)).toEqual(ex(p));
     expect(again.drawings.d2!.vectors[0]!.points).toHaveLength(2);
     expect(assetPaths(again)).toEqual(new Set(['assets/abc-1.png', 'assets/def-2.png']));
   });
@@ -159,16 +193,16 @@ describe('project schema', () => {
 
   it('catches broken references and bad numbers', () => {
     const missing = sample();
-    missing.layers[0]!.exposures.push({ drawing: 'nope', length: 1 });
+    ex(missing).push({ drawing: 'nope', length: 1 });
     expect(() => validateProjectFile(missing)).toThrow(/missing drawing/);
     const zero = sample();
-    zero.layers[0]!.exposures[0]!.length = 0;
+    ex(zero)[0]!.length = 0;
     expect(() => validateProjectFile(zero)).toThrow(SchemaError);
     const huge = sample();
     huge.canvas.width = 100000;
     expect(() => validateProjectFile(huge)).toThrow(SchemaError);
     const fps = sample();
-    fps.fps = 0;
+    fps.comps.c1!.fps = 0;
     expect(() => validateProjectFile(fps)).toThrow(SchemaError);
   });
 
@@ -184,13 +218,13 @@ describe('project schema', () => {
 
   it('keeps exposure notes (trimmed, capped) and drops empty ones', () => {
     const p = sample();
-    p.layers[0]!.exposures[0]!.note = '  walks in  ';
-    p.layers[0]!.exposures[1]!.note = '   ';
+    ex(p)[0]!.note = '  walks in  ';
+    ex(p)[1]!.note = '   ';
     const ok = validateProjectFile(p);
-    expect(ok.layers[0]!.exposures[0]!.note).toBe('walks in');
-    expect(ok.layers[0]!.exposures[1]!.note).toBeUndefined();
-    p.layers[0]!.exposures[0]!.note = 'x'.repeat(500);
-    expect(validateProjectFile(p).layers[0]!.exposures[0]!.note!.length).toBe(200);
+    expect(ex(ok)[0]!.note).toBe('walks in');
+    expect(ex(ok)[1]!.note).toBeUndefined();
+    ex(p)[0]!.note = 'x'.repeat(500);
+    expect(ex(validateProjectFile(p))[0]!.note!.length).toBe(200);
   });
 
   it('refuses asset paths that could escape the archive', () => {
@@ -199,6 +233,60 @@ describe('project schema', () => {
       p.drawings.d1!.line = bad;
       expect(() => validateProjectFile(p), bad).toThrow(SchemaError);
     }
+  });
+
+  it('opens a schema 1 file as one comp holding its layer, placed exactly over the page', () => {
+    const v1 = {
+      format: '2dope',
+      schema: 1,
+      savedBy: 'old',
+      name: 'Old',
+      created: '2026-10-10T00:00:00.000Z',
+      modified: '2026-10-10T00:00:00.000Z',
+      canvas: { width: 1280, height: 720 },
+      fps: 24,
+      layers: [{ id: 'layer1', type: 'drawing', name: 'Drawing', exposures: [{ drawing: 'd1', length: 3, note: 'hi' }] }],
+      drawings: { d1: { num: 1, line: null, fill: null, vectors: [] } },
+    };
+    const p = validateProjectFile(v1);
+    expect(p.schema).toBe(SCHEMA);
+    expect(p.main).toBe('c1');
+    const c = p.comps.c1!;
+    expect([c.width, c.height, c.fps]).toEqual([1280, 720, 24]);
+    expect(c.layers[0]!.kind).toBe('drawings');
+    expect(c.layers[0]!.exposures).toEqual([{ drawing: 'd1', length: 3, note: 'hi' }]);
+    expect(c.layers[0]!.transform.position.value).toEqual([640, 360]);
+    expect(mainLength(p)).toBe(3);
+  });
+
+  it('round-trips layers, keys, cameras and precomps through the model', () => {
+    const p = sample();
+    p.comps.c1!.layers[0]!.transform.position = {
+      value: [960, 540],
+      keys: [
+        { f: 0, v: [960, 540], in: { interp: 'linear' }, out: { interp: 'bezier', slope: 0, influence: 0.33 } },
+        { f: 12, v: [1200, 540], in: { interp: 'bezier', slope: 0, influence: 0.33 }, out: { interp: 'linear' } },
+      ],
+    };
+    p.comps.c2 = { name: 'Walk', width: 500, height: 500, fps: 12, duration: 24, background: '#ffffff', folder: null, layers: [] };
+    p.comps.c1!.layers.unshift(
+      { id: 'cam', name: 'Camera', kind: 'camera', start: 0, in: 0, out: null, parent: null, visible: true, locked: false, label: 0, blend: 'normal', transform: T(1920, 1080), zoom: { value: 150 } },
+      { id: 'P', name: 'Walk', kind: 'comp', comp: 'c2', loop: true, start: 4, in: 4, out: null, parent: 'cam', visible: true, locked: false, label: 2, blend: 'multiply', transform: T(500, 500) },
+    );
+    const back = parseProjectFile(stringifyProjectFile(p));
+    const again = Object.fromEntries([...compsFromFile(back)].map(([id, c]) => [id, compFile(c)]));
+    expect(again).toEqual(back.comps);
+    expect(back.comps.c1!.layers[1]!.parent).toBe('cam');
+    expect(back.comps.c1!.layers[2]!.transform.position.keys).toHaveLength(2);
+  });
+
+  it('refuses a comp that contains itself and drops parents that do not exist', () => {
+    const p = sample();
+    p.comps.c1!.layers.push({ id: 'self', name: 'me', kind: 'comp', comp: 'c1', start: 0, in: 0, out: null, parent: null, visible: true, locked: false, label: 0, blend: 'normal', transform: T(10, 10) });
+    expect(() => validateProjectFile(p)).toThrow(/contains itself/);
+    const q = sample();
+    q.comps.c1!.layers[0]!.parent = 'ghost';
+    expect(validateProjectFile(q).comps.c1!.layers[0]!.parent).toBeNull();
   });
 
   it('fills in missing brush fields from the default brush and rejects bad strokes', () => {

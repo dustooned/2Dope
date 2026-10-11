@@ -1,4 +1,6 @@
+import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
 import { PRESETS, type BrushSettings } from '../core/brush';
+import { BLEND_MODES, compLength, wouldCycle, type BinFolder, type BlendMode, type Comp, type Layer, type Transform } from '../core/comp';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
 
 /**
@@ -11,7 +13,7 @@ import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 1;
+export const SCHEMA = 2;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -21,12 +23,67 @@ export interface ExposureFile {
   note?: string;
 }
 
+/** A keyframe side (see core/anim.ts). `slope` and `influence` only matter for bezier. */
+export interface SideFile {
+  interp: Interp;
+  slope?: number;
+  influence?: number;
+}
+
+export interface KeyFile<T extends Value = Value> {
+  f: number;
+  v: T;
+  in: SideFile;
+  out: SideFile;
+}
+
+/** An animatable value: `value` when still, `keys` (frame-sorted, layer time) when animated. */
+export interface PropFile<T extends Value = Value> {
+  value: T;
+  keys?: KeyFile<T>[];
+}
+
+export interface TransformFile {
+  anchor: PropFile<Vec2>;
+  position: PropFile<Vec2>;
+  scale: PropFile<Vec2>;
+  rotation: PropFile<number>;
+  opacity: PropFile<number>;
+}
+
 export interface LayerFile {
   id: string;
-  type: 'drawing';
   name: string;
-  /** Run-length exposures: show `drawing` for `length` frames. */
-  exposures: ExposureFile[];
+  kind: 'drawings' | 'comp' | 'camera' | 'null';
+  start: number;
+  in: number;
+  out: number | null;
+  parent: string | null;
+  visible: boolean;
+  locked: boolean;
+  label: number;
+  blend: BlendMode;
+  transform: TransformFile;
+  /** drawings: run-length exposures in layer time. */
+  exposures?: ExposureFile[];
+  /** drawings / comp: repeat the content. */
+  loop?: boolean;
+  /** comp: the nested comp's id. */
+  comp?: string;
+  /** camera: 100 = the comp as is. */
+  zoom?: PropFile<number>;
+}
+
+export interface CompFile {
+  name: string;
+  width: number;
+  height: number;
+  fps: number;
+  duration: number | null;
+  background: string | null;
+  folder: string | null;
+  /** Top of the stack first. */
+  layers: LayerFile[];
 }
 
 export interface DrawingFile {
@@ -48,9 +105,15 @@ export interface ProjectFile {
   name: string;
   created: string;
   modified: string;
+  /** Pixel size of every drawing's page. */
   canvas: { width: number; height: number };
+  /** The main comp's frame rate (repeated here for simple readers). */
   fps: number;
-  layers: LayerFile[];
+  /** The comp that is "the shot". */
+  main: string;
+  comps: Record<string, CompFile>;
+  /** Project bin folders. */
+  folders: Record<string, { name: string; parent: string | null }>;
   drawings: Record<string, DrawingFile>;
 }
 
@@ -61,6 +124,9 @@ const MAX_DRAWINGS = 20_000;
 const MAX_FRAMES = 1_000_000;
 const MAX_VECTORS = 50_000;
 const MAX_POINTS = 200_000;
+const MAX_COMPS = 500;
+const MAX_LAYERS = 1000;
+const MAX_KEYS = 100_000;
 export const ASSET_PATH = /^assets\/[A-Za-z0-9_.-]{1,120}\.png$/;
 const TOOLS: Tool[] = ['brush', 'eraser', 'pen', 'fill'];
 
@@ -126,14 +192,166 @@ function stroke(v: unknown): StrokeRecord {
   };
 }
 
+const ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** A still property as written in files. */
+function still<T extends Value>(value: T): PropFile<T> {
+  return { value };
+}
+
+function defaultTransformFile(w: number, h: number): TransformFile {
+  return { anchor: still<Vec2>([w / 2, h / 2]), position: still<Vec2>([w / 2, h / 2]), scale: still<Vec2>([100, 100]), rotation: still(0), opacity: still(100) };
+}
+
+/**
+ * Schema 1 had one list of drawing layers and no comps. It becomes one comp (the shot) holding
+ * those layers, each placed exactly over the page as before.
+ */
+function from1to2(raw: Record<string, unknown>): Record<string, unknown> {
+  const canvas = isObj(raw.canvas) ? raw.canvas : {};
+  const w = typeof canvas.width === 'number' ? canvas.width : 1920;
+  const h = typeof canvas.height === 'number' ? canvas.height : 1080;
+  const layers = Array.isArray(raw.layers) ? raw.layers : [];
+  const comp: CompFile = {
+    name: 'Shot',
+    width: w,
+    height: h,
+    fps: typeof raw.fps === 'number' ? raw.fps : 12,
+    duration: null,
+    background: null,
+    folder: null,
+    layers: layers.map((l: unknown, i: number) => {
+      const o = isObj(l) ? l : {};
+      return {
+        id: typeof o.id === 'string' && ID.test(o.id) ? o.id : `layer${i + 1}`,
+        name: typeof o.name === 'string' ? o.name : 'Drawing',
+        kind: 'drawings',
+        start: 0,
+        in: 0,
+        out: null,
+        parent: null,
+        visible: true,
+        locked: false,
+        label: 0,
+        blend: 'normal',
+        transform: defaultTransformFile(w, h),
+        exposures: (o.exposures as ExposureFile[]) ?? [],
+        loop: false,
+      } satisfies LayerFile;
+    }),
+  };
+  const out: Record<string, unknown> = { ...raw, schema: 2, main: 'c1', comps: { c1: comp }, folders: {} };
+  delete out.layers;
+  return out;
+}
+
+const INTERPS: Interp[] = ['linear', 'bezier', 'hold'];
+
+function side(v: unknown, what: string): SideFile {
+  if (!isObj(v)) throw new SchemaError(`${what} is not an object`);
+  if (!INTERPS.includes(v.interp as Interp)) throw new SchemaError(`${what} has an unknown interpolation`);
+  const out: SideFile = { interp: v.interp as Interp };
+  if (v.interp === 'bezier') {
+    out.slope = num(v.slope ?? 0, `${what} slope`, -1e3, 1e3);
+    out.influence = num(v.influence ?? 1 / 3, `${what} influence`, 0.01, 1);
+  }
+  return out;
+}
+
+function val(v: unknown, what: string, dims: 1 | 2): Value {
+  if (dims === 1) return num(v, what, -1e9, 1e9);
+  if (!Array.isArray(v) || v.length !== 2) throw new SchemaError(`${what} must be [x, y]`);
+  return [num(v[0], `${what} x`, -1e9, 1e9), num(v[1], `${what} y`, -1e9, 1e9)];
+}
+
+function prop<T extends Value>(v: unknown, what: string, dims: 1 | 2): PropFile<T> {
+  if (!isObj(v)) throw new SchemaError(`${what} is not an object`);
+  const out: PropFile<T> = { value: val(v.value, `${what} value`, dims) as T };
+  if (v.keys !== undefined) {
+    if (!Array.isArray(v.keys) || v.keys.length > MAX_KEYS) throw new SchemaError(`${what} has too many keys`);
+    const keys = v.keys.map((k: unknown, i: number) => {
+      if (!isObj(k)) throw new SchemaError(`${what} key ${i + 1} is not an object`);
+      return { f: int(k.f, `${what} key frame`, -MAX_FRAMES, MAX_FRAMES), v: val(k.v, `${what} key value`, dims) as T, in: side(k.in, `${what} key in`), out: side(k.out, `${what} key out`) };
+    });
+    keys.sort((a: KeyFile<T>, b: KeyFile<T>) => a.f - b.f);
+    for (let i = 1; i < keys.length; i++) if (keys[i]!.f === keys[i - 1]!.f) throw new SchemaError(`${what} has two keys on frame ${keys[i]!.f}`);
+    if (keys.length) out.keys = keys;
+  }
+  return out;
+}
+
+function transform(v: unknown, what: string): TransformFile {
+  if (!isObj(v)) throw new SchemaError(`${what} transform is missing`);
+  return {
+    anchor: prop<Vec2>(v.anchor, `${what} anchor`, 2),
+    position: prop<Vec2>(v.position, `${what} position`, 2),
+    scale: prop<Vec2>(v.scale, `${what} scale`, 2),
+    rotation: prop<number>(v.rotation, `${what} rotation`, 1),
+    opacity: prop<number>(v.opacity, `${what} opacity`, 1),
+  };
+}
+
+function exposureList(v: unknown, what: string, drawings: Record<string, DrawingFile>): ExposureFile[] {
+  if (!Array.isArray(v)) throw new SchemaError(`${what} has no exposures`);
+  let frames = 0;
+  return v.map((e: unknown) => {
+    if (!isObj(e)) throw new SchemaError('an exposure is not an object');
+    const drawing = str(e.drawing, 'exposure drawing', 64);
+    if (!drawings[drawing]) throw new SchemaError(`a frame refers to a missing drawing "${drawing}"`);
+    const length = int(e.length, 'exposure length', 1, MAX_FRAMES);
+    frames += length;
+    if (frames > MAX_FRAMES) throw new SchemaError('the timeline is too long');
+    const note = typeof e.note === 'string' && e.note.trim() ? e.note.trim().slice(0, 200) : undefined;
+    return note ? { drawing, length, note } : { drawing, length };
+  });
+}
+
+const KINDS: LayerFile['kind'][] = ['drawings', 'comp', 'camera', 'null'];
+
+function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, comps: Record<string, unknown>): LayerFile {
+  if (!isObj(v)) throw new SchemaError(`${what} is not an object`);
+  const kind = v.kind as LayerFile['kind'];
+  if (!KINDS.includes(kind)) throw new SchemaError(`${what} has an unknown kind`);
+  const id = str(v.id, `${what} id`, 64);
+  if (!ID.test(id)) throw new SchemaError(`${what} id "${id}" is not allowed`);
+  const out: LayerFile = {
+    id,
+    name: str(v.name ?? 'Layer', `${what} name`),
+    kind,
+    start: int(v.start ?? 0, `${what} start`, -MAX_FRAMES, MAX_FRAMES),
+    in: int(v.in ?? 0, `${what} in`, -MAX_FRAMES, MAX_FRAMES),
+    out: v.out === null || v.out === undefined ? null : int(v.out, `${what} out`, -MAX_FRAMES, MAX_FRAMES),
+    parent: typeof v.parent === 'string' && ID.test(v.parent) ? v.parent : null,
+    visible: v.visible !== false,
+    locked: v.locked === true,
+    label: typeof v.label === 'number' && Number.isInteger(v.label) && v.label >= 0 && v.label <= 16 ? v.label : 0,
+    blend: BLEND_MODES.includes(v.blend as BlendMode) ? (v.blend as BlendMode) : 'normal',
+    transform: transform(v.transform, what),
+  };
+  if (kind === 'drawings') {
+    out.exposures = exposureList(v.exposures, what, drawings);
+    if (!out.exposures.length) throw new SchemaError(`${what} has no frames`);
+    out.loop = v.loop === true;
+  } else if (kind === 'comp') {
+    const c = str(v.comp, `${what} comp`, 64);
+    if (!isObj(comps[c])) throw new SchemaError(`${what} refers to a missing comp "${c}"`);
+    out.comp = c;
+    out.loop = v.loop === true;
+  } else if (kind === 'camera') {
+    out.zoom = v.zoom === undefined ? still(100) : prop<number>(v.zoom, `${what} zoom`, 1);
+  }
+  return out;
+}
+
 /** Upgrade older files to the current schema, step by step. Refuse newer ones. */
-export function migrate(raw: unknown): Record<string, unknown> {
-  if (!isObj(raw)) throw new SchemaError('this is not a 2Dope project');
+export function migrate(input: unknown): Record<string, unknown> {
+  if (!isObj(input)) throw new SchemaError('this is not a 2Dope project');
+  let raw: Record<string, unknown> = input;
   if (raw.format !== FORMAT) throw new SchemaError('this is not a 2Dope project (wrong format)');
   const schema = raw.schema;
   if (typeof schema !== 'number' || !Number.isInteger(schema) || schema < 1) throw new SchemaError('the project has no valid schema version');
   if (schema > SCHEMA) throw new SchemaError(`this project was made by a newer version of 2Dope (file format ${schema}, this version reads up to ${SCHEMA}). Update 2Dope to open it.`);
-  // Future: if (schema < 2) raw = from1to2(raw); ...
+  if (schema < 2) raw = from1to2(raw);
   return raw;
 }
 
@@ -143,7 +361,6 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
   if (!isObj(raw.canvas)) throw new SchemaError('the project has no canvas size');
   const width = int(raw.canvas.width, 'canvas width', 1, MAX_DIM);
   const height = int(raw.canvas.height, 'canvas height', 1, MAX_DIM);
-  if (!Array.isArray(raw.layers) || raw.layers.length < 1) throw new SchemaError('the project has no layers');
   if (!isObj(raw.drawings)) throw new SchemaError('the project has no drawings');
   const ids = Object.keys(raw.drawings);
   if (ids.length > MAX_DRAWINGS) throw new SchemaError('the project has too many drawings');
@@ -167,23 +384,54 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     drawings[id] = { num: int(d.num, `drawing ${id} number`, 1, 1e9), ...planes, vectors: vectors.map(stroke), ...(role ? { role } : {}) };
   }
 
-  const layers: LayerFile[] = raw.layers.map((l: unknown, i: number) => {
-    if (!isObj(l)) throw new SchemaError(`layer ${i + 1} is not an object`);
-    if (l.type !== 'drawing') throw new SchemaError(`layer ${i + 1} has an unknown type`);
-    if (!Array.isArray(l.exposures) || l.exposures.length < 1) throw new SchemaError(`layer ${i + 1} has no frames`);
-    let frames = 0;
-    const exposures = l.exposures.map((e: unknown) => {
-      if (!isObj(e)) throw new SchemaError('an exposure is not an object');
-      const drawing = str(e.drawing, 'exposure drawing', 64);
-      if (!drawings[drawing]) throw new SchemaError(`a frame refers to a missing drawing "${drawing}"`);
-      const length = int(e.length, 'exposure length', 1, MAX_FRAMES);
-      frames += length;
-      if (frames > MAX_FRAMES) throw new SchemaError('the timeline is too long');
-      const note = typeof e.note === 'string' && e.note.trim() ? e.note.trim().slice(0, 200) : undefined;
-      return note ? { drawing, length, note } : { drawing, length };
+  if (!isObj(raw.comps)) throw new SchemaError('the project has no comps');
+  const compIds = Object.keys(raw.comps);
+  if (compIds.length < 1 || compIds.length > MAX_COMPS) throw new SchemaError('the project has no comps, or too many');
+  const folders: ProjectFile['folders'] = {};
+  if (isObj(raw.folders)) {
+    for (const [id, f] of Object.entries(raw.folders)) {
+      if (!ID.test(id) || !isObj(f)) continue;
+      folders[id] = { name: str(f.name ?? 'Folder', 'folder name'), parent: typeof f.parent === 'string' && f.parent !== id ? f.parent : null };
+    }
+    for (const f of Object.values(folders)) if (f.parent && !folders[f.parent]) f.parent = null;
+  }
+  let frames = 0;
+  const comps: Record<string, CompFile> = {};
+  for (const id of compIds) {
+    if (!ID.test(id)) throw new SchemaError(`comp id "${id}" is not allowed`);
+    const c = (raw.comps as Record<string, unknown>)[id];
+    if (!isObj(c)) throw new SchemaError(`comp ${id} is not an object`);
+    const cw = int(c.width, `comp ${id} width`, 1, MAX_DIM);
+    const ch = int(c.height, `comp ${id} height`, 1, MAX_DIM);
+    if (!Array.isArray(c.layers) || c.layers.length > MAX_LAYERS) throw new SchemaError(`comp ${id} has no layer list, or too many layers`);
+    const layerIds = new Set<string>();
+    const layers = c.layers.map((l: unknown, i: number) => {
+      const ly = layer(l, `comp ${id} layer ${i + 1}`, drawings, raw.comps as Record<string, unknown>);
+      if (layerIds.has(ly.id)) throw new SchemaError(`comp ${id} has two layers with id ${ly.id}`);
+      layerIds.add(ly.id);
+      if (ly.exposures) {
+        for (const e of ly.exposures) frames += e.length;
+        if (frames > MAX_FRAMES) throw new SchemaError('the timeline is too long');
+      }
+      return ly;
     });
-    return { id: str(l.id, 'layer id', 64), type: 'drawing' as const, name: str(l.name ?? 'Drawing', 'layer name'), exposures };
-  });
+    for (const ly of layers) if (ly.parent && (!layerIds.has(ly.parent) || ly.parent === ly.id)) ly.parent = null;
+    const bg = c.background;
+    comps[id] = {
+      name: str(c.name ?? 'Comp', `comp ${id} name`),
+      width: cw,
+      height: ch,
+      fps: int(c.fps, `comp ${id} fps`, 1, 120),
+      duration: c.duration === null || c.duration === undefined ? null : int(c.duration, `comp ${id} duration`, 1, MAX_FRAMES),
+      background: typeof bg === 'string' && /^#[0-9a-fA-F]{6}$/.test(bg) ? bg : null,
+      folder: typeof c.folder === 'string' && folders[c.folder] ? c.folder : null,
+      layers,
+    };
+  }
+  const main = typeof raw.main === 'string' && comps[raw.main] ? raw.main : compIds[0]!;
+  // a comp may not contain itself, directly or through other comps
+  const model = compsFromFile({ comps } as ProjectFile);
+  for (const c of model.values()) for (const l of c.layers) if (l.kind === 'comp' && wouldCycle(c.id, l.comp, model)) throw new SchemaError(`comp ${c.id} contains itself`);
 
   return {
     format: FORMAT,
@@ -193,8 +441,10 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     created: typeof raw.created === 'string' ? raw.created.slice(0, 40) : new Date(0).toISOString(),
     modified: typeof raw.modified === 'string' ? raw.modified.slice(0, 40) : new Date(0).toISOString(),
     canvas: { width, height },
-    fps: int(raw.fps, 'fps', 1, 120),
-    layers,
+    fps: comps[main]!.fps,
+    main,
+    comps,
+    folders,
     drawings,
   };
 }
@@ -227,4 +477,80 @@ export function stringifyProjectFile(p: ProjectFile): string {
   const text = JSON.stringify(p, null, 1);
   parseProjectFile(text);
   return text;
+}
+
+// ---------------------------------------------------------------------------------------------
+// File <-> model
+
+function sideOf(f: SideFile): Side {
+  return { interp: f.interp, slope: f.slope ?? (f.interp === 'linear' ? 1 : 0), influence: f.influence ?? 1 / 3 };
+}
+
+function propOf<T extends Value>(f: PropFile<T>): Prop<T> {
+  return { value: f.value, keys: (f.keys ?? []).map((k): Key<T> => ({ f: k.f, v: k.v, in: sideOf(k.in), out: sideOf(k.out) })) };
+}
+
+function sideFile(s: Side): SideFile {
+  return s.interp === 'bezier' ? { interp: 'bezier', slope: s.slope, influence: s.influence } : { interp: s.interp };
+}
+
+export function propFile<T extends Value>(p: Prop<T>): PropFile<T> {
+  const out: PropFile<T> = { value: p.value };
+  if (p.keys.length) out.keys = p.keys.map((k) => ({ f: k.f, v: k.v, in: sideFile(k.in), out: sideFile(k.out) }));
+  return out;
+}
+
+function transformOf(t: TransformFile): Transform {
+  return { anchor: propOf(t.anchor), position: propOf(t.position), scale: propOf(t.scale), rotation: propOf(t.rotation), opacity: propOf(t.opacity) };
+}
+
+function transformFile(t: Transform): TransformFile {
+  return { anchor: propFile(t.anchor), position: propFile(t.position), scale: propFile(t.scale), rotation: propFile(t.rotation), opacity: propFile(t.opacity) };
+}
+
+/** The comps of a (validated) file as model objects. */
+export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Comp> {
+  const out = new Map<string, Comp>();
+  for (const [id, c] of Object.entries(file.comps)) {
+    const layers: Layer[] = c.layers.map((l): Layer => {
+      const base = { id: l.id, name: l.name, start: l.start, in: l.in, out: l.out, parent: l.parent, visible: l.visible, locked: l.locked, label: l.label, blend: l.blend, transform: transformOf(l.transform) };
+      if (l.kind === 'drawings') return { ...base, kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), loop: !!l.loop };
+      if (l.kind === 'comp') return { ...base, kind: 'comp', comp: l.comp!, loop: !!l.loop };
+      if (l.kind === 'camera') return { ...base, kind: 'camera', zoom: propOf(l.zoom ?? still(100)) };
+      return { ...base, kind: 'null' };
+    });
+    out.set(id, { id, name: c.name, width: c.width, height: c.height, fps: c.fps, duration: c.duration, background: c.background, folder: c.folder, layers });
+  }
+  return out;
+}
+
+/** A comp as written in files. */
+export function compFile(c: Comp): CompFile {
+  return {
+    name: c.name,
+    width: c.width,
+    height: c.height,
+    fps: c.fps,
+    duration: c.duration,
+    background: c.background,
+    folder: c.folder,
+    layers: c.layers.map((l): LayerFile => {
+      const base: LayerFile = { id: l.id, name: l.name, kind: l.kind, start: l.start, in: l.in, out: l.out, parent: l.parent, visible: l.visible, locked: l.locked, label: l.label, blend: l.blend, transform: transformFile(l.transform) };
+      if (l.kind === 'drawings') return { ...base, exposures: l.exposures.map((e) => ({ ...e })), loop: l.loop };
+      if (l.kind === 'comp') return { ...base, comp: l.comp, loop: l.loop };
+      if (l.kind === 'camera') return { ...base, zoom: propFile(l.zoom) };
+      return base;
+    }),
+  };
+}
+
+export function foldersOf(file: Pick<ProjectFile, 'folders'>): BinFolder[] {
+  return Object.entries(file.folders ?? {}).map(([id, f]) => ({ id, name: f.name, parent: f.parent }));
+}
+
+/** The shot's length in frames. */
+export function mainLength(file: ProjectFile): number {
+  const comps = compsFromFile(file);
+  const c = comps.get(file.main);
+  return c ? compLength(c, comps) : 0;
 }

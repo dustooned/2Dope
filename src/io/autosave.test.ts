@@ -36,6 +36,7 @@ class FakeClock implements Clock {
 }
 
 function file(frames: number, asset?: string): ProjectFile {
+  const t = { anchor: { value: [50, 50] as [number, number] }, position: { value: [50, 50] as [number, number] }, scale: { value: [100, 100] as [number, number] }, rotation: { value: 0 }, opacity: { value: 100 } };
   return {
     format: FORMAT,
     schema: SCHEMA,
@@ -45,10 +46,25 @@ function file(frames: number, asset?: string): ProjectFile {
     modified: '2026-10-10T00:00:00.000Z',
     canvas: { width: 100, height: 100 },
     fps: 12,
-    layers: [{ id: 'layer1', type: 'drawing', name: 'Drawing', exposures: [{ drawing: 'd1', length: frames }] }],
+    main: 'c1',
+    folders: {},
+    comps: {
+      c1: {
+        name: 'Shot',
+        width: 100,
+        height: 100,
+        fps: 12,
+        duration: null,
+        background: null,
+        folder: null,
+        layers: [{ id: 'layer1', name: 'Drawing', kind: 'drawings', start: 0, in: 0, out: null, parent: null, visible: true, locked: false, label: 0, blend: 'normal', transform: t, exposures: [{ drawing: 'd1', length: frames }], loop: false }],
+      },
+    },
     drawings: { d1: { num: 1, line: asset ?? null, fill: null, vectors: [] } },
   };
 }
+
+const len = (f: ProjectFile) => f.comps[f.main]!.layers[0]!.exposures![0]!.length;
 
 /** A capture whose content we control; counts how often it encoded. */
 function fakeCapture(state: { frames: number; asset?: string; encoded: number }): () => Capture {
@@ -92,7 +108,7 @@ describe('autosave', () => {
     await a.idle();
     expect(state.encoded).toBeGreaterThanOrEqual(1);
     expect(a.state).toBe('saved');
-    expect(parseProjectFile(await head(store)).layers[0]!.exposures[0]!.length).toBe(3);
+    expect(len(parseProjectFile(await head(store)))).toBe(3);
     expect(store.assets.has('assets/a-1.png')).toBe(true);
     // the library card follows the project
     expect((await store.getProject('p1'))!.frames).toBe(3);
@@ -152,7 +168,7 @@ describe('autosave', () => {
     const p = a.saveVersion('Before clear', true);
     state.frames = 1; // the destructive edit happens immediately after
     const v = (await p)!;
-    expect(parseProjectFile(v.json).layers[0]!.exposures[0]!.length).toBe(4);
+    expect(len(parseProjectFile(v.json))).toBe(4);
   });
 
   it('keeps only the newest automatic versions and never prunes manual ones', async () => {
@@ -201,12 +217,12 @@ describe('autosave', () => {
     const a = saver(store, state, clock);
     a.markDirty();
     await a.flush();
-    expect(parseProjectFile(await head(store)).layers[0]!.exposures[0]!.length).toBe(2);
+    expect(len(parseProjectFile(await head(store)))).toBe(2);
     a.open(metaFromFile('p2', file(1)), false);
     state.frames = 7;
     await a.flush();
-    expect(parseProjectFile((await store.getHead('p2'))!.json).layers[0]!.exposures[0]!.length).toBe(7);
-    expect(parseProjectFile(await head(store)).layers[0]!.exposures[0]!.length).toBe(2);
+    expect(len(parseProjectFile((await store.getHead('p2'))!.json))).toBe(7);
+    expect(len(parseProjectFile(await head(store)))).toBe(2);
     expect((await store.listProjects()).map((p) => p.id).sort()).toEqual(['p1', 'p2']);
   });
 
