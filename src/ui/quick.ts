@@ -31,6 +31,7 @@ export class Quick {
   private readonly fps: HTMLSelectElement;
   private readonly planeBtn: HTMLButtonElement;
   private readonly lockBtn: HTMLButtonElement;
+  private readonly flipBtn: HTMLButtonElement;
 
   constructor(
     private readonly app: App,
@@ -77,12 +78,14 @@ export class Quick {
 
     this.planeBtn = btn('Line', 'Drawing on the Line plane. Tap to draw color on the Fill plane (X).', () => app.togglePlane());
     this.lockBtn = btn('Lock', 'Scrub lock (L)', () => app.toggleLock());
+    this.flipBtn = btn('Flipbook', 'Flipbook: step past the last frame for a blank page; drawing on it adds the frame', () => app.setFlipbook(!app.flipbook));
 
     const moreBtn = btn('More ⋯', 'More tools', () => this.more.classList.toggle('open'));
     this.more = el('div', { class: 'quick-more' });
     this.more.append(
       btn('Vector pen', 'Vector pen (P)', () => app.setTool('pen')),
       this.planeBtn,
+      this.flipBtn,
       btn('Duplicate', 'Duplicate drawing (D)', () => void app.duplicateSelection()),
       btn('Delete', 'Delete drawing', () => app.deleteFrame()),
       this.lockBtn,
@@ -98,7 +101,12 @@ export class Quick {
       group(...this.toolBtns.values()),
       group(this.color, this.size),
       group(this.undoBtn, this.redoBtn),
-      group(btn('◀', 'Previous frame (←)', () => app.prevFrame()), this.playBtn, btn('▶', 'Next frame (→)', () => app.nextFrame()), btn('+ Frame', 'New drawing after this one (N)', () => app.addFrame())),
+      group(
+        btn('◀', 'Previous frame (←)', () => app.prevFrame()),
+        this.playBtn,
+        btn('▶', 'Next frame (→)', () => app.nextFrame()),
+        btn('+ Frame', 'New drawing after this one (N)', () => app.addFrame()),
+      ),
       group(
         btn('1s', 'Exposure on ones (1)', () => app.setExposure(1)),
         btn('2s', 'Exposure on twos (2)', () => app.setExposure(2)),
@@ -159,5 +167,6 @@ export class Quick {
     this.planeBtn.setAttribute('aria-pressed', String(app.plane === 'fill'));
     this.lockBtn.textContent = app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`;
     this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));
+    this.flipBtn.setAttribute('aria-pressed', String(app.flipbook));
   }
 }

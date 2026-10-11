@@ -68,6 +68,9 @@ export class Strip {
   private signature = '';
   private cell = loadCell();
   private drag: Drag | null = null;
+  private flipBtn!: HTMLButtonElement;
+  /** The flipbook's blank page after the last drawing (tap it, then draw). */
+  private readonly blank = el('div', { class: 'blankpage', title: 'Blank page: draw here to add a frame' }, '+');
 
   constructor(
     private readonly app: App,
@@ -99,6 +102,7 @@ export class Strip {
       btn('+ Frame', 'New drawing after this frame (N)', () => app.addFrame()),
       btn('Duplicate', 'Duplicate drawing (D)', () => void app.duplicateSelection()),
       btn('Delete', 'Delete the selected drawings, or this one (Delete)', () => app.deleteFrame()),
+      (this.flipBtn = btn('Flipbook', 'Flipbook: a blank page waits after the last drawing; drawing on it adds the frame', () => app.setFlipbook(!app.flipbook))),
     );
 
     // Exposure: how many frames each selected drawing is held (on ones, twos, threes...).
@@ -227,6 +231,10 @@ export class Strip {
         this.track.setPointerCapture(e.pointerId);
       } catch {
         // capture can fail for stale pointers; dragging still works while over the strip
+      }
+      if (target.closest('.blankpage')) {
+        app.goBlankPage();
+        return;
       }
       const blockEl = target.closest<HTMLElement>('.block');
       if (blockEl) {
@@ -376,7 +384,7 @@ export class Strip {
       this.rebuild();
     }
     const cell = this.cell;
-    this.frameLabel.textContent = `${app.lf + 1} / ${p.length}`;
+    this.frameLabel.textContent = app.blankPage ? `${p.length + 1} / ${p.length} new` : `${app.lf + 1} / ${p.length}`;
     const l = locate(p.exposures, app.lf);
     const targets = app.targets;
     const common = commonHold(p.exposures, targets);
@@ -386,7 +394,12 @@ export class Strip {
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(p.fps);
     this.playhead.style.width = `${cell}px`;
-    this.playhead.style.transform = `translateX(${app.lf * cell}px)`;
+    this.playhead.style.transform = `translateX(${(app.blankPage ? p.length : app.lf) * cell}px)`;
+    this.flipBtn.setAttribute('aria-pressed', String(app.flipbook));
+    this.blank.style.display = app.flipbook ? '' : 'none';
+    this.blank.style.left = `${p.length * cell}px`;
+    this.blank.style.width = `${cell - 4}px`;
+    this.blank.classList.toggle('current', app.blankPage);
     this.onionBtn.setAttribute('aria-pressed', String(app.onion.enabled));
     this.keysBtn.setAttribute('aria-pressed', String(app.onion.keysOnly));
     this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));
@@ -437,7 +450,7 @@ export class Strip {
       block.append(el('span', { class: 'handle', title: 'Drag to change the hold' }));
       this.inner.append(block);
     });
-    this.inner.append(this.lockMark, this.playhead, this.marquee);
+    this.inner.append(this.blank, this.lockMark, this.playhead, this.marquee);
     const used = new Set(p.exposures.map((x) => x.drawing));
     for (const id of this.thumbs.keys()) if (!used.has(id)) this.thumbs.delete(id);
   }

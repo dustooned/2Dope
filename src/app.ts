@@ -43,6 +43,7 @@ const BRUSH_KEY = '2dope.m0.brush';
 const COLOR_KEY = '2dope.m0.color';
 const ONION_KEY = '2dope.m1.onion';
 const FILL_KEY = '2dope.m1.fill';
+const FLIPBOOK_KEY = '2dope.flipbook';
 
 interface LiveStroke {
   record: StrokeRecord;
@@ -133,6 +134,7 @@ export class App {
   setWorkspace(w: Workspace): void {
     if (w === this.workspace || this.live) return;
     if (this.playing) this.togglePlay();
+    if (w === 'motion') this.leaveBlankPage();
     this.editor.gestureEnd(true);
     const was = this.workspace;
     this.workspace = w;
@@ -472,8 +474,44 @@ export class App {
     this.onDocChanged();
   }
 
+  // -------------------------------------------------------------------------------------------
+  // Flipbook: a blank page after the last drawing (Procreate Dreams' flipbook works this way).
+  // Step past the last frame and the page is blank with the last drawing as onion skin; the first
+  // stroke makes it a real frame, and the next blank page waits after it. Flipping on or back
+  // leaves nothing behind.
+
+  /** Is the flipbook blank page on? (per device) */
+  flipbook = loadJSON<boolean>(FLIPBOOK_KEY) ?? true;
+  /** Showing the blank page after the last drawing. */
+  blankPage = false;
+
+  setFlipbook(on: boolean): void {
+    this.flipbook = on;
+    saveJSON(FLIPBOOK_KEY, on);
+    if (!on) this.leaveBlankPage();
+    this.onFrameChange();
+  }
+
+  /** Go to the blank page after the active layer's last frame. */
+  goBlankPage(): void {
+    if (this.live || !this.flipbook || this.workspace === 'motion') return;
+    this.setLayerFrame(this.project.length - 1);
+    if (this.playing) this.togglePlay();
+    this.blankPage = true;
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  private leaveBlankPage(): void {
+    if (!this.blankPage) return;
+    this.blankPage = false;
+    this.requestRender();
+    this.onFrameChange();
+  }
+
   setFrame(f: number): void {
     if (this.live) return;
+    this.leaveBlankPage();
     const len = this.compEnd;
     const next = ((Math.round(f) % len) + len) % len;
     if (next === this.frame) return;
@@ -484,10 +522,13 @@ export class App {
   }
 
   nextFrame(): void {
+    if (this.blankPage) return;
+    if (this.flipbook && this.workspace !== 'motion' && !this.playing && this.layerFrame >= this.project.length - 1) return this.goBlankPage();
     this.setFrame(this.frame + 1);
   }
 
   prevFrame(): void {
+    if (this.blankPage) return this.leaveBlankPage();
     this.setFrame(this.frame - 1);
   }
 
@@ -507,6 +548,7 @@ export class App {
 
   togglePlay(): void {
     if (this.live) return;
+    this.leaveBlankPage();
     this.playing = !this.playing;
     this.playClock = { t0: performance.now(), f0: this.frame };
     this.onFrameChange();
@@ -599,6 +641,7 @@ export class App {
       {
         label,
         do: () => {
+          this.blankPage = false;
           this.focusLayer(layerId);
           this.selection = after();
           const l = find();
@@ -609,6 +652,7 @@ export class App {
           this.onDocChanged();
         },
         undo: () => {
+          this.blankPage = false;
           this.focusLayer(layerId);
           this.selection = keepSelection || r.selection ? beforeSel : [];
           const l = find();
@@ -794,6 +838,7 @@ export class App {
 
   /** While dragging on the timeline: show the new order/holds without recording history yet. */
   previewExposures(ex: Exposure[]): void {
+    this.blankPage = false;
     this.project.exposures = ex;
     this.frame = Math.min(this.frame, this.compEnd - 1);
     this.requestRender();
@@ -806,6 +851,7 @@ export class App {
     const compId = this.project.comp.id;
     const layerId = this.project.editLayer().id;
     const set = (ex: Exposure[]) => {
+      this.blankPage = false;
       this.selection = [];
       this.project.activeComp = compId;
       this.focusLayer(layerId);
@@ -890,10 +936,15 @@ export class App {
       this.onFrameChange();
     }
     if (this.tool === 'fill') {
-      this.fillAt(e);
+      if (!this.blankPage) this.fillAt(e);
       return;
     }
     const tool = this.tool;
+    if (this.blankPage) {
+      if (tool === 'eraser') return; // nothing to erase on a blank page
+      this.blankPage = false;
+      this.addFrame();
+    }
     // drawing on a comp's placeholder makes it a real layer of that comp
     if (this.project.isPlaceholder) {
       this.project.editLayer();
@@ -1514,6 +1565,7 @@ export class App {
       return;
     }
     this.drawOnion(g);
+    if (this.blankPage && !this.live) return;
     const live = this.live;
     const d = live ? live.drawing : this.drawing;
     if (d.parked) {
@@ -1597,9 +1649,15 @@ export class App {
   /** Ghosts of the neighboring drawings: previous in blue, next in red, fading with distance. */
   private drawOnion(g: CanvasRenderingContext2D): void {
     const o = this.onion;
-    if (!o.enabled || this.playing || (this.scrubbing && !o.whileScrubbing)) return;
+    if ((!o.enabled && !this.blankPage) || this.playing || (this.scrubbing && !o.whileScrubbing)) return;
     const keys = o.keysOnly ? (id: string) => this.project.drawing(id).role === 'key' : undefined;
     const n = neighborDrawings(this.project.exposures, this.lf, o.before, o.after, keys);
+    if (this.blankPage && !this.live) {
+      // the blank page comes after the last drawing: it and the ones before it are all "before"
+      const cur = this.drawing.id;
+      n.before = [{ drawing: cur, distance: 1 }, ...n.before.map((b) => ({ ...b, distance: b.distance + 1 }))].slice(0, Math.max(1, o.before));
+      n.after = [];
+    }
     const draw = (list: typeof n.before, color: string) => {
       for (const nb of list) {
         const d = this.project.drawing(nb.drawing);
