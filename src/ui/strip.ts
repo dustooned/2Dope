@@ -101,7 +101,7 @@ export class Strip {
 
     // Exposure: how many frames each selected drawing is held (on ones, twos, threes...).
     const exposure = el('div', { class: 'group', role: 'group', 'aria-label': 'Exposure' });
-    exposure.append(el('span', { class: 'name' }, 'Exposure'));
+    exposure.append(el('span', { class: 'name' }, 'Hold'));
     for (const n of [1, 2, 3, 4]) exposure.append(btn(`${n}s`, `Hold the selected drawings for ${n} frame${n > 1 ? 's' : ''} each (${n})`, () => app.setExposure(n)));
     this.expInput = el('input', { type: 'number', min: '1', max: '99', step: '1', 'aria-label': 'Exposure in frames', title: 'Type a number of frames and press Enter', class: 'exp-input' });
     this.expInput.addEventListener('keydown', (e) => {
@@ -170,7 +170,11 @@ export class Strip {
     });
     zoom.append(el('span', { class: 'name' }, 'Zoom'), this.zoomRange);
 
-    bar.append(nav, this.frameLabel, this.fpsSel, edit, exposure, roles, onion, zoom);
+    const rowA = el('div', { class: 'strip-row' });
+    rowA.append(nav, this.frameLabel, this.fpsSel, edit, zoom);
+    const rowB = el('div', { class: 'strip-row' });
+    rowB.append(exposure, roles, onion);
+    bar.append(rowA, rowB);
 
     this.track = el('div', { class: 'strip-track', role: 'region', 'aria-label': 'Timeline', tabindex: '0' });
     this.inner = el('div', { class: 'strip-inner' });

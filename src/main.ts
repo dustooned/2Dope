@@ -79,6 +79,34 @@ setInterval(() => {
 
 // Side panel: Brush and X-sheet tabs (Shift+X switches)
 buildPanel(app, $('#tab-brush'));
+
+// Brush sections fold away. Tip and Paint start open; the choice is remembered.
+{
+  const KEY = '2dope.m1.fold';
+  let saved: Record<string, boolean> = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, boolean>;
+  } catch {
+    // default folding
+  }
+  $('#tab-brush')
+    .querySelectorAll('fieldset')
+    .forEach((fs, i) => {
+      const legend = fs.querySelector('legend');
+      if (!legend) return;
+      const title = legend.textContent ?? String(i);
+      fs.classList.toggle('collapsed', saved[title] ?? !/^(tip|paint)/i.test(title));
+      legend.addEventListener('click', () => {
+        fs.classList.toggle('collapsed');
+        saved[title] = fs.classList.contains('collapsed');
+        try {
+          localStorage.setItem(KEY, JSON.stringify(saved));
+        } catch {
+          // not persisted: fine
+        }
+      });
+    });
+}
 const xsheet = new XSheet(app, $('#tab-xsheet'));
 const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-tab]')];
 const showTab = (name: 'brush' | 'xsheet') => {
@@ -121,6 +149,54 @@ const quick = new Quick(app, $('#quickbar'), {
 });
 app.onToggleQuick = () => quick.toggle();
 $('#enter-quick').addEventListener('click', () => quick.toggle());
+
+// The ☰ button is always on screen (even in Quick Animate and with the interface hidden),
+// so there is always a way back to every control.
+const dock = $('#dock');
+const menu = $('#menu');
+const setMenu = (open: boolean) => {
+  menu.hidden = !open;
+  dock.setAttribute('aria-expanded', String(open));
+};
+dock.addEventListener('click', () => setMenu(menu.hidden));
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!menu.hidden && !menu.contains(e.target as Node) && !dock.contains(e.target as Node)) setMenu(false);
+  },
+  true,
+);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !menu.hidden) setMenu(false);
+});
+menu.addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (b) setMenu(false);
+});
+const BAR_KEY = '2dope.m1.bar';
+const setBar = (collapsed: boolean) => {
+  document.body.classList.toggle('bar-collapsed', collapsed);
+  try {
+    localStorage.setItem(BAR_KEY, collapsed ? '1' : '0');
+  } catch {
+    // not persisted: fine
+  }
+  setTimeout(() => app.fit(), 80);
+};
+const toggleBar = () => setBar(!document.body.classList.contains('bar-collapsed'));
+$('#bar-collapse').addEventListener('click', toggleBar);
+try {
+  if (localStorage.getItem(BAR_KEY) === '1') document.body.classList.add('bar-collapsed');
+} catch {
+  // default: toolbar shown
+}
+const menuActions: Record<string, () => void> = {
+  quick: () => quick.toggle(),
+  panel: () => setPanel(!document.body.classList.contains('panel-open')),
+  bar: toggleBar,
+  'export-seq': () => exporter?.open(),
+};
+menu.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((b) => b.addEventListener('click', () => menuActions[b.dataset.menu ?? '']?.()));
 
 app.onFrameChange = () => {
   strip.update();

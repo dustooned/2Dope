@@ -36,11 +36,14 @@ body {
 
 .topbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 8px 14px;
-  padding: 8px 12px;
-  padding-top: max(8px, env(safe-area-inset-top));
+  gap: 6px 12px;
+  padding: 6px 10px 6px 54px;
+  padding-top: max(6px, env(safe-area-inset-top));
+  min-height: 48px;
+  overflow-x: auto;
+  scrollbar-width: none;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
@@ -98,7 +101,7 @@ button:disabled {
 }
 
 .readout {
-  min-width: 90px;
+  min-width: 0;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -140,11 +143,21 @@ button:disabled {
 }
 
 .strip-bar {
+  padding: 4px 10px 2px;
+}
+
+.strip-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px 14px;
-  padding: 6px 10px;
+  gap: 4px 12px;
+  padding: 2px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.strip-row > * {
+  flex: 0 0 auto;
 }
 
 .strip-bar .name {
@@ -414,8 +427,8 @@ button[aria-pressed='true'] {
 /* Project / autosave */
 
 .group.file #pname {
-  width: 130px;
-  min-height: 34px;
+  width: 120px;
+  min-height: 32px;
   padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -425,7 +438,12 @@ button[aria-pressed='true'] {
 }
 
 #savestatus {
-  min-width: 96px;
+  min-width: 0;
+  max-width: 120px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
 }
 
 #savestatus[data-state='dirty'],
@@ -964,17 +982,17 @@ body.ui-hidden .strip {
     align-items: center;
   }
 
-  .topbar,
-  .strip-bar {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
+  .topbar > *,
+  .strip-row > * {
+    flex: 0 0 auto;
   }
 
-  .topbar > *,
-  .strip-bar > * {
-    flex: 0 0 auto;
+  .topbar .logo {
+    display: none;
+  }
+
+  .quickbar {
+    left: 52px;
   }
 
   .panel {
@@ -1039,4 +1057,162 @@ body.ui-hidden .strip {
   background: #2a1d24;
   color: #e8e8ee;
   font: 15px/1.5 system-ui, sans-serif;
+}
+
+/* ---- Menu button, menu, collapsible toolbar ---- */
+
+.dock {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  z-index: 60;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 12px;
+  background: var(--panel-2);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.12s;
+}
+
+.dock[aria-expanded='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1d1d22;
+}
+
+body.drawing .dock {
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.menu {
+  position: fixed;
+  top: calc(max(8px, env(safe-area-inset-top)) + 46px);
+  left: max(8px, env(safe-area-inset-left));
+  z-index: 59;
+  width: min(300px, calc(100vw - 16px));
+  max-height: calc(100vh - 70px);
+  overflow-y: auto;
+  padding: 6px 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(38, 38, 45, 0.98);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55);
+}
+
+.menu section + section {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.menu h3 {
+  margin: 6px 0 4px;
+  color: var(--accent);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.menu-grid.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.menu-grid button {
+  padding: 0 8px;
+}
+
+.menu-grid .check {
+  grid-column: 1 / -1;
+  min-height: 34px;
+}
+
+.menu-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.spacer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.seg {
+  gap: 0;
+}
+
+.seg button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.seg button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin-left: -1px;
+}
+
+body.bar-collapsed .topbar {
+  display: none;
+}
+
+body.ui-hidden .dock {
+  opacity: 0.45;
+}
+
+/* Mouse and trackpad: tighter controls. Touch keeps the bigger targets. */
+@media (pointer: fine) {
+  button,
+  select,
+  input[type='color'] {
+    min-height: 30px;
+    padding: 0 10px;
+  }
+
+  .menu-grid .check {
+    min-height: 30px;
+  }
+}
+
+/* Brush panel sections fold away so the panel is a short list, not a long scroll */
+fieldset > legend {
+  cursor: pointer;
+}
+
+fieldset > legend::before {
+  content: '▾ ';
+  color: var(--muted);
+}
+
+fieldset.collapsed > legend::before {
+  content: '▸ ';
+}
+
+fieldset.collapsed > :not(legend) {
+  display: none;
+}
+
+fieldset.collapsed {
+  padding-bottom: 2px;
+  margin-bottom: 6px;
+}
+
+@media (min-width: 1101px) {
+  .menu [data-menu='panel'] {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  #savestatus:not([data-state='error']) {
+    display: none;
+  }
 }

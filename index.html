@@ -4,21 +4,56 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <title>2Dope Pen Lab</title>
+    <title>2Dope</title>
   </head>
   <body>
+    <button type="button" id="dock" class="dock" aria-label="Menu" aria-haspopup="true" aria-expanded="false" title="Menu: files, view, interface">☰</button>
+    <div id="menu" class="menu" role="menu" hidden>
+      <section>
+        <h3>Project</h3>
+        <div class="menu-grid">
+          <button type="button" data-file="save" title="Save a .2dope file (a backup you keep)">Save file</button>
+          <button type="button" data-file="open" title="Open a .2dope file">Open…</button>
+          <button type="button" data-file="new" title="New project (the current one is kept under Versions)">New</button>
+          <button type="button" data-file="versions" title="Restore points">Versions…</button>
+          <button type="button" data-action="export" title="Export this frame as PNG with alpha">Export frame (PNG)</button>
+          <button type="button" data-menu="export-seq" title="Export the whole shot as PNG sequences">Export sequence…</button>
+        </div>
+        <input id="openfile" type="file" accept=".2dope,.zip,.json,application/zip,application/json" hidden />
+        <p class="menu-note"><span id="storage" class="readout"></span></p>
+      </section>
+      <section>
+        <h3>View</h3>
+        <div class="menu-grid four">
+          <button type="button" data-action="fit" title="Fit (F)">Fit</button>
+          <button type="button" data-action="actual" title="100% (1)">100%</button>
+          <button type="button" data-action="rotate0" title="Reset rotation (0)">0°</button>
+          <button type="button" data-action="flip" title="Flip view (H)">Flip</button>
+        </div>
+        <p class="menu-note"><span id="viewinfo" class="readout"></span></p>
+      </section>
+      <section>
+        <h3>Drawing</h3>
+        <div class="menu-grid">
+          <button type="button" data-action="clear" title="Clear this drawing (undoable)">Clear drawing</button>
+          <label class="check"><input id="finger" type="checkbox" /> Finger paints</label>
+        </div>
+      </section>
+      <section>
+        <h3>Interface</h3>
+        <div class="menu-grid">
+          <button type="button" data-menu="quick" title="Quick Animate (Tab)">Quick Animate</button>
+          <button type="button" data-menu="panel" title="Brush settings and X-sheet">Brush / X-sheet panel</button>
+          <button type="button" data-menu="bar" title="Show or hide the toolbar">Toolbar on/off</button>
+          <button type="button" data-action="hide" title="Hide everything but this menu button (Shift+Tab, four-finger tap)">Hide / show interface</button>
+        </div>
+      </section>
+    </div>
     <header class="topbar">
-      <strong class="logo">2Dope <span>pen lab · M0</span></strong>
-      <button type="button" id="panel-toggle" title="Brush settings and X-sheet">Panel</button>
+      <strong class="logo">2Dope</strong>
       <div class="group file" role="group" aria-label="Project">
         <input id="pname" type="text" placeholder="Untitled" maxlength="60" aria-label="Project name" />
-        <button type="button" data-file="save" title="Save a .2dope file (a backup you keep)">Save</button>
-        <button type="button" data-file="open" title="Open a .2dope file">Open</button>
-        <button type="button" data-file="new" title="New project (the current one is kept under Versions)">New</button>
-        <button type="button" data-file="versions" title="Restore points">Versions</button>
         <span id="savestatus" class="readout" role="status"></span>
-        <span id="storage" class="readout"></span>
-        <input id="openfile" type="file" accept=".2dope,.zip,.json,application/zip,application/json" hidden />
       </div>
       <div class="group" role="group" aria-label="Tools">
         <button type="button" data-tool="brush" title="Brush (B)">Brush</button>
@@ -26,28 +61,19 @@
         <button type="button" data-tool="pen" title="Vector pen (P)">Vector</button>
         <button type="button" data-tool="fill" title="Fill (G): fills the area under the click, below the lines">Fill</button>
       </div>
-      <div class="group" role="group" aria-label="Draws on" title="Which plane brushes and the eraser write to (X). Fills always sit under the lines.">
-        <span class="name">On</span>
+      <div class="group seg" role="group" aria-label="Draws on" title="Which plane brushes and the eraser write to (X). Fills always sit under the lines.">
         <button type="button" data-plane="line" title="Line plane: linework">Line</button>
         <button type="button" data-plane="fill" title="Fill plane: flat color, under the lines">Fill</button>
       </div>
       <div class="group" role="group" aria-label="History">
-        <button type="button" data-action="undo" title="Undo (Ctrl+Z, two-finger tap)">Undo</button>
-        <button type="button" data-action="redo" title="Redo (Ctrl+Shift+Z, three-finger tap)">Redo</button>
-        <button type="button" data-action="clear" title="Clear this drawing (undoable)">Clear</button>
+        <button type="button" data-action="undo" title="Undo (Ctrl+Z, two-finger tap)" aria-label="Undo">↶</button>
+        <button type="button" data-action="redo" title="Redo (Ctrl+Shift+Z, three-finger tap)" aria-label="Redo">↷</button>
       </div>
-      <div class="group" role="group" aria-label="View">
-        <button type="button" data-action="fit" title="Fit (F)">Fit</button>
-        <button type="button" data-action="actual" title="100% (1)">100%</button>
-        <button type="button" data-action="rotate0" title="Reset rotation (0)">0°</button>
-        <button type="button" data-action="flip" title="Flip view (H)">Flip</button>
-        <span id="viewinfo" class="readout"></span>
-      </div>
-      <label class="check"><input id="finger" type="checkbox" /> Finger paints</label>
-      <button type="button" data-action="export" title="Export this frame as PNG with alpha">PNG</button>
+      <span class="spacer"></span>
+      <button type="button" id="panel-toggle" title="Brush settings and X-sheet">Panel</button>
+      <button type="button" id="enter-quick" title="Quick Animate: just the canvas, a slim strip and the essentials (Tab)">Quick</button>
       <button type="button" id="export-seq" title="Export the whole shot as PNG sequences with alpha (Lines / Fills / Matte passes)">Export…</button>
-      <button type="button" id="enter-quick" title="Quick Animate: just the canvas, a slim strip and the essentials (Tab)">Quick Animate</button>
-      <button type="button" data-action="hide" title="Hide interface (Shift+Tab, four-finger tap)">Hide UI</button>
+      <button type="button" id="bar-collapse" title="Shrink the toolbar to the menu button" aria-label="Hide toolbar">▲</button>
     </header>
     <main class="workspace">
       <div class="stage-col">
