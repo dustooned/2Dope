@@ -8,7 +8,8 @@ import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
-import { compLength, frameContent, invert, worldMatrix } from './core/comp';
+import { compLength, frameContent, invert, worldMatrix, type Layer } from './core/comp';
+import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { CompEditor } from './compedit';
 import { drawComp } from './view/composite';
 import { drawMotionOverlay } from './view/overlay';
@@ -1071,7 +1072,11 @@ export class App {
     c.addEventListener('pointerup', (e) => this.onUp(e, false));
     c.addEventListener('pointercancel', (e) => this.onUp(e, true));
     c.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
-    c.addEventListener('contextmenu', (e) => e.preventDefault());
+    c.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (Date.now() - this.lastHold < 1000) return; // the hold already opened it
+      this.openCanvasMenu(e.clientX, e.clientY);
+    });
     // Safari's own pinch-zoom gestures must not move the page.
     for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
       document.addEventListener(t, (e) => e.preventDefault());
@@ -1119,6 +1124,7 @@ export class App {
         this.editor.gestureEnd(true);
         this.motionPointer = null;
       }
+      this.armHold(e);
       if (this.touches.size === 1 && this.workspace === 'motion') {
         if (this.motionDown(e)) return;
       } else if (this.touches.size === 1 && this.fingerPaint) {
@@ -1167,6 +1173,109 @@ export class App {
 
   private lastTap = { at: 0, layer: '' };
 
+  // -------------------------------------------------------------------------------------------
+  // Context menu on the canvas: right-click, the pen's barrel button, or one finger held still
+
+  private holdArm: { timer: number; id: number; x: number; y: number } | null = null;
+  /** The finger that opened a menu (its moves are ignored until it lifts). */
+  private held_: number | null = null;
+  private lastHold = 0;
+  /** Motion's layer menus (set by the Motion panel). */
+  motionMenu: ((l: Layer | null) => CtxItem[]) | null = null;
+
+  private armHold(e: PointerEvent): void {
+    this.disarmHold();
+    // finger painting keeps a still finger for drawing dots; the menu is a right-click there
+    if (this.touches.size !== 1 || (this.fingerPaint && this.workspace !== 'motion')) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    this.holdArm = {
+      id: e.pointerId,
+      x,
+      y,
+      timer: window.setTimeout(() => {
+        const arm = this.holdArm;
+        this.holdArm = null;
+        if (!arm || this.touches.size !== 1) return;
+        // a finger stroke that has not moved is dropped; a layer grab is let go
+        if (this.live && this.live.pointerId === arm.id) this.endStroke(true);
+        if (this.motionPointer === arm.id) {
+          this.editor.gestureEnd(true);
+          this.motionPointer = null;
+        }
+        if (this.tapSession) this.tapSession.moved = true; // not a tap (no undo)
+        this.held_ = arm.id;
+        this.lastHold = Date.now();
+        swallowNextClick();
+        this.openCanvasMenu(arm.x, arm.y);
+      }, HOLD_MS),
+    };
+  }
+
+  private disarmHold(): void {
+    if (!this.holdArm) return;
+    clearTimeout(this.holdArm.timer);
+    this.holdArm = null;
+  }
+
+  /** Pixel colour of the current drawing at a document point (line over fill), or null if empty there. */
+  colorAt(x: number, y: number): string | null {
+    const d = this.drawing;
+    if (d.parked || x < 0 || y < 0 || x >= this.project.width || y >= this.project.height) return null;
+    for (const c of [d.line, d.fill]) {
+      const px = c?.getContext('2d')?.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+      if (px && px[3]! > 0) return `#${[px[0]!, px[1]!, px[2]!].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+    }
+    return null;
+  }
+
+  /** The canvas menu for the current mode at a screen point. */
+  openCanvasMenu(clientX: number, clientY: number): void {
+    if (this.live) return;
+    const r = this.canvas.getBoundingClientRect();
+    const doc = this.view.screenToDoc(clientX - r.left, clientY - r.top);
+    let items: CtxItem[];
+    if (this.workspace === 'motion') {
+      const l = this.editor.hitLayer([doc.x, doc.y]);
+      if (l && !this.editor.selected.includes(l.id)) this.editor.select(l.id);
+      items = [...(this.motionMenu?.(l) ?? []), { sep: true }, { label: 'Fit view', run: () => this.fit(), hint: 'F' }];
+    } else {
+      const picked = this.colorAt(doc.x, doc.y);
+      const tool = (t: Tool, label: string) => ({ label, on: this.tool === t, run: () => this.setTool(t) });
+      items = [
+        ...(picked ? [{ label: 'Pick this colour', hint: picked, run: () => this.setColor(picked) }] : []),
+        { title: 'Tool' },
+        { chips: [tool('brush', 'Brush'), tool('eraser', 'Eraser'), tool('pen', 'Vector'), tool('fill', 'Fill')] },
+        { title: 'Draw on' },
+        {
+          chips: [
+            { label: 'Line', on: this.plane === 'line', run: () => this.plane !== 'line' && this.togglePlane() },
+            { label: 'Fill', on: this.plane === 'fill', run: () => this.plane !== 'fill' && this.togglePlane() },
+          ],
+        },
+        { sep: true },
+        { label: 'Undo', run: () => this.undo(), disabled: !this.history.canUndo, hint: '2 fingers' },
+        { label: 'Redo', run: () => this.redo(), disabled: !this.history.canRedo, hint: '3 fingers' },
+        { title: 'Frame' },
+        {
+          chips: [
+            { label: '+ Frame', run: () => this.addFrame() },
+            { label: 'Duplicate', run: () => this.duplicateSelection() },
+            { label: 'Delete', run: () => this.deleteFrame() },
+          ],
+        },
+        { label: 'Onion skin', checked: this.onion.enabled, run: () => this.toggleOnion(), hint: 'O' },
+        { label: 'Flipbook blank page', checked: this.flipbook, run: () => this.setFlipbook(!this.flipbook) },
+        { label: 'Scrub lock here', checked: this.lockFrame !== null, run: () => this.toggleLock(), hint: 'L' },
+        { sep: true },
+        { label: 'Fit view', run: () => this.fit(), hint: 'F' },
+        { label: 'Flip view', run: () => this.flipView(), hint: 'H' },
+        { label: this.uiHidden ? 'Show interface' : 'Hide interface', run: () => this.toggleUI(), hint: '4 fingers' },
+      ];
+    }
+    showContextMenu(clientX, clientY, items);
+  }
+
   /** Motion workspace: grab a layer (or its handles) under the pointer. Double-tap a precomp to go inside. */
   private motionDown(e: PointerEvent): boolean {
     const ed = this.editor;
@@ -1190,6 +1299,8 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    const arm = this.holdArm;
+    if (arm && arm.id === e.pointerId && Math.hypot(e.clientX - arm.x, e.clientY - arm.y) > HOLD_SLOP) this.disarmHold();
     if (this.motionPointer === e.pointerId) {
       this.editor.gestureMove(this.stagePoint(e));
       return;
@@ -1213,6 +1324,8 @@ export class App {
       const p = this.local(e);
       t.x = p.x;
       t.y = p.y;
+      if (this.held_ === e.pointerId) return; // the finger that opened a menu does not pan
+
       if (this.tapSession && Math.hypot(p.x - t.sx, p.y - t.sy) > 10) this.tapSession.moved = true;
       this.touchNavigate(e.pointerId, p);
       return;
@@ -1221,6 +1334,8 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    this.disarmHold();
+    if (this.held_ === e.pointerId) this.held_ = null;
     if (this.motionPointer === e.pointerId) {
       this.motionPointer = null;
       this.editor.gestureEnd(cancelled && e.pointerType !== 'pen');

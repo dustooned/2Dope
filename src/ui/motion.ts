@@ -4,6 +4,7 @@ import { compLength, layerEnd, playsOn, type Layer, type PlayMode } from '../cor
 import { FPS_PRESETS } from '../core/project';
 import { isPin, keyId, PROP_LABEL, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
+import { attachContextMenu, type CtxItem } from './contextmenu';
 
 const ZOOM_KEY = '2dope.m3.mcell';
 const ROW_KEY = '2dope.m3.mrow';
@@ -11,6 +12,8 @@ const LEFT_W = 196;
 const DRAG = 4;
 const LABELS = ['#9a9aa8', '#ff5a8a', '#ffd24a', '#4aa3ff', '#4ade80', '#c084fc', '#fb923c'];
 const KIND_COLOR: Record<Layer['kind'], string> = { drawings: '#6f82e8', comp: '#3fbf8f', camera: '#e0a83c', null: '#8f8fa3' };
+type LayerAct = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'play' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique';
+
 const KIND_ICON: Record<Layer['kind'], string> = { drawings: '✎', comp: '▣', camera: '🎥', null: '✛' };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
@@ -91,6 +94,7 @@ export class MotionPanel {
     private readonly root: HTMLElement,
   ) {
     const ed = app.editor;
+    app.motionMenu = (l) => (l ? this.layerItems(l) : this.layerListItems());
     const btn = (label: string, title: string, fn: () => void, cls = '') => {
       const b = el('button', { type: 'button', title, class: cls }, label);
       b.addEventListener('click', fn);
@@ -126,8 +130,18 @@ export class MotionPanel {
     this.groupBtn = btn('Group', 'Put the selected layers into a new comp (a precomp)', () => void this.groupSelected());
     const rowA = row(
       this.crumbsEl,
-      group(btn('◀', 'Previous frame (←)', () => app.prevFrame()), this.playBtn, btn('▶', 'Next frame (→)', () => app.nextFrame()), this.frameLabel, this.fpsSel),
-      group(btn('+ Drawing', 'A new drawings layer at the playhead', () => ed.addLayer('drawings')), btn('+ Null', 'An empty handle to parent other layers to', () => ed.addLayer('null')), btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera'))),
+      group(
+        btn('◀', 'Previous frame (←)', () => app.prevFrame()),
+        this.playBtn,
+        btn('▶', 'Next frame (→)', () => app.nextFrame()),
+        this.frameLabel,
+        this.fpsSel,
+      ),
+      group(
+        btn('+ Drawing', 'A new drawings layer at the playhead', () => ed.addLayer('drawings')),
+        btn('+ Null', 'An empty handle to parent other layers to', () => ed.addLayer('null')),
+        btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera')),
+      ),
       group(
         btn('↑', 'Move the selected layer up', () => ed.primary && ed.reorder(ed.primary.id, -1)),
         btn('↓', 'Move the selected layer down', () => ed.primary && ed.reorder(ed.primary.id, 1)),
@@ -155,15 +169,25 @@ export class MotionPanel {
     const ease = el('div', { class: 'group', role: 'group', 'aria-label': 'Easing of the selected keys' });
     ease.append(el('span', { class: 'name' }, 'Easing'));
     for (const e of EASINGS) {
-      const b = btn(e.label, `${e.label}: ${e.id === 'linear' ? 'steady speed' : e.id === 'easeIn' ? 'starts slow, speeds up' : e.id === 'easeOut' ? 'slows down into the next key' : e.id === 'easeInOut' ? 'slow at both ends' : 'jumps at the next key'}. Applies to the selected keys and to new ones.`, () => ed.setEasing(e.id));
+      const b = btn(
+        e.label,
+        `${e.label}: ${e.id === 'linear' ? 'steady speed' : e.id === 'easeIn' ? 'starts slow, speeds up' : e.id === 'easeOut' ? 'slows down into the next key' : e.id === 'easeInOut' ? 'slow at both ends' : 'jumps at the next key'}. Applies to the selected keys and to new ones.`,
+        () => ed.setEasing(e.id),
+      );
       this.easeBtns.set(e.id, b);
       ease.append(b);
     }
     const rowC = row(
       group(this.autoBtn, this.startBtn, this.camBtn),
       ease,
-      group(btn('Reverse', 'Play the selected keys backwards (mirror them in time)', () => ed.reverse()), btn('Delete key', 'Delete the selected keys', () => ed.deleteKeys())),
-      group(this.slider('Zoom', 'Time zoom', 8, 80, this.cell, (n) => this.setCell(n)), this.slider('Rows', 'Row height', 32, 72, this.rowH, (n) => this.setRowH(n))),
+      group(
+        btn('Reverse', 'Play the selected keys backwards (mirror them in time)', () => ed.reverse()),
+        btn('Delete key', 'Delete the selected keys', () => ed.deleteKeys()),
+      ),
+      group(
+        this.slider('Zoom', 'Time zoom', 8, 80, this.cell, (n) => this.setCell(n)),
+        this.slider('Rows', 'Row height', 32, 72, this.rowH, (n) => this.setRowH(n)),
+      ),
     );
 
     this.bar.append(rowA, rowC);
@@ -393,14 +417,44 @@ export class MotionPanel {
     const left = el('div', { class: 'mleft' });
     left.append(
       el('span', { class: `pname${isPin(n) ? ' pin' : ''}`, title: ed.rowLabel(l, n) }, isPin(n) ? ed.rowLabel(l, n) : PROP_LABEL[kind]),
-      el('button', { type: 'button', class: `pval${ed.isOverridden(l, n) ? ' over' : ''}`, 'data-val': n, 'data-layer': l.id, 'data-act': 'value', title: isPin(n) ? 'This instance\'s value. Tap to type one.' : 'Tap to type a value' }, show(kind, ed.valueNow(l, n))),
+      el(
+        'button',
+        {
+          type: 'button',
+          class: `pval${ed.isOverridden(l, n) ? ' over' : ''}`,
+          'data-val': n,
+          'data-layer': l.id,
+          'data-act': 'value',
+          title: isPin(n) ? "This instance's value. Tap to type one." : 'Tap to type a value',
+        },
+        show(kind, ed.valueNow(l, n)),
+      ),
     );
-    if (isPin(n) && ed.isOverridden(l, n)) left.append(el('button', { type: 'button', class: 'pstar', 'data-act': 'reset', 'data-row': n, title: 'Back to the comp\'s own value' }, '↺'));
+    if (isPin(n) && ed.isOverridden(l, n)) left.append(el('button', { type: 'button', class: 'pstar', 'data-act': 'reset', 'data-row': n, title: "Back to the comp's own value" }, '↺'));
     else if (!isPin(n) && n !== 'remap' && inside) {
       const on = ed.isPinned(l.id, n as PropName);
-      left.append(el('button', { type: 'button', class: `pstar${on ? ' on' : ''}`, 'data-act': 'pin', 'data-row': n, 'aria-pressed': String(on), title: on ? 'Pinned: every instance of this comp shows this property. Tap to unpin.' : 'Pin: show this property on every instance of this comp' }, '★'));
+      left.append(
+        el(
+          'button',
+          {
+            type: 'button',
+            class: `pstar${on ? ' on' : ''}`,
+            'data-act': 'pin',
+            'data-row': n,
+            'aria-pressed': String(on),
+            title: on ? 'Pinned: every instance of this comp shows this property. Tap to unpin.' : 'Pin: show this property on every instance of this comp',
+          },
+          '★',
+        ),
+      );
     }
-    left.append(el('button', { type: 'button', class: `pkey${isAnimated(p) ? ' anim' : ''}`, 'data-diamond': n, 'data-layer': l.id, 'data-act': 'diamond', 'aria-label': `Keyframe for ${ed.rowLabel(l, n)}` }, '◆'));
+    left.append(
+      el(
+        'button',
+        { type: 'button', class: `pkey${isAnimated(p) ? ' anim' : ''}`, 'data-diamond': n, 'data-layer': l.id, 'data-act': 'diamond', 'aria-label': `Keyframe for ${ed.rowLabel(l, n)}` },
+        '◆',
+      ),
+    );
     const right = el('div', { class: 'mright' });
     right.style.width = `${end * this.cell}px`;
     const off = this.keyOffset(l, n);
@@ -429,7 +483,11 @@ export class MotionPanel {
     }
     for (const k of p.keys) {
       const ref = { layer: l.id, prop: n, f: k.f };
-      const d = el('div', { class: `mkey${ed.keys.has(keyId(ref)) ? ' selected' : ''}${k.out.interp === 'hold' ? ' hold' : k.out.interp === 'bezier' || k.in.interp === 'bezier' ? ' eased' : ''}`, 'data-key': keyId(ref), title: 'Tap to select, drag to retime' });
+      const d = el('div', {
+        class: `mkey${ed.keys.has(keyId(ref)) ? ' selected' : ''}${k.out.interp === 'hold' ? ' hold' : k.out.interp === 'bezier' || k.in.interp === 'bezier' ? ' eased' : ''}`,
+        'data-key': keyId(ref),
+        title: 'Tap to select, drag to retime',
+      });
       d.style.left = `${x(k.f)}px`;
       right.append(d);
     }
@@ -447,6 +505,13 @@ export class MotionPanel {
     g.addEventListener('pointermove', (e) => this.onMove(e));
     g.addEventListener('pointerup', (e) => this.onUp(e, false));
     g.addEventListener('pointercancel', (e) => this.onUp(e, true));
+    // right-click, or press and hold: the menu for the key, property or layer under the finger
+    attachContextMenu(g, ({ target }) => this.contextItems(target as HTMLElement), {
+      onHold: () => {
+        if (this.drag?.kind === 'scrub') this.app.endScrub();
+        this.drag = null;
+      },
+    });
     this.scroll.addEventListener(
       'wheel',
       (e) => {
@@ -588,9 +653,69 @@ export class MotionPanel {
     if (!this.ed.setParentOf(l.id, choice)) this.app.editor.onChange();
   }
 
-  private async layerMenu(l: Layer): Promise<void> {
+  /** The context menu for what is under the pointer in the layer list / time area. */
+  private contextItems(t: HTMLElement): CtxItem[] | null {
     const ed = this.ed;
-    type Act = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'play' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique';
+    const key = t.closest<HTMLElement>('[data-key]');
+    if (key) {
+      const [layer, prop, f] = key.dataset.key!.split('|');
+      const ref = { layer: layer!, prop: prop as PropKey, f: Number(f) };
+      if (!ed.keys.has(keyId(ref))) ed.selectKey(ref);
+      const n = ed.keys.size;
+      const ease = (label: string, e: Easing) => ({ label, title: `Easing: ${label}`, run: () => ed.setEasing(e) });
+      return [
+        { title: n > 1 ? `${n} keys` : 'Key' },
+        { chips: [ease('Linear', 'linear'), ease('Ease in', 'easeIn'), ease('Ease out', 'easeOut'), ease('In & out', 'easeInOut'), ease('Hold', 'hold')] },
+        { label: 'Reverse', run: () => ed.reverse() },
+        { label: 'Go to this key', run: () => this.app.setFrame((ed.layer(ref.layer)?.start ?? 0) + ref.f) },
+        { sep: true },
+        { label: n > 1 ? 'Delete keys' : 'Delete key', run: () => ed.deleteKeys(), danger: true, hint: 'Del' },
+      ];
+    }
+    const row = t.closest<HTMLElement>('[data-layer], [data-bar]');
+    const id = row?.dataset.layer ?? row?.dataset.bar;
+    const l = id ? ed.layer(id) : null;
+    if (!l) return this.layerListItems();
+    const prop = row?.dataset.prop as PropKey | undefined;
+    if (prop) {
+      return [
+        { title: ed.rowLabel(l, prop) },
+        { label: 'Key at the playhead (add / remove)', run: () => ed.toggleKey(l.id, prop) },
+        { label: 'Type a value…', run: () => this.editValue(l, prop) },
+        { label: 'Clear animation (keep the value here)', run: () => ed.clearAnimation(l.id, prop), danger: true },
+      ];
+    }
+    if (!ed.selected.includes(l.id)) ed.select(l.id);
+    return this.layerItems(l);
+  }
+
+  /** Context menu entries for one layer (the canvas in Motion uses them too). */
+  layerItems(l: Layer): CtxItem[] {
+    const ed = this.ed;
+    return [
+      { title: l.name },
+      { label: l.visible ? 'Hide' : 'Show', run: () => ed.setFlag(l.id, 'visible', !l.visible) },
+      ...(ed.selected.length > 1 || l.kind !== 'camera' ? [{ label: ed.selected.length > 1 ? `Group ${ed.selected.length} layers` : 'Group into a comp', run: () => void ed.group() }] : []),
+      ...this.layerActions(l).map((a) => ({ label: a.label, run: () => this.runLayerAction(l, a.value), danger: a.value === 'delete' })),
+    ];
+  }
+
+  /** Context menu on empty space: add layers, view options. */
+  layerListItems(): CtxItem[] {
+    const ed = this.ed;
+    const add = (kind: 'drawings' | 'null' | 'camera', label: string) => ({ label, run: () => ed.addLayer(kind) });
+    return [
+      { title: 'Comp' },
+      { chips: [add('drawings', '+ Drawing'), add('null', '+ Null'), add('camera', '+ Camera')] },
+      { label: 'Auto-key', checked: ed.autoKey, run: () => ((ed.autoKey = !ed.autoKey), ed.onChange()) },
+      ...(ed.hasCamera() ? [{ label: 'Look through camera', checked: ed.throughCamera, run: () => ((ed.throughCamera = !ed.throughCamera), this.app.requestRender(), ed.onChange()) }] : []),
+      ...(ed.crumbs().length > 1 ? [{ label: 'Back out of this comp', run: () => ed.exit(ed.crumbs().length - 2) }] : []),
+    ];
+  }
+
+  private layerActions(l: Layer): { label: string; value: LayerAct }[] {
+    const ed = this.ed;
+    type Act = LayerAct;
     const items: { label: string; value: Act }[] = [];
     if (l.kind === 'comp') {
       items.push({ label: 'Go inside', value: 'enter' }, { label: 'Ungroup (put its layers back here)', value: 'ungroup' }, { label: 'Duplicate (another instance)', value: 'dup' });
@@ -606,8 +731,16 @@ export class MotionPanel {
     );
     if (l.kind === 'drawings' || l.kind === 'comp') items.push({ label: 'Playback (once, loop, ping-pong, hold a frame, speed)…', value: 'play' });
     items.push({ label: 'Delete', value: 'delete' });
-    const pick = await pickBox<Act>(l.name, items);
-    if (!pick) return;
+    return items;
+  }
+
+  private async layerMenu(l: Layer): Promise<void> {
+    const pick = await pickBox<LayerAct>(l.name, this.layerActions(l));
+    if (pick) await this.runLayerAction(l, pick);
+  }
+
+  private async runLayerAction(l: Layer, pick: LayerAct): Promise<void> {
+    const ed = this.ed;
     switch (pick) {
       case 'enter':
         ed.enter(l.id);
@@ -639,7 +772,10 @@ export class MotionPanel {
         ed.setFlag(l.id, 'locked', !l.locked);
         break;
       case 'colour': {
-        const c = await pickBox<number>('Colour', LABELS.map((col, i) => ({ label: i === 0 ? 'None' : `Colour ${i}`, value: i })));
+        const c = await pickBox<number>(
+          'Colour',
+          LABELS.map((col, i) => ({ label: i === 0 ? 'None' : `Colour ${i}`, value: i })),
+        );
         if (c !== undefined) ed.setLabel(l.id, c);
         break;
       }

@@ -92,6 +92,16 @@
 - **Blender handoff = a package + a single-file add-on** (no server, no Blender-side state): image planes with baked image sequences (timing is always exact), F-curves with exact Bezier handles, collection instances only when a precomp runs on the shot's clock, otherwise rendered frames. Tested headless in Blender 4.5 LTS and 5.1 against 2Dope's own render.
 - Not yet: separate line/fill planes in Blender, blend modes, animated anchors, OCA export.
 
+## 2026-10-11: Touch editing, context menus, flipbook (after the Clip Studio study, doc 13)
+
+- **Transform box = what the layer shows** (alpha bounds of the drawing on screen, cached per drawing revision; precomps union their layers). Scale/rotate move an untouched pivot to the drawing's centre, compensating position, inside the gesture's undo step.
+- **Block editing is pure** (`insertAt`, `duplicateBlock`, `moveBlock`, `shiftBlock`, `blockDropIndex` in core/timeline.ts) and each edit selects its result, so the next tap acts on the same block.
+- **Paste shows the same drawings by default** (an exposure sheet reuses numbers for cycles); "Paste as new drawings" copies them.
+- **One context menu for the app** (ui/contextmenu.ts): right-click, pen barrel button, or one finger held still (450 ms). Each area builds its own items: frames (X-sheet, strip), keys / properties / layers (Motion), tools and frames (Draw canvas), layers (Motion canvas). It opens as a bottom sheet under 600 px. Holding while finger-painting is left to drawing.
+- **X-sheet by touch**: a finger on the cells scrolls, on the frame column selects a range; hold lifts the selection, drag moves it, release opens the menu.
+- **Flipbook blank page**: stepping past the last frame shows a blank page with the last drawing as onion skin; the first stroke adds the frame. Nothing is created by flipping alone.
+- Existing taps stay: 2 fingers undo, 3 redo, 4 hide the interface.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?
