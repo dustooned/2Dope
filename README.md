@@ -59,6 +59,12 @@ npm run dev:lan
 - **Mark K / B / I:** label drawings as **key**, **breakdown** or **inbetween** (badge on the block; click again to clear). **Keys only** limits onion skin to key drawings.
 - **Zoom** slider for long shots. **Delete** removes all selected drawings (undoable).
 
+## Playback modes and frame swaps
+
+- **⋯ → Playback** on a drawings or precomp layer: **Once** (plays through, then ends; make the layer longer and it holds its last frame), **Loop**, **Ping-pong** (forwards then backwards), **Hold one frame** (always shows one frame: a pose or mouth library), and **Speed** (0.5× = half speed). The layer's bar shows ↻ ⇋ ▣ for the mode.
+- **Frame row** (in the layer's properties): which frame of its own timeline it shows. Tap it at the playhead and type a frame number to **swap** from there on (hold keys), the classic way to time a mouth chart or hand poses inside a precomp. Change the easing to Linear for a ramp or slow-motion. With keys it overrides the play mode; delete them to go back.
+- **Length**: tap the frame counter in Motion (e.g. "1 / 12") to set how long the comp is; 0 = follow its content. A looping layer needs a length to loop into.
+
 ## Precomps (comps inside comps)
 
 - **Group**: in Motion, pick layers (tap **Select**, then tap layers, or Shift-click) and tap **Group**. They move into a new comp the same size and speed as this one, replaced by one layer; nothing moves or retimes. Undo puts them back.

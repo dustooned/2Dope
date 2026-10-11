@@ -60,7 +60,7 @@ describe('comps and layers', () => {
     expect(drawingOf(l, 9)).toBeNull();
     expect(drawingOf(l, 12)).toBe('b');
     expect(layerEnd(l, comps)).toBe(15);
-    l.loop = true;
+    l.play = 'loop';
     expect(drawingOf(l, 15)).toBe('a');
     expect(layerEnd(l, comps)).toBe(Infinity);
     l.out = 20;
@@ -143,7 +143,7 @@ describe('comps and layers', () => {
     expect(nestedFrame(pl, 0, 12, inner, comps)).toBe(0);
     expect(nestedFrame(pl, 1, 12, inner, comps)).toBe(2); // one 12 fps frame = two 24 fps frames
     expect(nestedFrame(pl, 3, 12, inner, comps)).toBeNull(); // past the end (frame 6 of 5)
-    pl.loop = true;
+    pl.play = 'loop';
     expect(nestedFrame(pl, 3, 12, inner, comps)).toBe(1);
   });
 
@@ -175,5 +175,69 @@ describe('frame content', () => {
     comps.set('c2', outer);
     outer.layers.push(compLayer('P', 'Shot', c, outer));
     expect([...frameContent(comps, 'c2', 3).drawings]).toEqual(['b']);
+  });
+});
+
+describe('play modes and frame picking', () => {
+  async function mk() {
+    const C = await import('./comp');
+    const A = await import('./anim');
+    const c = C.newComp('c1', 'S', 100, 100, 12);
+    // 4 drawings, one frame each: a b c d
+    const l = C.drawingsLayer('L', 'x', ['a', 'b', 'c', 'd'].map((d) => ({ drawing: d, length: 1 })), 100, 100);
+    c.layers.push(l);
+    return { C, A, c, l, comps: new Map([[c.id, c]]) };
+  }
+  const seq = (l: Parameters<typeof drawingOf>[0], n: number) => Array.from({ length: n }, (_, f) => drawingOf(l, f) ?? '-').join('');
+
+  it('once ends after its content, or holds the last frame when made longer', async () => {
+    const { l, C, comps } = await mk();
+    expect(seq(l, 6)).toBe('abcd--');
+    expect(C.layerEnd(l, comps, 12)).toBe(4);
+    l.out = 6;
+    expect(seq(l, 7)).toBe('abcddd-');
+  });
+
+  it('loop repeats, ping-pong bounces without doubling the ends, single holds one frame', async () => {
+    const { l, C, comps } = await mk();
+    l.play = 'loop';
+    expect(seq(l, 9)).toBe('abcdabcda');
+    l.play = 'pingpong';
+    expect(seq(l, 10)).toBe('abcdcbabcd');
+    expect(C.layerEnd(l, comps, 12)).toBe(Infinity);
+    l.play = 'single';
+    l.single = 2;
+    expect(seq(l, 3)).toBe('ccc');
+  });
+
+  it('speed stretches time (and the layer end with it)', async () => {
+    const { l, C, comps, c } = await mk();
+    l.speed = 0.5;
+    expect(seq(l, 9)).toBe('aabbccdd-');
+    expect(C.layerEnd(l, comps, 12)).toBe(8);
+    expect(C.compLength(c, comps)).toBe(8);
+  });
+
+  it('frame picking (time remap with hold keys) swaps frames and wins over the play mode', async () => {
+    const { l, A } = await mk();
+    l.play = 'loop';
+    let r = A.setKey(A.staticProp(0), 0, 3, 'hold');
+    r = A.setKey(r, 2, 0, 'hold');
+    r = A.setKey(r, 4, 2, 'hold');
+    l.timeRemap = r;
+    expect(seq(l, 7)).toBe('ddaaccc');
+  });
+
+  it('a precomp at another fps and speed maps its frames', async () => {
+    const { C, c, comps } = await mk();
+    const outer = C.newComp('o', 'O', 100, 100, 24);
+    comps.set('o', outer);
+    const pl = C.compLayer('P', 'p', c, outer);
+    outer.layers.push(pl);
+    // inner runs at 12 fps inside a 24 fps shot: each inner frame shows twice
+    expect([0, 1, 2, 3].map((f) => C.nestedFrame(pl, f, 24, c, comps))).toEqual([0, 0, 1, 1]);
+    expect(C.compLength(outer, comps)).toBe(8);
+    pl.speed = 2;
+    expect([0, 1, 2, 3].map((f) => C.nestedFrame(pl, f, 24, c, comps))).toEqual([0, 1, 2, 3]);
   });
 });

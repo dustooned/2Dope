@@ -59,16 +59,21 @@ assets/<hash>.png       one PNG per non-empty pixel plane (transparent RGBA)
             "opacity":  { "value": 100 }                   // percent
           },
           "exposures": [ { "drawing": "d1", "length": 2, "note": "walks in" }, { "drawing": "d2", "length": 1 } ],
-          "loop": false
+          // optional, drawings and comp layers: "play" once | loop | pingpong | single (default once),
+          // "speed" (default 1), "single" (the held frame, 0-based), "timeRemap" (keys: which content
+          // frame to show, 0-based; hold keys = swaps; overrides play and speed)
+          "play": "loop"
         },
         {
-          "id": "P", "name": "Walk cycle", "kind": "comp", "comp": "c2", "loop": true,
+          "id": "P", "name": "Walk cycle", "kind": "comp", "comp": "c2", "play": "loop",
+          "overrides": { "L1:rotation": { "value": 30 } },   // this instance's values for the comp's pinned properties
           "start": 0, "in": 0, "out": null, "parent": null, "visible": true, "locked": false, "label": 0, "blend": "normal",
           "transform": { /* ... */ }
         }
       ]
     },
-    "c2": { "name": "Walk cycle", "width": 1920, "height": 1080, "fps": 12, "duration": 8, "background": null, "folder": "f1", "layers": [ /* ... */ ] }
+    "c2": { "name": "Walk cycle", "width": 1920, "height": 1080, "fps": 12, "duration": 8, "background": null, "folder": "f1", "layers": [ /* ... */ ],
+            "pins": [ { "layer": "L1", "prop": "rotation" } ] }   // properties shown on every instance
   },
   "drawings": {
     "d1": {
@@ -94,7 +99,10 @@ Display order of a drawing: fill, then line, then vector strokes.
   left handle of key B = (f − influence·Δf, v − slope·influence·Δv).
 - **Camera**: the topmost visible camera frames the comp. It maps comp space to the frame as
   `T(comp centre) · S(zoom/100) · R(−rotation) · T(−position)`: a centred camera at 100 % changes nothing.
-- **Precomps**: a `comp` layer shows its comp at `(comp frame − start) × nested fps ÷ parent fps`, repeating with `loop`.
+- **Precomps and drawings layers** show content frame `floor((comp frame − start) × speed × content fps ÷ comp fps)`,
+  wrapped by `play` (loop: modulo; pingpong: bounce; once: ends, or holds the last frame when `out` is later;
+  single: the `single` frame). `timeRemap` keys, when present, give the frame directly (rounded, clamped).
+  Early schema-2 files wrote `"loop": true`; it reads as `"play": "loop"`.
   A comp may not contain itself (refused on open).
 - Layers draw bottom to top with their blend mode; a layer with opacity or a blend mode is flattened first.
 

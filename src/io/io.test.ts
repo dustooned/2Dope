@@ -280,6 +280,21 @@ describe('project schema', () => {
     expect(back.comps.c1!.layers[2]!.transform.position.keys).toHaveLength(2);
   });
 
+  it('reads the early schema-2 "loop" flag as the loop play mode and keeps play, speed and remap', () => {
+    const p = sample();
+    const l = p.comps.c1!.layers[0]!;
+    (l as unknown as { loop: boolean }).loop = true;
+    expect(validateProjectFile(p).comps.c1!.layers[0]!.play).toBe('loop');
+    delete (l as unknown as { loop?: boolean }).loop;
+    l.play = 'pingpong';
+    l.speed = 0.5;
+    l.timeRemap = { value: 0, keys: [{ f: 0, v: 1, in: { interp: 'linear' }, out: { interp: 'hold' } }] };
+    const back = parseProjectFile(stringifyProjectFile(p)).comps.c1!.layers[0]!;
+    expect([back.play, back.speed, back.timeRemap?.keys?.length]).toEqual(['pingpong', 0.5, 1]);
+    const plain = validateProjectFile(sample()).comps.c1!.layers[0]!;
+    expect([plain.play, plain.speed, plain.timeRemap]).toEqual([undefined, undefined, undefined]); // defaults are not written
+  });
+
   it('refuses a comp that contains itself and drops parents that do not exist', () => {
     const p = sample();
     p.comps.c1!.layers.push({ id: 'self', name: 'me', kind: 'comp', comp: 'c1', start: 0, in: 0, out: null, parent: null, visible: true, locked: false, label: 0, blend: 'normal', transform: T(10, 10) });

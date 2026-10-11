@@ -1,6 +1,6 @@
 import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
 import { PRESETS, type BrushSettings } from '../core/brush';
-import { BLEND_MODES, compLength, PIN_PROPS, wouldCycle, type BinFolder, type BlendMode, type Comp, type Layer, type PinProp, type Transform } from '../core/comp';
+import { BLEND_MODES, compLength, PIN_PROPS, PLAY_MODES, wouldCycle, type PlayMode, type BinFolder, type BlendMode, type Comp, type Layer, type PinProp, type Transform } from '../core/comp';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
 
 /**
@@ -66,7 +66,15 @@ export interface LayerFile {
   transform: TransformFile;
   /** drawings: run-length exposures in layer time. */
   exposures?: ExposureFile[];
-  /** drawings / comp: repeat the content. */
+  /** drawings / comp: how the content plays (older files: `loop: true` = "loop"). */
+  play?: PlayMode;
+  /** drawings / comp: playback rate, default 1. */
+  speed?: number;
+  /** drawings / comp: the frame "single" shows (0-based). */
+  single?: number;
+  /** drawings / comp: which content frame to show, keyed (0-based); overrides play and speed. */
+  timeRemap?: PropFile<number>;
+  /** Written by early schema-2 files; read as play "loop". */
   loop?: boolean;
   /** comp: the nested comp's id. */
   comp?: string;
@@ -240,7 +248,6 @@ function from1to2(raw: Record<string, unknown>): Record<string, unknown> {
         blend: 'normal',
         transform: defaultTransformFile(w, h),
         exposures: (o.exposures as ExposureFile[]) ?? [],
-        loop: false,
       } satisfies LayerFile;
     }),
   };
@@ -312,6 +319,20 @@ function exposureList(v: unknown, what: string, drawings: Record<string, Drawing
 
 const KINDS: LayerFile['kind'][] = ['drawings', 'comp', 'camera', 'null'];
 
+/** Play mode, speed, held frame and time remap of a drawings or precomp layer (defaults left out). */
+function timing(v: Record<string, unknown>, out: LayerFile, what: string): void {
+  const play = PLAY_MODES.includes(v.play as PlayMode) ? (v.play as PlayMode) : v.loop === true ? 'loop' : 'once';
+  if (play !== 'once') out.play = play;
+  const speed = v.speed === undefined ? 1 : num(v.speed, `${what} speed`, 0.01, 100);
+  if (speed !== 1) out.speed = speed;
+  const single = v.single === undefined ? 0 : int(v.single, `${what} held frame`, 0, MAX_FRAMES);
+  if (single) out.single = single;
+  if (v.timeRemap !== undefined) {
+    const r = prop<number>(v.timeRemap, `${what} time remap`, 1);
+    if (r.keys?.length) out.timeRemap = r;
+  }
+}
+
 function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, comps: Record<string, unknown>): LayerFile {
   if (!isObj(v)) throw new SchemaError(`${what} is not an object`);
   const kind = v.kind as LayerFile['kind'];
@@ -335,12 +356,12 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   if (kind === 'drawings') {
     out.exposures = exposureList(v.exposures, what, drawings);
     if (!out.exposures.length) throw new SchemaError(`${what} has no frames`);
-    out.loop = v.loop === true;
+    timing(v, out, what);
   } else if (kind === 'comp') {
     const c = str(v.comp, `${what} comp`, 64);
     if (!isObj(comps[c])) throw new SchemaError(`${what} refers to a missing comp "${c}"`);
     out.comp = c;
-    out.loop = v.loop === true;
+    timing(v, out, what);
     if (isObj(v.overrides)) {
       const o: Record<string, PropFile> = {};
       for (const [k, p] of Object.entries(v.overrides)) {
@@ -533,8 +554,9 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
   for (const [id, c] of Object.entries(file.comps)) {
     const layers: Layer[] = c.layers.map((l): Layer => {
       const base = { id: l.id, name: l.name, start: l.start, in: l.in, out: l.out, parent: l.parent, visible: l.visible, locked: l.locked, label: l.label, blend: l.blend, transform: transformOf(l.transform) };
-      if (l.kind === 'drawings') return { ...base, kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), loop: !!l.loop };
-      if (l.kind === 'comp') return { ...base, kind: 'comp', comp: l.comp!, loop: !!l.loop, overrides: Object.fromEntries(Object.entries(l.overrides ?? {}).map(([k, p]) => [k, propOf(p)])) };
+      const timed = { play: l.play ?? (l.loop ? 'loop' : 'once'), speed: l.speed ?? 1, single: l.single ?? 0, timeRemap: l.timeRemap ? propOf(l.timeRemap) : null } as const;
+      if (l.kind === 'drawings') return { ...base, kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
+      if (l.kind === 'comp') return { ...base, kind: 'comp', comp: l.comp!, ...timed, overrides: Object.fromEntries(Object.entries(l.overrides ?? {}).map(([k, p]) => [k, propOf(p)])) };
       if (l.kind === 'camera') return { ...base, kind: 'camera', zoom: propOf(l.zoom ?? still(100)) };
       return { ...base, kind: 'null' };
     });
@@ -555,10 +577,17 @@ export function compFile(c: Comp): CompFile {
     folder: c.folder,
     layers: c.layers.map((l): LayerFile => {
       const base: LayerFile = { id: l.id, name: l.name, kind: l.kind, start: l.start, in: l.in, out: l.out, parent: l.parent, visible: l.visible, locked: l.locked, label: l.label, blend: l.blend, transform: transformFile(l.transform) };
-      if (l.kind === 'drawings') return { ...base, exposures: l.exposures.map((e) => ({ ...e })), loop: l.loop };
+      const timed: Partial<LayerFile> = {};
+      if (l.kind === 'drawings' || l.kind === 'comp') {
+        if (l.play !== 'once') timed.play = l.play;
+        if (l.speed !== 1) timed.speed = l.speed;
+        if (l.single) timed.single = l.single;
+        if (l.timeRemap?.keys.length) timed.timeRemap = propFile(l.timeRemap);
+      }
+      if (l.kind === 'drawings') return { ...base, exposures: l.exposures.map((e) => ({ ...e })), ...timed };
       if (l.kind === 'comp') {
         const o = Object.entries(l.overrides ?? {});
-        return o.length ? { ...base, comp: l.comp, loop: l.loop, overrides: Object.fromEntries(o.map(([k, p]) => [k, propFile(p)])) } : { ...base, comp: l.comp, loop: l.loop };
+        return o.length ? { ...base, comp: l.comp, ...timed, overrides: Object.fromEntries(o.map(([k, p]) => [k, propFile(p)])) } : { ...base, comp: l.comp, ...timed };
       }
       if (l.kind === 'camera') return { ...base, zoom: propFile(l.zoom) };
       return base;

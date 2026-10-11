@@ -408,3 +408,28 @@ describe('precomps', () => {
     expect(instanceComp(n, l)).toBe(n); // not pinned: ignored
   });
 });
+
+describe('frame picking in the editor', () => {
+  it('typing a frame at the playhead writes a hold key (a swap); the first one also keys the start', () => {
+    const { ed, app, comp } = rig();
+    const l = comp.layers[0]!;
+    if (l.kind === 'drawings') l.exposures = ['a', 'b', 'c'].map((d) => ({ drawing: d, length: 1 }));
+    app.frame = 2;
+    ed.setValue('L1', 'remap', 0);
+    const r = (ed.layer('L1') as { timeRemap: { keys: { f: number; v: number; out: { interp: string } }[] } }).timeRemap;
+    expect(r.keys.map((k) => [k.f, k.v, k.out.interp])).toEqual([
+      [0, 0, 'hold'],
+      [2, 0, 'hold'],
+    ]);
+    app.frame = 1;
+    expect(ed.contentFrame(ed.layer('L1')!)).toBe(0);
+  });
+
+  it('play modes are one undo step', () => {
+    const { ed, app } = rig();
+    ed.setPlay('L1', 'pingpong', { speed: 2 });
+    expect([(ed.layer('L1') as { play: string }).play, (ed.layer('L1') as { speed: number }).speed]).toEqual(['pingpong', 2]);
+    app.history.undo();
+    expect((ed.layer('L1') as { play: string }).play).toBe('once');
+  });
+});

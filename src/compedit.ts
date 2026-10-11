@@ -35,11 +35,13 @@ import {
   type Mat,
 } from './core/comp';
 import { nestedFrame } from './core/comp';
+import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
+import { totalFrames } from './core/timeline';
 import type { Command } from './core/history';
 import type { App } from './app';
 
 /** The properties the Motion view animates, by name. */
-export type PropName = 'position' | 'scale' | 'rotation' | 'opacity' | 'anchor' | 'zoom';
+export type PropName = 'position' | 'scale' | 'rotation' | 'opacity' | 'anchor' | 'zoom' | 'remap';
 
 export const PROP_LABEL: Record<PropName, string> = {
   position: 'Position',
@@ -48,21 +50,29 @@ export const PROP_LABEL: Record<PropName, string> = {
   opacity: 'Opacity',
   anchor: 'Anchor',
   zoom: 'Zoom',
+  remap: 'Frame',
 };
 
 /** Which properties a layer shows, in order. */
 export function propsOf(l: Layer): PropName[] {
   if (l.kind === 'camera') return ['position', 'rotation', 'zoom'];
   if (l.kind === 'null') return ['position', 'scale', 'rotation'];
-  return ['position', 'scale', 'rotation', 'opacity'];
+  // "Frame" picks which frame of the layer's own timeline shows (swaps, freezes, ramps)
+  return ['position', 'scale', 'rotation', 'opacity', 'remap'];
 }
 
 export function getProp(l: Layer, n: PropName): Prop {
+  if (n === 'remap') return (l.kind === 'drawings' || l.kind === 'comp') && l.timeRemap ? l.timeRemap : { value: 0, keys: [] };
   if (n === 'zoom') return l.kind === 'camera' ? l.zoom : (l.transform.opacity as Prop);
   return l.transform[n] as Prop;
 }
 
 function setPropOn(l: Layer, n: PropName, p: Prop): void {
+  if (n === 'remap') {
+    // only keys mean anything here: without them the layer plays by its play mode
+    if (l.kind === 'drawings' || l.kind === 'comp') l.timeRemap = p.keys.length ? (p as Prop<number>) : null;
+    return;
+  }
   if (n === 'zoom' && l.kind === 'camera') l.zoom = p as Prop<number>;
   else (l.transform as unknown as Record<string, Prop>)[n] = p;
 }
@@ -157,6 +167,50 @@ export class CompEditor {
     return layerFrame(l, this.app.frame);
   }
 
+  /** The frame of its own timeline a drawings or precomp layer shows at the playhead (0-based). */
+  contentFrame(l: Layer): number | null {
+    const p = this.app.project;
+    if (l.kind === 'drawings') return contentFrameAt(l, this.app.frame, totalFrames(l.exposures), p.comps, this.comp.fps);
+    if (l.kind === 'comp') {
+      const n = p.comps.get(l.comp);
+      return n ? contentFrameAt(l, this.app.frame, compLength(n, p.comps), p.comps, this.comp.fps) : null;
+    }
+    return null;
+  }
+
+  /** How many frames a drawings or precomp layer's own timeline has. */
+  contentLength(l: Layer): number {
+    const p = this.app.project;
+    if (l.kind === 'drawings') return totalFrames(l.exposures);
+    if (l.kind === 'comp') {
+      const n = p.comps.get(l.comp);
+      return n ? compLength(n, p.comps) : 1;
+    }
+    return 1;
+  }
+
+  /** Set how long the open comp is (frames), or null to follow its content. */
+  setDuration(frames: number | null): void {
+    const c = this.comp;
+    const n = frames === null || frames < 1 ? null : Math.round(Math.min(frames, 1_000_000));
+    if (n === c.duration) return;
+    this.editProject(n === null ? 'Length: automatic' : `Length: ${n} frames`, () => {
+      c.duration = n;
+    });
+    this.app.setFrame(Math.min(this.app.frame, this.app.compEnd - 1));
+  }
+
+  /** Play once, loop, ping-pong, or hold one frame; and the speed. */
+  setPlay(id: string, play: PlayMode, opts: { single?: number; speed?: number } = {}): void {
+    this.edit('Playback', (c) => {
+      const l = c.layers.find((x) => x.id === id);
+      if (!l || (l.kind !== 'drawings' && l.kind !== 'comp')) return;
+      l.play = play;
+      if (opts.single !== undefined) l.single = Math.max(0, Math.round(opts.single));
+      if (opts.speed !== undefined) l.speed = Math.max(0.05, Math.min(20, opts.speed));
+    });
+  }
+
   /** A property of a layer, including pinned properties of a precomp (this instance's value). */
   getProp(l: Layer, n: PropKey): Prop {
     if (isPin(n)) {
@@ -168,6 +222,7 @@ export class CompEditor {
       const inner = this.app.project.comps.get(l.comp)?.layers.find((x) => x.id === id);
       return inner ? getProp(inner, prop) : (l.transform.opacity as Prop);
     }
+    if (n === 'remap' && (l.kind === 'drawings' || l.kind === 'comp') && !l.timeRemap?.keys.length) return { value: this.contentFrame(l) ?? 0, keys: [] };
     return getProp(l, n);
   }
 
@@ -227,10 +282,11 @@ export class CompEditor {
 
   /** Pin or unpin a property of a layer in the open comp. */
   togglePin(layerId: string, n: PropName): void {
+    if (n === 'remap') return; // a layer's own frame picking is not a pinnable property (yet)
     const c = this.comp;
     const before = structuredClone(c.pins);
     const has = this.isPinned(layerId, n);
-    c.pins = has ? c.pins.filter((p) => !(p.layer === layerId && p.prop === n)) : [...c.pins, { layer: layerId, prop: n }];
+    c.pins = has ? c.pins.filter((p) => !(p.layer === layerId && p.prop === n)) : [...c.pins, { layer: layerId, prop: n as PinProp }];
     const after = structuredClone(c.pins);
     const id = c.id;
     const set = (pins: typeof before) => {
@@ -692,6 +748,11 @@ export class CompEditor {
   private withValue(l: Layer, n: PropKey, value: number | Vec2): Prop {
     const p = this.getProp(l, n);
     const f = this.frameOf(l, n);
+    if (n === 'remap') {
+      // the first pick also keeps what the layer showed at its start (frame 0, or the held frame)
+      const base = isAnimated(p) ? p : { value: (l.kind === 'drawings' || l.kind === 'comp') && l.play === 'single' ? l.single : 0, keys: [] };
+      return setKey(base, f, value as never, isAnimated(p) ? this.lastEase : 'hold', this.keyAtStart && !isAnimated(p) ? 0 : undefined) as Prop;
+    }
     if (isAnimated(p) || this.autoKey) return setKey(p, f, value as never, this.lastEase, this.keyAtStart && !isAnimated(p) ? 0 : undefined) as Prop;
     return { ...p, value } as Prop;
   }

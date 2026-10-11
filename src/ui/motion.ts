@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import { easingOf, EASINGS, isAnimated, spacingTicks, type Easing, type Prop, type Vec2 } from '../core/anim';
-import { compLength, layerEnd, type Layer } from '../core/comp';
+import { compLength, layerEnd, playsOn, type Layer, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
 import { isPin, keyId, PROP_LABEL, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
@@ -44,6 +44,7 @@ function fmt(n: number): string {
 }
 
 function show(n: PropName, v: number | Vec2): string {
+  if (n === 'remap') return `#${Math.round(v as number) + 1}`;
   if (Array.isArray(v)) return n === 'scale' ? `${fmt(v[0])}, ${fmt(v[1])} %` : `${fmt(v[0])}, ${fmt(v[1])}`;
   if (n === 'rotation') return `${fmt(v)}°`;
   return `${fmt(v)} %`;
@@ -74,7 +75,7 @@ export class MotionPanel {
 
   // toolbar bits updated on every change
   private readonly playBtn: HTMLButtonElement;
-  private readonly frameLabel = el('span', { class: 'readout frame-readout' });
+  private readonly frameLabel = el('button', { type: 'button', class: 'readout frame-readout', title: 'Frame / length of this comp. Tap to set the length.' });
   private readonly fpsSel: HTMLSelectElement;
   private readonly autoBtn: HTMLButtonElement;
   private readonly startBtn: HTMLButtonElement;
@@ -108,6 +109,11 @@ export class MotionPanel {
 
     // Transport
     this.playBtn = btn('Play', 'Play / pause (Enter)', () => app.togglePlay(), 'play');
+    this.frameLabel.addEventListener('click', async () => {
+      const c = ed.comp;
+      const r = await askNumbers(`${c.name}: length`, [{ label: 'Frames', value: c.duration ?? compLength(c, app.project.comps), unit: c.duration === null ? '(auto)' : '' }]);
+      if (r) ed.setDuration(r[0]! > 0 ? r[0]! : null);
+    });
     this.fpsSel = el('select', { 'aria-label': 'Frames per second', title: 'Frames per second' });
     for (const f of FPS_PRESETS) this.fpsSel.append(el('option', { value: String(f) }, `${f} fps`));
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
@@ -369,7 +375,8 @@ export class MotionPanel {
     b.append(el('span', { class: 'mh in', 'data-handle': 'in' }), el('span', { class: 'mh out', 'data-handle': 'out' }));
     if (l.kind === 'drawings' || l.kind === 'comp') {
       // content cycle marks help when a layer loops or starts later than its in point
-      if (l.loop) b.append(el('span', { class: 'mloop', title: 'Loops' }, '↻'));
+      const mark = l.timeRemap?.keys.length ? '⇄' : { once: '', loop: '↻', pingpong: '⇋', single: '▣' }[l.play];
+      if (mark) b.append(el('span', { class: 'mloop', title: l.timeRemap?.keys.length ? 'Frames picked by the Frame row' : `Plays: ${l.play}` }, mark));
     }
     right.append(b);
     row.append(left, right);
@@ -389,7 +396,7 @@ export class MotionPanel {
       el('button', { type: 'button', class: `pval${ed.isOverridden(l, n) ? ' over' : ''}`, 'data-val': n, 'data-layer': l.id, 'data-act': 'value', title: isPin(n) ? 'This instance\'s value. Tap to type one.' : 'Tap to type a value' }, show(kind, ed.valueNow(l, n))),
     );
     if (isPin(n) && ed.isOverridden(l, n)) left.append(el('button', { type: 'button', class: 'pstar', 'data-act': 'reset', 'data-row': n, title: 'Back to the comp\'s own value' }, '↺'));
-    else if (!isPin(n) && inside) {
+    else if (!isPin(n) && n !== 'remap' && inside) {
       const on = ed.isPinned(l.id, n as PropName);
       left.append(el('button', { type: 'button', class: `pstar${on ? ' on' : ''}`, 'data-act': 'pin', 'data-row': n, 'aria-pressed': String(on), title: on ? 'Pinned: every instance of this comp shows this property. Tap to unpin.' : 'Pin: show this property on every instance of this comp' }, '★'));
     }
@@ -514,9 +521,39 @@ export class MotionPanel {
     }
   }
 
+  /** Playback of a drawings or precomp layer: once, loop, ping-pong, hold one frame; speed. */
+  private async playMenu(l: Layer): Promise<void> {
+    if (l.kind !== 'drawings' && l.kind !== 'comp') return;
+    const ed = this.ed;
+    const len = ed.contentLength(l);
+    type P = PlayMode | 'speed';
+    const pick = await pickBox<P>(`${l.name}: playback`, [
+      { label: `${l.play === 'once' ? '● ' : ''}Once`, value: 'once', hint: ' play it through, then it ends (or holds its last frame if you make the layer longer)' },
+      { label: `${l.play === 'loop' ? '● ' : ''}Loop`, value: 'loop', hint: ' repeat it' },
+      { label: `${l.play === 'pingpong' ? '● ' : ''}Ping-pong`, value: 'pingpong', hint: ' forwards, then backwards' },
+      { label: `${l.play === 'single' ? '● ' : ''}Hold one frame…`, value: 'single', hint: ' always show the same frame (a pose or a mouth)' },
+      { label: `Speed… (now ${l.speed}×)`, value: 'speed' },
+    ]);
+    if (!pick) return;
+    if (pick === 'speed') {
+      const r = await askNumbers(`${l.name}: speed`, [{ label: 'Speed', value: l.speed, step: 0.05, unit: '×' }]);
+      if (r) ed.setPlay(l.id, l.play, { speed: r[0]! });
+    } else if (pick === 'single') {
+      const r = await askNumbers(`${l.name}: hold frame`, [{ label: 'Frame', value: (ed.contentFrame(l) ?? 0) + 1, unit: `of ${len}` }]);
+      if (r) ed.setPlay(l.id, 'single', { single: Math.max(0, Math.min(len - 1, Math.round(r[0]!) - 1)) });
+    } else ed.setPlay(l.id, pick);
+  }
+
   private async editValue(l: Layer, n: PropKey): Promise<void> {
     const v = this.ed.valueNow(l, n);
     const kind = this.ed.rowProp(n);
+    if (kind === 'remap') {
+      // a swap: show this frame of the layer's own timeline from the playhead on
+      const len = this.ed.contentLength(l);
+      const r = await askNumbers(`${l.name}: show frame`, [{ label: 'Frame', value: (v as number) + 1, unit: `of ${len}` }]);
+      if (r) this.ed.setValue(l.id, n, Math.max(0, Math.min(len - 1, Math.round(r[0]!) - 1)), 'Pick frame');
+      return;
+    }
     const title = `${l.name}: ${this.ed.rowLabel(l, n)}`;
     if (Array.isArray(v)) {
       const unit = kind === 'scale' ? '%' : 'px';
@@ -553,7 +590,7 @@ export class MotionPanel {
 
   private async layerMenu(l: Layer): Promise<void> {
     const ed = this.ed;
-    type Act = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'loop' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique';
+    type Act = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'play' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique';
     const items: { label: string; value: Act }[] = [];
     if (l.kind === 'comp') {
       items.push({ label: 'Go inside', value: 'enter' }, { label: 'Ungroup (put its layers back here)', value: 'ungroup' }, { label: 'Duplicate (another instance)', value: 'dup' });
@@ -567,7 +604,7 @@ export class MotionPanel {
       { label: l.locked ? 'Unlock' : 'Lock', value: 'lock' },
       { label: 'Colour…', value: 'colour' },
     );
-    if (l.kind === 'drawings' || l.kind === 'comp') items.push({ label: l.loop ? 'Stop looping' : 'Loop', value: 'loop' });
+    if (l.kind === 'drawings' || l.kind === 'comp') items.push({ label: 'Playback (once, loop, ping-pong, hold a frame, speed)…', value: 'play' });
     items.push({ label: 'Delete', value: 'delete' });
     const pick = await pickBox<Act>(l.name, items);
     if (!pick) return;
@@ -606,11 +643,8 @@ export class MotionPanel {
         if (c !== undefined) ed.setLabel(l.id, c);
         break;
       }
-      case 'loop':
-        ed.edit((l.kind === 'drawings' || l.kind === 'comp') && l.loop ? 'Stop looping' : 'Loop layer', (c) => {
-          const x = c.layers.find((z) => z.id === l.id);
-          if (x && (x.kind === 'drawings' || x.kind === 'comp')) x.loop = !x.loop;
-        });
+      case 'play':
+        await this.playMenu(l);
         break;
       case 'delete':
         if (await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true)) ed.deleteLayers([l.id]);
@@ -721,7 +755,7 @@ export class MotionPanel {
         const natural = layerEnd({ ...l, out: null }, this.app.project.comps);
         const cur = l.out ?? (Number.isFinite(natural) ? natural : this.ed.length());
         let out = cur + df;
-        if (Number.isFinite(natural) && !((l.kind === 'drawings' || l.kind === 'comp') && l.loop)) out = Math.min(out, natural);
+        if (Number.isFinite(natural) && !playsOn(l)) out = Math.max(out, l.in + 1); // a "once" layer made longer holds its last frame
         this.ed.setTiming(l.id, { out }, 'Trim layer end');
       }
     }

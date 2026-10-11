@@ -41,19 +41,40 @@ interface LayerBase {
   transform: Transform;
 }
 
+/**
+ * How a layer with its own timeline (drawings, precomp) plays it:
+ * - once: play it through; past the end it disappears, or holds the last frame if the layer's
+ *   out point is set later (so a one-shot can rest on its final pose)
+ * - loop: repeat (a walk cycle placed once)
+ * - pingpong: forwards, then backwards, and again
+ * - single: always show one frame (`single`): a precomp used as a library of poses or mouths
+ */
+export type PlayMode = 'once' | 'loop' | 'pingpong' | 'single';
+export const PLAY_MODES: PlayMode[] = ['once', 'loop', 'pingpong', 'single'];
+
+interface Timed {
+  play: PlayMode;
+  /** Playback rate (1 = as drawn; 0.5 = half speed). */
+  speed: number;
+  /** The frame `single` shows (0-based, in the content's own frames). */
+  single: number;
+  /**
+   * Which content frame to show, keyed over time (0-based content frames). With keys it overrides
+   * play mode and speed: hold keys swap frames (lip sync, poses), linear keys ramp, reverse or freeze.
+   */
+  timeRemap: Prop<number> | null;
+}
+
 /** Frame-by-frame drawings, timed by exposures (what the strip and X-sheet edit). */
-export interface DrawingsLayer extends LayerBase {
+export interface DrawingsLayer extends LayerBase, Timed {
   kind: 'drawings';
   exposures: Exposure[];
-  /** Repeat the exposures (a walk cycle placed once, playing on). */
-  loop: boolean;
 }
 
 /** A precomp: another comp placed as one layer. Instances of the same comp share its content. */
-export interface CompLayer extends LayerBase {
+export interface CompLayer extends LayerBase, Timed {
   kind: 'comp';
   comp: string;
-  loop: boolean;
   /**
    * This instance's own values for the comp's pinned properties, by pin key ("layerId:prop").
    * Keys are in the nested layer's time, like the property they replace.
@@ -140,13 +161,16 @@ function base(id: string, name: string, width: number, height: number, compW: nu
   };
 }
 
+/** The default timing of a new drawings or precomp layer: play once at normal speed. */
+export const ONCE: Timed = { play: 'once', speed: 1, single: 0, timeRemap: null };
+
 /** A drawings layer whose page is `w`×`h`, centred in a `compW`×`compH` comp. */
 export function drawingsLayer(id: string, name: string, exposures: Exposure[], w: number, h: number, compW = w, compH = h): DrawingsLayer {
-  return { ...base(id, name, w, h, compW, compH), kind: 'drawings', exposures, loop: false };
+  return { ...base(id, name, w, h, compW, compH), kind: 'drawings', exposures, ...ONCE };
 }
 
 export function compLayer(id: string, name: string, nested: Comp, parent: Comp): CompLayer {
-  return { ...base(id, name, nested.width, nested.height, parent.width, parent.height), kind: 'comp', comp: nested.id, loop: false, overrides: {} };
+  return { ...base(id, name, nested.width, nested.height, parent.width, parent.height), kind: 'comp', comp: nested.id, ...ONCE, overrides: {} };
 }
 
 export function cameraLayer(id: string, comp: Comp): CameraLayer {
@@ -205,23 +229,68 @@ export function contentLength(l: Layer, comps: ReadonlyMap<string, Comp>): numbe
   return null;
 }
 
-/** The comp frame after the layer's last visible frame. */
-export function layerEnd(l: Layer, comps: ReadonlyMap<string, Comp>): number {
-  if (l.out !== null) return l.out;
-  const loops = (l.kind === 'drawings' || l.kind === 'comp') && l.loop;
-  const len = contentLength(l, comps);
-  if (len === null || loops) return Number.POSITIVE_INFINITY;
-  return l.start + len;
+/** Content frames per comp frame: the content's fps over the comp's, times speed. */
+function rate(l: DrawingsLayer | CompLayer, comps: ReadonlyMap<string, Comp>, parentFps?: number): number {
+  let r = Math.max(0.01, l.speed || 1);
+  if (l.kind === 'comp' && parentFps) {
+    const n = comps.get(l.comp);
+    if (n) r *= n.fps / parentFps;
+  }
+  return r;
 }
 
-/** Is the layer showing at this comp frame? */
-export function activeAt(l: Layer, compFrame: number, comps: ReadonlyMap<string, Comp>): boolean {
-  return l.visible && compFrame >= l.in && compFrame < layerEnd(l, comps);
+/** Does the layer's timing keep going past its content (loops, ping-pong, a held frame, remap)? */
+export function playsOn(l: Layer): boolean {
+  if (l.kind !== 'drawings' && l.kind !== 'comp') return true;
+  return l.play !== 'once' || (l.timeRemap?.keys.length ?? 0) > 0;
 }
 
 /**
- * A comp's length in frames: its set duration, or the end of its last finite layer (at least 1).
- * Guards against precomp cycles (the schema refuses them too).
+ * The comp frame after the layer's last visible frame. `parentFps` is the fps of the comp the
+ * layer is in (needed when a precomp runs at another rate).
+ */
+export function layerEnd(l: Layer, comps: ReadonlyMap<string, Comp>, parentFps?: number): number {
+  if (l.out !== null) return l.out;
+  if (l.kind !== 'drawings' && l.kind !== 'comp') return Number.POSITIVE_INFINITY;
+  if (playsOn(l)) return Number.POSITIVE_INFINITY;
+  const len = contentLength(l, comps) ?? 0;
+  return l.start + Math.ceil(len / rate(l, comps, parentFps) - 1e-9);
+}
+
+/** Is the layer showing at this comp frame? */
+export function activeAt(l: Layer, compFrame: number, comps: ReadonlyMap<string, Comp>, parentFps?: number): boolean {
+  return l.visible && compFrame >= l.in && compFrame < layerEnd(l, comps, parentFps);
+}
+
+const mod = (a: number, n: number) => ((a % n) + n) % n;
+
+/**
+ * The single place that decides which frame of its content a drawings or precomp layer shows at
+ * a comp frame (0-based content frame), or null when it shows nothing. Time remap wins, then
+ * play mode, speed and fps.
+ */
+export function contentFrameAt(l: DrawingsLayer | CompLayer, compFrame: number, len: number, comps: ReadonlyMap<string, Comp>, parentFps?: number): number | null {
+  if (!l.visible || compFrame < l.in || (l.out !== null && compFrame >= l.out)) return null;
+  if (len <= 0) return null;
+  const lf = layerFrame(l, compFrame);
+  const last = len - 1;
+  if (l.timeRemap && l.timeRemap.keys.length) return Math.max(0, Math.min(last, Math.round(valueAt(l.timeRemap, lf))));
+  if (l.play === 'single') return Math.max(0, Math.min(last, Math.round(l.single)));
+  if (lf < 0) return null;
+  const f = Math.floor(lf * rate(l, comps, parentFps) + 1e-9);
+  if (l.play === 'loop') return mod(f, len);
+  if (l.play === 'pingpong') {
+    if (len === 1) return 0;
+    const r = mod(f, 2 * last);
+    return r <= last ? r : 2 * last - r;
+  }
+  if (f <= last) return f;
+  return l.out !== null ? last : null; // once: hold the last frame only if the layer was made longer
+}
+
+/**
+ * A comp's length in frames: its set duration, or the end of its last layer that ends (at least
+ * 1). Guards against precomp cycles (the schema refuses them too).
  */
 export function compLength(c: Comp, comps: ReadonlyMap<string, Comp>, seen: Set<string> = new Set()): number {
   if (c.duration !== null) return c.duration;
@@ -230,10 +299,14 @@ export function compLength(c: Comp, comps: ReadonlyMap<string, Comp>, seen: Set<
   let end = 1;
   for (const l of c.layers) {
     if (l.out !== null) end = Math.max(end, l.out);
-    else if (l.kind === 'drawings') end = Math.max(end, l.start + totalFrames(l.exposures));
-    else if (l.kind === 'comp') {
+    else if (l.kind === 'drawings') {
+      if (!playsOn(l)) end = Math.max(end, layerEnd(l, comps, c.fps));
+      else end = Math.max(end, l.start + totalFrames(l.exposures));
+    } else if (l.kind === 'comp') {
       const n = comps.get(l.comp);
-      if (n) end = Math.max(end, l.start + compLength(n, comps, new Set(seen)));
+      if (!n) continue;
+      const len = compLength(n, comps, new Set(seen));
+      end = Math.max(end, l.start + Math.ceil(len / rate(l, comps, c.fps) - 1e-9));
     }
   }
   return end;
@@ -241,24 +314,15 @@ export function compLength(c: Comp, comps: ReadonlyMap<string, Comp>, seen: Set<
 
 /** Which drawing a drawings layer shows at a comp frame, or null (before/after it, or hidden). */
 export function drawingOf(l: DrawingsLayer, compFrame: number): string | null {
-  if (!l.visible || compFrame < l.in || (l.out !== null && compFrame >= l.out)) return null;
-  let f = layerFrame(l, compFrame);
-  const len = totalFrames(l.exposures);
-  if (!len) return null;
-  if (l.loop) f = ((f % len) + len) % len;
-  if (f < 0 || f >= len) return null;
-  return drawingAt(l.exposures, f);
+  const f = contentFrameAt(l, compFrame, totalFrames(l.exposures), EMPTY);
+  return f === null ? null : drawingAt(l.exposures, f);
 }
+
+const EMPTY: ReadonlyMap<string, Comp> = new Map();
 
 /** The nested comp frame a precomp layer shows at a parent comp frame (converting fps if they differ). */
 export function nestedFrame(l: CompLayer, compFrame: number, parentFps: number, nested: Comp, comps: ReadonlyMap<string, Comp>): number | null {
-  if (!activeAt(l, compFrame, comps)) return null;
-  const lf = layerFrame(l, compFrame);
-  let nf = Math.floor((lf * nested.fps) / parentFps + 1e-9);
-  const len = compLength(nested, comps);
-  if (l.loop) nf = ((nf % len) + len) % len;
-  if (nf < 0 || nf >= len) return null;
-  return nf;
+  return contentFrameAt(l, compFrame, compLength(nested, comps), comps, parentFps);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -379,7 +443,7 @@ export function wouldCycle(parentId: string, childId: string, comps: ReadonlyMap
 export function isPlainFlipbook(c: Comp): boolean {
   if (c.layers.length !== 1) return false;
   const l = c.layers[0]!;
-  if (l.kind !== 'drawings' || l.loop || l.start !== 0 || l.in !== 0 || l.out !== null || l.blend !== 'normal' || !l.visible) return false;
+  if (l.kind !== 'drawings' || l.play !== 'once' || l.speed !== 1 || l.timeRemap?.keys.length || l.start !== 0 || l.in !== 0 || l.out !== null || l.blend !== 'normal' || !l.visible) return false;
   const t = l.transform;
   const still = (p: Prop) => p.keys.length === 0;
   if (![t.anchor, t.position, t.scale, t.rotation, t.opacity].every(still)) return false;
