@@ -12,6 +12,7 @@ Open-source Craft repos (Apache-2.0) may be reused with attribution.
 | 05 | [Drawing data model + timesheet markers](05-harmony-drawing-api-and-timesheet.md) | Harmony scripting API docs |
 | 06 | [Craft source: brushes, vectors, audio](06-craft-source-brushes-vectors.md) | photocraft, vectorcraft, soundcraft source |
 | 07 | [Procreate Dreams](07-procreate-dreams-handbook.md) | Official public handbook (no API exists) |
+| 08 | [Dreams clean-room spec](08-dreams-cleanroom-spec.md) | Full handbook re-read as testable rules, mapped to 2Dope status and milestones |
 
 Reference clones: `E:\2026\Dev\Apps\2Dope\reference\` (+ `C:\Users\dusto\effectcraft`).
 
