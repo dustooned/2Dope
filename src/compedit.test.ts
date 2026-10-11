@@ -13,6 +13,7 @@ function rig() {
   let n = 1;
   const project = {
     comps,
+    drawings: new Map<string, unknown>(),
     main: 'c1',
     activeComp: 'c1',
     activeLayer: 'L1',
@@ -267,6 +268,45 @@ describe('canvas gestures', () => {
     ed.setFlag('L1', 'locked', false);
     ed.setFlag('L1', 'visible', false);
     expect(ed.gestureStart([200, 150], 1)).toBe(false);
+  });
+});
+
+/** A drawing whose line plane has ink in one rectangle (enough of a canvas for contentbox.ts). */
+function inked(id: string, w: number, h: number, x0: number, y0: number, x1: number, y1: number) {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) data[(y * w + x) * 4 + 3] = 255;
+  const line = { width: w, height: h, getContext: () => ({ getImageData: () => ({ data }) }) };
+  return { id, line, fill: null, vectors: [], rev: 1, parked: null };
+}
+
+describe('the box hugs the drawing', () => {
+  it('handles and hit tests follow the ink, not the page', () => {
+    const { ed, project } = rig();
+    project.drawings.set('d1', inked('d1', 400, 300, 100, 50, 149, 79));
+    const [a, , c] = ed.corners(ed.layer('L1')!);
+    close(a!, [94, 44]); // 6 px of breathing room
+    close(c!, [156, 86]);
+    ed.select(null);
+    expect(ed.gestureStart([300, 250], 1)).toBe(false); // empty paper is not the drawing
+    expect(ed.gestureStart([120, 60], 1)).toBe(true);
+    ed.gestureEnd();
+  });
+
+  it('scale and rotate pivot on the drawing; nothing jumps; undo restores the old pivot', () => {
+    const { ed, project, app } = rig();
+    project.drawings.set('d1', inked('d1', 400, 300, 100, 50, 149, 79));
+    ed.select('L1');
+    const corner = ed.corners(ed.layer('L1')!)[2]!;
+    ed.gestureStart(corner, 1);
+    const l = ed.layer('L1')!;
+    close(l.transform.anchor.value, [125, 65]);
+    close(apply(worldMatrix(ed.comp, l, 0), [100, 50]), [100, 50]); // the ink did not move
+    ed.gestureMove([125 + (corner[0] - 125) * 2, 65 + (corner[1] - 65) * 2]);
+    ed.gestureEnd();
+    close(ed.layer('L1')!.transform.scale.value, [200, 200]);
+    close(apply(worldMatrix(ed.comp, ed.layer('L1')!, 0), [125, 65]), [125, 65]); // grew around its centre
+    app.history.undo();
+    close(ed.layer('L1')!.transform.anchor.value, [200, 150]);
   });
 });
 

@@ -1,18 +1,4 @@
-import {
-  easingOf,
-  easingSides,
-  isAnimated,
-  moveKey,
-  removeKey,
-  reverseKeys,
-  setAllEasings,
-  setKey,
-  setSegmentEasing,
-  valueAt,
-  type Easing,
-  type Prop,
-  type Vec2,
-} from './core/anim';
+import { easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentEasing, valueAt, type Easing, type Prop, type Vec2 } from './core/anim';
 import {
   apply,
   cameraLayer,
@@ -34,9 +20,10 @@ import {
   type Layer,
   type Mat,
 } from './core/comp';
-import { nestedFrame } from './core/comp';
+import { localMatrix, nestedFrame } from './core/comp';
 import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
 import { totalFrames } from './core/timeline';
+import { layerContentBox } from './view/contentbox';
 import type { Command } from './core/history';
 import type { App } from './app';
 
@@ -107,6 +94,8 @@ interface Gesture {
 
 const HANDLE_PX = 22;
 const NULL_HALF = 32;
+/** Breathing room (layer px) between a drawing's ink and its selection box. */
+const CONTENT_PAD = 6;
 
 /**
  * Everything the Motion workspace changes: layers, their order, timing and parents, and every
@@ -405,7 +394,8 @@ export class CompEditor {
       c.layers = c.layers.filter((x) => ![...ids.values()].includes(x.id));
       const t = l.transform;
       const still = [t.anchor, t.position, t.scale, t.rotation].every((q) => !q.keys.length);
-      const plain = still && t.anchor.value[0] === t.position.value[0] && t.anchor.value[1] === t.position.value[1] && t.scale.value[0] === 100 && t.scale.value[1] === 100 && t.rotation.value === 0 && !l.parent;
+      const plain =
+        still && t.anchor.value[0] === t.position.value[0] && t.anchor.value[1] === t.position.value[1] && t.scale.value[0] === 100 && t.scale.value[1] === 100 && t.rotation.value === 0 && !l.parent;
       let holder: string | null = null;
       const out: Layer[] = [];
       if (!plain) {
@@ -461,7 +451,11 @@ export class CompEditor {
       const copy = structuredClone(l);
       copy.id = this.app.project.newId('L');
       copy.name = `${l.name} 2`;
-      cc.layers.splice(cc.layers.findIndex((x) => x.id === id), 0, copy);
+      cc.layers.splice(
+        cc.layers.findIndex((x) => x.id === id),
+        0,
+        copy,
+      );
       made = copy.id;
     });
     if (made) this.select(made);
@@ -565,7 +559,12 @@ export class CompEditor {
     // not reachable from the shot (a comp only in the bin): show it on its own
     const solo = p.comp;
     this.trail = [];
-    return solo.id === main.id ? out.slice(0, 1) : [{ comp: main, via: null }, { comp: solo, via: null }];
+    return solo.id === main.id
+      ? out.slice(0, 1)
+      : [
+          { comp: main, via: null },
+          { comp: solo, via: null },
+        ];
   }
 
   /** While inside a precomp: the comp above, the layer we came through, and the frame it shows. */
@@ -632,7 +631,12 @@ export class CompEditor {
     const c = this.comp;
     const p = this.app.project;
     let made: Layer | null = null;
-    const at = this.primary ? Math.max(0, c.layers.findIndex((l) => l.id === this.primary!.id)) : 0;
+    const at = this.primary
+      ? Math.max(
+          0,
+          c.layers.findIndex((l) => l.id === this.primary!.id),
+        )
+      : 0;
     this.edit(`Add ${kind === 'drawings' ? 'drawing' : kind} layer`, (cc) => {
       const id = p.newId('L');
       if (kind === 'camera') made = cameraLayer(id, cc);
@@ -909,13 +913,28 @@ export class CompEditor {
     return this.throughCamera ? viewMatrix(this.comp, this.app.frame, this.app.project.comps) : [1, 0, 0, 1, 0, 0];
   }
 
-  /** The layer's page rectangle in its own space. */
-  bounds(l: Layer): { x: number; y: number; w: number; h: number } {
+  /** The layer's page rectangle in its own space (the drawing paper, or the precomp's frame). */
+  page(l: Layer): { x: number; y: number; w: number; h: number } {
     const p = this.app.project;
-    if (l.kind === 'drawings') return { x: 0, y: 0, w: p.width, h: p.height };
     if (l.kind === 'comp') {
       const n = p.comps.get(l.comp);
       return { x: 0, y: 0, w: n?.width ?? 100, h: n?.height ?? 100 };
+    }
+    return { x: 0, y: 0, w: p.width, h: p.height };
+  }
+
+  /**
+   * The box handles and hit tests use, in the layer's own space: what the layer shows right now
+   * (the drawing's ink and paint, or a precomp's visible content), not the whole page. An empty
+   * frame gets a small box at the anchor; a parked drawing never measured falls back to the page.
+   */
+  bounds(l: Layer): { x: number; y: number; w: number; h: number } {
+    if (l.kind === 'drawings' || l.kind === 'comp') {
+      const b = layerContentBox(this.app.project, this.comp, l, this.app.frame);
+      if (b === undefined) return this.page(l);
+      if (b) return { x: b.x - CONTENT_PAD, y: b.y - CONTENT_PAD, w: b.w + CONTENT_PAD * 2, h: b.h + CONTENT_PAD * 2 };
+      const [ax, ay] = valueAt(l.transform.anchor, this.frameOf(l));
+      return { x: ax - NULL_HALF, y: ay - NULL_HALF, w: NULL_HALF * 2, h: NULL_HALF * 2 };
     }
     if (l.kind === 'camera') return { x: 0, y: 0, w: this.comp.width, h: this.comp.height };
     const [ax, ay] = valueAt(l.transform.anchor, this.frameOf(l));
@@ -959,6 +978,30 @@ export class CompEditor {
     return [mid[0] + (dy / len) * out, mid[1] - (dx / len) * out];
   }
 
+  /**
+   * Scale and rotate turn around the drawing, not the middle of the page: a layer that still has
+   * its untouched pivot (page centre, nothing animated) gets its anchor moved to the centre of
+   * what it shows, with position compensated so nothing moves. Part of the gesture's undo step.
+   * Once moved (or once anything is animated) the anchor stays put, so animation keeps one pivot.
+   */
+  private pivotOnContent(l: Layer): void {
+    if (l.kind !== 'drawings' && l.kind !== 'comp') return;
+    const t = l.transform;
+    if (isAnimated(t.anchor) || isAnimated(t.position) || isAnimated(t.scale) || isAnimated(t.rotation)) return;
+    const pg = this.page(l);
+    const [ax, ay] = t.anchor.value;
+    if (Math.abs(ax - pg.w / 2) > 0.5 || Math.abs(ay - pg.h / 2) > 0.5) return;
+    const b = layerContentBox(this.app.project, this.comp, l, this.app.frame);
+    if (!b) return;
+    const nx = b.x + b.w / 2;
+    const ny = b.y + b.h / 2;
+    const m = localMatrix(l, this.app.frame);
+    const [dx, dy] = [nx - ax, ny - ay];
+    const [px, py] = t.position.value;
+    t.anchor = { ...t.anchor, value: [nx, ny] };
+    t.position = { ...t.position, value: [px + m[0] * dx + m[2] * dy, py + m[1] * dx + m[3] * dy] };
+  }
+
   private anchorStage(l: Layer): Vec2 {
     return apply(this.matrixOf(l), valueAt(l.transform.anchor, this.frameOf(l)));
   }
@@ -987,11 +1030,13 @@ export class CompEditor {
       }
       if (!this.selected.includes(target.id) || add) this.select(target.id, add);
     }
+    const before = structuredClone(this.comp.layers);
+    if (kind !== 'move') this.pivotOnContent(target);
     const anchor = this.anchorStage(target);
     this.gesture = {
       kind,
       layer: target.id,
-      before: structuredClone(this.comp.layers),
+      before,
       startPt: pt,
       anchorComp: anchor,
       startDist: Math.max(1e-6, Math.hypot(pt[0] - anchor[0], pt[1] - anchor[1])),
