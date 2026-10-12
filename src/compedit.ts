@@ -320,7 +320,7 @@ export class CompEditor {
     const ids = new Set(this.comp.layers.map((l) => l.id));
     this.selected = this.selected.filter((id) => ids.has(id));
     for (const k of [...this.keys]) if (!ids.has(k.split('|')[0]!)) this.keys.delete(k);
-    for (const id of [...this.open]) if (!ids.has(id)) this.open.delete(id);
+    for (const id of [...this.open]) if (!ids.has(id.split('#')[0]!)) this.open.delete(id);
   }
 
   reset(): void {

@@ -1,8 +1,8 @@
 import type { App } from '../app';
 import { easingOf, EASINGS, isAnimated, spacingTicks, type Easing, type Prop, type Vec2 } from '../core/anim';
-import { compLength, layerEnd, playsOn, type Layer, type PlayMode } from '../core/comp';
+import { compLength, layerEnd, PART_NAMES, partOf, playsOn, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
-import { isPin, keyId, PROP_LABEL, type PropKey, type PropName } from '../compedit';
+import { isPartProp, isPin, keyId, PROP_LABEL, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
 import { attachContextMenu, type CtxItem } from './contextmenu';
 
@@ -359,7 +359,15 @@ export class MotionPanel {
     // layers
     for (const l of c.layers) {
       this.grid.append(this.layerRow(l, end));
-      if (ed.open.has(l.id)) for (const n of ed.rowsOf(l)) this.grid.append(this.propRow(l, n, end));
+      if (ed.open.has(l.id)) {
+        for (const n of ed.rowsOf(l)) this.grid.append(this.propRow(l, n, end));
+        if (l.kind === 'drawings') {
+          for (const part of PART_NAMES.slice().reverse()) {
+            this.grid.append(this.partRow(l, part, end));
+            if (ed.open.has(`${l.id}#${part}`)) for (const n of [`${part}.opacity`, `${part}.offset`] as PropKey[]) this.grid.append(this.propRow(l, n, end));
+          }
+        }
+      }
     }
     if (!c.layers.length) {
       const empty = el('div', { class: 'mempty' });
@@ -407,6 +415,45 @@ export class MotionPanel {
     return row;
   }
 
+  /** The header of one part (Line or Fill) under a drawings layer: eye, name, colour, and its rows. */
+  private partRow(l: DrawingsLayer, part: PartName, end: number): HTMLElement {
+    const ed = this.ed;
+    const p = partOf(l, part);
+    const key = `${l.id}#${part}`;
+    const open = ed.open.has(key);
+    const label = part === 'line' ? 'Line' : 'Fill';
+    const row = el('div', { class: `mrow part${ed.selected.includes(l.id) ? ' selected' : ''}${p.visible ? '' : ' off'}`, 'data-layer': l.id, 'data-part': part });
+    const left = el('div', { class: 'mleft' });
+    const chev = el('button', { type: 'button', class: 'chev', 'aria-label': open ? `Hide ${label} properties` : `Show ${label} properties`, 'data-act': 'parttwirl' }, open ? '▾' : '▸');
+    const eye = el(
+      'button',
+      {
+        type: 'button',
+        class: 'leye',
+        'aria-pressed': String(p.visible),
+        title: p.visible ? `Hide the ${label.toLowerCase()} of this layer` : `Show the ${label.toLowerCase()}`,
+        'data-act': 'parteye',
+      },
+      p.visible ? '👁' : '–',
+    );
+    const name = el('button', { type: 'button', class: 'lname part-name', 'data-act': 'parttwirl', title: `${label} part: tap to show its opacity and offset rows` }, label);
+    // colour: tapping opens the system picker; a small ✕ goes back to the drawing's own colours
+    const tint = el('input', {
+      type: 'color',
+      class: `ptint${p.tint ? ' on' : ''}`,
+      value: p.tint ?? (part === 'line' ? '#222222' : '#888888'),
+      title: p.tint ? `${label} recoloured (tap to change)` : `Recolour the ${label.toLowerCase()} of the whole layer`,
+      'aria-label': `${label} colour`,
+    });
+    tint.addEventListener('change', () => ed.setPart(l.id, part, { tint: tint.value }));
+    left.append(chev, eye, name, tint);
+    if (p.tint) left.append(el('button', { type: 'button', class: 'pstar', 'data-act': 'parttintclear', title: 'Back to the drawing’s own colours' }, '✕'));
+    const right = el('div', { class: 'mright' });
+    right.style.width = `${end * this.cell}px`;
+    row.append(left, right);
+    return row;
+  }
+
   private propRow(l: Layer, n: PropKey, end: number): HTMLElement {
     const ed = this.ed;
     const p = ed.getProp(l, n);
@@ -431,7 +478,7 @@ export class MotionPanel {
       ),
     );
     if (isPin(n) && ed.isOverridden(l, n)) left.append(el('button', { type: 'button', class: 'pstar', 'data-act': 'reset', 'data-row': n, title: "Back to the comp's own value" }, '↺'));
-    else if (!isPin(n) && n !== 'remap' && inside) {
+    else if (!isPin(n) && n !== 'remap' && !isPartProp(n) && inside) {
       const on = ed.isPinned(l.id, n as PropName);
       left.append(
         el(
@@ -565,6 +612,21 @@ export class MotionPanel {
       case 'eye':
         ed.setFlag(id, 'visible', !l.visible);
         break;
+      case 'parttwirl':
+      case 'parteye':
+      case 'parttintclear': {
+        const part = row?.dataset.part as PartName | undefined;
+        if (!part || l.kind !== 'drawings') break;
+        const key = `${id}#${part}`;
+        if (act.dataset.act === 'parttwirl') {
+          if (ed.open.has(key)) ed.open.delete(key);
+          else ed.open.add(key);
+          this.signature = '';
+          this.update();
+        } else if (act.dataset.act === 'parteye') ed.setPart(id, part, { visible: !partOf(l, part).visible });
+        else ed.setPart(id, part, { tint: null });
+        break;
+      }
       case 'more':
         await this.layerMenu(l);
         break;
@@ -676,6 +738,17 @@ export class MotionPanel {
     const id = row?.dataset.layer ?? row?.dataset.bar;
     const l = id ? ed.layer(id) : null;
     if (!l) return this.layerListItems();
+    const part = row?.dataset.part as PartName | undefined;
+    if (part && l.kind === 'drawings') {
+      const p = partOf(l, part);
+      const name = part === 'line' ? 'Line' : 'Fill';
+      return [
+        { title: `${name} of ${l.name}` },
+        { label: p.visible ? `Hide ${name.toLowerCase()}` : `Show ${name.toLowerCase()}`, run: () => ed.setPart(l.id, part, { visible: !p.visible }) },
+        ...(p.tint ? [{ label: 'Original colours', run: () => ed.setPart(l.id, part, { tint: null }) }] : []),
+        { label: `Reset ${name.toLowerCase()} settings`, run: () => ed.resetPart(l.id, part), danger: true },
+      ];
+    }
     const prop = row?.dataset.prop as PropKey | undefined;
     if (prop) {
       return [

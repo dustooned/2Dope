@@ -1277,6 +1277,8 @@ export class App {
             { label: 'Delete', run: () => this.deleteFrame() },
           ],
         },
+        { label: 'Show lines', checked: this.partVisible('line'), run: () => this.togglePart('line') },
+        { label: 'Show colour (fills)', checked: this.partVisible('fill'), run: () => this.togglePart('fill') },
         { label: 'Onion skin', checked: this.onion.enabled, run: () => this.toggleOnion(), hint: 'O' },
         { label: 'Flipbook blank page', checked: this.flipbook, run: () => this.setFlipbook(!this.flipbook) },
         { label: 'Scrub lock here', checked: this.lockFrame !== null, run: () => this.toggleLock(), hint: 'L' },
@@ -1735,6 +1737,18 @@ export class App {
     }
 
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
+  }
+
+  /** Is this part (Line or Fill) of the active layer shown? */
+  partVisible(name: PartName): boolean {
+    return partOf(this.project.layer, name).visible;
+  }
+
+  /** Show or hide the lines or the colour of the active layer (one undo step). */
+  togglePart(name: PartName): void {
+    if (this.live || this.workspace === 'motion') return;
+    const l = this.project.editLayer();
+    this.editor.setPart(l.id, name, { visible: !partOf(l, name).visible });
   }
 
   /** How strongly the Draw view shows a part of the active layer (0 = hidden). */

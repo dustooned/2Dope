@@ -36,10 +36,13 @@ if (import.meta.env.DEV) (window as unknown as { __2dope: App }).__2dope = app;
 // Toolbar
 const toolButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-tool]')];
 const planeButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-plane]')];
+const partButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-part-eye]')];
 const syncTools = () => {
+  for (const b of partButtons) b.setAttribute('aria-pressed', String(app.partVisible(b.dataset.partEye === 'fill' ? 'fill' : 'line')));
   for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool));
   for (const b of planeButtons) b.setAttribute('aria-pressed', String(b.dataset.plane === app.plane));
 };
+for (const b of partButtons) b.addEventListener('click', () => app.togglePart(b.dataset.partEye === 'fill' ? 'fill' : 'line'));
 for (const b of planeButtons) b.addEventListener('click', () => app.setPlane(b.dataset.plane === 'fill' ? 'fill' : 'line'));
 for (const b of toolButtons) b.addEventListener('click', () => app.setTool(b.dataset.tool as Tool));
 app.onToolChange = syncTools;
@@ -278,6 +281,7 @@ async function exportForBlender(): Promise<void> {
 menu.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((b) => b.addEventListener('click', () => menuActions[b.dataset.menu ?? '']?.()));
 
 app.onFrameChange = () => {
+  syncTools();
   strip.update();
   xsheet.update();
   quick.update();

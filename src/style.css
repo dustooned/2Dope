@@ -2234,3 +2234,39 @@ body.ws-time .panel {
   color: var(--accent);
   background: rgba(255, 90, 138, 0.08);
 }
+
+/* Line / Fill part rows under a drawings layer */
+.mrow.part {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mrow.part.off .part-name {
+  opacity: 0.5;
+}
+
+.mrow.part .mleft {
+  padding-left: 14px;
+}
+
+.part-name {
+  flex: 1 1 auto;
+  text-align: left;
+  font-size: 12px;
+}
+
+.ptint {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.ptint.on {
+  opacity: 1;
+  border-color: var(--accent);
+}
