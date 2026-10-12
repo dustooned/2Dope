@@ -633,6 +633,9 @@ export class App {
     this.onColorChange();
   }
 
+  /** Shows a short message to the person (the file UI sets it to a toast). */
+  onNotice: ((message: string) => void) | null = null;
+
   /** Fires when the colour changes (the toolbar's colour circle follows). */
   onColorChange: () => void = () => {};
 
@@ -1811,6 +1814,12 @@ export class App {
     if (mod && e.code === 'KeyA') {
       e.preventDefault();
       this.selectAll();
+      return;
+    }
+    // Motion: Ctrl+Shift+D splits the selected layers at the playhead
+    if (mod && e.shiftKey && e.code === 'KeyD' && this.workspace === 'motion') {
+      e.preventDefault();
+      if (!this.editor.split()) this.onNotice?.('Move the playhead inside a layer to split it there.');
       return;
     }
     // copy / cut / paste drawings on the timeline (Shift+Ctrl+V pastes new copies)

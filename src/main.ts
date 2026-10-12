@@ -84,6 +84,7 @@ const syncColor = () => {
 };
 colorChip.addEventListener('input', () => app.setColor(colorChip.value));
 app.onColorChange = chain(app.onColorChange, syncColor);
+app.onNotice = (m) => files?.toast(m, [], 4000);
 syncColor();
 
 const finger = $<HTMLInputElement>('#finger');

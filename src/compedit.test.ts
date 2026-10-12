@@ -310,6 +310,31 @@ describe('the box hugs the drawing', () => {
   });
 });
 
+describe('split at the playhead', () => {
+  it('cuts a layer in two where the playhead is; both show the same frames as before; one undo step', () => {
+    const { ed, app, comp } = rig();
+    ed.select('L1');
+    app.frame = 5;
+    expect(ed.split()).toBe(1);
+    const [second, first] = comp.layers;
+    expect([first!.in, first!.out, second!.in, second!.out]).toEqual([0, 5, 5, null]);
+    expect(second!.id).not.toBe(first!.id);
+    expect(JSON.stringify(second!.kind === 'drawings' ? second!.exposures : null)).toBe(JSON.stringify(first!.kind === 'drawings' ? first!.exposures : 0));
+    expect(ed.selected).toEqual([second!.id]);
+    app.history.undo();
+    expect(comp.layers.map((l) => [l.id, l.out])).toEqual([['L1', null]]);
+  });
+
+  it('does nothing outside the layer or on a camera', () => {
+    const { ed, app, comp } = rig();
+    comp.layers.unshift(cameraLayer('cam', comp));
+    app.frame = 0;
+    expect(ed.split(['L1'])).toBe(0); // at its first frame
+    app.frame = 4;
+    expect(ed.split(['cam'])).toBe(0);
+  });
+});
+
 describe('line and fill parts', () => {
   it('part opacity and offset key like any property; visibility and tint are one undo step each', () => {
     const { ed, app } = rig();

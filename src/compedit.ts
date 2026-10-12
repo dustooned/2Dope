@@ -481,6 +481,37 @@ export class CompEditor {
     if (made) this.select(made);
   }
 
+  /**
+   * Split layers at the playhead (Procreate Dreams' split, After Effects' split layer): each
+   * layer that spans the playhead becomes two, the first ending and the second starting there.
+   * Both keep the same content, timing and keys, so nothing moves. One undo step; selects the
+   * second halves. Returns how many layers were split.
+   */
+  split(ids: string[] = this.selected): number {
+    const f = this.app.frame;
+    const comps = this.app.project.comps;
+    const made: string[] = [];
+    this.edit(ids.length > 1 ? 'Split layers' : 'Split layer', (c) => {
+      for (const id of ids) {
+        const i = c.layers.findIndex((x) => x.id === id);
+        const l = c.layers[i];
+        if (!l || l.kind === 'camera' || l.kind === 'null') continue;
+        if (f <= l.in || f >= layerEnd(l, comps, c.fps)) continue;
+        const second = structuredClone(l);
+        second.id = this.app.project.newId('L');
+        second.in = f;
+        l.out = f;
+        c.layers.splice(i, 0, second);
+        made.push(second.id);
+      }
+    });
+    if (made.length) {
+      this.selected = made;
+      this.changed();
+    }
+    return made.length;
+  }
+
   /** How many layers (in all comps) show this comp. */
   instances(compId: string): number {
     let n = 0;

@@ -86,6 +86,7 @@ export class MotionPanel {
   private readonly camBtn: HTMLButtonElement;
   private readonly easeBtns = new Map<Easing, HTMLButtonElement>();
   private readonly delBtn: HTMLButtonElement;
+  private readonly splitBtn: HTMLButtonElement;
   private readonly groupBtn: HTMLButtonElement;
   private readonly multiBtn: HTMLButtonElement;
   private readonly crumbsEl = el('nav', { class: 'mcrumbs', 'aria-label': 'Where you are' });
@@ -124,6 +125,7 @@ export class MotionPanel {
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
     // Row 1: layers
     this.delBtn = btn('Delete', 'Delete the selected layers (Delete)', () => ed.deleteLayers());
+    this.splitBtn = btn('Split', 'Split the selected layers at the playhead (Ctrl+Shift+D)', () => this.splitAt());
     this.multiBtn = btn('Select', 'Tap layers to pick several (to group them into a comp)', () => {
       this.ed.multiSelect = !this.ed.multiSelect;
       this.update();
@@ -148,6 +150,7 @@ export class MotionPanel {
         btn('↓', 'Move the selected layer down', () => ed.primary && ed.reorder(ed.primary.id, 1)),
         this.multiBtn,
         this.groupBtn,
+        this.splitBtn,
         this.delBtn,
       ),
     );
@@ -265,6 +268,7 @@ export class MotionPanel {
     this.camBtn.setAttribute('aria-pressed', String(ed.throughCamera));
     this.camBtn.hidden = !ed.hasCamera();
     this.delBtn.disabled = !ed.selected.length;
+    this.splitBtn.disabled = !ed.selected.length;
     this.groupBtn.disabled = !ed.selected.length;
     this.multiBtn.setAttribute('aria-pressed', String(this.ed.multiSelect));
     this.renderCrumbs();
@@ -763,12 +767,18 @@ export class MotionPanel {
     return this.layerItems(l);
   }
 
+  /** Split the selected layers at the playhead; says so when nothing spans it. */
+  private splitAt(): void {
+    if (!this.ed.split()) this.app.onNotice?.('Move the playhead inside a layer to split it there.');
+  }
+
   /** Context menu entries for one layer (the canvas in Motion uses them too). */
   layerItems(l: Layer): CtxItem[] {
     const ed = this.ed;
     return [
       { title: l.name },
       { label: l.visible ? 'Hide' : 'Show', run: () => ed.setFlag(l.id, 'visible', !l.visible) },
+      ...(l.kind === 'drawings' || l.kind === 'comp' ? [{ label: 'Split at the playhead', hint: 'Ctrl+Shift+D', run: () => this.splitAt() }] : []),
       ...(ed.selected.length > 1 || l.kind !== 'camera' ? [{ label: ed.selected.length > 1 ? `Group ${ed.selected.length} layers` : 'Group into a comp', run: () => void ed.group() }] : []),
       ...this.layerActions(l).map((a) => ({ label: a.label, run: () => this.runLayerAction(l, a.value), danger: a.value === 'delete' })),
     ];
