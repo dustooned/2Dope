@@ -171,6 +171,14 @@
 - ~~QuickShape~~ built (below).
 - ~~Student manual + What’s new~~ built: src/ui/manualtext.ts (content as data: overview, getting started, gestures, Board, Draw, Time, Motion, export, Lite, shortcuts; UPDATES newest first) and src/ui/manual.ts (contents, search, phone dropdown, Print / PDF). Menu > Help > Manual / What’s new, or ?. A dot on the menu button until new notes are opened; a one-time hint on first launch. **Keep the manual and UPDATES in step with every feature that ships.**
 
+## 2026-10-12: Board sync, QuickShape pressure, manual pictures, three-finger clear
+
+- **Animate this shot** starts the animation in step with the board: a first (or untouched starter) animation layer gets one blank drawing per panel, each as long as its panel, and Draw opens on the panel you were on. Ripple keeps them together afterwards (retime a panel: the animation follows; add frames to the animation: the panel makes room). Yellow P1, P2… marks over the Draw/Time frame bar show the panels.
+- **QuickShape keeps pressure**: the shape takes the stroke's pressure profile (nearest stroke point along the base shape, smoothed), so thick and thin survive the snap and the drag.
+- **Manual pictures**: toolbar icons and gesture glyphs in every table, line diagrams (src/ui/manualfigs.ts) for workspaces, storyboard card, Line/Fill, QuickShape, onion skin, holds, ripple, Motion.
+- **Three-finger scrub clears the drawing** (Procreate's gesture; one undo step). Three fingers never navigate: when the third lands, the view goes back to where it was when the first finger touched and stays put until all lift. A three-finger tap (with jitter) is still redo.
+- Queued: **video export** (user): quick share vs a "legit post" export with transparency. Browser limits: H.264 MP4 via WebCodecs (Safari 16.4+, Chrome/Edge); alpha only as WebM VP9 (Chrome/Edge), animated PNG, or the PNG sequence; no ProRes 4444 in a browser.
+
 ## 2026-10-12: QuickShape
 
 - Hold the pen still (450 ms, 5 px) at the end of a Brush or Pen stroke and it snaps to what it looks like: line, arc, polyline, ellipse, rectangle or polygon (src/core/quickshape.ts: resample, line test, Kåsa circle fit for arcs, PCA ellipse fit, RDP corners; square corners make a rectangle). A scribble does not snap. The eraser never snaps.
