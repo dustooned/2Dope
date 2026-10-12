@@ -18,6 +18,7 @@ Open-source Craft repos (Apache-2.0) may be reused with attribution.
 | 11 | [Design: workspaces + precomps by touch](11-views-layers-precomp-design.md) | Our proposal built from 07-10 |
 | 12 | [Nemo: motion + 2D in one app](12-nemo-motion-and-2d.md) | Nemo source (GPL-3.0, design only): component play modes, frame-pick swaps, paint pins, key loops |
 | 13 | [Clip Studio: fill, ink, layers, phone mode](13-clip-studio-fill-ink-layers-phone.md) | Clip Studio manual + Dreams colour panel: drag/enclose/leftover fill, crisp ink, brush import, line/fill parts, X-sheet touch editing, Lite phone mode; plan |
+| 14 | [Drawing assist](14-drawing-assist.md) | Procreate guides, Drawing Assist and QuickShape, plus Lazy Nezumi's rulers (radial speed lines, parallel, accuracy) from its manual; plan |
 
 Reference clones: `E:\2026\Dev\Apps\2Dope\reference\` (+ `C:\Users\dusto\effectcraft`).
 
