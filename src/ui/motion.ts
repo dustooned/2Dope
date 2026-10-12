@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { autoIcon, setLabel } from './icons';
 import { easingOf, EASINGS, isAnimated, spacingTicks, type Easing, type Prop, type Vec2 } from '../core/anim';
 import { compLength, layerEnd, PART_NAMES, partOf, playsOn, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
@@ -98,7 +99,7 @@ export class MotionPanel {
     const btn = (label: string, title: string, fn: () => void, cls = '') => {
       const b = el('button', { type: 'button', title, class: cls }, label);
       b.addEventListener('click', fn);
-      return b;
+      return autoIcon(b);
     };
     const group = (...kids: HTMLElement[]) => {
       const g = el('div', { class: 'group' });
@@ -256,7 +257,7 @@ export class MotionPanel {
     }
     // toolbar
     this.frameLabel.textContent = `${app.frame + 1} / ${app.compEnd}`;
-    this.playBtn.textContent = app.playing ? 'Pause' : 'Play';
+    setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(c.fps);
     this.autoBtn.setAttribute('aria-pressed', String(ed.autoKey));

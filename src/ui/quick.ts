@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { autoIcon, setLabel } from './icons';
 import { FPS_PRESETS } from '../core/project';
 import type { Tool } from '../core/stroke';
 
@@ -45,7 +46,7 @@ export class Quick {
     const btn = (label: string, title: string, fn: () => void, cls = '') => {
       const b = el('button', { type: 'button', title, class: cls }, label);
       b.addEventListener('click', fn);
-      return b;
+      return autoIcon(b);
     };
     const group = (...kids: HTMLElement[]) => {
       const g = el('div', { class: 'group' });
@@ -99,7 +100,7 @@ export class Quick {
 
     host.append(
       group(...this.toolBtns.values()),
-      group(this.color, this.size),
+      group(this.color),
       group(this.undoBtn, this.redoBtn),
       group(
         btn('◀', 'Previous frame (←)', () => app.prevFrame()),
@@ -155,7 +156,7 @@ export class Quick {
   update(): void {
     const app = this.app;
     for (const [tool, b] of this.toolBtns) b.setAttribute('aria-pressed', String(app.tool === tool));
-    this.playBtn.textContent = app.playing ? 'Pause' : 'Play';
+    setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.onionBtn.setAttribute('aria-pressed', String(app.onion.enabled));
     this.undoBtn.disabled = !app.history.canUndo;
@@ -165,7 +166,7 @@ export class Quick {
     this.fps.value = String(app.project.fps);
     this.planeBtn.textContent = app.plane === 'line' ? 'Draw on: Line' : 'Draw on: Fill';
     this.planeBtn.setAttribute('aria-pressed', String(app.plane === 'fill'));
-    this.lockBtn.textContent = app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`;
+    setLabel(this.lockBtn, app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`);
     this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));
     this.flipBtn.setAttribute('aria-pressed', String(app.flipbook));
   }

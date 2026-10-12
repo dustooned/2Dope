@@ -2270,3 +2270,284 @@ body.ws-time .panel {
   opacity: 1;
   border-color: var(--accent);
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Icons and the Dreams-style toolbar */
+
+.has-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.has-ico .ico {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.dock .lbl {
+  display: none;
+}
+
+.dock .ico {
+  width: 22px;
+  height: 22px;
+}
+
+.topbar .tb-left,
+.topbar .tb-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+/* icon groups on the right: square buttons, labels only as tooltips / screen-reader names */
+.topbar .icons button {
+  width: 40px;
+  min-width: 40px;
+  min-height: 38px;
+  padding: 0;
+}
+
+.topbar .icons .lbl {
+  display: none;
+}
+
+.topbar .tools {
+  gap: 2px;
+  padding: 2px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.topbar .tools button {
+  border-color: transparent;
+  background: transparent;
+  border-radius: 10px;
+}
+
+.topbar .tools button[aria-pressed='true'] {
+  background: var(--accent);
+  color: #1d1d22;
+}
+
+.topbar .tools .ico {
+  width: 22px;
+  height: 22px;
+}
+
+/* eye toggles: a small letter under the eye says which part */
+.topbar .parts button {
+  position: relative;
+}
+
+.topbar .parts .lbl {
+  display: block;
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.topbar .parts button[aria-pressed='false'] .ico {
+  opacity: 0.35;
+}
+
+/* workspaces and Projects: icon + word on wide screens, icon alone on narrow ones */
+@media (max-width: 1180px) {
+  .topbar .ws .lbl,
+  .topbar .gbtn .lbl {
+    display: none;
+  }
+
+  .topbar .ws button,
+  .topbar .gbtn {
+    min-width: 40px;
+    padding: 0 8px;
+  }
+}
+
+/* the colour circle (Dreams keeps it top right) */
+.colorchip {
+  --chip: #222222;
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--chip);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.colorchip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* the floating sidebar on the canvas: size, opacity, undo, redo */
+.sidebar {
+  position: absolute;
+  left: max(10px, env(safe-area-inset-left));
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(38, 38, 45, 0.88);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  transition: opacity 0.15s;
+  touch-action: none;
+}
+
+.sidebar button {
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.sidebar .lbl {
+  display: none;
+}
+
+.vslider {
+  position: relative;
+  width: 30px;
+  height: 140px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.vslider:focus-visible {
+  border-color: var(--accent);
+}
+
+.vfill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 90, 138, 0.45);
+  pointer-events: none;
+}
+
+.vval {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.vslider.active {
+  border-color: var(--accent);
+}
+
+body.drawing .sidebar {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+body.ws-motion .sidebar,
+body.ui-hidden .sidebar {
+  display: none;
+}
+
+@media (max-height: 560px) {
+  .vslider {
+    height: 96px;
+  }
+}
+
+.has-ico.icon-only {
+  min-width: 36px;
+  padding: 0 8px;
+}
+
+.has-ico.icon-only .lbl {
+  display: none;
+}
+
+/* iPad portrait and smaller: keep the toolbar on one screen (the rest is in ☰ and the canvas menu) */
+@media (max-width: 900px) {
+  .topbar {
+    gap: 6px;
+  }
+
+  .topbar .tb-left,
+  .topbar .tb-right {
+    gap: 6px;
+  }
+
+  .topbar .parts,
+  .topbar #export-seq,
+  .topbar #savestatus {
+    display: none;
+  }
+
+  .group.file #pname {
+    width: 96px;
+  }
+}
+
+@media (max-width: 600px) {
+  .topbar #pname,
+  .topbar #enter-quick {
+    display: none;
+  }
+}
+
+/* phones until the phone layout (step 9): workspaces, planes and the panel live in ☰ and the canvas menu */
+@media (max-width: 600px) {
+  .topbar #ws,
+  .topbar .tb-right > .seg,
+  .topbar #panel-toggle,
+  .topbar #bar-collapse {
+    display: none;
+  }
+
+  .sidebar {
+    gap: 6px;
+    padding: 6px 4px;
+  }
+
+  .vslider {
+    width: 26px;
+    height: 92px;
+  }
+
+  .sidebar button {
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+}

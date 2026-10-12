@@ -7,7 +7,7 @@
     <title>2Dope</title>
   </head>
   <body>
-    <button type="button" id="dock" class="dock" aria-label="Menu" aria-haspopup="true" aria-expanded="false" title="Menu: files, view, interface">☰</button>
+    <button type="button" id="dock" class="dock" data-icon="menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false" title="Menu: files, view, interface">Menu</button>
     <div id="menu" class="menu" role="menu" hidden>
       <section>
         <h3>Project</h3>
@@ -65,45 +65,56 @@
       </section>
     </div>
     <header class="topbar">
-      <button type="button" id="open-gallery" class="gbtn" title="All your projects">Projects</button>
-      <div class="group seg ws" id="ws" role="group" aria-label="Workspace">
-        <button type="button" data-ws="draw" title="Draw: the canvas and the flipbook strip">Draw</button>
-        <button type="button" data-ws="time" title="Time: the exposure sheet">Time</button>
-        <button type="button" data-ws="motion" title="Motion: layers, keyframes and the camera">Motion</button>
-      </div>
-      <div class="group file" role="group" aria-label="Project">
-        <input id="pname" type="text" placeholder="Untitled" maxlength="60" aria-label="Project name" />
-        <button type="button" id="crumb" class="crumbbtn" hidden title="You are inside a precomp. Tap to go back out."></button>
-        <span id="savestatus" class="readout" role="status"></span>
-      </div>
-      <div class="group" role="group" aria-label="Tools">
-        <button type="button" data-tool="brush" title="Brush (B)">Brush</button>
-        <button type="button" data-tool="eraser" title="Eraser (E)">Eraser</button>
-        <button type="button" data-tool="pen" title="Vector pen (P)">Vector</button>
-        <button type="button" data-tool="fill" title="Fill (G): fills the area under the click, below the lines">Fill</button>
-      </div>
-      <div class="group seg" role="group" aria-label="Draws on" title="Which plane brushes and the eraser write to (X). Fills always sit under the lines.">
-        <button type="button" data-plane="line" title="Line plane: linework">Line</button>
-        <button type="button" data-plane="fill" title="Fill plane: flat color, under the lines">Fill</button>
-      </div>
-      <div class="group seg" role="group" aria-label="Show parts" title="Show or hide the lines or the colour of this layer (the whole shot)">
-        <button type="button" data-part-eye="line" title="Show / hide the lines of this layer">◉ L</button>
-        <button type="button" data-part-eye="fill" title="Show / hide the colour (fills) of this layer">◉ F</button>
-      </div>
-      <div class="group" role="group" aria-label="History">
-        <button type="button" data-action="undo" title="Undo (Ctrl+Z, two-finger tap)" aria-label="Undo">↶</button>
-        <button type="button" data-action="redo" title="Redo (Ctrl+Shift+Z, three-finger tap)" aria-label="Redo">↷</button>
+      <div class="tb-left">
+        <button type="button" id="open-gallery" class="gbtn" data-icon="gallery" title="All your projects">Projects</button>
+        <div class="group seg ws" id="ws" role="group" aria-label="Workspace">
+          <button type="button" data-ws="draw" data-icon="draw" title="Draw: the canvas and the flipbook strip">Draw</button>
+          <button type="button" data-ws="time" data-icon="time" title="Time: the exposure sheet">Time</button>
+          <button type="button" data-ws="motion" data-icon="motion" title="Motion: layers, keyframes and the camera">Motion</button>
+        </div>
+        <div class="group file" role="group" aria-label="Project">
+          <input id="pname" type="text" placeholder="Untitled" maxlength="60" aria-label="Project name" />
+          <button type="button" id="crumb" class="crumbbtn" hidden title="You are inside a precomp. Tap to go back out."></button>
+          <span id="savestatus" class="readout" role="status"></span>
+        </div>
       </div>
       <span class="spacer"></span>
-      <button type="button" id="panel-toggle" title="Brush settings and X-sheet">Panel</button>
-      <button type="button" id="enter-quick" title="Quick Animate: just the canvas, a slim strip and the essentials (Tab)">Quick</button>
-      <button type="button" id="export-seq" title="Export the whole shot as PNG sequences with alpha (Lines / Fills / Matte passes)">Export…</button>
-      <button type="button" id="bar-collapse" title="Shrink the toolbar to the menu button" aria-label="Hide toolbar">▲</button>
+      <div class="tb-right">
+        <div class="group seg icons" role="group" aria-label="Draws on" title="Which plane brushes and the eraser write to (X). Fills always sit under the lines.">
+          <button type="button" data-plane="line" data-icon="lineplane" title="Draw on the Line plane (linework)">Line</button>
+          <button type="button" data-plane="fill" data-icon="fillplane" title="Draw on the Fill plane (flat colour, under the lines)">Fill</button>
+        </div>
+        <div class="group seg icons parts" role="group" aria-label="Show parts" title="Show or hide the lines or the colour of this layer (the whole shot)">
+          <button type="button" data-part-eye="line" data-icon="eye" title="Show / hide the lines of this layer">L</button>
+          <button type="button" data-part-eye="fill" data-icon="eye" title="Show / hide the colour (fills) of this layer">F</button>
+        </div>
+        <div class="group tools icons" role="group" aria-label="Tools">
+          <button type="button" data-tool="brush" data-icon="brush" title="Brush (B)">Brush</button>
+          <button type="button" data-tool="pen" data-icon="pen" title="Vector pen (P)">Vector</button>
+          <button type="button" data-tool="fill" data-icon="fill" title="Fill (G). Hold the canvas for Tap / Lasso / Leftovers">Fill</button>
+          <button type="button" data-tool="eraser" data-icon="eraser" title="Eraser (E)">Eraser</button>
+        </div>
+        <label class="colorchip" title="Colour">
+          <input id="color-chip" type="color" aria-label="Colour" />
+        </label>
+        <div class="group icons" role="group" aria-label="More">
+          <button type="button" id="panel-toggle" data-icon="panel" title="Brush settings and X-sheet">Panel</button>
+          <button type="button" id="enter-quick" data-icon="quick" title="Quick Animate: just the canvas, a slim strip and the essentials (Tab)">Quick</button>
+          <button type="button" id="export-seq" data-icon="export" title="Export the whole shot as PNG sequences with alpha (Lines / Fills / Matte passes)">Export</button>
+          <button type="button" id="bar-collapse" data-icon="collapse" title="Shrink the toolbar to the menu button" aria-label="Hide toolbar">Hide</button>
+        </div>
+      </div>
     </header>
     <main class="workspace">
       <div class="stage-col">
         <div id="stage" class="stage">
           <canvas id="canvas" aria-label="Drawing canvas"></canvas>
+          <div id="sidebar" class="sidebar" aria-label="Brush size, opacity, undo and redo">
+            <div class="vslider" data-slider="size" role="slider" tabindex="0" aria-label="Brush size" title="Brush size: drag up or down ( [ and ] )"><div class="vfill"></div><span class="vval"></span></div>
+            <div class="vslider" data-slider="opacity" role="slider" tabindex="0" aria-label="Brush opacity" title="Brush opacity: drag up or down"><div class="vfill"></div><span class="vval"></span></div>
+            <button type="button" data-action="undo" data-icon="undo" title="Undo (Ctrl+Z, two-finger tap)">Undo</button>
+            <button type="button" data-action="redo" data-icon="redo" title="Redo (Ctrl+Shift+Z, three-finger tap)">Redo</button>
+          </div>
           <div id="stats" class="stats">Draw with a pen, mouse or (with Finger paints on) a finger. Alt + mouse = tilted pencil.</div>
         </div>
         <div id="splitter" class="splitter" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the timeline (double-tap to reset)" tabindex="0"></div>

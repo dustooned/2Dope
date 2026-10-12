@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { autoIcon, setLabel } from './icons';
 import { FPS_PRESETS, ROLES, type Drawing, type Role } from '../core/project';
 import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, type Exposure } from '../core/timeline';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './contextmenu';
@@ -80,7 +81,7 @@ export class Strip {
     const btn = (label: string, title: string, fn: () => void, cls = '') => {
       const b = el('button', { type: 'button', title, class: cls }, label);
       b.addEventListener('click', fn);
-      return b;
+      return autoIcon(b);
     };
     this.playBtn = btn('Play', 'Play / pause (Enter or tap Space)', () => app.togglePlay(), 'play');
     this.frameLabel = el('span', { class: 'readout frame-readout' });
@@ -390,7 +391,7 @@ export class Strip {
     const common = commonHold(p.exposures, targets);
     this.expLabel.textContent = targets.length === 0 ? '-' : common === null ? 'mixed' : `${common}`;
     this.expLabel.title = `${targets.length} drawing${targets.length === 1 ? '' : 's'} ${app.selection.length ? 'selected' : '(current)'}`;
-    this.playBtn.textContent = app.playing ? 'Pause' : 'Play';
+    setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(p.fps);
     this.playhead.style.width = `${cell}px`;
@@ -403,7 +404,7 @@ export class Strip {
     this.onionBtn.setAttribute('aria-pressed', String(app.onion.enabled));
     this.keysBtn.setAttribute('aria-pressed', String(app.onion.keysOnly));
     this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));
-    this.lockBtn.textContent = app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`;
+    setLabel(this.lockBtn, app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`);
     this.beforeSel.value = String(app.onion.before);
     this.afterSel.value = String(app.onion.after);
     this.opacityRange.value = String(app.onion.opacity);

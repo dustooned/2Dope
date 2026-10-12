@@ -192,7 +192,9 @@ export function buildPanel(app: App, root: HTMLElement): void {
     presetSel.value = String(Math.max(0, idx));
     drawPreview();
   };
+  const prevBrush = app.onBrushChange;
   app.onBrushChange = () => {
+    prevBrush();
     refresh();
     app.requestRender();
   };

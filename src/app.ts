@@ -619,7 +619,11 @@ export class App {
   setColor(c: string): void {
     this.color = c;
     saveJSON(COLOR_KEY, c);
+    this.onColorChange();
   }
+
+  /** Fires when the colour changes (the toolbar's colour circle follows). */
+  onColorChange: () => void = () => {};
 
   // -------------------------------------------------------------------------------------------
   // Commands

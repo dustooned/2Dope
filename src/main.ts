@@ -16,6 +16,8 @@ import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
 import { Strip } from './ui/strip';
 import { XSheet } from './ui/xsheet';
+import { applyIcons } from './ui/icons';
+import { Sidebar } from './ui/sidebar';
 
 const $ = <T extends HTMLElement>(sel: string) => {
   const e = document.querySelector<T>(sel);
@@ -63,13 +65,26 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-action]')) {
   b.addEventListener('click', () => actions[b.dataset.action ?? '']?.());
 }
 
-const undoBtn = $<HTMLButtonElement>('[data-action="undo"]');
-const redoBtn = $<HTMLButtonElement>('[data-action="redo"]');
+const undoBtns = [...document.querySelectorAll<HTMLButtonElement>('[data-action="undo"]')];
+const redoBtns = [...document.querySelectorAll<HTMLButtonElement>('[data-action="redo"]')];
 app.history.onChange = () => {
-  undoBtn.disabled = !app.history.canUndo;
-  redoBtn.disabled = !app.history.canRedo;
+  for (const b of undoBtns) b.disabled = !app.history.canUndo;
+  for (const b of redoBtns) b.disabled = !app.history.canRedo;
 };
 app.history.onChange();
+
+// Icons on every button that asks for one, the brush sidebar, and the colour circle
+applyIcons();
+const sidebar = new Sidebar(app, $('#sidebar'));
+app.onBrushChange = chain(app.onBrushChange, () => sidebar.update());
+const colorChip = $<HTMLInputElement>('#color-chip');
+const syncColor = () => {
+  colorChip.value = app.color;
+  colorChip.parentElement!.style.setProperty('--chip', app.color);
+};
+colorChip.addEventListener('input', () => app.setColor(colorChip.value));
+app.onColorChange = chain(app.onColorChange, syncColor);
+syncColor();
 
 const finger = $<HTMLInputElement>('#finger');
 finger.addEventListener('change', () => (app.fingerPaint = finger.checked));
