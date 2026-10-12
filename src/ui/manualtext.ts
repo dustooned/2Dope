@@ -121,7 +121,8 @@ export const MANUAL: ManualSection[] = [
           'Flipbook mode: past your last drawing there is a blank page. Draw on it and a new frame is made for you.',
           'Onion skin (O) shows the drawings before and after. Lock (L) pins a frame so you can flip back to it.',
           'Layers: the Layers button shows your other layers around the one you draw on: Show, Fade or Hide them. Tap a layer to draw on it; the eye hides it, the lock protects it.',
-          'Fill options: fill across the next drawings at once, and close small gaps in your lines.',
+          'Fill options: fill across the next drawings at once, close small gaps in your lines, and Use lines from other layers (ink on one layer, colour on another: the fill stops at the ink).',
+          'Vector lines thicker or thinner after drawing: press and hold the canvas, then pick −50% … +100% under Vector lines.',
           'Brush panel (Menu > Brush / X-sheet panel): every brush setting, anti-aliasing (off gives hard pixel edges) and line smoothing.',
         ],
       },
@@ -146,7 +147,7 @@ export const MANUAL: ManualSection[] = [
       {
         tip: 'Ripple (on by default): when you make something longer or shorter, everything after it moves too, on every layer, so nothing slips out of sync. Switch it with the Ripple button or Shift+R. Hold Alt to do one edit without ripple.',
       },
-      'While you drag an edge, a yellow line marks the frame you are changing, with a label like "out 24 · +3f". The shaded part is what will move.',
+      'While you drag an edge, or type a new length, a yellow line marks the frame you are changing, with a label like "out 24 · +3f". The shaded part is what will move.',
       'Tap any time readout to switch between frames, seconds + frames, and timecode. The rulers follow.',
     ],
   },
@@ -239,6 +240,9 @@ export const UPDATES: Update[] = [
     items: [
       'Animate this shot lines your frames up with the board: one drawing per panel, same lengths, and P1, P2… marks above the frame bar. Board and animation timing stay in sync.',
       'QuickShape keeps your pressure (thick and thin) and adjusts from the start point.',
+      'Fill can use the lines on your other layers (Brush panel > Fill > Use lines from other layers).',
+      'Vector lines can be made thicker or thinner after drawing (press and hold the canvas).',
+      'Typed lengths and + / − show the yellow edit line for a moment too.',
       'Three-finger scrub clears the drawing fast (undo brings it back); the page never moves while three fingers are down.',
       'The manual now has pictures: tool and gesture icons and small diagrams.',
       'Manual and What’s new (you are reading them): Menu > Manual, or press ?.',

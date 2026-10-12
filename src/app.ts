@@ -68,6 +68,7 @@ const QUICKSHAPE_KEY = '2dope.quickshape';
 const SHAPE_HOLD_MS = 450;
 const SHAPE_SLOP = 5;
 const FILL_ACROSS_KEY = '2dope.fill.across';
+const FILL_REFER_KEY = '2dope.fill.refer';
 
 /** Fill tool: tap or drag across areas, lasso around areas, or scrub up leftovers. */
 export type FillMode = 'tap' | 'lasso' | 'leftover';
@@ -408,6 +409,31 @@ export class App {
     this.requestRender();
   }
 
+  /** Make every vector line on this drawing thicker or thinner (×k), one undo step. */
+  scaleVectorWidth(k: number): void {
+    const d = this.drawing;
+    if (this.live || !d.vectors.length || !Number.isFinite(k) || k <= 0) return;
+    const before = d.vectors;
+    const after = before.map((v) => ({ ...v, brush: { ...v.brush, size: Math.max(0.5, Math.min(400, v.brush.size * k)) } }));
+    this.history.push(
+      {
+        label: k > 1 ? 'Thicker vector lines' : 'Thinner vector lines',
+        drawings: [d],
+        do: () => {
+          d.vectors = after;
+          this.touch(d);
+          this.residency.updateThumb(d);
+        },
+        undo: () => {
+          d.vectors = before;
+          this.touch(d);
+          this.residency.updateThumb(d);
+        },
+      },
+      false,
+    );
+  }
+
   setVectorErase(m: VectorErase): void {
     this.vectorErase = m;
     saveJSON(VECTOR_ERASE_KEY, m);
@@ -418,6 +444,30 @@ export class App {
   fillMode: FillMode = loadJSON<FillMode>(FILL_MODE_KEY) ?? 'tap';
   /** Also fill the same spot on this many following drawings (0 = this drawing only). */
   fillAcross = Math.max(0, Math.min(12, loadJSON<number>(FILL_ACROSS_KEY) ?? 0));
+
+  /** Fill also stops at the lines of the other visible drawing layers (ink on one layer, colour on another). */
+  fillRefer = loadJSON<boolean>(FILL_REFER_KEY) ?? false;
+
+  setFillRefer(on: boolean): void {
+    this.fillRefer = on;
+    saveJSON(FILL_REFER_KEY, on);
+    this.fillMapCache = null;
+    this.onToolChange();
+  }
+
+  /** The other layers' drawings whose lines a fill at comp frame `f` reads (with fillRefer on). */
+  private referDrawings(f: number): Drawing[] {
+    if (!this.fillRefer) return [];
+    const self = this.project.layer.id;
+    const out: Drawing[] = [];
+    for (const l of this.project.comp.layers) {
+      if (l.kind !== 'drawings' || l.id === self || l.guide || !l.visible) continue;
+      const id = drawingAt(l.exposures, f - l.start);
+      const d = id ? this.project.drawings.get(id) : undefined;
+      if (d && !d.parked && d.line.width === this.docW && d.line.height === this.docH) out.push(d);
+    }
+    return out;
+  }
 
   setFillMode(m: FillMode): void {
     this.fillMode = m;
@@ -449,12 +499,15 @@ export class App {
   private fillBusy = false;
 
   /** The line art of a drawing as a fill map (line plane + vector strokes). */
-  private fillMapOf(d: Drawing): FillMap {
+  private fillMapOf(d: Drawing, frame = this.frame): FillMap {
     this.fillScratch ??= makeCanvas(this.docW, this.docH);
     const sg = this.fillScratch.getContext('2d', { willReadFrequently: true })!;
     sg.clearRect(0, 0, this.docW, this.docH);
-    sg.drawImage(d.line, 0, 0);
-    for (const v of d.vectors) drawVectorStroke(sg, v, this.lengthOf(v));
+    // with "use other layers", their lines at this frame close the areas too
+    for (const o of [d, ...this.referDrawings(frame)]) {
+      sg.drawImage(o.line, 0, 0);
+      for (const v of o.vectors) drawVectorStroke(sg, v, this.lengthOf(v));
+    }
     const px = sg.getImageData(0, 0, this.docW, this.docH).data;
     const alpha = new Uint8Array(this.docW * this.docH);
     for (let i = 0; i < alpha.length; i++) alpha[i] = px[i * 4 + 3]!;
@@ -463,7 +516,9 @@ export class App {
 
   /** The current drawing's fill map, reused while its lines stay the same. */
   private fillMapFor(d: Drawing): FillMap {
-    const key = `${JSON.stringify(this.fillOptions)}|${d.vectors.length}`;
+    const key = `${JSON.stringify(this.fillOptions)}|${d.vectors.length}|${this.referDrawings(this.frame)
+      .map((o) => `${o.id}:${o.rev}:${o.vectors.length}`)
+      .join(',')}`;
     const c = this.fillMapCache;
     if (c && c.d === d && c.rev === d.rev && c.key === key) return c.map;
     const map = this.fillMapOf(d);
@@ -650,10 +705,13 @@ export class App {
       const next = neighborDrawings(ex, this.lf, 0, this.fillAcross)
         .after.map((n) => this.project.drawing(n.drawing))
         .filter((x) => x !== first);
+      const layer = this.project.layer;
       for (const d of next) {
         await this.residency.pin(d);
         try {
-          const map = this.fillMapOf(d);
+          // the other layers are read at this drawing's own frame
+          const at = ex.findIndex((e, i) => e.drawing === d.id && startOf(ex, i) > this.lf);
+          const map = this.fillMapOf(d, layer.start + (at >= 0 ? startOf(ex, at) : this.lf));
           const target = planeCanvas(d, 'fill');
           const before = target.getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
           const box = emptyBox();
@@ -1406,6 +1464,22 @@ export class App {
       },
       false,
     );
+    // a typed or keyed retime (not a drag, which shows its own line): flash the edit line there
+    if (!this.editLine && beforeEx.length === r.ex.length) {
+      const ep = editPoint(beforeEx, r.ex);
+      if (ep && ep.delta) this.flashEditLine((find()?.start ?? 0) + ep.at, ep.delta);
+    }
+  }
+
+  private flashTimer = 0;
+  /** Show the edit line for a moment (a typed duration, + / −, a panel length box). */
+  flashEditLine(frame: number, delta: number): void {
+    clearTimeout(this.flashTimer);
+    this.setEditLine({ frame, edge: 'out', delta });
+    const shown = this.editLine;
+    this.flashTimer = window.setTimeout(() => {
+      if (this.editLine === shown) this.setEditLine(null);
+    }, 1400);
   }
 
   addFrame(): void {
@@ -2065,6 +2139,14 @@ export class App {
             { label: 'Fill', on: this.plane === 'fill', run: () => this.plane !== 'fill' && this.togglePlane() },
           ],
         },
+        ...(this.drawing.vectors.length
+          ? [
+              { title: 'Vector lines on this drawing' },
+              {
+                chips: [0.5, 0.75, 1.25, 1.5, 2].map((k) => ({ label: `${k < 1 ? '−' : '+'}${Math.round(Math.abs(k - 1) * 100)}%`, run: () => this.scaleVectorWidth(k) })),
+              },
+            ]
+          : []),
         { sep: true },
         { label: 'Undo', run: () => this.undo(), disabled: !this.history.canUndo, hint: '2 fingers' },
         { label: 'Redo', run: () => this.redo(), disabled: !this.history.canRedo, hint: '3 fingers' },

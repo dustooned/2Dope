@@ -281,7 +281,16 @@ function fillEditor(app: App): HTMLElement {
     across.value = String(app.fillAcross);
     acrossOut.textContent = app.fillAcross ? `+${app.fillAcross}` : 'off';
   };
-  sync();
+  const referRow = el('label', { class: 'row toggle', title: 'Fill stops at the lines on your other visible layers too: ink on one layer, colour on another' });
+  const refer = el('input', { type: 'checkbox' });
+  refer.addEventListener('change', () => app.setFillRefer(refer.checked));
+  referRow.append(refer, el('span', {}, 'Use lines from other layers'));
+  const syncAll = () => {
+    sync();
+    refer.checked = app.fillRefer;
+  };
+  syncAll();
+  fs.insertBefore(referRow, fs.children[1] ?? null);
   fs.insertBefore(acrossRow, fs.children[1] ?? null);
   fs.insertBefore(modes, acrossRow);
   fs.append(el('p', { class: 'hint' }, 'Reads the Line plane and vector strokes; paints the Fill plane under them. Shift+G switches Tap / Lasso / Leftovers.'));
