@@ -127,6 +127,7 @@ export const MANUAL: ManualSection[] = [
           'Fill options: fill across the next drawings at once, close small gaps in your lines, and Use lines from other layers (ink on one layer, colour on another: the fill stops at the ink).',
           'Vector lines thicker or thinner after drawing: press and hold the canvas, then pick −50% … +100% under Vector lines.',
           'Brush panel (Menu > Brush / X-sheet panel): every brush setting, anti-aliasing (off gives hard pixel edges) and line smoothing.',
+          'Steady lines (Brush panel > Stroke): StreamLine tidies slow strokes; Stabilisation steadies fast ones; Motion filter removes hand shake, and Expression gives some natural wobble back; Post-correct smooths the line after you lift.',
         ],
       },
     ],
@@ -243,6 +244,7 @@ export const UPDATES: Update[] = [
     items: [
       'Animate this shot lines your frames up with the board: one drawing per panel, same lengths, and P1, P2… marks above the frame bar. Board and animation timing stay in sync.',
       'QuickShape keeps your pressure (thick and thin) and adjusts from the start point.',
+      'Procreate-style steady lines: Stabilisation, Motion filter and Expression join StreamLine in the Brush panel.',
       'LINE and FILL are clearer: always-labelled switch, a FILL badge on the canvas, Line / Fill rows in Layers, same names everywhere.',
       'Colour panel: hue ring and square, H/S/B sliders and hex, recent colours and a palette you build. Tap the colour circle.',
       'Fill can use the lines on your other layers (Brush panel > Fill > Use lines from other layers).',

@@ -64,7 +64,10 @@ const SECTIONS: {
     sliders: [
       { key: 'taperStart', label: 'Taper start', min: 0, max: 200, step: 1, unit: 'px' },
       { key: 'taperEnd', label: 'Taper end', min: 0, max: 200, step: 1, unit: 'px' },
-      { key: 'smoothing', label: 'Stabilizer', min: 0, max: 1, step: 0.01 },
+      { key: 'smoothing', label: 'StreamLine', min: 0, max: 1, step: 0.01 },
+      { key: 'stabilize', label: 'Stabilisation', min: 0, max: 1, step: 0.01 },
+      { key: 'motionFilter', label: 'Motion filter', min: 0, max: 1, step: 0.01 },
+      { key: 'expression', label: 'Expression', min: 0, max: 1, step: 0.01 },
       { key: 'postSmooth', label: 'Post-correct', min: 0, max: 1, step: 0.01 },
     ],
     toggles: [

@@ -76,6 +76,12 @@ export interface BrushSettings {
   antiAlias?: boolean;
   /** Post-correction 0..1: smooth the stroke after the pen lifts (0 = off). */
   postSmooth?: number;
+  /** Procreate-style Stabilisation 0..1: steadies fast strokes (a time-window average). */
+  stabilize?: number;
+  /** Motion filtering 0..1: removes hand shake. */
+  motionFilter?: number;
+  /** Expression 0..1: keeps some natural wobble while motion filtering. */
+  expression?: number;
 }
 
 export const NO_TILT_SHADE: TiltShade = {

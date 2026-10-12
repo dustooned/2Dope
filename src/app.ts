@@ -1812,7 +1812,11 @@ export class App {
       plane,
       pointerId: e.pointerId,
       t0,
-      smoother: new Smoother(record.brush.smoothing, record.brush.pulledString, this.view.zoom),
+      smoother: new Smoother(record.brush.smoothing, record.brush.pulledString, this.view.zoom, {
+        stabilize: record.brush.stabilize,
+        motion: record.brush.motionFilter,
+        expression: record.brush.expression,
+      }),
       walker: new DabWalker(record.brush, record.seed),
       lastRaw: first,
       predicted: [],
