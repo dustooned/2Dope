@@ -244,6 +244,7 @@ export const UPDATES: Update[] = [
     items: [
       'Animate this shot lines your frames up with the board: one drawing per panel, same lengths, and P1, P2… marks above the frame bar. Board and animation timing stay in sync.',
       'QuickShape keeps your pressure (thick and thin) and adjusts from the start point.',
+      'Every new project starts with its setup (name, size, frame rate), also the very first one and after deleting your last project.',
       'Procreate-style steady lines: Stabilisation, Motion filter and Expression join StreamLine in the Brush panel.',
       'LINE and FILL are clearer: always-labelled switch, a FILL badge on the canvas, Line / Fill rows in Layers, same names everywhere.',
       'Colour panel: hue ring and square, H/S/B sliders and hex, recent colours and a palette you build. Tap the colour circle.',

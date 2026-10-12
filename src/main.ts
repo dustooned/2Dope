@@ -461,6 +461,8 @@ if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = fi
 exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
 const newUI = new NewProjectUI(app.device.lite ? app.device.limits : null);
 const gallery = new Gallery(files, newUI, $('#gallery'));
+// every new project starts with its setup (size, frame rate, name), the first one too
+files.askNew = () => newUI.open(null);
 const showGallery = () => void gallery.open();
 $('#open-gallery').addEventListener('click', showGallery);
 document.querySelectorAll('[data-file="projects"]').forEach((b) => b.addEventListener('click', showGallery));

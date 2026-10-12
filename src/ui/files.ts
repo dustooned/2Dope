@@ -48,7 +48,11 @@ function download(blob: Blob, name: string): void {
 }
 
 function fileName(name: string, ext: string): string {
-  const base = name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'untitled';
+  const base =
+    name
+      .replace(/[^\w\- ]+/g, '')
+      .trim()
+      .replace(/\s+/g, '-') || 'untitled';
   return `${base}.${ext}`;
 }
 
@@ -223,7 +227,19 @@ export class FileUI {
   // -------------------------------------------------------------------------------------------
   // The library
 
-  /** On start: reopen the last project, or start the first one. Nothing to "restore": it is all saved. */
+  /**
+   * Asks for a new project's setup (the New project dialog). Every new project goes through it,
+   * also the first one and the one made when the last project is deleted. Null = cancelled.
+   */
+  askNew: (() => Promise<NewProjectOptions | null>) | null = null;
+
+  /** A new project set up in the New dialog; cancelling still leaves a project open (the default one). */
+  private async createAsked(): Promise<void> {
+    const opts = this.askNew ? await this.askNew() : null;
+    await this.createProject(opts ?? {});
+  }
+
+  /** On start: reopen the last project, or set up the first one. Nothing to "restore": it is all saved. */
   async start(): Promise<void> {
     try {
       const last = await this.store.getSetting<string>(LAST_PROJECT);
@@ -233,7 +249,7 @@ export class FileUI {
     } catch (e) {
       this.toast(`The library could not be read: ${e instanceof Error ? e.message : String(e)}`);
     }
-    await this.createProject({});
+    await this.createAsked();
   }
 
   /** Open a project from the library. Saves the current one first. False if it could not be read. */
@@ -380,7 +396,7 @@ export class FileUI {
     if (this.current?.id === id) {
       const others = (await this.store.listProjects()).filter((p) => p.id !== id).sort((a, b) => b.opened - a.opened);
       const next = others[0];
-      if (!next || !(await this.openProject(next.id, true))) await this.createProject({});
+      if (!next || !(await this.openProject(next.id, true))) await this.createAsked();
     }
     await this.autosaver.then(() => this.store.deleteProject(id));
     this.onLibraryChanged();
@@ -528,7 +544,9 @@ export class FileUI {
     if (a.changes - this.lastExportChanges < BACKUP_MIN_CHANGES) return;
     if (now - this.lastExportAt < BACKUP_AFTER_MS || now - this.remindedAt < BACKUP_AFTER_MS) return;
     this.remindedAt = now;
-    this.toast('It has been a while since you saved a backup file. Browsers can clear local storage, especially on shared computers.', [{ label: 'Export .2dope', run: () => void this.exportProject() }]);
+    this.toast('It has been a while since you saved a backup file. Browsers can clear local storage, especially on shared computers.', [
+      { label: 'Export .2dope', run: () => void this.exportProject() },
+    ]);
   }
 
   /** Two tabs autosaving the same project would overwrite each other: warn when that happens. */
