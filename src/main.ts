@@ -20,6 +20,7 @@ import { applyIcons } from './ui/icons';
 import { Sidebar } from './ui/sidebar';
 import { LayersPopover } from './ui/layerspop';
 import { BoardPanel } from './ui/board';
+import { ColorPanel } from './ui/colorpanel';
 import { hasNewUpdates, openManual } from './ui/manual';
 
 const $ = <T extends HTMLElement>(sel: string) => {
@@ -89,7 +90,16 @@ const syncColor = () => {
   colorChip.parentElement!.style.setProperty('--chip', app.color);
 };
 colorChip.addEventListener('input', () => app.setColor(colorChip.value));
-app.onColorChange = chain(app.onColorChange, syncColor);
+// the colour circle opens the colour panel (the system picker is one button inside it)
+const colorPanel = new ColorPanel(app, colorChip);
+colorChip.parentElement!.addEventListener('click', (e) => {
+  e.preventDefault();
+  colorPanel.toggle(colorChip.parentElement!);
+});
+app.onColorChange = chain(app.onColorChange, () => {
+  syncColor();
+  colorPanel.sync();
+});
 app.onNotice = (m) => files?.toast(m, [], 4000);
 const layersPop = new LayersPopover(app);
 const layersBtn = $<HTMLButtonElement>('#layers-btn');
