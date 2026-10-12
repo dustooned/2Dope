@@ -897,6 +897,18 @@ export class App {
     if (this.workspace === 'board') this.enterBoard();
   }
 
+  /** Put the storyboard in final renders and Blender packages (it stays out by default). */
+  setBoardExport(on: boolean): void {
+    const b = this.board;
+    if (!b || !!b.guideExport === on) return;
+    this.editor.edit(on ? 'Include board in export' : 'Leave board out of export', (c) => {
+      const l = c.layers.find((x) => x.id === b.id);
+      if (!l) return;
+      if (on) l.guideExport = true;
+      else delete l.guideExport;
+    });
+  }
+
   /** A new blank panel (two seconds) after the selected or current one. */
   addPanel(): void {
     const t = this.targets;

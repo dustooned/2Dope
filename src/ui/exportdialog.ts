@@ -137,6 +137,19 @@ export class ExportUI {
     });
     d.append(row('First number', start, 'Number of the first file (1001 is common for compositing)'));
 
+    const board = this.app.board;
+    if (board) {
+      const l = el('label', { class: 'check' });
+      const c = el('input', { type: 'checkbox' });
+      c.checked = !!board.guideExport;
+      c.addEventListener('change', () => {
+        this.app.setBoardExport(c.checked);
+        this.summary();
+      });
+      l.append(c, el('span', {}, 'Include the storyboard'));
+      d.append(row('Board', l, 'The board is a guide and stays out of the final render unless this is on. For storyboard PDFs and panel images, use Export in the Board.'));
+    }
+
     d.append(el('p', { class: 'hint xsummary', 'aria-live': 'polite' }));
     const bar = el('progress', { class: 'xprogress', max: '1', value: '0', hidden: '' });
     d.append(bar, el('p', { class: 'hint xstatus', hidden: '' }));

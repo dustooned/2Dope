@@ -159,6 +159,18 @@
 - **One time format for every timeline**: frames, seconds + frames, or timecode, shared with the X-sheet setting. Tap any frame readout to switch. Rulers space their labels so they never overlap (whole seconds in the seconds formats). Board cards show each panel's start and length in it.
 - **Edit lines**: while an edge is dragged (strip holds, Motion bars), a yellow line marks the edited frame on the visible timelines with a label ("out 24 · +3f · ripple"), the part that will shift is shaded, the dragged edge lights up, and the X-sheet marks the same frame.
 
+## 2026-10-12: Storyboard export
+
+- **Board > Export** makes a storyboard **PDF** (our own small PDF writer, src/io/pdf.ts: JPEG pictures at about 150 dpi, built-in Helvetica, no font files) or a **ZIP of panel PNGs + captions.csv**. Layouts: 2 per page with captions beside the picture, 4 or 6 per page with captions below; Letter or A4 landscape; captions on or off. Each panel shows its number, start and length in the current time format; long captions wrap and end with "…" when the cell is full. Picture: the board drawing, or board + animation at the panel's first frame.
+- The CSV has one row per panel (panel, start, frames, duration, dialogue, action, slugging, notes, image file), UTF-8 with a BOM for Excel, and a caption starting with = + - @ gets a leading ' so spreadsheets never run it as a formula.
+- The shot export gets an **Include the storyboard** switch (the board layer's guideExport; one undo step). Off by default: the board stays out of final renders.
+- Characters outside WinAnsi (e.g. CJK, emoji) print as "?" in the PDF for now; the PNG/CSV export keeps them.
+
+## Queued (user, 2026-10-12)
+
+- **QuickShape (auto-shape)**: hold at the end of a stroke to snap it to a line, arc, ellipse/circle, rectangle/square or polygon, then adjust before lifting; for vector and pixel brushes. The feel should match Procreate's QuickShape (and Clip Studio / Lazy Nezumi shape assist).
+- **Simplified timeline control in Time**: Time should have its own easy timeline control (not only the X-sheet and holds bar).
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

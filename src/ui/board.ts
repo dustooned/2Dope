@@ -1,5 +1,6 @@
 import type { App } from '../app';
 import { CAPTION_FIELDS, type CaptionField } from '../core/timeline';
+import { openBoardExport } from './boardexport';
 import { attachContextMenu } from './contextmenu';
 import { frameMenu } from './framemenu';
 import { autoIcon, decorate, setLabel } from './icons';
@@ -60,6 +61,7 @@ export class BoardPanel {
       btn('Later', 'Move the selected panels later', () => app.moveSelection(1), 'next'),
       btn('Images', 'Import images as panels (board sketches, photos)', () => this.fileIn.click(), 'export'),
       this.playBtn,
+      btn('Export', 'Export the storyboard as PDF pages or panel PNGs with captions', () => openBoardExport(app, (m) => app.onNotice?.(m)), 'export'),
       btn('Animate this shot', 'Draw the animation on top of the board', () => app.animateShot(), 'draw'),
     );
     for (const b of this.bar.querySelectorAll<HTMLButtonElement>('button')) if (['Duplicate', 'Delete', 'Earlier', 'Later'].includes(b.getAttribute('aria-label') ?? '')) b.classList.add('icon-only');
