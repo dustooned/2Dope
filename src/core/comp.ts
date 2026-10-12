@@ -39,6 +39,17 @@ interface LayerBase {
   label: number;
   blend: BlendMode;
   transform: Transform;
+  /**
+   * A guide layer (the storyboard / animatic, references): shown in every view, left out of
+   * exports unless `guideExport` is on (After Effects' guide layers).
+   */
+  guide?: boolean;
+  guideExport?: boolean;
+}
+
+/** Is this layer left out of a final render? */
+export function skippedInExport(l: { guide?: boolean; guideExport?: boolean }): boolean {
+  return l.guide === true && l.guideExport !== true;
 }
 
 /**
@@ -475,7 +486,19 @@ export function wouldCycle(parentId: string, childId: string, comps: ReadonlyMap
 export function isPlainFlipbook(c: Comp): boolean {
   if (c.layers.length !== 1) return false;
   const l = c.layers[0]!;
-  if (l.kind !== 'drawings' || partsActive(l) || l.play !== 'once' || l.speed !== 1 || l.timeRemap?.keys.length || l.start !== 0 || l.in !== 0 || l.out !== null || l.blend !== 'normal' || !l.visible)
+  if (
+    l.kind !== 'drawings' ||
+    l.guide ||
+    partsActive(l) ||
+    l.play !== 'once' ||
+    l.speed !== 1 ||
+    l.timeRemap?.keys.length ||
+    l.start !== 0 ||
+    l.in !== 0 ||
+    l.out !== null ||
+    l.blend !== 'normal' ||
+    !l.visible
+  )
     return false;
   const t = l.transform;
   const still = (p: Prop) => p.keys.length === 0;

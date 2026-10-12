@@ -223,8 +223,8 @@ describe('project schema', () => {
     const ok = validateProjectFile(p);
     expect(ex(ok)[0]!.note).toBe('walks in');
     expect(ex(ok)[1]!.note).toBeUndefined();
-    ex(p)[0]!.note = 'x'.repeat(500);
-    expect(ex(validateProjectFile(p))[0]!.note!.length).toBe(200);
+    ex(p)[0]!.note = 'x'.repeat(1500);
+    expect(ex(validateProjectFile(p))[0]!.note!.length).toBe(1000);
   });
 
   it('refuses asset paths that could escape the archive', () => {
@@ -278,6 +278,21 @@ describe('project schema', () => {
     expect(again).toEqual(back.comps);
     expect(back.comps.c1!.layers[1]!.parent).toBe('cam');
     expect(back.comps.c1!.layers[2]!.transform.position.keys).toHaveLength(2);
+  });
+
+  it('keeps storyboard captions and guide flags (additive: older files read as before)', () => {
+    const p = sample();
+    const l = p.comps.c1!.layers[0]!;
+    l.guide = true;
+    l.exposures![0] = { ...l.exposures![0]!, dialogue: ' Hi! ', action: 'waves', slug: 'hold 2s' };
+    const back = parseProjectFile(stringifyProjectFile(p));
+    const bl = back.comps.c1!.layers[0]!;
+    expect(bl.guide).toBe(true);
+    expect(bl.guideExport).toBeUndefined();
+    expect(bl.exposures![0]).toMatchObject({ dialogue: 'Hi!', action: 'waves', slug: 'hold 2s' });
+    const model = compsFromFile(back).get('c1')!.layers[0]!;
+    expect(model.guide).toBe(true);
+    expect(compFile(compsFromFile(back).get('c1')!).layers[0]).toMatchObject({ guide: true });
   });
 
   it('keeps Line / Fill part settings (only what differs from the defaults) and drops bad tints', () => {

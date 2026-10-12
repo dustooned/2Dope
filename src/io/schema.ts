@@ -19,6 +19,7 @@ import {
   type PinProp,
   type Transform,
 } from '../core/comp';
+import { CAPTION_FIELDS } from '../core/timeline';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
 
 /**
@@ -39,6 +40,10 @@ export interface ExposureFile {
   length: number;
   /** Optional exposure-sheet note (added without a schema bump). */
   note?: string;
+  /** Storyboard captions (added without a schema bump). */
+  dialogue?: string;
+  action?: string;
+  slug?: string;
 }
 
 /** A keyframe side (see core/anim.ts). `slope` and `influence` only matter for bezier. */
@@ -100,6 +105,9 @@ export interface LayerFile {
   single?: number;
   /** drawings / comp: which content frame to show, keyed (0-based); overrides play and speed. */
   timeRemap?: PropFile<number>;
+  /** A guide layer (storyboard / reference): left out of exports unless guideExport. */
+  guide?: boolean;
+  guideExport?: boolean;
   /** Written by early schema-2 files; read as play "loop". */
   loop?: boolean;
   /** drawings: Line / Fill part settings that differ from the defaults (additive, no version bump). */
@@ -340,8 +348,12 @@ function exposureList(v: unknown, what: string, drawings: Record<string, Drawing
     const length = int(e.length, 'exposure length', 1, MAX_FRAMES);
     frames += length;
     if (frames > MAX_FRAMES) throw new SchemaError('the timeline is too long');
-    const note = typeof e.note === 'string' && e.note.trim() ? e.note.trim().slice(0, 200) : undefined;
-    return note ? { drawing, length, note } : { drawing, length };
+    const out: ExposureFile = { drawing, length };
+    for (const f of CAPTION_FIELDS) {
+      const t = e[f.key];
+      if (typeof t === 'string' && t.trim()) out[f.key] = t.trim().slice(0, f.max);
+    }
+    return out;
   });
 }
 
@@ -381,6 +393,8 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
     blend: BLEND_MODES.includes(v.blend as BlendMode) ? (v.blend as BlendMode) : 'normal',
     transform: transform(v.transform, what),
   };
+  if (v.guide === true) out.guide = true;
+  if (v.guideExport === true) out.guideExport = true;
   if (kind === 'drawings') {
     out.exposures = exposureList(v.exposures, what, drawings);
     if (!out.exposures.length) throw new SchemaError(`${what} has no frames`);
@@ -607,6 +621,8 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
         label: l.label,
         blend: l.blend,
         transform: transformOf(l.transform),
+        ...(l.guide ? { guide: true } : {}),
+        ...(l.guideExport ? { guideExport: true } : {}),
       };
       const timed = { play: l.play ?? (l.loop ? 'loop' : 'once'), speed: l.speed ?? 1, single: l.single ?? 0, timeRemap: l.timeRemap ? propOf(l.timeRemap) : null } as const;
       if (l.kind === 'drawings') {
@@ -667,6 +683,8 @@ export function compFile(c: Comp): CompFile {
         blend: l.blend,
         transform: transformFile(l.transform),
       };
+      if (l.guide) base.guide = true;
+      if (l.guideExport) base.guideExport = true;
       const timed: Partial<LayerFile> = {};
       if (l.kind === 'drawings' || l.kind === 'comp') {
         if (l.play !== 'once') timed.play = l.play;

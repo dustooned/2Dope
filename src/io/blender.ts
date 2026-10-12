@@ -1,5 +1,5 @@
 import { blenderHandles, type Prop, type Value } from '../core/anim';
-import { compLength, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type Layer, partsActive } from '../core/comp';
+import { compLength, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type Layer, partsActive, skippedInExport } from '../core/comp';
 
 /**
  * The Blender handoff (spec principle 4). 2Dope writes a package: `scene.json` (this file's
@@ -177,6 +177,7 @@ export function planBlender(project: { name: string; main: string; width: number
     const length = compLength(c, comps);
     const bc: BlenderComp = { name: c.name, width: c.width, height: c.height, fps: c.fps, length, background: c.background, layers: [] };
     for (const l of c.layers) {
+      if (skippedInExport(l)) continue; // the storyboard / guides stay in 2Dope
       const t = l.transform;
       const anchorValue = t.anchor.keys.length ? t.anchor.keys[0]!.v : t.anchor.value;
       if (t.anchor.keys.length > 1) notes.add(`“${l.name}”: an animated anchor point is exported as its first value.`);

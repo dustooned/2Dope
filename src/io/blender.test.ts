@@ -6,8 +6,33 @@ import { channels, planBlender, plannedLayers, runs } from './blender';
 function project() {
   const shot = newComp('c1', 'Shot', 400, 300, 12);
   const walk = newComp('c2', 'Walk', 400, 300, 12);
-  walk.layers.push(drawingsLayer('W', 'Legs', [{ drawing: 'w1', length: 2 }, { drawing: 'w2', length: 2 }], 400, 300));
-  shot.layers.push(cameraLayer('cam', shot), nullLayer('N', 'Handle', shot), compLayer('P', 'Walk', walk, shot), drawingsLayer('B', 'Ball', [{ drawing: 'b1', length: 3 }, { drawing: 'b2', length: 1 }], 400, 300));
+  walk.layers.push(
+    drawingsLayer(
+      'W',
+      'Legs',
+      [
+        { drawing: 'w1', length: 2 },
+        { drawing: 'w2', length: 2 },
+      ],
+      400,
+      300,
+    ),
+  );
+  shot.layers.push(
+    cameraLayer('cam', shot),
+    nullLayer('N', 'Handle', shot),
+    compLayer('P', 'Walk', walk, shot),
+    drawingsLayer(
+      'B',
+      'Ball',
+      [
+        { drawing: 'b1', length: 3 },
+        { drawing: 'b2', length: 1 },
+      ],
+      400,
+      300,
+    ),
+  );
   const comps = new Map<string, Comp>([
     ['c1', shot],
     ['c2', walk],
@@ -29,6 +54,15 @@ describe('Blender plan', () => {
     expect([...plan.drawings].sort()).toEqual(['b1', 'b2', 'w1', 'w2']);
     expect(plan.scene.images['d:b1']).toBe('drawings/b1.png');
     expect(plan.renders).toHaveLength(0);
+  });
+
+  it('guide layers (the storyboard) stay out of Blender unless set to export', () => {
+    const p = project();
+    const B = p.shot.layers.find((l) => l.id === 'B')!;
+    B.guide = true;
+    expect(plannedLayers(planBlender(p, 'test'), 'c1').B).toBeUndefined();
+    B.guideExport = true;
+    expect(plannedLayers(planBlender(p, 'test'), 'c1').B).toBeDefined();
   });
 
   it('drawings layers list which image shows on each frame, as runs', () => {

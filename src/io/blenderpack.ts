@@ -68,7 +68,7 @@ export async function exportBlender(
       const need = [...frameContent(project.comps, job.comp, job.frame).drawings].map((id) => project.drawings.get(id)).filter((d): d is Drawing => !!d);
       for (const d of need) await hold.pin(d);
       try {
-        drawComp(cg, project, job.comp, job.frame, { backgrounds: true });
+        drawComp(cg, project, job.comp, job.frame, { backgrounds: true, export: true });
         files.push({ name: plan.scene.images[job.image]!, data: await encodePng(c) });
       } finally {
         for (const d of need) hold.unpin(d);

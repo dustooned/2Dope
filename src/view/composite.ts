@@ -5,6 +5,7 @@ import {
   IDENTITY,
   invert,
   activeAt,
+  skippedInExport,
   drawingOf,
   instanceComp,
   layerFrame,
@@ -39,6 +40,8 @@ export interface CompositeOptions {
   skip?: string;
   /** Multiply the top comp's layers' opacity (context drawn faintly). */
   alpha?: number;
+  /** A final render: guide layers (the storyboard) are left out unless set to export. */
+  export?: boolean;
   /** Draw this drawing's pixels from other canvases (the stroke being painted right now). */
   source?: (d: Drawing) => { line: HTMLCanvasElement; fill: HTMLCanvasElement | null } | null;
 }
@@ -152,6 +155,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     const l = c.layers[i]!;
     if (l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps)) continue;
     if (depth === 0 && opt.skip === l.id) continue;
+    if (opt.export && skippedInExport(l)) continue;
     const alpha = opacityAt(l, frame) * (depth === 0 ? (opt.alpha ?? 1) : 1);
     if (alpha <= 0) continue;
     const m = base.multiply(toDom(mul(view, worldMatrix(c, l, frame))));
@@ -200,7 +204,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
  * frame, placed relative to it (the drawn-on layer's page is the view's space). Cameras and nulls
  * are not drawn. `alpha` fades them (a light-table look); hidden layers stay hidden.
  */
-export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, side: 'below' | 'above', alpha = 1): void {
+export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, side: 'below' | 'above', alpha = 1, guideAlpha = 1): void {
   const comps = project.comps;
   const idx = c.layers.findIndex((l) => l.id === activeId);
   const active = idx >= 0 ? c.layers[idx]! : null;
@@ -212,7 +216,7 @@ export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, 
     // layers[0] is the top; a layer not yet in the comp (a placeholder) goes to the bottom
     const above = idx < 0 || i < idx;
     if ((side === 'above') !== above) continue;
-    const a = opacityAt(l, frame) * alpha;
+    const a = opacityAt(l, frame) * (l.guide ? guideAlpha : alpha);
     if (a <= 0) continue;
     drawLayer(g, project, c, l, frame, base.multiply(toDom(mul(rel, worldMatrix(c, l, frame)))), a, 'all', {}, 0);
   }

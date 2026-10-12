@@ -8,6 +8,29 @@ export interface Exposure {
   length: number;
   /** Optional text on the exposure sheet (dialogue, an action note). It travels with the drawing. */
   note?: string;
+  /** Storyboard captions (Storyboard Pro's defaults): what is said, what happens, timing notes. */
+  dialogue?: string;
+  action?: string;
+  slug?: string;
+}
+
+/** The caption fields of an exposure (a storyboard panel), in the order they are shown. */
+export type CaptionField = 'dialogue' | 'action' | 'slug' | 'note';
+export const CAPTION_FIELDS: { key: CaptionField; label: string; max: number }[] = [
+  { key: 'dialogue', label: 'Dialogue', max: 1000 },
+  { key: 'action', label: 'Action', max: 1000 },
+  { key: 'slug', label: 'Slugging', max: 300 },
+  { key: 'note', label: 'Notes', max: 1000 },
+];
+
+/** An exposure without its captions (a fresh copy of a panel). */
+function withoutCaptions(e: Exposure): Exposure {
+  const { note: _n, dialogue: _d, action: _a, slug: _s, ...rest } = e;
+  void _n;
+  void _d;
+  void _a;
+  void _s;
+  return rest;
 }
 
 export interface Located {
@@ -238,11 +261,7 @@ export function insertAt(ex: Exposure[], index: number, items: Exposure[]): Edit
 export function duplicateBlock(ex: Exposure[], indices: number[], ids: string[]): Edit {
   const idx = uniqueSorted(indices, ex.length);
   if (!idx.length || ids.length !== idx.length) return { ex, frame: 0 };
-  const items = idx.map((i, k) => {
-    const { note: _n, ...rest } = ex[i]!;
-    void _n;
-    return { ...rest, drawing: ids[k]! };
-  });
+  const items = idx.map((i, k) => ({ ...withoutCaptions(ex[i]!), drawing: ids[k]! }));
   return insertAt(ex, idx[idx.length - 1]! + 1, items);
 }
 
@@ -316,7 +335,10 @@ export function normalize(ex: Exposure[]): Exposure[] {
   for (const e of ex) {
     const last = out[out.length - 1];
     if (last && last.drawing === e.drawing) {
-      out[out.length - 1] = { ...last, length: last.length + e.length, ...(last.note || !e.note ? {} : { note: e.note }) };
+      // the first keeps its captions; an empty field takes the second's
+      const merged: Exposure = { ...last, length: last.length + e.length };
+      for (const f of CAPTION_FIELDS) if (!merged[f.key] && e[f.key]) merged[f.key] = e[f.key];
+      out[out.length - 1] = merged;
       changed = true;
     } else {
       out.push(e);
@@ -346,13 +368,20 @@ export function exposeAt(ex: Exposure[], frame: number, drawing: string): Exposu
 
 /** Set (or clear, with empty text) the note on one exposure. */
 export function setNote(ex: Exposure[], index: number, note: string): Exposure[] {
+  return setCaption(ex, index, 'note', note);
+}
+
+/** Set (or clear, with empty text) one caption of an exposure (a storyboard panel). */
+export function setCaption(ex: Exposure[], index: number, field: CaptionField, text: string): Exposure[] {
   const cur = ex[index];
   if (!cur) return ex;
-  const text = note.trim().slice(0, 200);
-  if ((cur.note ?? '') === text) return ex;
+  const max = CAPTION_FIELDS.find((f) => f.key === field)?.max ?? 1000;
+  const value = text.trim().slice(0, max);
+  if ((cur[field] ?? '') === value) return ex;
   const out = ex.slice();
-  const { note: _old, ...rest } = cur;
-  void _old;
-  out[index] = text ? { ...rest, note: text } : rest;
+  const next: Exposure = { ...cur };
+  if (value) next[field] = value;
+  else delete next[field];
+  out[index] = next;
   return out;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockDropIndex, duplicateBlock, exposeAt, insertAt, moveBlock, normalize, setNote, shiftBlock } from './timeline';
+import { blockDropIndex, duplicateBlock, exposeAt, insertAt, moveBlock, normalize, setCaption, setNote, shiftBlock } from './timeline';
 import { frameLabel, isSecondBoundary } from './timecode';
 import {
   addAfter,
@@ -221,7 +221,7 @@ describe('x-sheet editing', () => {
     expect(setNote(e, 0, '')[0]!.note).toBeUndefined();
     expect(setNote(e, 0, 'hello')).toBe(e);
     expect(setNote(e, 9, 'x')).toBe(e);
-    expect(setNote(e, 1, 'x'.repeat(500))[1]!.note!.length).toBe(200);
+    expect(setNote(e, 1, 'x'.repeat(1500))[1]!.note!.length).toBe(1000);
   });
 });
 
@@ -284,5 +284,25 @@ describe('block editing by touch', () => {
     expect(blockDropIndex(four, [1], 1.5)).toBe(1);
     expect(blockDropIndex(four, [1], 4)).toBe(2);
     expect(blockDropIndex(four, [1], 9)).toBe(3);
+  });
+});
+
+describe('storyboard captions', () => {
+  it('sets, trims and clears captions; duplicates start clean; merging keeps the first panel and fills its gaps', () => {
+    const e: Exposure[] = [
+      { drawing: 'a', length: 24 },
+      { drawing: 'b', length: 12 },
+    ];
+    const a = setCaption(e, 0, 'dialogue', '  Hello there  ');
+    expect(a[0]!.dialogue).toBe('Hello there');
+    expect(setCaption(a, 0, 'dialogue', '')[0]!.dialogue).toBeUndefined();
+    expect(setCaption(a, 0, 'dialogue', 'Hello there')).toBe(a);
+    const b = setCaption(setCaption(a, 0, 'slug', 'beat'), 1, 'action', 'turns');
+    expect(duplicateBlock(b, [0], ['c']).ex[1]).toEqual({ drawing: 'c', length: 24 });
+    const merged = normalize([
+      { drawing: 'x', length: 2, dialogue: 'Hi' },
+      { drawing: 'x', length: 3, dialogue: 'ignored', action: 'waves' },
+    ]);
+    expect(merged).toEqual([{ drawing: 'x', length: 5, dialogue: 'Hi', action: 'waves' }]);
   });
 });

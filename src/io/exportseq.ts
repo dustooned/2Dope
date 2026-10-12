@@ -212,7 +212,7 @@ function drawCompPass(g: CanvasRenderingContext2D, project: Project, compId: str
     g.restore();
   }
   const planes = pass === 'lines' ? 'line' : pass === 'fills' ? 'fill' : 'all';
-  drawComp(g, project, compId, frame, { planes, backgrounds: pass === 'combined' });
+  drawComp(g, project, compId, frame, { planes, backgrounds: pass === 'combined', export: true });
   if (pass === 'matte') {
     g.save();
     g.setTransform(1, 0, 0, 1, 0, 0);
