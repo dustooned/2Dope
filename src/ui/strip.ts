@@ -1,7 +1,8 @@
 import type { App } from '../app';
 import { autoIcon, decorate, setLabel } from './icons';
 import { FPS_PRESETS, ROLES, type Drawing, type Role } from '../core/project';
-import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, type Exposure } from '../core/timeline';
+import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, totalFrames, type Exposure } from '../core/timeline';
+import { rulerStep } from '../core/timecode';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './contextmenu';
 import { frameMenu } from './framemenu';
 
@@ -89,7 +90,8 @@ export class Strip {
       return autoIcon(b);
     };
     this.playBtn = btn('Play', 'Play / pause (Enter or tap Space)', () => app.togglePlay(), 'play');
-    this.frameLabel = el('span', { class: 'readout frame-readout' });
+    this.frameLabel = el('span', { class: 'readout frame-readout', role: 'button', tabindex: '0', title: 'Frame / length. Tap to show frames, seconds + frames, or timecode.' });
+    this.frameLabel.addEventListener('click', () => app.cycleTimeFormat());
     this.fpsSel = el('select', { 'aria-label': 'Frames per second', title: 'Frames per second' });
     for (const f of FPS_PRESETS) this.fpsSel.append(el('option', { value: String(f) }, `${f} fps`));
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
@@ -297,7 +299,9 @@ export class Strip {
         const startFrame = startOf(d.before, d.index);
         const length = Math.max(1, Math.round(p.x / this.cell - startFrame));
         const group = app.selection.includes(d.index) ? app.selection : [d.index];
-        app.previewExposures(setHolds(d.before, group, length));
+        const next = setHolds(d.before, group, length);
+        app.previewExposures(next);
+        app.setEditLine({ frame: app.project.layer.start + startFrame + length, edge: 'out', delta: totalFrames(next) - totalFrames(d.before) });
       } else if (d.kind === 'move') {
         if (!d.moved && Math.abs(p.x - d.startX) < Math.max(DRAG_THRESHOLD, e.pointerType === 'touch' ? HOLD_SLOP : 0)) return;
         d.moved = true;
@@ -327,6 +331,7 @@ export class Strip {
 
     const finish = (e: PointerEvent, cancelled: boolean) => {
       clearTimeout(this.holdTimer);
+      if (app.editLine) app.setEditLine(null);
       const d = this.drag;
       this.drag = null;
       this.marquee.style.display = 'none';
@@ -378,6 +383,28 @@ export class Strip {
   }
 
   private holdTimer = 0;
+  private readonly editLineEl = el('div', { class: 'editline' });
+  private readonly editShiftEl = el('div', { class: 'editshift' });
+
+  /** The edge being changed (from any timeline), as a line on this one, with what will shift shaded. */
+  private drawEditLine(): void {
+    const e = this.app.editLine;
+    if (!e) {
+      this.editLineEl.remove();
+      this.editShiftEl.remove();
+      return;
+    }
+    const x = (e.frame - this.app.project.layer.start) * this.cell;
+    this.editLineEl.style.left = `${x}px`;
+    this.editLineEl.dataset.label = this.app.editLineLabel();
+    this.editLineEl.classList.toggle('flip', x > this.inner.offsetWidth - 180);
+    if (!this.editLineEl.isConnected) this.inner.append(this.editLineEl);
+    if (e.shift) {
+      this.editShiftEl.style.left = `${x}px`;
+      this.editShiftEl.style.width = `${Math.max(0, this.inner.offsetWidth - x)}px`;
+      if (!this.editShiftEl.isConnected) this.inner.append(this.editShiftEl);
+    } else this.editShiftEl.remove();
+  }
   private lastHold = 0;
 
   // -------------------------------------------------------------------------------------------
@@ -394,14 +421,16 @@ export class Strip {
     const app = this.app;
     const p = app.project;
     const sel = new Set(app.selection);
-    const sig = `${this.cell}#` + p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).thumbRev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
+    const sig =
+      `${this.cell}#${app.timeFormat}#` + p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).thumbRev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
     if (sig !== this.signature) {
       this.signature = sig;
       this.rebuild();
     }
     const cell = this.cell;
     setLabel(this.layerChip, app.project.isPlaceholder ? 'New layer' : app.project.layer.name);
-    this.frameLabel.textContent = app.blankPage ? `${p.length + 1} / ${p.length} new` : `${app.lf + 1} / ${p.length}`;
+    this.frameLabel.textContent = app.blankPage ? `new · ${app.fmtDur(p.length)}` : `${app.fmt(app.lf)} / ${app.fmtDur(p.length)}`;
+    this.drawEditLine();
     const l = locate(p.exposures, app.lf);
     const targets = app.targets;
     const common = commonHold(p.exposures, targets);
@@ -481,10 +510,10 @@ export class Strip {
     this.inner.replaceChildren();
     this.inner.style.width = `${Math.max(p.length * cell + cell * 2, 200)}px`;
     const ruler = el('div', { class: 'strip-ruler' });
-    const step = cell < 28 ? 5 : cell < 40 ? 2 : 1;
+    const step = rulerStep(cell, p.fps, this.app.timeFormat);
     for (let f = 0; f < p.length; f++) {
-      if (f % step !== 0 && f !== p.length - 1) continue;
-      const n = el('span', {}, String(f + 1));
+      if (f % step !== 0) continue;
+      const n = el('span', {}, this.app.fmt(f));
       n.style.left = `${f * cell}px`;
       n.style.width = `${cell}px`;
       ruler.append(n);
@@ -501,7 +530,10 @@ export class Strip {
       if (e.length > 1 && width >= 90) block.append(el('span', { class: 'hold-line' }));
       if (e.length > 1) block.append(el('span', { class: 'len' }, `×${e.length}`));
       if (d.role) block.append(el('span', { class: `badge role-${d.role}`, title: ROLE_NAME[d.role] }, ROLE_LETTER[d.role]));
-      block.append(el('span', { class: 'handle', title: 'Drag to change the hold' }));
+      // the edge being dragged lights up (blocks are rebuilt while a hold is dragged)
+      const dr = this.drag;
+      const active = dr && dr.kind === 'resize' && (dr.index === i || (this.app.selection.includes(dr.index) && sel.has(i)));
+      block.append(el('span', { class: `handle${active ? ' active' : ''}`, title: 'Drag to change the hold' }));
       this.inner.append(block);
     });
     this.inner.append(this.blank, this.lockMark, this.playhead, this.marquee);

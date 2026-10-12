@@ -6,6 +6,7 @@ import { FPS_PRESETS } from '../core/project';
 import { isPartProp, isPin, keyId, PROP_LABEL, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
 import { attachContextMenu, type CtxItem } from './contextmenu';
+import { rulerStep } from '../core/timecode';
 
 const ZOOM_KEY = '2dope.m3.mcell';
 const ROW_KEY = '2dope.m3.mrow';
@@ -259,7 +260,8 @@ export class MotionPanel {
       this.rebuild();
     }
     // toolbar
-    this.frameLabel.textContent = `${app.frame + 1} / ${app.compEnd}`;
+    this.frameLabel.textContent = `${app.fmt(app.frame)} / ${app.fmtDur(app.compEnd)}`;
+    this.drawEditLine();
     setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(c.fps);
@@ -310,6 +312,29 @@ export class MotionPanel {
     });
   }
 
+  private readonly editLineEl = el('div', { class: 'editline' });
+  private readonly editShiftEl = el('div', { class: 'editshift' });
+
+  /** The edge being changed (from any timeline), as a line on this one, with what will shift shaded. */
+  private drawEditLine(): void {
+    const e = this.app.editLine;
+    if (!e) {
+      this.editLineEl.remove();
+      this.editShiftEl.remove();
+      return;
+    }
+    const x = LEFT_W + e.frame * this.cell;
+    this.editLineEl.style.left = `${x}px`;
+    this.editLineEl.dataset.label = this.app.editLineLabel();
+    this.editLineEl.classList.toggle('flip', x > this.grid.offsetWidth - 180);
+    if (!this.editLineEl.isConnected) this.grid.append(this.editLineEl);
+    if (e.shift) {
+      this.editShiftEl.style.left = `${x}px`;
+      this.editShiftEl.style.width = `${Math.max(0, this.grid.offsetWidth - x)}px`;
+      if (!this.editShiftEl.isConnected) this.grid.append(this.editShiftEl);
+    } else this.editShiftEl.remove();
+  }
+
   private async groupSelected(): Promise<void> {
     const ed = this.ed;
     if (!ed.selected.length) return;
@@ -347,9 +372,9 @@ export class MotionPanel {
     corner.append(el('span', { class: 'hint' }, `${c.name} · ${c.width}×${c.height}`));
     const rr = el('div', { class: 'mright' });
     rr.style.width = `${end * this.cell}px`;
-    const step = this.cell < 14 ? 10 : this.cell < 22 ? 5 : this.cell < 40 ? 2 : 1;
+    const step = rulerStep(this.cell, c.fps, app.timeFormat);
     for (let f = 0; f < end; f += step) {
-      const t = el('span', { class: f % c.fps === 0 ? 'tick sec' : 'tick' }, String(f + 1));
+      const t = el('span', { class: f % c.fps === 0 ? 'tick sec' : 'tick' }, app.fmt(f));
       t.style.left = `${f * this.cell}px`;
       rr.append(t);
     }
@@ -1018,6 +1043,14 @@ export class MotionPanel {
     } else {
       d.el.style.width = `${Math.max(this.cell, d.w0 + snap)}px`;
     }
+    if (d.kind === 'bar') {
+      // the edge being moved, as a line across the timelines (frames from the bar's pixels)
+      const left = parseFloat(d.el.style.left) + (d.mode === 'move' ? snap : 0);
+      const right = left + parseFloat(d.el.style.width);
+      const frame = Math.round((d.mode === 'out' ? right : left) / this.cell);
+      d.el.querySelector(`.mh.${d.mode === 'in' ? 'in' : 'out'}`)?.classList.toggle('active', d.mode !== 'move');
+      this.app.setEditLine({ frame, edge: d.mode, delta: Math.round(snap / this.cell) });
+    }
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
@@ -1026,6 +1059,7 @@ export class MotionPanel {
     const d = this.drag;
     this.drag = null;
     if (!d) return;
+    if (this.app.editLine) this.app.setEditLine(null);
     if (d.kind === 'scrub') {
       this.app.endScrub();
       return;

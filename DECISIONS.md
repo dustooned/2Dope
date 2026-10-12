@@ -153,6 +153,12 @@
 - **Show board in Draw**: Layers popover → Board: Show / Fade (default) / Hide, independent of "Others". The current panel's dialogue shows as a subtitle in Board and while playing.
 - Next: export (PDF board pages, PNG zip + captions CSV), then audio, shots end to end, camera per panel.
 
+## 2026-10-12: Timeline foundation (ripple, measured rulers, edit lines)
+
+- **Ripple is on by default** (doc 16, "Live edits"). A timing change *inside* a layer (insert, delete, hold change, panel duration, image panels, drag of a hold) moves everything after it on every layer of the comp: later layers shift, spanning drawings layers hold the drawing on screen longer (or lose frames there), keys after the point move, set comp durations follow. One undo step, labelled "(ripple)". Changes at the very end of a layer push nothing (nothing of that layer comes after them). Motion end trims move the layers that started after the old end. Shift+R switches ripple; holding Alt flips it for one edit; a toolbar switch shows the state.
+- **One time format for every timeline**: frames, seconds + frames, or timecode, shared with the X-sheet setting. Tap any frame readout to switch. Rulers space their labels so they never overlap (whole seconds in the seconds formats). Board cards show each panel's start and length in it.
+- **Edit lines**: while an edge is dragged (strip holds, Motion bars), a yellow line marks the edited frame on the visible timelines with a label ("out 24 · +3f · ripple"), the part that will shift is shaded, the dragged edge lights up, and the X-sheet marks the same frame.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

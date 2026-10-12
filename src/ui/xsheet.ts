@@ -54,6 +54,7 @@ export class XSheet {
     this.formatSel.value = this.format;
     this.formatSel.addEventListener('change', () => {
       this.format = this.formatSel.value as FrameFormat;
+      app.setTimeFormat(this.format);
       try {
         localStorage.setItem(FORMAT_KEY, this.format);
       } catch {
@@ -413,6 +414,18 @@ export class XSheet {
   update(): void {
     if (!this.visible || this.editing) return;
     const app = this.app;
+    // one time format for every timeline (set here, in the strip, or in Motion)
+    if (app.timeFormat !== this.format) {
+      this.format = app.timeFormat;
+      this.formatSel.value = this.format;
+    }
+    const marked = this.body.querySelector('.xs-row.edit-at');
+    const e = app.editLine;
+    const at = e ? this.body.querySelector(`.xs-row[data-frame="${e.frame - app.project.layer.start}"]`) : null;
+    if (marked !== at) {
+      marked?.classList.remove('edit-at');
+      at?.classList.add('edit-at');
+    }
     const p = app.project;
     const sel = new Set(app.selection);
     const sig =

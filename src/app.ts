@@ -10,6 +10,7 @@ import { domPlaneOps } from './view/planeops';
 import { brushMask, DEFAULT_FILL, fillFrom, lassoFill, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, shiftLater } from './core/ripple';
+import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type Comp, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
@@ -56,6 +57,8 @@ const FILL_MODE_KEY = '2dope.fill.mode';
 const LAYERS_KEY = '2dope.draw.layers';
 const BOARD_ALPHA_KEY = '2dope.draw.boardAlpha';
 const RIPPLE_KEY = '2dope.ripple';
+/** Shared with the X-sheet's frame-number setting (it was there first). */
+const TIME_FORMAT_KEY = '2dope.m1.framefmt';
 const LAYERS_ALPHA_KEY = '2dope.draw.layersAlpha';
 const VECTOR_ERASE_KEY = '2dope.eraser.vector';
 const FILL_ACROSS_KEY = '2dope.fill.across';
@@ -1109,6 +1112,68 @@ export class App {
   }
 
   /** Run a timeline edit as an undoable command. */
+  // -------------------------------------------------------------------------------------------
+  // Measuring time: one format for every timeline (frames, seconds + frames, timecode)
+
+  timeFormat: FrameFormat = (() => {
+    const v =
+      loadJSON<string>(TIME_FORMAT_KEY) ??
+      (() => {
+        try {
+          return localStorage.getItem(TIME_FORMAT_KEY);
+        } catch {
+          return null;
+        }
+      })();
+    return v === 'secFrames' || v === 'timecode' ? v : 'frames';
+  })();
+
+  setTimeFormat(f: FrameFormat): void {
+    this.timeFormat = f;
+    try {
+      localStorage.setItem(TIME_FORMAT_KEY, f);
+    } catch {
+      // not remembered
+    }
+    this.onFrameChange();
+  }
+
+  /** Frames → sec + frames → timecode → frames (tap any frame readout). */
+  cycleTimeFormat(): void {
+    const order: FrameFormat[] = ['frames', 'secFrames', 'timecode'];
+    this.setTimeFormat(order[(order.indexOf(this.timeFormat) + 1) % order.length]!);
+  }
+
+  /** A frame (0-based) as text in the chosen format. */
+  fmt(frame: number): string {
+    return frameLabel(frame, this.project.comp.fps, this.timeFormat);
+  }
+
+  /** A length of time as text in the chosen format. */
+  fmtDur(frames: number): string {
+    return durationLabel(frames, this.project.comp.fps, this.timeFormat);
+  }
+
+  /**
+   * The edge being changed right now (while dragging), in comp frames, shown as a line across every
+   * timeline: `edge` says which edge, `delta` how far it moved, `shift` whether later things will move.
+   */
+  editLine: { frame: number; edge: 'in' | 'out' | 'move'; delta: number; shift: boolean } | null = null;
+
+  setEditLine(v: { frame: number; edge: 'in' | 'out' | 'move'; delta: number } | null): void {
+    this.editLine = v ? { ...v, shift: this.rippling && v.edge !== 'move' && v.delta !== 0 } : null;
+    this.onFrameChange();
+  }
+
+  /** The edit line's label: "out 2s 06f · +6f (ripple)". */
+  editLineLabel(): string {
+    const e = this.editLine;
+    if (!e) return '';
+    const what = e.edge === 'move' ? 'start' : e.edge;
+    const by = e.delta ? ` · ${e.delta > 0 ? '+' : ''}${this.fmtDur(e.delta)}` : '';
+    return `${what} ${this.fmt(e.frame)}${by}${e.shift ? ' · ripple' : ''}`;
+  }
+
   // -------------------------------------------------------------------------------------------
   // Ripple (doc 16, "Live edits"): a timing change inside a layer moves everything after it on
   // every layer of the comp. On by default; Shift+R switches it; holding Alt flips it for one edit.

@@ -104,10 +104,11 @@ export class BoardPanel {
     const ex = b.exposures;
     const fps = p.comp.fps;
     const total = ex.reduce((n, e) => n + e.length, 0);
-    this.info.textContent = `${ex.length} panel${ex.length === 1 ? '' : 's'} · ${(total / fps).toFixed(1)} s`;
+    this.info.textContent = `${ex.length} panel${ex.length === 1 ? '' : 's'} · ${app.fmtDur(total)}`;
     const typing = this.cards.contains(document.activeElement) && (document.activeElement as HTMLElement).matches('textarea, input');
     const sig =
-      `${b.id}|${fps}|` + ex.map((e) => `${e.drawing}:${e.length}:${e.dialogue ?? ''}:${e.action ?? ''}:${e.slug ?? ''}:${e.note ?? ''}:${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join('|');
+      `${b.id}|${fps}|${app.timeFormat}|` +
+      ex.map((e) => `${e.drawing}:${e.length}:${e.dialogue ?? ''}:${e.action ?? ''}:${e.slug ?? ''}:${e.note ?? ''}:${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join('|');
     if (sig !== this.sig && !typing) {
       this.sig = sig;
       this.rebuild();
@@ -129,7 +130,9 @@ export class BoardPanel {
     const p = app.project;
     const fps = p.comp.fps;
     const frag = document.createDocumentFragment();
+    let startAt = b.start;
     b.exposures.forEach((e, i) => {
+      if (i > 0) startAt += b.exposures[i - 1]!.length;
       const card = el('div', { class: 'bcard', role: 'listitem', 'data-i': String(i) });
       const head = el('div', { class: 'bhead' });
       head.append(el('span', { class: 'bnum' }, String(i + 1)));
@@ -145,7 +148,7 @@ export class BoardPanel {
       });
       dur.addEventListener('change', () => app.setPanelDuration(i, Number(dur.value)));
       dur.addEventListener('keydown', (k) => k.stopPropagation());
-      head.append(dur, el('span', { class: 'hint' }, `f · ${(e.length / fps).toFixed(1)}s`));
+      head.append(dur, el('span', { class: 'hint', title: 'Starts at · lasts' }, `f · @${app.fmt(startAt)} · ${app.fmtDur(e.length)}`));
       card.append(head);
       // the picture: tap to go to this panel (the canvas above draws on it)
       const thumb = el('canvas', { class: 'bthumb', width: '192', height: String(Math.round((192 * p.height) / p.width)) });
