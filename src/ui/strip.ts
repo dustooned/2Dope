@@ -494,8 +494,8 @@ export class Strip {
         const on = cur.parts?.[part]?.visible !== false;
         const b = el(
           'button',
-          { type: 'button', 'aria-pressed': String(on), title: `${on ? 'Hide' : 'Show'} the ${part === 'line' ? 'lines' : 'colour'} of ${cur.name}` },
-          part === 'line' ? 'Lines' : 'Colour',
+          { type: 'button', 'aria-pressed': String(on), title: `${on ? 'Hide' : 'Show'} the ${part === 'line' ? 'LINE (ink)' : 'FILL (colour)'} of ${cur.name}` },
+          part === 'line' ? 'Line' : 'Fill',
         );
         b.addEventListener('click', () => app.togglePart(part));
         row.append(b);

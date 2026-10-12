@@ -50,7 +50,17 @@ const syncTools = () => {
   for (const b of partButtons) b.setAttribute('aria-pressed', String(app.partVisible(b.dataset.partEye === 'fill' ? 'fill' : 'line')));
   for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool));
   for (const b of planeButtons) b.setAttribute('aria-pressed', String(b.dataset.plane === app.plane));
+  // a clear sign on the canvas while brushes paint on FILL (under the ink)
+  const onFill = app.plane === 'fill' && (app.tool === 'brush' || app.tool === 'eraser');
+  planeBadge.hidden = !onFill;
+  planeBadge.textContent = app.tool === 'eraser' ? 'FILL · erasing colour only' : 'FILL · painting under your lines';
 };
+const planeBadge = document.createElement('div');
+planeBadge.className = 'plane-badge';
+planeBadge.hidden = true;
+planeBadge.title = 'Brushes paint on FILL: colour under your ink. Press X or tap LINE to paint ink again.';
+planeBadge.addEventListener('click', () => app.setPlane('line'));
+document.querySelector('#stage')?.append(planeBadge);
 for (const b of partButtons) b.addEventListener('click', () => app.togglePart(b.dataset.partEye === 'fill' ? 'fill' : 'line'));
 for (const b of planeButtons) b.addEventListener('click', () => app.setPlane(b.dataset.plane === 'fill' ? 'fill' : 'line'));
 for (const b of toolButtons) b.addEventListener('click', () => app.setTool(b.dataset.tool as Tool));
@@ -88,6 +98,8 @@ const colorChip = $<HTMLInputElement>('#color-chip');
 const syncColor = () => {
   colorChip.value = app.color;
   colorChip.parentElement!.style.setProperty('--chip', app.color);
+  // the FILL button's drop shows the colour you paint with
+  document.documentElement.style.setProperty('--chip-fill', app.color);
 };
 colorChip.addEventListener('input', () => app.setColor(colorChip.value));
 // the colour circle opens the colour panel (the system picker is one button inside it)
@@ -105,6 +117,7 @@ const layersPop = new LayersPopover(app);
 const layersBtn = $<HTMLButtonElement>('#layers-btn');
 layersBtn.addEventListener('click', () => layersPop.toggle(layersBtn));
 app.openLayers = (anchor) => layersPop.toggle(anchor);
+app.onToolChange = chain(app.onToolChange, () => layersPop.update());
 syncColor();
 
 const finger = $<HTMLInputElement>('#finger');

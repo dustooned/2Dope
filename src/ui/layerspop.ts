@@ -77,7 +77,7 @@ export class LayersPopover {
     const layers = app.drawLayers();
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // rebuild only when something it shows changed (keeps double-taps and focus intact)
-    const sig = `${app.project.comp.id}|${active}|${app.showLayers}|${app.otherAlpha}|${app.boardAlpha}|${app.board?.id ?? ''}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}`).join(',')}`;
+    const sig = `${app.project.comp.id}|${active}|${app.plane}|${app.partVisible('line')}|${app.partVisible('fill')}|${app.showLayers}|${app.otherAlpha}|${app.boardAlpha}|${app.board?.id ?? ''}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -124,6 +124,38 @@ export class LayersPopover {
       down.addEventListener('click', () => ed.reorder(l.id, 1));
       row.append(eye, lock, name, up, down);
       list.append(row);
+      // the layer you draw on: its LINE and FILL, each shown or hidden, and which one brushes paint on
+      if (l.id === active && !l.guide) {
+        const parts = el('div', { class: 'lp-parts', role: 'group', 'aria-label': `${l.name}: Line and Fill` });
+        for (const part of ['line', 'fill'] as const) {
+          const vis = app.partVisible(part);
+          const chip = el('div', { class: `lp-part${app.plane === part ? ' paint' : ''}` });
+          const pe = el(
+            'button',
+            { type: 'button', class: 'icon-only', 'aria-pressed': String(vis), title: `${vis ? 'Hide' : 'Show'} ${part === 'line' ? 'LINE (ink)' : 'FILL (colour)'}` },
+            vis ? 'Hide' : 'Show',
+          );
+          decorate(pe, 'eye');
+          pe.addEventListener('click', () => {
+            app.togglePart(part);
+            this.sig = '';
+            this.update();
+          });
+          const pick = el(
+            'button',
+            { type: 'button', class: 'lp-part-name', 'aria-pressed': String(app.plane === part), title: `Paint on ${part === 'line' ? 'LINE: your ink' : 'FILL: colour under the ink'}` },
+            part === 'line' ? 'Line' : 'Fill',
+          );
+          pick.addEventListener('click', () => {
+            app.setPlane(part);
+            this.sig = '';
+            this.update();
+          });
+          chip.append(pe, pick, el('span', { class: 'hint' }, part === 'line' ? 'ink, on top' : 'colour, under'));
+          parts.append(chip);
+        }
+        list.append(parts);
+      }
     });
     this.root.append(list);
 

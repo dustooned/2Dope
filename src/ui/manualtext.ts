@@ -113,7 +113,9 @@ export const MANUAL: ManualSection[] = [
       'The circle at the top right is your colour. Tap it for the colour panel: a hue ring around a saturation / brightness square (Disc), or H, S, B sliders and a hex box (Values); the colour before and now (tap the old half to go back); Recent colours; and a Palette (+ adds the current colour, hold a swatch to remove it). System… opens your device’s own picker.',
       'The sliders on the left are brush size and opacity, with undo and redo under them.',
       { figure: 'linefill' },
-      { tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. Press X to switch which part a brush paints on.' },
+      {
+        tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. The LINE | FILL switch in the toolbar (or X) picks which one brushes paint on; a yellow FILL badge on the canvas reminds you when you are painting colour. In Layers, the layer you draw on shows its LINE and FILL with an eye each.',
+      },
       'QuickShape: draw a line, circle, box or triangle roughly and keep the pencil still at the end. It snaps to a clean shape and keeps the pressure you drew with, thick and thin. Keep holding and move to adjust it: the start stays put and the pencil drags the other end. Touch a second finger (or hold Shift) to make it perfect: a circle, a square, an even polygon or a straight angle. Turn it off in the Brush panel under Assist.',
       { figure: 'quickshape' },
       { figure: 'onion' },
@@ -241,6 +243,7 @@ export const UPDATES: Update[] = [
     items: [
       'Animate this shot lines your frames up with the board: one drawing per panel, same lengths, and P1, P2… marks above the frame bar. Board and animation timing stay in sync.',
       'QuickShape keeps your pressure (thick and thin) and adjusts from the start point.',
+      'LINE and FILL are clearer: always-labelled switch, a FILL badge on the canvas, Line / Fill rows in Layers, same names everywhere.',
       'Colour panel: hue ring and square, H/S/B sliders and hex, recent colours and a palette you build. Tap the colour circle.',
       'Fill can use the lines on your other layers (Brush panel > Fill > Use lines from other layers).',
       'Vector lines can be made thicker or thinner after drawing (press and hold the canvas).',
