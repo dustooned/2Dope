@@ -44,7 +44,7 @@ import {
 } from './core/timeline';
 import { Smoother, smoothStroke } from './brush/smoothing';
 import { eraseVectors, type VectorErase } from './core/vectorcut';
-import { constrainShape, editShape, recognizeShape, SHAPE_NAMES, shapeOutline, type Shape } from './core/quickshape';
+import { constrainShape, editShape, pressureProfile, recognizeShape, sampleProfile, SHAPE_NAMES, shapeOutline, type Shape } from './core/quickshape';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
 import { snapRotation, Viewport } from './view/viewport';
@@ -111,7 +111,7 @@ interface LiveStroke {
   /** Where the pen last came to rest (screen px), for QuickShape's hold. */
   still: { x: number; y: number };
   /** Set once QuickShape snapped the stroke: the recognised shape and the pen point at the snap. */
-  shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; pressure: number };
+  shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; profile: number[] };
 }
 
 interface TouchInfo {
@@ -377,8 +377,8 @@ export class App {
     const pts = [...live.record.points, live.lastRaw];
     const base = recognizeShape(pts);
     if (!base) return;
-    const ps = pts.map((q) => q.pressure).sort((a, b) => a - b);
-    live.shape = { base, grab: live.lastRaw, now: live.lastRaw, constrain: false, pressure: ps[Math.floor(ps.length / 2)] ?? 1 };
+    // the shape keeps the pressure you drew with, start to end
+    live.shape = { base, grab: live.lastRaw, now: live.lastRaw, constrain: false, profile: pressureProfile(base, pts) };
     this.redrawShape();
   }
 
@@ -394,7 +394,8 @@ export class App {
     const last = live.lastRaw;
     const outline = shapeOutline(s, Math.max(1, 2 / this.view.zoom));
     const rec = live.record;
-    rec.points = outline.map((q, i) => ({ x: q.x, y: q.y, pressure: sh.pressure, tiltX: last.tiltX, tiltY: last.tiltY, t: i }));
+    const n = Math.max(1, outline.length - 1);
+    rec.points = outline.map((q, i) => ({ x: q.x, y: q.y, pressure: sampleProfile(sh.profile, i / n), tiltX: last.tiltX, tiltY: last.tiltY, t: i }));
     live.predicted = [];
     if (rec.tool !== 'pen') {
       this.raster.begin(rec);

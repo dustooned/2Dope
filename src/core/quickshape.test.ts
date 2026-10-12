@@ -158,3 +158,15 @@ describe('QuickShape', () => {
     for (const q of e) expect(Math.hypot(q.x, q.y)).toBeCloseTo(20);
   });
 });
+
+describe('QuickShape pressure', () => {
+  it('keeps the thick and thin of the stroke along the shape', async () => {
+    const { pressureProfile, sampleProfile } = await import('./quickshape');
+    // a line drawn light at the start and heavy at the end
+    const stroke = Array.from({ length: 50 }, (_, i) => ({ x: i * 4, y: 0, pressure: 0.1 + (0.8 * i) / 49 }));
+    const prof = pressureProfile({ kind: 'line', a: { x: 0, y: 0 }, b: { x: 196, y: 0 } }, stroke);
+    expect(sampleProfile(prof, 0)).toBeLessThan(0.25);
+    expect(sampleProfile(prof, 1)).toBeGreaterThan(0.75);
+    expect(sampleProfile(prof, 0.5)).toBeCloseTo(0.5, 1);
+  });
+});

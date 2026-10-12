@@ -486,3 +486,46 @@ export function shapeOutline(s: Shape, step = 3): V[] {
 }
 
 export const SHAPE_NAMES: Record<ShapeKind, string> = { line: 'Line', polyline: 'Polyline', arc: 'Arc', ellipse: 'Ellipse', rect: 'Rectangle', polygon: 'Polygon' };
+
+/**
+ * The stroke's pressure along a shape: `samples` values from the shape's start to its end, each
+ * taken from the nearest point of the hand-drawn stroke (lightly smoothed). The shape keeps the
+ * thick and thin of the line you drew, even after it is resized (the profile follows the outline).
+ */
+export function pressureProfile(shape: Shape, stroke: readonly (V & { pressure: number })[], samples = 64): number[] {
+  const along = resample(shapeOutline(shape, 2), samples);
+  const raw = along.map((q) => {
+    let best = Infinity;
+    let p = 1;
+    for (const s of stroke) {
+      const d = (s.x - q.x) ** 2 + (s.y - q.y) ** 2;
+      if (d < best) {
+        best = d;
+        p = s.pressure;
+      }
+    }
+    return p;
+  });
+  return raw.map((_, i) => {
+    let n = 0;
+    let sum = 0;
+    for (let k = i - 2; k <= i + 2; k++) {
+      const v = raw[k];
+      if (v !== undefined) {
+        sum += v;
+        n++;
+      }
+    }
+    return sum / n;
+  });
+}
+
+/** The profile's value at `t` (0 = shape start, 1 = end). */
+export function sampleProfile(profile: readonly number[], t: number): number {
+  if (!profile.length) return 1;
+  const x = Math.max(0, Math.min(1, t)) * (profile.length - 1);
+  const i = Math.floor(x);
+  const a = profile[i]!;
+  const b = profile[Math.min(profile.length - 1, i + 1)]!;
+  return a + (b - a) * (x - i);
+}
