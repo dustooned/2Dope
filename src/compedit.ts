@@ -839,6 +839,39 @@ export class CompEditor {
     });
   }
 
+  // Scrubbing a value (drag on the number, After Effects style): live while dragging, one undo step.
+  private scrub: { before: Layer[]; compId: string } | null = null;
+
+  scrubStart(): void {
+    if (!this.scrub) this.scrub = { before: structuredClone(this.comp.layers), compId: this.comp.id };
+  }
+
+  /** Set a value live during a scrub (no undo step yet). */
+  scrubSet(id: string, n: PropKey, value: number | Vec2): void {
+    const l = this.comp.layers.find((x) => x.id === id);
+    if (!l || !this.scrub) return;
+    this.setProp(l, n, this.withValue(l, n, value));
+    this.changedLive();
+  }
+
+  /** Finish a scrub: one undo step if anything changed (`cancel` puts it back). */
+  scrubEnd(label: string, cancel = false): void {
+    const s = this.scrub;
+    this.scrub = null;
+    if (!s) return;
+    const c = this.app.project.comps.get(s.compId);
+    if (!c) return;
+    if (cancel) {
+      c.layers = s.before;
+      this.changedLive();
+      return;
+    }
+    const after = structuredClone(c.layers);
+    if (JSON.stringify(after) === JSON.stringify(s.before)) return;
+    this.push(label, s.compId, s.before, after);
+    this.changed();
+  }
+
   /** The diamond: add a key at the playhead holding the current value, or remove the one there. */
   toggleKey(id: string, n: PropKey): void {
     this.edit('Toggle keyframe', (c) => {

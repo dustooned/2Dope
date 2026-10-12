@@ -310,6 +310,27 @@ describe('the box hugs the drawing', () => {
   });
 });
 
+describe('scrubbing a value', () => {
+  it('changes live while dragging and makes one undo step at the end (or none when cancelled)', () => {
+    const { ed, app } = rig();
+    const steps = () => (app.history as unknown as { done: unknown[] }).done.length;
+    const n0 = steps();
+    ed.scrubStart();
+    ed.scrubSet('L1', 'rotation', 10);
+    ed.scrubSet('L1', 'rotation', 25);
+    expect(ed.layer('L1')!.transform.rotation.value).toBe(25);
+    expect(steps()).toBe(n0);
+    ed.scrubEnd('Change rotation');
+    expect(steps()).toBe(n0 + 1);
+    app.history.undo();
+    expect(ed.layer('L1')!.transform.rotation.value).toBe(0);
+    ed.scrubStart();
+    ed.scrubSet('L1', 'opacity', 40);
+    ed.scrubEnd('Change opacity', true);
+    expect(ed.layer('L1')!.transform.opacity.value).toBe(100);
+  });
+});
+
 describe('split at the playhead', () => {
   it('cuts a layer in two where the playhead is; both show the same frames as before; one undo step', () => {
     const { ed, app, comp } = rig();

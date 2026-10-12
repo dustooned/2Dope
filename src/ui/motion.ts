@@ -254,7 +254,7 @@ export class MotionPanel {
     for (const l of c.layers) if (l.kind === 'drawings') for (const e of l.exposures) content += e.length + 1;
     const sig = `${c.id}|${ed.rev}|${ed.selected.join(',')}|${[...ed.keys].join(',')}|${[...ed.open].join(',')}|${this.cell}|${this.rowH}|${content}|${app.compEnd}`;
     // never rebuild the rows under a finger that is dragging one of them
-    if (sig !== this.signature && !this.drag) {
+    if (sig !== this.signature && !this.drag && !this.scrubbing) {
       this.signature = sig;
       this.rebuild();
     }
@@ -482,6 +482,7 @@ export class MotionPanel {
         show(kind, ed.valueNow(l, n)),
       ),
     );
+    (left.lastElementChild as HTMLElement).title = 'Drag left / right to change (Shift ×10, Alt fine). Tap to type a value.';
     if (isPin(n) && ed.isOverridden(l, n)) left.append(el('button', { type: 'button', class: 'pstar', 'data-act': 'reset', 'data-row': n, title: "Back to the comp's own value" }, '↺'));
     else if (!isPin(n) && n !== 'remap' && !isPartProp(n) && inside) {
       const on = ed.isPinned(l.id, n as PropName);
@@ -553,6 +554,7 @@ export class MotionPanel {
   private bind(): void {
     const g = this.grid;
     g.addEventListener('click', (e) => void this.onClick(e));
+    g.addEventListener('pointerdown', (e) => this.scrubDown(e));
     g.addEventListener('pointerdown', (e) => this.onDown(e));
     g.addEventListener('pointermove', (e) => this.onMove(e));
     g.addEventListener('pointerup', (e) => this.onUp(e, false));
@@ -583,7 +585,80 @@ export class MotionPanel {
     });
   }
 
+  // -------------------------------------------------------------------------------------------
+  // Scrub a value: press on a number and drag left / right (After Effects' hot text). A tap with
+  // no drag still opens the type-a-value box. On a pair (position, scale) the half you press picks
+  // x or y; scale moves both when they were equal.
+
+  private scrubbing: { id: number; el: HTMLElement; x0: number; layer: string; prop: PropKey; start: number | Vec2; part: 0 | 1; moved: boolean } | null = null;
+  private eatClick = false;
+
+  private scrubDown(e: PointerEvent): void {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('.pval');
+    if (!b || e.button !== 0) return;
+    const l = this.ed.layer(b.dataset.layer ?? '');
+    if (!l || l.locked) return;
+    const n = b.dataset.val as PropKey;
+    const r = b.getBoundingClientRect();
+    this.scrubbing = { id: e.pointerId, el: b, x0: e.clientX, layer: l.id, prop: n, start: this.ed.valueNow(l, n), part: e.clientX > r.left + r.width / 2 ? 1 : 0, moved: false };
+    capture(b, e.pointerId);
+    b.addEventListener('pointermove', this.scrubMove);
+    b.addEventListener('pointerup', this.scrubUp);
+    b.addEventListener('pointercancel', this.scrubUp);
+  }
+
+  private readonly scrubMove = (e: PointerEvent): void => {
+    const s = this.scrubbing;
+    if (!s || e.pointerId !== s.id) return;
+    const dx = e.clientX - s.x0;
+    if (!s.moved && Math.abs(dx) < 4) return;
+    if (!s.moved) {
+      s.moved = true;
+      this.ed.scrubStart();
+      s.el.classList.add('scrubbing');
+    }
+    const kind = this.ed.rowProp(s.prop);
+    const per = kind === 'position' || kind === 'anchor' ? 1 : kind === 'remap' ? 1 / 8 : 0.5;
+    const mod = e.shiftKey ? 10 : e.altKey || e.ctrlKey || e.metaKey ? 0.1 : 1;
+    const d = dx * per * mod;
+    let v: number | Vec2;
+    if (Array.isArray(s.start)) {
+      const [x, y] = s.start;
+      if (kind === 'scale' && Math.abs(x - y) < 1e-6) v = [x + d, y + d];
+      else v = s.part === 0 ? [x + d, y] : [x, y + d];
+    } else {
+      v = s.start + d;
+      if (kind === 'opacity') v = Math.max(0, Math.min(100, v));
+      else if (kind === 'zoom') v = Math.max(1, v);
+      else if (kind === 'remap') {
+        const l = this.ed.layer(s.layer);
+        v = Math.max(0, Math.min((l ? this.ed.contentLength(l) : 1) - 1, Math.round(v)));
+      }
+    }
+    this.ed.scrubSet(s.layer, s.prop, v);
+  };
+
+  private readonly scrubUp = (e: PointerEvent): void => {
+    const s = this.scrubbing;
+    if (!s || e.pointerId !== s.id) return;
+    this.scrubbing = null;
+    s.el.removeEventListener('pointermove', this.scrubMove);
+    s.el.removeEventListener('pointerup', this.scrubUp);
+    s.el.removeEventListener('pointercancel', this.scrubUp);
+    s.el.classList.remove('scrubbing');
+    if (!s.moved) return; // a tap: the click opens the type-a-value box
+    this.eatClick = true;
+    const l = this.ed.layer(s.layer);
+    this.ed.scrubEnd(`Change ${l ? this.ed.rowLabel(l, s.prop).toLowerCase() : 'value'}`, e.type === 'pointercancel');
+    this.signature = '';
+    this.update();
+  };
+
   private async onClick(e: MouseEvent): Promise<void> {
+    if (this.eatClick) {
+      this.eatClick = false;
+      return;
+    }
     const t = e.target as HTMLElement;
     const act = t.closest<HTMLElement>('[data-act]');
     if (!act) return;

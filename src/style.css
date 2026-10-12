@@ -2677,3 +2677,14 @@ body.ui-hidden .sidebar {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* scrubbable values in Motion: drag left / right on a number */
+.pval {
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.pval.scrubbing {
+  border-color: var(--accent);
+  color: var(--accent);
+}
