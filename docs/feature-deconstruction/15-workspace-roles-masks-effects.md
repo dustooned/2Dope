@@ -74,14 +74,64 @@ Risks:
   timeline-zoom helper.
 - Selection, hold-to-lift, the context menus and drag to move (doc 13 step 1) work per rail.
 
+## 5. Animatic mode (pre-production first, optional)
+
+The user's direction: a stage before drawing for animatics and planning. It plays under Draw as a
+guide, artists can skip it, all timelines stay in sync, and it is **not** in the final output unless
+switched on.
+
+**The key idea: animatic layers are guide layers on the same clock.** A *guide* layer (After
+Effects' term) shows in every viewer but is left out of exports by default (`guide: true`, with
+"Include in export" to override). The animatic is one or more guide layers in the shot's comp, so it
+cannot drift:
+- Storyboard **panels** are the exposures of a guide drawings layer (one panel = one drawing held for
+  its duration). Imported board images become panels too.
+- **Camera moves** on panels use the normal transform keys (pan and zoom on a still panel).
+- **Audio** (step R6) sits on the same timeline: dialogue, music, scratch tracks.
+- Panel **notes and dialogue** are exposure notes, which already exist and show in the X-sheet.
+- Retiming a panel in the Animatic view is retiming exposures, so Draw, Time and Motion see it at
+  once. There is nothing to sync, because there is only one timeline.
+
+**Animatic workspace** (first tab: Animatic → Draw → Time → Motion):
+- A storyboard view: panels as cards in order, with duration, notes and dialogue. Drag to reorder;
+  pinch for bigger cards; + panel; import images as panels.
+- The same timeline underneath with the audio waveform.
+- Play it as a film (it is just the comp playing with guides on).
+
+**In Draw:** "Show animatic" (light-table opacity, like Others: Show / Fade / Hide) puts the
+animatic under the drawing as reference for poses and timing. Jumping straight into Draw without an
+animatic changes nothing.
+
+**Export:** guide layers are skipped unless "Include in export" is on (per layer, or one switch in
+the export dialog: "Include animatic"). Blender skips them too.
+
+## 6. Canvas 2D or WebGL?
+
+| | Canvas 2D (today) | WebGL2 |
+|---|---|---|
+| Drawing (brush engine) | Good; tested on iPad | No gain worth a rewrite |
+| Compositing plain layers | Good | Faster at 4K or with many layers |
+| Blur, glow, colour effects | `ctx.filter`: fast in Chrome, recent in Safari (unknown on the user's iPad) | Shaders: fast everywhere, full control (glow, boil, displacement) |
+| Masks and mattes | Composite modes; cheap | Cheap |
+| Memory | Canvases only | Textures **duplicate** canvas memory: residency would have to manage them too (iPad tabs die above roughly 1.5 GB) |
+| Risk | Low | iOS context loss, texture limits, more code |
+
+**Recommendation: hybrid.** Keep Canvas 2D for drawing and plain compositing. Add a **WebGL2 effects
+pass** used only by layers with effects, in Motion preview and export; it falls back to Canvas 2D
+filters when WebGL is missing. Before committing, run a **short benchmark page** (step R0) on the
+user's iPad: canvas-filter blur against WebGL blur on a 1080p frame, plus a check that `ctx.filter`
+exists in Safari. The numbers decide how R4 is built.
+
 ## Plan (revised; Blender stays last)
 
 | # | Step | Model |
 |---|---|---|
-| R1 | Workspace roles: slim Draw strip, timing tools to Time, effect / layer toggles in Time | Sonnet |
+| R0 | Benchmark page for the user's iPad: canvas filters vs WebGL blur, `ctx.filter` support | Opus (small) |
+| R1 | Workspace roles: slim Draw strip, timing tools to Time, effect / layer toggles in Time; Animatic tab placeholder | Sonnet |
 | R2 | Clipping masks (clip to layer below, clip to fill, matte / inverted), renderer + file + UI | Opus (model, renderer), Sonnet (UI) |
 | R3 | Rails in Draw (one row per layer), pinch zoom and row height shared with Motion | Sonnet |
 | R4 | Layer effects v1 (blur, glow, shadow, colour, tint, shake, boil, flicker), keyable, toggles | Opus |
 | R5 | QuickShape (doc 14) | Opus |
 | R6 | Audio in Motion and the X-sheet (waveform, scrub, tied to a layer or free) | Opus |
+| R7 | Animatic: guide layers (not exported unless switched on), storyboard view, panels from images, "Show animatic" in Draw | Opus (model, export), Sonnet (board UI) |
 | then | Colour panel, asset bin, brush import, phone UI, the rest of drawing assist, **Blender last** | — |
