@@ -168,7 +168,14 @@
 
 ## Queued (user, 2026-10-12)
 
-- **QuickShape (auto-shape)**: hold at the end of a stroke to snap it to a line, arc, ellipse/circle, rectangle/square or polygon, then adjust before lifting; for vector and pixel brushes. The feel should match Procreate's QuickShape (and Clip Studio / Lazy Nezumi shape assist).
+- ~~QuickShape~~ built (below).
+- **Student manual + "What's new"**: an in-app manual students can read right away (overview of the app, every feature by workspace) and an updates section.
+
+## 2026-10-12: QuickShape
+
+- Hold the pen still (450 ms, 5 px) at the end of a Brush or Pen stroke and it snaps to what it looks like: line, arc, polyline, ellipse, rectangle or polygon (src/core/quickshape.ts: resample, line test, Kåsa circle fit for arcs, PCA ellipse fit, RDP corners; square corners make a rectangle). A scribble does not snap. The eraser never snaps.
+- Keep holding and move: a line's end follows the pen; other shapes resize and turn around their centre (arcs and polylines around their start). A second finger (or Shift) makes it perfect: circle, square, regular polygon, lines and polyline edges at 15° steps. Lifting commits one undo step named after the shape.
+- Works for vector strokes (points replaced by the shape) and pixel brushes (dabs redrawn along the shape at the stroke's median pressure). Post-correction is skipped for shapes. On/off: Brush panel > Assist (on by default).
 - **Simplified timeline control in Time**: Time should have its own easy timeline control (not only the X-sheet and holds bar).
 
 ## Open

@@ -44,6 +44,7 @@ import {
 } from './core/timeline';
 import { Smoother, smoothStroke } from './brush/smoothing';
 import { eraseVectors, type VectorErase } from './core/vectorcut';
+import { constrainShape, editShape, recognizeShape, SHAPE_NAMES, shapeOutline, type Shape } from './core/quickshape';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
 import { snapRotation, Viewport } from './view/viewport';
@@ -61,6 +62,10 @@ const RIPPLE_KEY = '2dope.ripple';
 const TIME_FORMAT_KEY = '2dope.m1.framefmt';
 const LAYERS_ALPHA_KEY = '2dope.draw.layersAlpha';
 const VECTOR_ERASE_KEY = '2dope.eraser.vector';
+const QUICKSHAPE_KEY = '2dope.quickshape';
+/** QuickShape: how long the pen must rest (ms) and how far it may wander (screen px) to snap. */
+const SHAPE_HOLD_MS = 450;
+const SHAPE_SLOP = 5;
 const FILL_ACROSS_KEY = '2dope.fill.across';
 
 /** Fill tool: tap or drag across areas, lasso around areas, or scrub up leftovers. */
@@ -103,6 +108,10 @@ interface LiveStroke {
   walker: DabWalker;
   lastRaw: StrokePoint;
   predicted: StrokePoint[];
+  /** Where the pen last came to rest (screen px), for QuickShape's hold. */
+  still: { x: number; y: number };
+  /** Set once QuickShape snapped the stroke: the recognised shape and the pen point at the snap. */
+  shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; pressure: number };
 }
 
 interface TouchInfo {
@@ -332,6 +341,64 @@ export class App {
 
   /** What the eraser does to vector lines on the Line plane: cut up to crossings, remove whole lines, or nothing. */
   vectorErase: VectorErase = loadJSON<VectorErase>(VECTOR_ERASE_KEY) ?? 'crossing';
+
+  /** QuickShape: hold at the end of a brush or pen stroke to snap it to a line, arc, ellipse, rectangle or polygon. */
+  quickShape = loadJSON<boolean>(QUICKSHAPE_KEY) ?? true;
+  private shapeTimer = 0;
+  /** The shape the current stroke snapped to (for a label while drawing), or null. */
+  get snappedShape(): string | null {
+    return this.live?.shape ? SHAPE_NAMES[this.live.shape.base.kind] : null;
+  }
+
+  setQuickShape(on: boolean): void {
+    this.quickShape = on;
+    saveJSON(QUICKSHAPE_KEY, on);
+    this.onToolChange();
+  }
+
+  /** (Re)start the hold timer while the pen moves; a resting pen snaps the stroke. */
+  private armShape(e: PointerEvent): void {
+    const live = this.live;
+    if (!live || live.shape || !this.quickShape || live.record.tool === 'eraser') return;
+    if (this.shapeTimer && Math.hypot(e.clientX - live.still.x, e.clientY - live.still.y) <= SHAPE_SLOP) return;
+    live.still = { x: e.clientX, y: e.clientY };
+    clearTimeout(this.shapeTimer);
+    this.shapeTimer = window.setTimeout(() => {
+      this.shapeTimer = 0;
+      this.snapShape();
+    }, SHAPE_HOLD_MS);
+  }
+
+  private snapShape(): void {
+    const live = this.live;
+    if (!live || live.shape) return;
+    const pts = [...live.record.points, live.lastRaw];
+    const base = recognizeShape(pts);
+    if (!base) return;
+    const ps = pts.map((q) => q.pressure).sort((a, b) => a - b);
+    live.shape = { base, grab: live.lastRaw, now: live.lastRaw, constrain: false, pressure: ps[Math.floor(ps.length / 2)] ?? 1 };
+    this.redrawShape();
+  }
+
+  /** Re-render the snapped stroke for the current pen position (resize/turn) and constrain state. */
+  private redrawShape(shift = false): void {
+    const live = this.live;
+    const sh = live?.shape;
+    if (!live || !sh) return;
+    let s = editShape(sh.base, sh.grab, sh.now);
+    if (sh.constrain || shift) s = constrainShape(s);
+    const last = live.lastRaw;
+    const outline = shapeOutline(s, Math.max(1, 2 / this.view.zoom));
+    const rec = live.record;
+    rec.points = outline.map((q, i) => ({ x: q.x, y: q.y, pressure: sh.pressure, tiltX: last.tiltX, tiltY: last.tiltY, t: i }));
+    live.predicted = [];
+    if (rec.tool !== 'pen') {
+      this.raster.begin(rec);
+      live.walker = new DabWalker(rec.brush, rec.seed);
+      for (const q of rec.points) this.raster.addDabs(live.walker.push(q));
+    }
+    this.requestRender();
+  }
 
   setVectorErase(m: VectorErase): void {
     this.vectorErase = m;
@@ -1622,9 +1689,11 @@ export class App {
       walker: new DabWalker(record.brush, record.seed),
       lastRaw: first,
       predicted: [],
+      still: { x: e.clientX, y: e.clientY },
     };
     if (tool !== 'pen') this.raster.begin(record);
     this.feed(first);
+    this.armShape(e);
     this.onStrokeState(true);
   }
 
@@ -1646,6 +1715,8 @@ export class App {
     const live = this.live;
     if (!live) return;
     this.live = null;
+    clearTimeout(this.shapeTimer);
+    this.shapeTimer = 0;
     this.onStrokeState(false);
     const rec = live.record;
     if (cancel) {
@@ -1653,19 +1724,21 @@ export class App {
       this.requestRender();
       return;
     }
-    for (const q of live.smoother.finish(live.lastRaw)) {
-      rec.points.push(q);
-      if (rec.tool !== 'pen') this.raster.addDabs(live.walker.push(q));
-    }
-    // post-correction: tidy the finished line (the eraser is left as drawn)
-    const post = rec.tool === 'eraser' ? 0 : (rec.brush.postSmooth ?? 0);
+    // a snapped shape is already final
+    if (!live.shape)
+      for (const q of live.smoother.finish(live.lastRaw)) {
+        rec.points.push(q);
+        if (rec.tool !== 'pen') this.raster.addDabs(live.walker.push(q));
+      }
+    // post-correction: tidy the finished line (the eraser and shapes are left as they are)
+    const post = rec.tool === 'eraser' || live.shape ? 0 : (rec.brush.postSmooth ?? 0);
     if (post > 0) rec.points = smoothStroke(rec.points, post);
     const d = live.drawing;
     if (rec.tool === 'pen') {
       const id = rec.id;
       this.history.push(
         {
-          label: 'Vector stroke',
+          label: live.shape ? `Vector ${SHAPE_NAMES[live.shape.base.kind].toLowerCase()}` : 'Vector stroke',
           drawings: [d],
           do: () => {
             d.vectors = [...d.vectors, rec];
@@ -1686,7 +1759,7 @@ export class App {
       if (vAfter) d.vectors = vAfter;
       if (c || vAfter) {
         this.history.push({
-          label: rec.tool === 'eraser' ? 'Erase' : 'Brush stroke',
+          label: rec.tool === 'eraser' ? 'Erase' : live.shape ? SHAPE_NAMES[live.shape.base.kind] : 'Brush stroke',
           drawings: [d],
           do: () => {
             if (c) putPixels(live.canvas, c.rect, c.after);
@@ -1758,6 +1831,12 @@ export class App {
     }
     const isTouch = e.pointerType === 'touch';
 
+    // QuickShape: a finger touching down while a snapped shape is held makes it perfect
+    if (this.live?.shape && this.live.pointerId !== e.pointerId) {
+      this.live.shape.constrain = true;
+      this.redrawShape();
+      return;
+    }
     if (isTouch) {
       // Palm rejection: while the pen draws, fingers are ignored.
       if (this.live && this.live.record && this.live.pointerId !== e.pointerId) {
@@ -1987,7 +2066,14 @@ export class App {
       this.editor.gestureMove(this.stagePoint(e));
       return;
     }
+    if (this.live?.shape && e.pointerId === this.live.pointerId) {
+      // snapped: the pen now resizes and turns the shape (Shift = perfect)
+      this.live.shape.now = this.toPoint(e, this.live.t0);
+      this.redrawShape(e.shiftKey);
+      return;
+    }
     if (this.live && e.pointerId === this.live.pointerId) {
+      this.armShape(e);
       const events = e.getCoalescedEvents?.() ?? [];
       const list = events.length ? events : [e];
       for (const ev of list) this.feed(this.toPoint(ev, this.live.t0));

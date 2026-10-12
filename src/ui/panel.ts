@@ -155,6 +155,23 @@ export function buildPanel(app: App, root: HTMLElement): void {
     body.append(fs);
   }
 
+  // drawing assist: QuickShape
+  {
+    const fs = el('fieldset');
+    fs.append(el('legend', {}, 'Assist'));
+    const row = el('label', {
+      class: 'row toggle',
+      title:
+        'Hold the pen still at the end of a stroke: it snaps to a line, arc, ellipse, rectangle or polygon. Keep holding and move to resize and turn it; touch a second finger (or hold Shift) for a perfect circle, square or 15° angle.',
+    });
+    const input = el('input', { type: 'checkbox' });
+    input.addEventListener('change', () => app.setQuickShape(input.checked));
+    refreshers.push(() => (input.checked = app.quickShape));
+    row.append(input, el('span', {}, 'QuickShape: hold at the end of a stroke to snap it to a shape'));
+    fs.append(row);
+    body.append(fs);
+  }
+
   body.prepend(fillEditor(app));
   root.append(head, preview, body);
 
