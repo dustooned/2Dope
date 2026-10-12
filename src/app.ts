@@ -44,6 +44,7 @@ import {
 } from './core/timeline';
 import { Smoother, smoothStroke } from './brush/smoothing';
 import { eraseVectors, type VectorErase } from './core/vectorcut';
+import { drawingBox } from './view/contentbox';
 import { constrainShape, editShape, pressureProfile, recognizeShape, sampleProfile, SHAPE_NAMES, shapeOutline, type Shape } from './core/quickshape';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
@@ -1045,14 +1046,59 @@ export class App {
   /** From the board to animation: Draw on the shot's first real layer, with the board faintly underneath. */
   animateShot(): void {
     if (this.live) return;
+    const p = this.project;
+    const b = this.board;
+    // the panel you were on is where you start drawing
+    const at = this.frame;
     this.setWorkspace('draw');
-    const layer = this.project.comp.layers.find((l) => l.kind === 'drawings' && !l.guide);
+    let layer = p.comp.layers.find((l) => l.kind === 'drawings' && !l.guide);
+    // a new project's untouched starter layer (one empty drawing) is retimed to the panels too
+    const untouched =
+      layer?.kind === 'drawings' &&
+      layer.exposures.length === 1 &&
+      p.comp.layers.filter((l) => l.kind === 'drawings' && !l.guide).length === 1 &&
+      ((d) => !d || (!d.vectors.length && !d.parked && drawingBox(d) === null))(p.drawings.get(layer.exposures[0]!.drawing));
+    if (b && layer?.kind === 'drawings' && untouched) {
+      const id = layer.id;
+      const first = layer.exposures[0]!.drawing;
+      this.editor.edit('Animate this shot', (c) => {
+        const l = c.layers.find((x) => x.id === id);
+        if (!l || l.kind !== 'drawings') return;
+        l.exposures = b.exposures.map((e, i) => ({ drawing: i === 0 ? first : p.newDrawing().id, length: e.length }));
+        l.start = b.start;
+      });
+    } else if (!layer && b) {
+      // A first animation layer starts in step with the board: one blank drawing per panel, each
+      // as long as its panel. Ripple keeps them together from then on (retime a panel and the
+      // animation under it follows; add in-betweens and the board makes room).
+      const id = p.newId('L');
+      this.editor.edit('Animate this shot', (c) => {
+        const ex = b.exposures.map((e) => ({ drawing: p.newDrawing().id, length: e.length }));
+        const l = drawingsLayer(id, 'Animation', ex, p.width, p.height, c.width, c.height);
+        l.start = b.start;
+        c.layers.push(l);
+      });
+      layer = p.comp.layers.find((l) => l.id === id);
+    }
     if (layer) this.pickLayer(layer.id);
     else {
-      this.project.activeLayer = '';
+      p.activeLayer = '';
       this.onCompChanged();
     }
     if (this.boardAlpha === 0) this.setBoardAlpha(0.35);
+    if (b) this.setFrame(at);
+  }
+
+  /** The board's panels on the comp clock (for panel marks on the Draw and Time timelines). */
+  get panelMarks(): { n: number; start: number; length: number }[] {
+    const b = this.board;
+    if (!b) return [];
+    let at = b.start;
+    return b.exposures.map((e, i) => {
+      const m = { n: i + 1, start: at, length: e.length };
+      at += e.length;
+      return m;
+    });
   }
 
   /** A new blank drawing after the last frame of the active layer, and go to it (the strip's + cell). */

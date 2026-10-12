@@ -3202,3 +3202,20 @@ dialog.manual[open] {
     background: #f3f3f3;
   }
 }
+
+/* board panels over the Draw / Time frame strip */
+.panel-mark {
+  position: absolute;
+  top: 0;
+  height: 14px;
+  padding-left: 4px;
+  border-left: 2px solid #f0c040;
+  color: #f0c040;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+  background: linear-gradient(90deg, rgba(240, 192, 64, 0.16), transparent 70%);
+}

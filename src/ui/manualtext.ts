@@ -82,7 +82,8 @@ export const MANUAL: ManualSection[] = [
           'Press Play to watch the animatic. Dialogue shows as subtitles.',
         ],
       },
-      'Animate this shot takes you to Draw with the board showing faintly underneath, so you can draw the animation on top of it.',
+      'Animate this shot takes you to Draw with the board showing faintly underneath, on the panel you were looking at. The first time, your animation layer gets one blank drawing per panel, each as long as its panel, so your frames start in step with the board. Yellow P1, P2… marks above the frame bar show where each panel starts.',
+      { tip: 'Board and animation stay in sync (with Ripple on): make a panel longer and the animation under it gets longer too; add frames to the animation and the board panel makes room.' },
       {
         list: [
           'Export (in the Board bar) saves the storyboard as a PDF (2, 4 or 6 panels a page, Letter or A4) or as PNG images with a captions spreadsheet (CSV).',
@@ -107,7 +108,7 @@ export const MANUAL: ManualSection[] = [
       },
       'The circle at the top right is your colour. The sliders on the left are brush size and opacity, with undo and redo under them.',
       { tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. Press X to switch which part a brush paints on.' },
-      'QuickShape: draw a line, circle, box or triangle roughly and keep the pencil still at the end. It snaps to a clean shape. Keep holding and move to adjust it: the start stays put and the pencil drags the other end. Touch a second finger (or hold Shift) to make it perfect: a circle, a square, an even polygon or a straight angle. Turn it off in the Brush panel under Assist.',
+      'QuickShape: draw a line, circle, box or triangle roughly and keep the pencil still at the end. It snaps to a clean shape and keeps the pressure you drew with, thick and thin. Keep holding and move to adjust it: the start stays put and the pencil drags the other end. Touch a second finger (or hold Shift) to make it perfect: a circle, a square, an even polygon or a straight angle. Turn it off in the Brush panel under Assist.',
       {
         list: [
           'Flipbook mode: past your last drawing there is a blank page. Draw on it and a new frame is made for you.',
@@ -226,6 +227,8 @@ export const UPDATES: Update[] = [
     date: '2026-10-12',
     title: 'Storyboard export, QuickShape, ripple and this manual',
     items: [
+      'Animate this shot lines your frames up with the board: one drawing per panel, same lengths, and P1, P2… marks above the frame bar. Board and animation timing stay in sync.',
+      'QuickShape keeps your pressure (thick and thin) and adjusts from the start point.',
       'Manual and What’s new (you are reading them): Menu > Manual, or press ?.',
       'QuickShape: hold the pencil at the end of a stroke to snap it to a line, arc, ellipse, rectangle or polygon. Drag to adjust from the start point; a second finger makes it perfect.',
       'Board > Export: storyboard PDF (2, 4 or 6 panels a page) or panel PNGs with a captions spreadsheet.',

@@ -508,7 +508,9 @@ export class Strip {
     const cell = this.cell;
     const sel = new Set(this.app.selection);
     this.inner.replaceChildren();
-    this.inner.style.width = `${Math.max(p.length * cell + cell * 2, 200)}px`;
+    // wide enough for the layer, and for the board's panels when they run longer
+    const boardEnd = this.app.board && p.layer.id !== this.app.board.id ? this.app.panelMarks.reduce((n, m) => Math.max(n, m.start + m.length), 0) - p.layer.start : 0;
+    this.inner.style.width = `${Math.max(Math.max(p.length, boardEnd) * cell + cell * 2, 200)}px`;
     const ruler = el('div', { class: 'strip-ruler' });
     const step = rulerStep(cell, p.fps, this.app.timeFormat);
     for (let f = 0; f < p.length; f++) {
@@ -519,6 +521,18 @@ export class Strip {
       ruler.append(n);
     }
     this.inner.append(ruler);
+    // the storyboard's panels, so drawings can be lined up with them (not on the board itself)
+    const b = this.app.board;
+    if (b && p.layer.id !== b.id) {
+      for (const m of this.app.panelMarks) {
+        const f = m.start - p.layer.start;
+        if (f + m.length <= 0) continue;
+        const mark = el('span', { class: 'panel-mark', title: `Board panel ${m.n}: ${this.app.fmt(m.start)}, ${this.app.fmtDur(m.length)}` }, `P${m.n}`);
+        mark.style.left = `${f * cell}px`;
+        mark.style.width = `${m.length * cell}px`;
+        this.inner.append(mark);
+      }
+    }
     p.exposures.forEach((e, i) => {
       const d = p.drawing(e.drawing);
       const width = e.length * cell - 4;
