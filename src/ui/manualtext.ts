@@ -239,6 +239,8 @@ export const UPDATES: Update[] = [
     items: [
       'Animate this shot lines your frames up with the board: one drawing per panel, same lengths, and P1, P2… marks above the frame bar. Board and animation timing stay in sync.',
       'QuickShape keeps your pressure (thick and thin) and adjusts from the start point.',
+      'Three-finger scrub clears the drawing fast (undo brings it back); the page never moves while three fingers are down.',
+      'The manual now has pictures: tool and gesture icons and small diagrams.',
       'Manual and What’s new (you are reading them): Menu > Manual, or press ?.',
       'QuickShape: hold the pencil at the end of a stroke to snap it to a line, arc, ellipse, rectangle or polygon. Drag to adjust from the start point; a second finger makes it perfect.',
       'Board > Export: storyboard PDF (2, 4 or 6 panels a page) or panel PNGs with a captions spreadsheet.',

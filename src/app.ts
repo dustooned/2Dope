@@ -260,7 +260,9 @@ export class App {
   private live: LiveStroke | null = null;
   private readonly touches = new Map<number, TouchInfo>();
   private pinch: PinchState | null = null;
-  private tapSession: { start: number; maxTouches: number; moved: boolean } | null = null;
+  private tapSession: { start: number; maxTouches: number; moved: boolean; view: { x: number; y: number; zoom: number; rot: number } } | null = null;
+  /** Three-finger scrub (clear the drawing): the fingers' mean x, its turning points, and whether it fired. */
+  private scrub3: { startX: number; lastX: number; extreme: number; dir: 0 | 1 | -1; turns: number; done: boolean } | null = null;
   private nav: NavDrag | null = null;
   private readonly held = new Set<string>();
   private readonly lengthCache = new WeakMap<StrokeRecord, number>();
@@ -1900,8 +1902,9 @@ export class App {
       }
       const p = this.local(e);
       this.touches.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y });
-      if (!this.tapSession) this.tapSession = { start: performance.now(), maxTouches: 0, moved: false };
+      if (!this.tapSession) this.tapSession = { start: performance.now(), maxTouches: 0, moved: false, view: { x: this.view.x, y: this.view.y, zoom: this.view.zoom, rot: this.view.rot } };
       this.tapSession.maxTouches = Math.max(this.tapSession.maxTouches, this.touches.size);
+      if (this.touches.size >= 3 && !this.scrub3 && this.workspace !== 'motion') this.beginScrub3();
       // a second finger means "navigate": let go of a layer drag
       if (this.motionPointer !== null && this.motionPointer !== e.pointerId) {
         this.editor.gestureEnd(true);
@@ -2144,6 +2147,10 @@ export class App {
       t.x = p.x;
       t.y = p.y;
       if (this.held_ === e.pointerId) return; // the finger that opened a menu does not pan
+      if (this.scrub3) {
+        this.scrub3Move();
+        return;
+      }
 
       if (this.tapSession && Math.hypot(p.x - t.sx, p.y - t.sy) > 10) this.tapSession.moved = true;
       this.touchNavigate(e.pointerId, p);
@@ -2168,7 +2175,10 @@ export class App {
       this.touches.delete(e.pointerId);
       this.pinch = null;
       this.startPinchIfNeeded();
-      if (this.touches.size === 0) this.finishTapSession(cancelled);
+      if (this.touches.size === 0) {
+        this.scrub3 = null;
+        this.finishTapSession(cancelled);
+      }
     }
   }
 
@@ -2186,8 +2196,62 @@ export class App {
     document.body.classList.toggle('ui-hidden', this.uiHidden);
   }
 
+  /**
+   * Three fingers down: a scrub gesture, never navigation. The page goes back to where it was
+   * when the first finger landed (the first two may have started a pinch) and stays put until
+   * every finger lifts. Scrubbing back and forth clears the drawing (one undo step).
+   */
+  private beginScrub3(): void {
+    this.pinch = null;
+    const v = this.tapSession?.view;
+    if (v) {
+      this.view.x = v.x;
+      this.view.y = v.y;
+      this.view.zoom = v.zoom;
+      this.view.rot = v.rot;
+      this.requestRender();
+    }
+    const x = this.touchMeanX();
+    this.scrub3 = { startX: x, lastX: x, extreme: x, dir: 0, turns: 0, done: false };
+  }
+
+  private touchMeanX(): number {
+    let x = 0;
+    for (const t of this.touches.values()) x += t.x;
+    return x / Math.max(1, this.touches.size);
+  }
+
+  private scrub3Move(): void {
+    const sc = this.scrub3;
+    if (!sc || sc.done) return;
+    const x = this.touchMeanX();
+    const TURN = 24; // px back the other way that counts as a turn
+    const dir = x > sc.lastX ? 1 : x < sc.lastX ? -1 : 0;
+    if (dir && dir !== sc.dir) {
+      if (sc.dir === 0 || Math.abs(sc.extreme - x) >= TURN) {
+        if (sc.dir !== 0) sc.turns++;
+        sc.dir = dir;
+        sc.extreme = x;
+      }
+    } else if (dir) sc.extreme = x;
+    sc.lastX = x;
+    // a scrub is not a three-finger tap (redo); a little jitter still is
+    if (this.tapSession && (sc.turns > 0 || Math.abs(x - sc.startX) > 10)) this.tapSession.moved = true;
+    // back, forth, back: clear
+    if (sc.turns >= 2) {
+      sc.done = true;
+      if (this.workspace === 'motion' || this.blankPage) return;
+      if (!this.project.isPlaceholder && this.project.layer.locked) {
+        this.onNotice?.(`“${this.project.layer.name}” is locked.`);
+        return;
+      }
+      this.clearFrame();
+      this.onNotice?.('Drawing cleared. Undo brings it back.');
+    }
+  }
+
   private startPinchIfNeeded(): void {
-    if (this.touches.size < 2 || this.pinch) return;
+    if (this.touches.size < 2 || this.pinch || this.scrub3) return;
     const ids = [...this.touches.keys()];
     const a = ids[0]!;
     const b = ids[1]!;
