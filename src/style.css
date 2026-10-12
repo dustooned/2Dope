@@ -3219,3 +3219,26 @@ dialog.manual[open] {
   white-space: nowrap;
   background: linear-gradient(90deg, rgba(240, 192, 64, 0.16), transparent 70%);
 }
+.man-fig {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.man-fig svg {
+  display: block;
+  margin: 0 auto;
+}
+.man-ico {
+  display: inline-flex;
+  vertical-align: -5px;
+  margin-right: 6px;
+  color: var(--accent);
+}
+@media print {
+  body.printing-manual .man-fig {
+    background: #fff;
+    break-inside: avoid;
+  }
+}

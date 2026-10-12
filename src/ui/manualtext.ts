@@ -5,7 +5,8 @@
  */
 
 /** A block of a section: a paragraph, a list of steps or tips, or a table of keys/gestures. */
-export type Block = string | { list: string[] } | { steps: string[] } | { keys: [string, string][] } | { tip: string };
+/** `keys` rows may name an icon (a toolbar icon or a gesture glyph) shown before the label; `figure` is a picture from ui/manualfigs.ts. */
+export type Block = string | { list: string[] } | { steps: string[] } | { keys: [string, string, string?][] } | { tip: string } | { figure: string };
 
 export interface ManualSection {
   id: string;
@@ -29,6 +30,7 @@ export const MANUAL: ManualSection[] = [
           'Motion: put it together. Move, scale and turn layers with keyframes, the camera, groups, Line and Fill parts.',
         ],
       },
+      { figure: 'workspaces' },
       'All four show the same shot and the same clock. A change in one shows up in the others straight away.',
     ],
   },
@@ -55,13 +57,14 @@ export const MANUAL: ManualSection[] = [
     blocks: [
       {
         keys: [
-          ['Two fingers: pinch, drag, twist', 'Zoom, move and turn the page'],
-          ['Two-finger tap', 'Undo'],
-          ['Three-finger tap', 'Redo'],
-          ['Four-finger tap', 'Hide or show the interface'],
-          ['Press and hold (or right-click)', 'A menu for what you are holding: a frame, a panel, a layer, the canvas'],
-          ['Hold the pencil at the end of a stroke', 'QuickShape: the stroke snaps to a shape (see Draw)'],
-          ['Hold and drag a number', 'Scrub the value up or down (Motion). Tap it to type instead'],
+          ['Two fingers: pinch, drag, twist', 'Zoom, move and turn the page', 'pinch'],
+          ['Two-finger tap', 'Undo', 'tap2'],
+          ['Three-finger tap', 'Redo', 'tap3'],
+          ['Three-finger scrub', 'Clear this drawing fast (undo brings it back). The page does not move', 'scrub3'],
+          ['Four-finger tap', 'Hide or show the interface', 'tap4'],
+          ['Press and hold (or right-click)', 'A menu for what you are holding: a frame, a panel, a layer, the canvas', 'hold'],
+          ['Hold the pencil at the end of a stroke', 'QuickShape: the stroke snaps to a shape (see Draw)', 'shape'],
+          ['Hold and drag a number', 'Scrub the value up or down (Motion). Tap it to type instead', 'scrub'],
         ],
       },
     ],
@@ -71,6 +74,7 @@ export const MANUAL: ManualSection[] = [
     title: 'Board: storyboard and animatic',
     blocks: [
       'The board is where you plan. Each panel is a rough picture with its timing and notes. The board plays under your drawing as a guide and never shows in your final export (unless you ask it to).',
+      { figure: 'board' },
       {
         steps: [
           'Open Board and tap Start a storyboard (or Import board images to turn pictures into panels).',
@@ -100,15 +104,18 @@ export const MANUAL: ManualSection[] = [
       'Draw is just for drawing: brushes, colours and layers. The bar at the bottom shows your frames.',
       {
         keys: [
-          ['Brush (B)', 'Pixel brushes: pencil, ink, brush pen, fine liner, pixel ink and more. Pressure and tilt work with a pencil.'],
-          ['Pen (P)', 'Vector lines: always crisp, can be resized later without going blurry.'],
-          ['Eraser (E)', 'Erases pixels. On vector lines it cuts up to where lines cross (change this in the eraser options).'],
-          ['Fill (G)', 'Fills areas closed by your lines. Tap or drag across areas, lasso around them, or brush over leftover gaps.'],
+          ['Brush (B)', 'Pixel brushes: pencil, ink, brush pen, fine liner, pixel ink and more. Pressure and tilt work with a pencil.', 'brush'],
+          ['Pen (P)', 'Vector lines: always crisp, can be resized later without going blurry.', 'pen'],
+          ['Eraser (E)', 'Erases pixels. On vector lines it cuts up to where lines cross (change this in the eraser options).', 'eraser'],
+          ['Fill (G)', 'Fills areas closed by your lines. Tap or drag across areas, lasso around them, or brush over leftover gaps.', 'fill'],
         ],
       },
       'The circle at the top right is your colour. The sliders on the left are brush size and opacity, with undo and redo under them.',
+      { figure: 'linefill' },
       { tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. Press X to switch which part a brush paints on.' },
       'QuickShape: draw a line, circle, box or triangle roughly and keep the pencil still at the end. It snaps to a clean shape and keeps the pressure you drew with, thick and thin. Keep holding and move to adjust it: the start stays put and the pencil drags the other end. Touch a second finger (or hold Shift) to make it perfect: a circle, a square, an even polygon or a straight angle. Turn it off in the Brush panel under Assist.',
+      { figure: 'quickshape' },
+      { figure: 'onion' },
       {
         list: [
           'Flipbook mode: past your last drawing there is a blank page. Draw on it and a new frame is made for you.',
@@ -124,6 +131,7 @@ export const MANUAL: ManualSection[] = [
     id: 'time',
     title: 'Time: timing and the X-sheet',
     blocks: [
+      { figure: 'holds' },
       'Time is for changing when things happen. The X-sheet (exposure sheet) on the right lists every frame: which drawing shows and for how long.',
       {
         list: [
@@ -134,6 +142,7 @@ export const MANUAL: ManualSection[] = [
           'The bar above the X-sheet holds onion skin settings, marks and the switches for each layer.',
         ],
       },
+      { figure: 'ripple' },
       {
         tip: 'Ripple (on by default): when you make something longer or shorter, everything after it moves too, on every layer, so nothing slips out of sync. Switch it with the Ripple button or Shift+R. Hold Alt to do one edit without ripple.',
       },
@@ -145,6 +154,7 @@ export const MANUAL: ManualSection[] = [
     id: 'motion',
     title: 'Motion: putting the shot together',
     blocks: [
+      { figure: 'motion' },
       'Motion is the last stage: each layer is a bar on the timeline, and you can move, scale, turn and fade it over time with keyframes.',
       {
         list: [

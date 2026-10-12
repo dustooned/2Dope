@@ -1,3 +1,5 @@
+import { iconSvg } from './icons';
+import { FIGURES, glyphSvg } from './manualfigs';
 import { MANUAL, UPDATES, type Block } from './manualtext';
 
 const SEEN_KEY = '2dope.updates.seen';
@@ -12,6 +14,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 function block(b: Block): HTMLElement {
   if (typeof b === 'string') return el('p', {}, b);
   if ('tip' in b) return el('p', { class: 'man-tip' }, b.tip);
+  if ('figure' in b) {
+    const f = el('figure', { class: 'man-fig' });
+    f.innerHTML = FIGURES[b.figure]?.() ?? '';
+    return f;
+  }
   if ('list' in b || 'steps' in b) {
     const items = 'list' in b ? b.list : b.steps;
     const l = el('steps' in b ? 'ol' : 'ul');
@@ -19,9 +26,16 @@ function block(b: Block): HTMLElement {
     return l;
   }
   const t = el('table', { class: 'man-keys' });
-  for (const [k, v] of b.keys) {
+  for (const [k, v, icon] of b.keys) {
     const r = el('tr');
-    r.append(el('th', { scope: 'row' }, k), el('td', {}, v));
+    const th = el('th', { scope: 'row' });
+    if (icon) {
+      const i = el('span', { class: 'man-ico' });
+      i.innerHTML = iconSvg(icon) || glyphSvg(icon);
+      th.append(i);
+    }
+    th.append(k);
+    r.append(th, el('td', {}, v));
     t.append(r);
   }
   return t;
