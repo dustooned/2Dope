@@ -137,6 +137,13 @@
 - **Layers popover** (toolbar button and the strip's layer chip): tap to draw on a layer, eye, lock (locked layers refuse strokes with a message), up/down, rename (double-tap), add above, delete. All through the comp editor, so undoable and shared with Motion.
 - Not yet: thumbnails in the list, per-layer opacity slider, groups of drawing layers.
 
+## 2026-10-11: Workspace roles (step 1 of doc 16's priority)
+
+- **Draw** keeps what you use while drawing: tools, colour, layers, size / opacity sidebar, and a slim strip (layer, frame steps, + frame, duplicate, delete, flipbook, onion on/off, scrub lock, zoom).
+- **Time** is where timing lives: holds (1s–4s, any number), K / B / I marks, onion settings, and on/off chips for every layer and the active layer's Lines / Colour, above the X-sheet. The drawing tools, colour and sidebar are hidden there; Motion hides them too.
+- The strip class still owns those controls (one place that keeps them in step); main.ts mounts them into the X-sheet tab. Keyboard shortcuts (1–4, K/B/I, N, D, O, L) work everywhere as before.
+- **Board tab** (animatic / storyboard, doc 16) is not added yet: it arrives with its content in the storyboard-core step, so there is no empty tab.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

@@ -167,6 +167,8 @@ $('#panel-toggle').addEventListener('click', () => setPanel(!document.body.class
 $('#stage').addEventListener('pointerdown', () => app.workspace !== 'time' && setPanel(false), { capture: true });
 
 const strip = new Strip(app, $('#strip'));
+// Timing tools (holds, marks, onion settings, layer toggles) belong to the Time workspace
+$('#tab-xsheet').prepend(strip.timingBar);
 const motion = new MotionPanel(app, $('#motion'));
 
 // The handle between the canvas and the timeline; each workspace remembers its own height.

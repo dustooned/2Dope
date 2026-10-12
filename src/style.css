@@ -2688,3 +2688,54 @@ body.ui-hidden .sidebar {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Time workspace: holds, marks, onion settings and layer toggles above the X-sheet */
+.timing-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+
+.timing-controls .strip-row {
+  flex-wrap: wrap;
+}
+
+.layer-toggles .lchip {
+  max-width: 140px;
+  min-height: 32px;
+  padding: 0 10px 0 8px;
+}
+
+.layer-toggles .lchip .lbl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-toggles .lchip[aria-pressed='false'] {
+  opacity: 0.55;
+}
+
+.layer-toggles .lchip.on {
+  border-color: var(--accent);
+}
+
+body:not(.ws-time) .timing-controls {
+  display: none;
+}
+
+/* each workspace shows only its own tools: drawing tools belong to Draw */
+body.ws-time .topbar .tools,
+body.ws-time .topbar .tb-right > .seg,
+body.ws-time .topbar .colorchip,
+body.ws-time .sidebar,
+body.ws-motion .topbar .tools,
+body.ws-motion .topbar .tb-right > .seg,
+body.ws-motion .topbar .colorchip,
+body.ws-motion #layers-btn,
+body.ws-time #layers-btn {
+  display: none;
+}

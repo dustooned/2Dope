@@ -70,6 +70,10 @@ export class Strip {
   private cell = loadCell();
   private drag: Drag | null = null;
   private flipBtn!: HTMLButtonElement;
+  /** Holds, marks, onion settings and layer toggles (shown in the Time workspace). */
+  readonly timingBar: HTMLElement;
+  private readonly togglesRow: HTMLElement;
+  private togglesSig = '';
   private layerChip!: HTMLButtonElement;
   /** The flipbook's blank page after the last drawing (tap it, then draw). */
   private readonly blank = el('div', { class: 'blankpage', title: 'Add a frame at the end' }, '+');
@@ -150,7 +154,6 @@ export class Strip {
       onion.append(el('span', { class: 'name' }, label), sel);
       return sel;
     };
-    onion.append(this.onionBtn);
     this.beforeSel = count(
       '◀',
       'Previous drawings shown (blue)',
@@ -176,7 +179,9 @@ export class Strip {
     });
     onion.append(this.keysBtn);
     this.lockBtn = btn('Lock', 'Scrub lock (L): mark this frame as home. Drag the ruler or hold Shift + arrows to flip; it snaps back when you let go.', () => app.toggleLock());
-    onion.append(this.lockBtn);
+    // Draw keeps the two things you flip while drawing: onion on/off and the scrub lock
+    const flip = el('div', { class: 'group' });
+    flip.append(this.onionBtn, this.lockBtn);
 
     const zoom = el('div', { class: 'group' });
     this.zoomRange = el('input', { type: 'range', min: '20', max: '120', step: '2', 'aria-label': 'Timeline zoom', title: 'Timeline zoom', class: 'onion-opacity' });
@@ -197,10 +202,16 @@ export class Strip {
     // which layer the strip shows (and you draw on); tap for the layer list
     this.layerChip = btn('Layer', 'The layer you draw on. Tap for all layers.', () => app.openLayers?.(this.layerChip), 'layerchip');
     decorate(this.layerChip, 'layers');
-    rowA.append(this.layerChip, nav, this.frameLabel, this.fpsSel, edit, zoom);
+    rowA.append(this.layerChip, nav, this.frameLabel, this.fpsSel, edit, flip, zoom);
+    bar.append(rowA);
+
+    // Timing tools live in the Time workspace (mounted into the X-sheet by main.ts): holds,
+    // marks, onion settings, and quick on/off toggles for layers and their Line / Fill parts.
+    this.timingBar = el('div', { class: 'timing-controls' });
     const rowB = el('div', { class: 'strip-row' });
     rowB.append(exposure, roles, onion);
-    bar.append(rowA, rowB);
+    this.togglesRow = el('div', { class: 'strip-row layer-toggles', role: 'group', 'aria-label': 'Show or hide layers' });
+    this.timingBar.append(rowB, this.togglesRow);
 
     this.track = el('div', { class: 'strip-track', role: 'region', 'aria-label': 'Timeline', tabindex: '0' });
     this.inner = el('div', { class: 'strip-inner' });
@@ -423,7 +434,44 @@ export class Strip {
     for (const b of this.inner.querySelectorAll<HTMLElement>('.block')) {
       b.classList.toggle('current', l !== null && b.dataset.index === String(l.index));
     }
+    this.updateToggles();
     this.keepVisible();
+  }
+
+  /** On/off chips for each drawing layer and the active layer's Line / Fill (Time workspace). */
+  private updateToggles(): void {
+    const app = this.app;
+    const layers = app.drawLayers();
+    const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
+    const cur = app.project.isPlaceholder ? null : app.project.layer;
+    const sig = layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.id === active}`).join('|') + `#${cur ? `${cur.parts?.line?.visible !== false}${cur.parts?.fill?.visible !== false}` : ''}`;
+    if (sig === this.togglesSig) return;
+    this.togglesSig = sig;
+    const row = this.togglesRow;
+    row.replaceChildren(el('span', { class: 'name' }, 'Show'));
+    for (const l of layers) {
+      const b = el(
+        'button',
+        { type: 'button', class: `lchip${l.id === active ? ' on' : ''}`, 'aria-pressed': String(l.visible), title: `${l.visible ? 'Hide' : 'Show'} ${l.name}. Long-press the name in Draw to rename.` },
+        l.name,
+      );
+      decorate(b, 'eye');
+      b.addEventListener('click', () => app.editor.setFlag(l.id, 'visible', !l.visible));
+      row.append(b);
+    }
+    if (cur) {
+      row.append(el('span', { class: 'name' }, `${cur.name}:`));
+      for (const part of ['line', 'fill'] as const) {
+        const on = cur.parts?.[part]?.visible !== false;
+        const b = el(
+          'button',
+          { type: 'button', 'aria-pressed': String(on), title: `${on ? 'Hide' : 'Show'} the ${part === 'line' ? 'lines' : 'colour'} of ${cur.name}` },
+          part === 'line' ? 'Lines' : 'Colour',
+        );
+        b.addEventListener('click', () => app.togglePart(part));
+        row.append(b);
+      }
+    }
   }
 
   private rebuild(): void {
