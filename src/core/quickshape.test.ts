@@ -106,17 +106,48 @@ describe('QuickShape', () => {
     expect(zig?.kind).toBe('polyline');
   });
 
-  it('editing scales and turns around the pivot; constrain makes it perfect', () => {
-    const e = { kind: 'ellipse' as const, cx: 0, cy: 0, rx: 50, ry: 30, rot: 0 };
-    const big = editShape(e, { x: 50, y: 0 }, { x: 0, y: 100 });
-    expect(big.kind === 'ellipse' && big.rx).toBeCloseTo(100);
-    expect(big.kind === 'ellipse' && big.rot).toBeCloseTo(Math.PI / 2);
-    const circle = constrainShape(e);
+  it('editing keeps the first point and drags the second', () => {
+    // line: the start stays, the end follows the pen
+    const moved = editShape({ kind: 'line', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } }, { x: 10, y: 0 }, { x: 30, y: 5 });
+    expect(moved.kind === 'line' && moved.a).toEqual({ x: 0, y: 0 });
+    expect(moved.kind === 'line' && moved.b).toEqual({ x: 30, y: 5 });
+    // polyline: only the last point moves
+    const pl = editShape(
+      {
+        kind: 'polyline',
+        pts: [
+          { x: 0, y: 0 },
+          { x: 10, y: 10 },
+          { x: 20, y: 0 },
+        ],
+      },
+      { x: 20, y: 0 },
+      { x: 25, y: 5 },
+    );
+    expect(pl.kind === 'polyline' && pl.pts).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+      { x: 25, y: 5 },
+    ]);
+    // ellipse grabbed on its right edge: the left edge stays; the other axis follows in proportion
+    const e = editShape({ kind: 'ellipse', cx: 0, cy: 0, rx: 50, ry: 30, rot: 0 }, { x: 50, y: 0 }, { x: 150, y: 0 });
+    expect(e.kind === 'ellipse' && [e.cx, e.rx, e.ry]).toEqual([50, 100, 60]);
+    // rectangle grabbed at a corner: the opposite corner stays, width and height separately
+    const r = editShape({ kind: 'rect', cx: 0, cy: 0, w: 10, h: 10, rot: 0 }, { x: 10, y: 10 }, { x: 30, y: 20 });
+    expect(r.kind === 'rect' && [r.cx, r.cy, r.w, r.h]).toEqual([10, 5, 20, 15]);
+    const sq = editShape({ kind: 'rect', cx: 0, cy: 0, w: 10, h: 10, rot: 0 }, { x: 10, y: 10 }, { x: 30, y: 20 }, true);
+    expect(sq.kind === 'rect' && sq.w === sq.h).toBe(true);
+    // arc: pinned at its start, its end lands on the pen
+    const arc = editShape({ kind: 'arc', cx: 0, cy: 0, r: 10, start: 0, sweep: Math.PI }, { x: -10, y: 0 }, { x: -20, y: 0 });
+    expect(arc.kind === 'arc' && arc.r).toBeCloseTo(15);
+    const end = arc.kind === 'arc' ? { x: arc.cx + Math.cos(arc.start + arc.sweep) * arc.r, y: arc.cy + Math.sin(arc.start + arc.sweep) * arc.r } : null;
+    expect(end!.x).toBeCloseTo(-20);
+    expect(end!.y).toBeCloseTo(0);
+    // perfect versions
+    const circle = constrainShape({ kind: 'ellipse', cx: 0, cy: 0, rx: 50, ry: 30, rot: 0 });
     expect(circle.kind === 'ellipse' && circle.rx === circle.ry).toBe(true);
     const line = constrainShape({ kind: 'line', a: { x: 0, y: 0 }, b: { x: 100, y: 3 } });
     expect(line.kind === 'line' && line.b.y).toBeCloseTo(0);
-    const moved = editShape({ kind: 'line', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } }, { x: 10, y: 0 }, { x: 30, y: 5 });
-    expect(moved.kind === 'line' && moved.b).toEqual({ x: 30, y: 5 });
   });
 
   it('outlines close and keep corners', () => {

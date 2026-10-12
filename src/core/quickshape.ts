@@ -301,42 +301,95 @@ function centroid(p: readonly V[]): V {
   return { x: p.reduce((n, q) => n + q.x, 0) / p.length, y: p.reduce((n, q) => n + q.y, 0) / p.length };
 }
 
-/** The point a shape turns and scales around. */
-export function pivotOf(s: Shape): V {
+/** Stretch `q` away from `a` by (sx, sy) along axes turned by `rot`. */
+function stretch(q: V, a: V, sx: number, sy: number, rot: number): V {
+  const c = Math.cos(rot);
+  const n = Math.sin(rot);
+  const dx = q.x - a.x;
+  const dy = q.y - a.y;
+  const u = (dx * c + dy * n) * sx;
+  const v = (-dx * n + dy * c) * sy;
+  return { x: a.x + u * c - v * n, y: a.y + u * n + v * c };
+}
+
+/** Per-axis scale (in a frame turned by `rot`) that takes grab to now with the anchor fixed. */
+function axisScale(anchor: V, grab: V, now: V, rot: number, uniform: boolean): { sx: number; sy: number } {
+  const c = Math.cos(rot);
+  const n = Math.sin(rot);
+  const g = { x: (grab.x - anchor.x) * c + (grab.y - anchor.y) * n, y: -(grab.x - anchor.x) * n + (grab.y - anchor.y) * c };
+  const w = { x: (now.x - anchor.x) * c + (now.y - anchor.y) * n, y: -(now.x - anchor.x) * n + (now.y - anchor.y) * c };
+  // an axis the grab barely spans cannot be scaled from the pen: it follows the other axis
+  let sx = Math.abs(g.x) < 4 ? 1 : w.x / g.x;
+  let sy = Math.abs(g.y) < 4 ? 1 : w.y / g.y;
+  if (Math.abs(g.x) < 4 && Math.abs(g.y) >= 4) sx = Math.abs(sy);
+  if (Math.abs(g.y) < 4 && Math.abs(g.x) >= 4) sy = Math.abs(sx);
+  if (uniform) {
+    const k = Math.max(Math.abs(sx), Math.abs(sy));
+    sx = Math.sign(sx || 1) * k;
+    sy = Math.sign(sy || 1) * k;
+  }
+  const min = 0.02;
+  return { sx: Math.sign(sx || 1) * Math.max(min, Math.abs(sx)), sy: Math.sign(sy || 1) * Math.max(min, Math.abs(sy)) };
+}
+
+/** The point that stays put while the shape is adjusted from `grab`. */
+export function anchorOf(s: Shape, grab: V): V {
   switch (s.kind) {
     case 'line':
       return s.a;
     case 'polyline':
       return s.pts[0]!;
-    case 'polygon':
-      return centroid(s.pts);
+    case 'arc':
+      return { x: s.cx + Math.cos(s.start) * s.r, y: s.cy + Math.sin(s.start) * s.r };
+    case 'polygon': {
+      const c = centroid(s.pts);
+      return { x: 2 * c.x - grab.x, y: 2 * c.y - grab.y };
+    }
     default:
-      return { x: s.cx, y: s.cy };
+      return { x: 2 * s.cx - grab.x, y: 2 * s.cy - grab.y };
   }
 }
 
 /**
- * The shape after the pen moved from `grab` to `now` while holding: a line's end follows the pen;
- * everything else turns and scales around its pivot.
+ * The shape after the pen moved from `grab` to `now` while holding. The first point stays put and
+ * the pen drags the second: a line's or polyline's last point follows the pen; an arc stays pinned
+ * at its start and its end lands on the pen; ellipses, rectangles and polygons keep the side
+ * opposite the pen fixed and stretch toward it (width and height separately; `uniform` keeps
+ * them in proportion).
  */
-export function editShape(s: Shape, grab: V, now: V): Shape {
-  if (s.kind === 'line') return { ...s, b: { x: s.b.x + now.x - grab.x, y: s.b.y + now.y - grab.y } };
-  const o = pivotOf(s);
-  const r0 = dist(grab, o);
-  const r1 = dist(now, o);
-  if (r0 < 4) return s;
-  const k = Math.max(0.05, r1 / r0);
-  const a = Math.atan2(now.y - o.y, now.x - o.x) - Math.atan2(grab.y - o.y, grab.x - o.x);
+export function editShape(s: Shape, grab: V, now: V, uniform = false): Shape {
+  const dx = now.x - grab.x;
+  const dy = now.y - grab.y;
   switch (s.kind) {
-    case 'polyline':
-    case 'polygon':
-      return { ...s, pts: s.pts.map((q) => rotScale(q, o, k, a)) };
-    case 'arc':
-      return { ...s, r: s.r * k, start: s.start + a };
+    case 'line':
+      return { ...s, b: { x: s.b.x + dx, y: s.b.y + dy } };
+    case 'polyline': {
+      const pts = s.pts.slice();
+      const last = pts[pts.length - 1]!;
+      pts[pts.length - 1] = { x: last.x + dx, y: last.y + dy };
+      return { ...s, pts };
+    }
+    case 'arc': {
+      const a = anchorOf(s, grab);
+      const r0 = dist(grab, a);
+      if (r0 < 4) return s;
+      const k = Math.max(0.02, dist(now, a) / r0);
+      const turn = Math.atan2(now.y - a.y, now.x - a.x) - Math.atan2(grab.y - a.y, grab.x - a.x);
+      const c = rotScale({ x: s.cx, y: s.cy }, a, k, turn);
+      return { ...s, cx: c.x, cy: c.y, r: s.r * k, start: s.start + turn };
+    }
+    case 'polygon': {
+      const a = anchorOf(s, grab);
+      const { sx, sy } = axisScale(a, grab, now, 0, uniform);
+      return { ...s, pts: s.pts.map((q) => stretch(q, a, sx, sy, 0)) };
+    }
     case 'ellipse':
-      return { ...s, rx: s.rx * k, ry: s.ry * k, rot: s.rot + a };
-    case 'rect':
-      return { ...s, w: s.w * k, h: s.h * k, rot: s.rot + a };
+    case 'rect': {
+      const a = anchorOf(s, grab);
+      const { sx, sy } = axisScale(a, grab, now, s.rot, uniform);
+      const c = stretch({ x: s.cx, y: s.cy }, a, sx, sy, s.rot);
+      return s.kind === 'ellipse' ? { ...s, cx: c.x, cy: c.y, rx: s.rx * Math.abs(sx), ry: s.ry * Math.abs(sy) } : { ...s, cx: c.x, cy: c.y, w: s.w * Math.abs(sx), h: s.h * Math.abs(sy) };
+    }
   }
 }
 

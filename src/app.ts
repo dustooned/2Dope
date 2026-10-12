@@ -385,8 +385,10 @@ export class App {
     const live = this.live;
     const sh = live?.shape;
     if (!live || !sh) return;
-    let s = editShape(sh.base, sh.grab, sh.now);
-    if (sh.constrain || shift) s = constrainShape(s);
+    // perfect first (circle, square, regular polygon), then drag the second point; lines snap their angle last
+    const perfect = sh.constrain || shift;
+    let s = editShape(perfect ? constrainShape(sh.base) : sh.base, sh.grab, sh.now, perfect);
+    if (perfect && (s.kind === 'line' || s.kind === 'polyline')) s = constrainShape(s);
     const last = live.lastRaw;
     const outline = shapeOutline(s, Math.max(1, 2 / this.view.zoom));
     const rec = live.record;

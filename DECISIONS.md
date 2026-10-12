@@ -174,7 +174,7 @@
 ## 2026-10-12: QuickShape
 
 - Hold the pen still (450 ms, 5 px) at the end of a Brush or Pen stroke and it snaps to what it looks like: line, arc, polyline, ellipse, rectangle or polygon (src/core/quickshape.ts: resample, line test, Kåsa circle fit for arcs, PCA ellipse fit, RDP corners; square corners make a rectangle). A scribble does not snap. The eraser never snaps.
-- Keep holding and move: a line's end follows the pen; other shapes resize and turn around their centre (arcs and polylines around their start). A second finger (or Shift) makes it perfect: circle, square, regular polygon, lines and polyline edges at 15° steps. Lifting commits one undo step named after the shape.
+- Keep holding and move: the first point stays pinned and the pen drags the second (user, 2026-10-12: "like in other programs"). Lines and polylines move their last point; an arc stays pinned at its start with its end on the pen; ellipses, rectangles and polygons keep the side opposite the pen fixed and stretch toward it, width and height separately (grabbed mid-side, the other axis follows in proportion). A second finger (or Shift) makes it perfect: circle, square, regular polygon, lines and polyline edges at 15° steps. Lifting commits one undo step named after the shape.
 - Works for vector strokes (points replaced by the shape) and pixel brushes (dabs redrawn along the shape at the stroke's median pressure). Post-correction is skipped for shapes. On/off: Brush panel > Assist (on by default).
 - **Simplified timeline control in Time**: Time should have its own easy timeline control (not only the X-sheet and holds bar).
 
