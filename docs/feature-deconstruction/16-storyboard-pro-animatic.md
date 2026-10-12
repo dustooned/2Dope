@@ -68,6 +68,38 @@ can be typed in one run. The same fields appear as X-sheet columns.
 6. Clipping masks, rails in Draw, QuickShape, effects (iPad benchmark right before effects)
 7. Colour panel, asset bin, brush import, phone layout, drawing assist, Blender last
 
+## Live edits (ripple) and edit lines (user, 2026-10-12)
+
+**Changes flood through automatically.** Ripple is the default, not an extra mode: when an edit makes
+something longer or shorter, everything after it moves to match, on every timeline that shares the
+clock (board panels, the shot's drawing layers, audio and video clips, the sequence of shots).
+
+| Edit | What follows |
+|---|---|
+| A panel gets longer or shorter | Everything after it in the shot shifts by the same amount (drawings layers, clips, keys stay attached to their layer) |
+| A layer or clip edge is trimmed | Later layers and clips on the same timeline close or open the gap |
+| A panel is inserted, deleted, moved | The rest closes up or opens up |
+| A shot gets longer or shorter | The following shots in the sequence move |
+| A clip is **linked** to a panel (audio, video) | It moves with the panel; unlinked clips stay where they are |
+
+Ripple works on one rule, After Effects' and Premiere's *ripple edit*: it moves what starts at or
+after the edit point. A **Ripple on / off** switch sits in the toolbar (key R), and holding a
+modifier flips it for one drag (like Premiere's ripple tool). Off = edits stay local, so planning
+can be done without moving finished animation. The whole ripple is **one undo step**.
+
+**Edit lines show which edge you are changing.** While dragging an edge, on every timeline:
+- a full-height **edit line** is drawn at the frame being modified, across the Board, Draw strip,
+  X-sheet and Motion rows, so you can see what lines up with it;
+- the edge being dragged is **highlighted** (accent colour, larger handle); the other edge of the
+  block is dimmed;
+- a small **label** shows the frame and the change ("out 48 · +6 frames");
+- the part that will **shift** is shaded from the edit line to the end, with the shift distance;
+- the same line shows when scrubbing and when typing a duration, so it is always clear where you are.
+
+Build order: the ripple core (pure functions on layers, clips and exposures, tested), then the edit
+line overlay shared by all timelines, then the toolbar switch. It comes right after the storyboard
+export, because audio and video need it from their first version.
+
 ## Plan (replaces R7 in doc 15)
 
 | # | Step | Model |
