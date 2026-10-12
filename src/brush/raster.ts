@@ -24,6 +24,14 @@ export interface Rect {
   h: number;
 }
 
+/** Hard pixel edges: alpha at or above half becomes solid, below half becomes empty (no anti-aliasing). */
+export function hardenAlpha(g: CanvasRenderingContext2D, r: Rect): void {
+  const img = g.getImageData(r.x, r.y, r.w, r.h);
+  const d = img.data;
+  for (let i = 3; i < d.length; i += 4) d[i] = d[i]! >= 128 ? 255 : 0;
+  g.putImageData(img, r.x, r.y);
+}
+
 export function putPixels(canvas: HTMLCanvasElement, rect: Rect, data: ImageData): void {
   ctx2d(canvas).putImageData(data, rect.x, rect.y);
 }
@@ -252,8 +260,20 @@ export class RasterEngine {
     return { x, y, w: x1 - x, h: y1 - y };
   }
 
-  /** The stroke image: normal buffer and shade buffer, each with its own paper grain. */
+  /** The stroke image: normal buffer and shade buffer, each with its own paper grain (hard-edged when anti-aliasing is off). */
   private strokeImage(r: Rect): HTMLCanvasElement {
+    const img = this.softImage(r);
+    if (this.record?.brush.antiAlias !== false) return img;
+    const g = ctx2d(this.grained);
+    if (img !== this.grained) {
+      g.clearRect(r.x, r.y, r.w, r.h);
+      g.drawImage(img, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+    }
+    hardenAlpha(g, r);
+    return this.grained;
+  }
+
+  private softImage(r: Rect): HTMLCanvasElement {
     const b = this.record?.brush;
     if (!b) return this.buffer;
     if (b.grain <= 0 && !this.hasShade) return this.buffer;
@@ -297,13 +317,14 @@ export class RasterEngine {
   }
 
   /**
-   * Finish the stroke: re-render it from data (now the length is known, the end taper applies),
-   * composite onto the bound canvas, and return before/after pixels for undo.
+   * Finish the stroke: re-render it from data (now the length is known, the end taper applies;
+   * `rerender` also after post-correction moved the points), composite onto the bound canvas,
+   * and return before/after pixels for undo.
    */
-  commit(): StrokeCommit | null {
+  commit(rerender = false): StrokeCommit | null {
     const rec = this.record;
     if (!rec) return null;
-    if (rec.brush.taperEnd > 0) {
+    if (rerender || rec.brush.taperEnd > 0) {
       this.bctx.clearRect(0, 0, this.width, this.height);
       this.sctx.clearRect(0, 0, this.width, this.height);
       this.bbox = null;

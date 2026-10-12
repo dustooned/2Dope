@@ -71,7 +71,7 @@ export class Strip {
   private drag: Drag | null = null;
   private flipBtn!: HTMLButtonElement;
   /** The flipbook's blank page after the last drawing (tap it, then draw). */
-  private readonly blank = el('div', { class: 'blankpage', title: 'Blank page: draw here to add a frame' }, '+');
+  private readonly blank = el('div', { class: 'blankpage', title: 'Add a frame at the end' }, '+');
 
   constructor(
     private readonly app: App,
@@ -234,7 +234,7 @@ export class Strip {
         // capture can fail for stale pointers; dragging still works while over the strip
       }
       if (target.closest('.blankpage')) {
-        app.goBlankPage();
+        app.appendFrame();
         return;
       }
       const blockEl = target.closest<HTMLElement>('.block');
@@ -397,7 +397,7 @@ export class Strip {
     this.playhead.style.width = `${cell}px`;
     this.playhead.style.transform = `translateX(${(app.blankPage ? p.length : app.lf) * cell}px)`;
     this.flipBtn.setAttribute('aria-pressed', String(app.flipbook));
-    this.blank.style.display = app.flipbook ? '' : 'none';
+    this.blank.style.display = '';
     this.blank.style.left = `${p.length * cell}px`;
     this.blank.style.width = `${cell - 4}px`;
     this.blank.classList.toggle('current', app.blankPage);

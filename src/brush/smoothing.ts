@@ -63,3 +63,43 @@ export class Smoother {
     return [{ ...q }];
   }
 }
+
+/**
+ * Post-correction: smooth a finished stroke (after the pen lifts) so wobbly hand-drawn lines come
+ * out clean, like Clip Studio's post-correction. Points are averaged with Gaussian weights over
+ * arc length; the window shrinks near both ends so the stroke starts and ends where the pen did.
+ * `strength` 0 (off) .. 1 (strong, about a 12 px window). Pressure, tilt and time are kept.
+ */
+export function smoothStroke(points: StrokePoint[], strength: number): StrokePoint[] {
+  const n = points.length;
+  if (strength <= 0 || n < 3) return points;
+  const sigma = 1 + strength * 11;
+  // arc length at each point
+  const s: number[] = [0];
+  for (let i = 1; i < n; i++) s.push(s[i - 1]! + Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y));
+  const total = s[n - 1]!;
+  const out: StrokePoint[] = [];
+  let lo = 0;
+  let hi = 0;
+  for (let i = 0; i < n; i++) {
+    // near the ends the window can only be as wide as the distance to the end
+    const sg = Math.max(1e-6, Math.min(sigma, s[i]! / 2, (total - s[i]!) / 2));
+    const reach = sg * 3;
+    while (s[lo]! < s[i]! - reach) lo++;
+    while (hi < n - 1 && s[hi + 1]! <= s[i]! + reach) hi++;
+    let wx = 0;
+    let wy = 0;
+    let wsum = 0;
+    for (let j = lo; j <= hi; j++) {
+      const d = s[j]! - s[i]!;
+      const w = Math.exp((-d * d) / (2 * sg * sg));
+      wx += points[j]!.x * w;
+      wy += points[j]!.y * w;
+      wsum += w;
+    }
+    out.push({ ...points[i]!, x: wx / wsum, y: wy / wsum });
+  }
+  out[0] = { ...points[0]! };
+  out[n - 1] = { ...points[n - 1]! };
+  return out;
+}

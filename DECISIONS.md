@@ -123,6 +123,14 @@
 - **Fill the next N drawings** at the same spot (distinct drawings, holds skipped), all in the same undo step. Leftovers stay on the current drawing (specks differ per drawing).
 - Not yet: "refer to other layers" (needs the active layer's transform to match the comp); a worker for very large pages.
 
+## 2026-10-11: Ink (step 6 of doc 13)
+
+- **Ink presets**: Ink (now post-corrected), Brush Pen (strong thin-thick, long tapers), Fine Liner (near-even width), Pixel Ink (no anti-aliasing). Brushes gain optional `antiAlias` (default on) and `postSmooth` (0..1); old saved brushes and stroke records stay valid.
+- **No anti-aliasing = alpha thresholded at half** on the stroke image (live preview and commit), so fills lock to the line with no soft rim.
+- **Post-correction** smooths the finished stroke's points (Gaussian over arc length, window shrinking at the ends so the line starts and ends where the pen did), then re-renders it from data. Strokes are data, so this is exact and replays the same.
+- **The eraser cuts vector lines** on the Line plane: up to the nearest crossings with other vector lines (default), the whole line, or off. Cut ends lose their taper; one undo step with the raster erase.
+- Not yet: changing a vector line's width after drawing; vector strokes are always anti-aliased.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

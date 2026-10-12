@@ -72,6 +72,10 @@ export interface BrushSettings {
   /** Pulled-string (lazy mouse) stabilizer instead of exponential smoothing. */
   pulledString: boolean;
   tiltShade: TiltShade;
+  /** Soft (anti-aliased) edges. Off = hard pixel edges, so fills lock tight to the line. Default on. */
+  antiAlias?: boolean;
+  /** Post-correction 0..1: smooth the stroke after the pen lifts (0 = off). */
+  postSmooth?: number;
 }
 
 export const NO_TILT_SHADE: TiltShade = {
@@ -151,8 +155,8 @@ export const PRESETS: BrushSettings[] = [
     ...base,
     name: 'Ink',
     size: 10,
-    hardness: 0.95,
-    spacing: 0.06,
+    hardness: 0.98,
+    spacing: 0.05,
     flow: 1,
     sizeDyn: dyn('pressure', 0.05, 1.6),
     opacityDyn: dyn('off'),
@@ -160,6 +164,56 @@ export const PRESETS: BrushSettings[] = [
     taperStart: 30,
     taperEnd: 40,
     smoothing: 0.45,
+    postSmooth: 0.5,
+    tiltShade: NO_TILT_SHADE,
+  },
+  {
+    ...base,
+    name: 'Brush Pen',
+    size: 18,
+    hardness: 0.98,
+    spacing: 0.04,
+    flow: 1,
+    roundness: 0.75,
+    angle: 30,
+    sizeDyn: dyn('pressure', 0.02, 2.2),
+    opacityDyn: dyn('off'),
+    grain: 0,
+    taperStart: 50,
+    taperEnd: 90,
+    smoothing: 0.55,
+    postSmooth: 0.6,
+    tiltShade: NO_TILT_SHADE,
+  },
+  {
+    ...base,
+    name: 'Fine Liner',
+    size: 4,
+    hardness: 0.98,
+    spacing: 0.05,
+    flow: 1,
+    sizeDyn: dyn('pressure', 0.75, 1),
+    opacityDyn: dyn('off'),
+    grain: 0,
+    taperStart: 6,
+    taperEnd: 6,
+    smoothing: 0.4,
+    postSmooth: 0.4,
+    tiltShade: NO_TILT_SHADE,
+  },
+  {
+    ...base,
+    name: 'Pixel Ink',
+    size: 3,
+    hardness: 0.98,
+    spacing: 0.05,
+    flow: 1,
+    sizeDyn: dyn('off'),
+    opacityDyn: dyn('off'),
+    grain: 0,
+    smoothing: 0.3,
+    postSmooth: 0.3,
+    antiAlias: false,
     tiltShade: NO_TILT_SHADE,
   },
   {

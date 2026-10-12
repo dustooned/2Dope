@@ -37,7 +37,8 @@ import {
   type Edit,
   type Exposure,
 } from './core/timeline';
-import { Smoother } from './brush/smoothing';
+import { Smoother, smoothStroke } from './brush/smoothing';
+import { eraseVectors, type VectorErase } from './core/vectorcut';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
 import { snapRotation, Viewport } from './view/viewport';
@@ -48,6 +49,7 @@ const ONION_KEY = '2dope.m1.onion';
 const FILL_KEY = '2dope.m1.fill';
 const FLIPBOOK_KEY = '2dope.flipbook';
 const FILL_MODE_KEY = '2dope.fill.mode';
+const VECTOR_ERASE_KEY = '2dope.eraser.vector';
 const FILL_ACROSS_KEY = '2dope.fill.across';
 
 /** Fill tool: tap or drag across areas, lasso around areas, or scrub up leftovers. */
@@ -314,6 +316,15 @@ export class App {
   // -------------------------------------------------------------------------------------------
   // Fill tool: tap or drag across areas, lasso around areas, or scrub up leftovers. The line art
   // is read once per drawing (a prepared map) and reused until the lines change.
+
+  /** What the eraser does to vector lines on the Line plane: cut up to crossings, remove whole lines, or nothing. */
+  vectorErase: VectorErase = loadJSON<VectorErase>(VECTOR_ERASE_KEY) ?? 'crossing';
+
+  setVectorErase(m: VectorErase): void {
+    this.vectorErase = m;
+    saveJSON(VECTOR_ERASE_KEY, m);
+    this.onToolChange();
+  }
 
   /** How the fill tool works: tap / drag across areas, lasso around them, or scrub up leftovers. */
   fillMode: FillMode = loadJSON<FillMode>(FILL_MODE_KEY) ?? 'tap';
@@ -764,6 +775,13 @@ export class App {
     saveJSON(FLIPBOOK_KEY, on);
     if (!on) this.leaveBlankPage();
     this.onFrameChange();
+  }
+
+  /** A new blank drawing after the last frame of the active layer, and go to it (the strip's + cell). */
+  appendFrame(): void {
+    if (this.live) return;
+    this.setLayerFrame(this.project.length - 1);
+    this.addFrame();
   }
 
   /** Go to the blank page after the active layer's last frame. */
@@ -1294,6 +1312,9 @@ export class App {
       rec.points.push(q);
       if (rec.tool !== 'pen') this.raster.addDabs(live.walker.push(q));
     }
+    // post-correction: tidy the finished line (the eraser is left as drawn)
+    const post = rec.tool === 'eraser' ? 0 : (rec.brush.postSmooth ?? 0);
+    if (post > 0) rec.points = smoothStroke(rec.points, post);
     const d = live.drawing;
     if (rec.tool === 'pen') {
       const id = rec.id;
@@ -1313,17 +1334,23 @@ export class App {
         false,
       );
     } else {
-      const c = this.raster.commit();
-      if (c) {
+      const c = this.raster.commit(post > 0);
+      // the eraser on the Line plane also cuts vector lines (up to their crossings, or whole)
+      const vBefore = d.vectors;
+      const vAfter = rec.tool === 'eraser' && live.plane === 'line' ? eraseVectors(d.vectors, rec.points, rec.brush.size / 2, this.vectorErase) : null;
+      if (vAfter) d.vectors = vAfter;
+      if (c || vAfter) {
         this.history.push({
           label: rec.tool === 'eraser' ? 'Erase' : 'Brush stroke',
           drawings: [d],
           do: () => {
-            putPixels(live.canvas, c.rect, c.after);
+            if (c) putPixels(live.canvas, c.rect, c.after);
+            if (vAfter) d.vectors = vAfter;
             this.touch(d);
           },
           undo: () => {
-            putPixels(live.canvas, c.rect, c.before);
+            if (c) putPixels(live.canvas, c.rect, c.before);
+            if (vAfter) d.vectors = vBefore;
             this.touch(d);
           },
         });
@@ -1527,6 +1554,18 @@ export class App {
         ...(picked ? [{ label: 'Pick this colour', hint: picked, run: () => this.setColor(picked) }] : []),
         { title: 'Tool' },
         { chips: [tool('brush', 'Brush'), tool('eraser', 'Eraser'), tool('pen', 'Vector'), tool('fill', 'Fill')] },
+        ...(this.tool === 'eraser'
+          ? [
+              { title: 'Eraser on vector lines' },
+              {
+                chips: [
+                  { label: 'Up to crossings', on: this.vectorErase === 'crossing', run: () => this.setVectorErase('crossing') },
+                  { label: 'Whole line', on: this.vectorErase === 'whole', run: () => this.setVectorErase('whole') },
+                  { label: 'Off', on: this.vectorErase === 'off', run: () => this.setVectorErase('off') },
+                ],
+              },
+            ]
+          : []),
         ...(this.tool === 'fill'
           ? [
               { title: 'Fill' },

@@ -7,7 +7,7 @@ import { RasterEngine } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 
 type NumKey = {
-  [K in keyof BrushSettings]: BrushSettings[K] extends number ? K : never;
+  [K in keyof BrushSettings]-?: NonNullable<BrushSettings[K]> extends number ? K : never;
 }[keyof BrushSettings];
 
 type DynKey = 'sizeDyn' | 'opacityDyn' | 'flowDyn';
@@ -24,7 +24,7 @@ interface SliderDef {
 const SECTIONS: {
   title: string;
   sliders: SliderDef[];
-  toggles?: { key: 'followDirection' | 'pulledString'; label: string }[];
+  toggles?: { key: 'followDirection' | 'pulledString' | 'antiAlias'; label: string }[];
   dyn?: DynKey[];
   tilt?: boolean;
 }[] = [
@@ -65,8 +65,12 @@ const SECTIONS: {
       { key: 'taperStart', label: 'Taper start', min: 0, max: 200, step: 1, unit: 'px' },
       { key: 'taperEnd', label: 'Taper end', min: 0, max: 200, step: 1, unit: 'px' },
       { key: 'smoothing', label: 'Stabilizer', min: 0, max: 1, step: 0.01 },
+      { key: 'postSmooth', label: 'Post-correct', min: 0, max: 1, step: 0.01 },
     ],
-    toggles: [{ key: 'pulledString', label: 'Pulled string (lazy)' }],
+    toggles: [
+      { key: 'pulledString', label: 'Pulled string (lazy)' },
+      { key: 'antiAlias', label: 'Soft edges (anti-alias). Off = hard pixels, fills lock tight' },
+    ],
   },
 ];
 
@@ -122,12 +126,12 @@ export function buildPanel(app: App, root: HTMLElement): void {
       const input = el('input', { type: 'range', min: String(def.min), max: String(def.max), step: String(def.step) });
       const out = el('output');
       const sync = () => {
-        input.value = String(app.brush[def.key]);
-        out.textContent = fmt(app.brush[def.key], def.step, def.unit);
+        input.value = String(app.brush[def.key] ?? 0);
+        out.textContent = fmt(app.brush[def.key] ?? 0, def.step, def.unit);
       };
       input.addEventListener('input', () => {
         (app.brush[def.key] as number) = Number(input.value);
-        out.textContent = fmt(app.brush[def.key], def.step, def.unit);
+        out.textContent = fmt(app.brush[def.key] ?? 0, def.step, def.unit);
         app.brushChanged();
       });
       refreshers.push(sync);
@@ -141,7 +145,8 @@ export function buildPanel(app: App, root: HTMLElement): void {
         app.brush[t.key] = input.checked;
         app.brushChanged();
       });
-      refreshers.push(() => (input.checked = app.brush[t.key]));
+      // anti-aliasing is on unless a brush turns it off
+      refreshers.push(() => (input.checked = t.key === 'antiAlias' ? app.brush.antiAlias !== false : !!app.brush[t.key]));
       row.append(input, el('span', {}, t.label));
       fs.append(row);
     }
