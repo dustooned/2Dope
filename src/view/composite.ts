@@ -1,6 +1,26 @@
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
-import { activeAt, drawingOf, instanceComp, mul, nestedFrame, opacityAt, viewMatrix, worldMatrix, type BlendMode, type Comp, type Layer, type Mat } from '../core/comp';
+import { valueAt } from '../core/anim';
+import {
+  activeAt,
+  drawingOf,
+  instanceComp,
+  layerFrame,
+  mul,
+  nestedFrame,
+  opacityAt,
+  PART_NAMES,
+  partOf,
+  partsActive,
+  viewMatrix,
+  worldMatrix,
+  type BlendMode,
+  type Comp,
+  type DrawingsLayer,
+  type Layer,
+  type Mat,
+  type PartName,
+} from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { strokeLength } from '../core/stroke';
 
@@ -58,13 +78,52 @@ export function releaseScratch(): void {
   scratch.clear();
 }
 
-function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions): void {
+/** The layer a drawing is painted for, so its Line / Fill part settings apply. */
+interface PartsCtx {
+  layer: DrawingsLayer;
+  /** The layer's own frame (part keys are in layer time). */
+  lf: number;
+  depth: number;
+}
+
+function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions, parts?: PartsCtx): void {
   if (d.parked) return; // the caller pins what a frame needs; never draw a packed-away drawing
   const src = opt?.source?.(d) ?? { line: d.line, fill: d.fill };
-  if (planes !== 'line' && src.fill) g.drawImage(src.fill, 0, 0);
-  if (planes !== 'fill') {
-    g.drawImage(src.line, 0, 0);
-    for (const v of d.vectors) drawVectorStroke(g, v, strokeLength(v.points));
+  const paint = (t: CanvasRenderingContext2D, name: PartName) => {
+    if (name === 'fill') {
+      if (src.fill) t.drawImage(src.fill, 0, 0);
+      return;
+    }
+    t.drawImage(src.line, 0, 0);
+    for (const v of d.vectors) drawVectorStroke(t, v, strokeLength(v.points));
+  };
+  if (!parts || !partsActive(parts.layer)) {
+    for (const name of PART_NAMES) if (planes === 'all' || planes === name) paint(g, name);
+    return;
+  }
+  const base = g.globalAlpha;
+  for (const name of PART_NAMES) {
+    if (planes !== 'all' && planes !== name) continue;
+    if (name === 'fill' && !src.fill) continue;
+    const p = partOf(parts.layer, name);
+    const a = p.visible ? Math.max(0, Math.min(1, valueAt(p.opacity, parts.lf) / 100)) : 0;
+    if (a <= 0) continue;
+    const [ox, oy] = valueAt(p.offset, parts.lf);
+    g.save();
+    g.translate(ox, oy);
+    g.globalAlpha = base * a;
+    if (p.tint) {
+      // recolour: the part's pixels in one colour, keeping their alpha (anti-aliasing stays)
+      const t = scratchFor(`t${parts.depth}`, src.line.width, src.line.height);
+      const tg = t.getContext('2d')!;
+      paint(tg, name);
+      tg.globalCompositeOperation = 'source-in';
+      tg.fillStyle = p.tint;
+      tg.fillRect(0, 0, t.width, t.height);
+      tg.globalCompositeOperation = 'source-over';
+      g.drawImage(t, 0, 0);
+    } else paint(g, name);
+    g.restore();
   }
 }
 
@@ -114,7 +173,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     else {
       source = scratchFor(`d${depth}`, project.width, project.height);
       const sg = source.getContext('2d')!;
-      paintPlanes(sg, d, planes, opt);
+      paintPlanes(sg, d, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
     }
   } else if (l.kind === 'comp') {
     const n = project.comps.get(l.comp);
@@ -128,7 +187,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
   g.setTransform(m);
   g.globalAlpha = alpha;
   g.globalCompositeOperation = BLEND[l.blend];
-  if (direct) paintPlanes(g, direct, planes, opt);
+  if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
   else if (source) g.drawImage(source, 0, 0);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';

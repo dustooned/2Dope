@@ -1,6 +1,24 @@
 import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
 import { PRESETS, type BrushSettings } from '../core/brush';
-import { BLEND_MODES, compLength, PIN_PROPS, PLAY_MODES, wouldCycle, type PlayMode, type BinFolder, type BlendMode, type Comp, type Layer, type PinProp, type Transform } from '../core/comp';
+import {
+  BLEND_MODES,
+  compLength,
+  defaultPart,
+  isDefaultPart,
+  PART_NAMES,
+  PIN_PROPS,
+  PLAY_MODES,
+  wouldCycle,
+  type PlayMode,
+  type BinFolder,
+  type BlendMode,
+  type Comp,
+  type DrawingsLayer,
+  type Layer,
+  type PartName,
+  type PinProp,
+  type Transform,
+} from '../core/comp';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
 
 /**
@@ -51,6 +69,14 @@ export interface TransformFile {
   opacity: PropFile<number>;
 }
 
+export interface PartFile {
+  visible?: boolean;
+  opacity?: PropFile<number>;
+  /** "#rrggbb" */
+  tint?: string;
+  offset?: PropFile<Vec2>;
+}
+
 export interface LayerFile {
   id: string;
   name: string;
@@ -76,6 +102,8 @@ export interface LayerFile {
   timeRemap?: PropFile<number>;
   /** Written by early schema-2 files; read as play "loop". */
   loop?: boolean;
+  /** drawings: Line / Fill part settings that differ from the defaults (additive, no version bump). */
+  parts?: Partial<Record<PartName, PartFile>>;
   /** comp: the nested comp's id. */
   comp?: string;
   /** camera: 100 = the comp as is. */
@@ -357,6 +385,20 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
     out.exposures = exposureList(v.exposures, what, drawings);
     if (!out.exposures.length) throw new SchemaError(`${what} has no frames`);
     timing(v, out, what);
+    if (isObj(v.parts)) {
+      const parts: Partial<Record<PartName, PartFile>> = {};
+      for (const n of PART_NAMES) {
+        const pv = v.parts[n];
+        if (!isObj(pv)) continue;
+        const pf: PartFile = {};
+        if (pv.visible === false) pf.visible = false;
+        if (pv.opacity !== undefined) pf.opacity = prop<number>(pv.opacity, `${what} ${n} opacity`, 1);
+        if (typeof pv.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(pv.tint)) pf.tint = pv.tint;
+        if (pv.offset !== undefined) pf.offset = prop<Vec2>(pv.offset, `${what} ${n} offset`, 2);
+        parts[n] = pf;
+      }
+      if (Object.keys(parts).length) out.parts = parts;
+    }
   } else if (kind === 'comp') {
     const c = str(v.comp, `${what} comp`, 64);
     if (!isObj(comps[c])) throw new SchemaError(`${what} refers to a missing comp "${c}"`);
@@ -553,14 +595,49 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
   const out = new Map<string, Comp>();
   for (const [id, c] of Object.entries(file.comps)) {
     const layers: Layer[] = c.layers.map((l): Layer => {
-      const base = { id: l.id, name: l.name, start: l.start, in: l.in, out: l.out, parent: l.parent, visible: l.visible, locked: l.locked, label: l.label, blend: l.blend, transform: transformOf(l.transform) };
+      const base = {
+        id: l.id,
+        name: l.name,
+        start: l.start,
+        in: l.in,
+        out: l.out,
+        parent: l.parent,
+        visible: l.visible,
+        locked: l.locked,
+        label: l.label,
+        blend: l.blend,
+        transform: transformOf(l.transform),
+      };
       const timed = { play: l.play ?? (l.loop ? 'loop' : 'once'), speed: l.speed ?? 1, single: l.single ?? 0, timeRemap: l.timeRemap ? propOf(l.timeRemap) : null } as const;
-      if (l.kind === 'drawings') return { ...base, kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
+      if (l.kind === 'drawings') {
+        const layer: DrawingsLayer = { ...base, kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
+        if (l.parts) {
+          layer.parts = {};
+          for (const n of PART_NAMES) {
+            const f = l.parts[n];
+            if (!f) continue;
+            const d = defaultPart();
+            layer.parts[n] = { visible: f.visible !== false, opacity: f.opacity ? propOf(f.opacity) : d.opacity, tint: f.tint ?? null, offset: f.offset ? propOf(f.offset) : d.offset };
+          }
+        }
+        return layer;
+      }
       if (l.kind === 'comp') return { ...base, kind: 'comp', comp: l.comp!, ...timed, overrides: Object.fromEntries(Object.entries(l.overrides ?? {}).map(([k, p]) => [k, propOf(p)])) };
       if (l.kind === 'camera') return { ...base, kind: 'camera', zoom: propOf(l.zoom ?? still(100)) };
       return { ...base, kind: 'null' };
     });
-    out.set(id, { id, name: c.name, width: c.width, height: c.height, fps: c.fps, duration: c.duration, background: c.background, folder: c.folder, layers, pins: (c.pins ?? []).map((p) => ({ ...p })) });
+    out.set(id, {
+      id,
+      name: c.name,
+      width: c.width,
+      height: c.height,
+      fps: c.fps,
+      duration: c.duration,
+      background: c.background,
+      folder: c.folder,
+      layers,
+      pins: (c.pins ?? []).map((p) => ({ ...p })),
+    });
   }
   return out;
 }
@@ -576,7 +653,20 @@ export function compFile(c: Comp): CompFile {
     background: c.background,
     folder: c.folder,
     layers: c.layers.map((l): LayerFile => {
-      const base: LayerFile = { id: l.id, name: l.name, kind: l.kind, start: l.start, in: l.in, out: l.out, parent: l.parent, visible: l.visible, locked: l.locked, label: l.label, blend: l.blend, transform: transformFile(l.transform) };
+      const base: LayerFile = {
+        id: l.id,
+        name: l.name,
+        kind: l.kind,
+        start: l.start,
+        in: l.in,
+        out: l.out,
+        parent: l.parent,
+        visible: l.visible,
+        locked: l.locked,
+        label: l.label,
+        blend: l.blend,
+        transform: transformFile(l.transform),
+      };
       const timed: Partial<LayerFile> = {};
       if (l.kind === 'drawings' || l.kind === 'comp') {
         if (l.play !== 'once') timed.play = l.play;
@@ -584,7 +674,22 @@ export function compFile(c: Comp): CompFile {
         if (l.single) timed.single = l.single;
         if (l.timeRemap?.keys.length) timed.timeRemap = propFile(l.timeRemap);
       }
-      if (l.kind === 'drawings') return { ...base, exposures: l.exposures.map((e) => ({ ...e })), ...timed };
+      if (l.kind === 'drawings') {
+        const out: LayerFile = { ...base, exposures: l.exposures.map((e) => ({ ...e })), ...timed };
+        const parts: Partial<Record<PartName, PartFile>> = {};
+        for (const n of PART_NAMES) {
+          const pt = l.parts?.[n];
+          if (!pt || isDefaultPart(pt)) continue;
+          const f: PartFile = {};
+          if (!pt.visible) f.visible = false;
+          if (pt.opacity.keys.length || pt.opacity.value !== 100) f.opacity = propFile(pt.opacity);
+          if (pt.tint) f.tint = pt.tint;
+          if (pt.offset.keys.length || pt.offset.value[0] || pt.offset.value[1]) f.offset = propFile(pt.offset);
+          parts[n] = f;
+        }
+        if (Object.keys(parts).length) out.parts = parts;
+        return out;
+      }
       if (l.kind === 'comp') {
         const o = Object.entries(l.overrides ?? {});
         return o.length ? { ...base, comp: l.comp, ...timed, overrides: Object.fromEntries(o.map(([k, p]) => [k, propFile(p)])) } : { ...base, comp: l.comp, ...timed };

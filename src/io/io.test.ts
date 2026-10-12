@@ -280,6 +280,21 @@ describe('project schema', () => {
     expect(back.comps.c1!.layers[2]!.transform.position.keys).toHaveLength(2);
   });
 
+  it('keeps Line / Fill part settings (only what differs from the defaults) and drops bad tints', () => {
+    const p = sample();
+    const l = p.comps.c1!.layers[0]!;
+    l.parts = { line: { tint: '#ff0000', opacity: { value: 50 } }, fill: { visible: false, offset: { value: [4, -2] }, tint: 'red' as string } };
+    const back = parseProjectFile(stringifyProjectFile(p));
+    expect(back.comps.c1!.layers[0]!.parts).toEqual({ line: { tint: '#ff0000', opacity: { value: 50 } }, fill: { visible: false, offset: { value: [4, -2] } } });
+    const model = compsFromFile(back).get('c1')!.layers[0]!;
+    expect(model.kind === 'drawings' && model.parts?.fill?.visible).toBe(false);
+    const again = compFile(compsFromFile(back).get('c1')!);
+    expect(again.layers[0]!.parts).toEqual(back.comps.c1!.layers[0]!.parts);
+    // a layer whose parts are back to defaults writes nothing
+    if (model.kind === 'drawings') model.parts = { line: { visible: true, opacity: { value: 100, keys: [] }, tint: null, offset: { value: [0, 0], keys: [] } } };
+    expect(compFile({ ...compsFromFile(back).get('c1')!, layers: [model] }).layers[0]!.parts).toBeUndefined();
+  });
+
   it('reads the early schema-2 "loop" flag as the loop play mode and keeps play, speed and remap', () => {
     const p = sample();
     const l = p.comps.c1!.layers[0]!;
@@ -297,7 +312,21 @@ describe('project schema', () => {
 
   it('refuses a comp that contains itself and drops parents that do not exist', () => {
     const p = sample();
-    p.comps.c1!.layers.push({ id: 'self', name: 'me', kind: 'comp', comp: 'c1', start: 0, in: 0, out: null, parent: null, visible: true, locked: false, label: 0, blend: 'normal', transform: T(10, 10) });
+    p.comps.c1!.layers.push({
+      id: 'self',
+      name: 'me',
+      kind: 'comp',
+      comp: 'c1',
+      start: 0,
+      in: 0,
+      out: null,
+      parent: null,
+      visible: true,
+      locked: false,
+      label: 0,
+      blend: 'normal',
+      transform: T(10, 10),
+    });
     expect(() => validateProjectFile(p)).toThrow(/contains itself/);
     const q = sample();
     q.comps.c1!.layers[0]!.parent = 'ghost';

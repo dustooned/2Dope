@@ -9,7 +9,11 @@ import {
   drawingOf,
   drawingsLayer,
   invert,
+  defaultPart,
+  isDefaultPart,
   isPlainFlipbook,
+  partOf,
+  partsActive,
   layerEnd,
   mul,
   nestedFrame,
@@ -163,6 +167,23 @@ describe('comps and layers', () => {
   });
 });
 
+describe('line and fill parts', () => {
+  it('default parts change nothing; changed parts make the layer more than a plain flipbook', () => {
+    const c = newComp('c1', 'Shot', 400, 300, 12);
+    const l = drawingsLayer('L', 'A', [{ drawing: 'd1', length: 2 }], 400, 300);
+    c.layers.push(l);
+    expect(isPlainFlipbook(c)).toBe(true);
+    l.parts = { line: defaultPart() };
+    expect(partsActive(l)).toBe(false);
+    expect(isPlainFlipbook(c)).toBe(true);
+    l.parts.fill = { ...defaultPart(), tint: '#123456' };
+    expect(partsActive(l)).toBe(true);
+    expect(isPlainFlipbook(c)).toBe(false);
+    expect(partOf(l, 'fill').tint).toBe('#123456');
+    expect(isDefaultPart(partOf(l, 'line'))).toBe(true);
+  });
+});
+
 describe('frame content', () => {
   it('held frames share a key; motion or another drawing changes it; precomp drawings are found', async () => {
     const { frameContent } = await import('./comp');
@@ -184,7 +205,13 @@ describe('play modes and frame picking', () => {
     const A = await import('./anim');
     const c = C.newComp('c1', 'S', 100, 100, 12);
     // 4 drawings, one frame each: a b c d
-    const l = C.drawingsLayer('L', 'x', ['a', 'b', 'c', 'd'].map((d) => ({ drawing: d, length: 1 })), 100, 100);
+    const l = C.drawingsLayer(
+      'L',
+      'x',
+      ['a', 'b', 'c', 'd'].map((d) => ({ drawing: d, length: 1 })),
+      100,
+      100,
+    );
     c.layers.push(l);
     return { C, A, c, l, comps: new Map([[c.id, c]]) };
   }

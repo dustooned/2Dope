@@ -109,6 +109,13 @@
 - **Nothing is removed from a project**: a big project opens in Lite with a warning.
 - The phone layout (body classes `lite`, `form-phone`) comes in step 9.
 
+## 2026-10-11: Line and Fill parts (step 3 of doc 13)
+
+- **Parts are settings on the drawings layer, not separate layers**: Line and Fill share the drawing's timing (lip sync, swaps and the X-sheet stay simple), but each part can be hidden, faded (keyed), recoloured (tint) or shifted (keyed offset) for the whole shot. Missing settings = defaults, so old files and plain layers are unchanged (additive, no schema bump).
+- **Tint keeps alpha** (`source-in` fill on a scratch canvas), so anti-aliased lines recolour cleanly. No per-drawing cache: one scratch draw per tinted part per frame keeps Lite memory flat.
+- The Draw view applies hide and fade (the plane you are drawing on stays faintly visible), not offset or tint, so strokes land where the pen is.
+- A layer with changed parts is no longer a "plain flipbook", so export goes through the compositor and the Lines / Fills passes follow the parts. Blender gets drawings as drawn for now (noted in the package README).
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

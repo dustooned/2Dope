@@ -9,7 +9,8 @@ import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
-import { compLength, frameContent, invert, worldMatrix, type Layer } from './core/comp';
+import { compLength, frameContent, invert, partOf, worldMatrix, type Layer, type PartName } from './core/comp';
+import { valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { CompEditor } from './compedit';
 import { drawComp } from './view/composite';
@@ -1705,8 +1706,14 @@ export class App {
     const rasterLive = live && live.record.tool !== 'pen' ? live : null;
     const fillSrc = rasterLive && rasterLive.plane === 'fill' ? this.raster.displaySource() : d.fill;
     const lineSrc = rasterLive && rasterLive.plane === 'line' ? this.raster.displaySource() : d.line;
-    if (fillSrc) g.drawImage(fillSrc, 0, 0);
-    g.drawImage(lineSrc, 0, 0);
+    // the layer's Line / Fill parts: hidden or faded here too (a hidden part being drawn on shows faintly)
+    const fillA = this.partAlpha('fill');
+    const lineA = this.partAlpha('line');
+    g.globalAlpha = fillA;
+    if (fillSrc && fillA > 0) g.drawImage(fillSrc, 0, 0);
+    g.globalAlpha = lineA;
+    if (lineA > 0) g.drawImage(lineSrc, 0, 0);
+    g.globalAlpha = 1;
 
     // Predicted input: drawn ahead of the real stroke this frame only (lower perceived latency).
     if (live && live.predicted.length && live.record.brush.smoothing < 0.15) {
@@ -1719,13 +1726,23 @@ export class App {
       }
     }
 
-    for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
+    g.globalAlpha = lineA;
+    if (lineA > 0) for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
+    g.globalAlpha = 1;
     if (live && live.record.tool === 'pen') {
       const extra = live.record.brush.smoothing < 0.15 ? live.predicted : [];
       drawVectorStroke(g, { ...live.record, points: [...live.record.points, ...extra] });
     }
 
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
+  }
+
+  /** How strongly the Draw view shows a part of the active layer (0 = hidden). */
+  private partAlpha(name: PartName): number {
+    const p = partOf(this.project.layer, name);
+    const a = p.visible ? Math.max(0, Math.min(1, valueAt(p.opacity, this.layerFrame) / 100)) : 0;
+    const target = this.tool === 'pen' ? 'line' : this.plane;
+    return target === name ? Math.max(a, 0.25) : a;
   }
 
   /**

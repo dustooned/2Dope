@@ -20,7 +20,7 @@ import {
   type Layer,
   type Mat,
 } from './core/comp';
-import { localMatrix, nestedFrame } from './core/comp';
+import { defaultPart, localMatrix, nestedFrame, partOf, type PartName } from './core/comp';
 import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
 import { totalFrames } from './core/timeline';
 import { layerContentBox } from './view/contentbox';
@@ -28,7 +28,11 @@ import type { Command } from './core/history';
 import type { App } from './app';
 
 /** The properties the Motion view animates, by name. */
-export type PropName = 'position' | 'scale' | 'rotation' | 'opacity' | 'anchor' | 'zoom' | 'remap';
+export type PropName = 'position' | 'scale' | 'rotation' | 'opacity' | 'anchor' | 'zoom' | 'remap' | PartProp;
+
+/** A drawings layer's Line or Fill part property ("line.opacity", "fill.offset"...). */
+export type PartProp = `${PartName}.${'opacity' | 'offset'}`;
+export const isPartProp = (n: string): n is PartProp => n === 'line.opacity' || n === 'line.offset' || n === 'fill.opacity' || n === 'fill.offset';
 
 export const PROP_LABEL: Record<PropName, string> = {
   position: 'Position',
@@ -38,6 +42,10 @@ export const PROP_LABEL: Record<PropName, string> = {
   anchor: 'Anchor',
   zoom: 'Zoom',
   remap: 'Frame',
+  'line.opacity': 'Line opacity',
+  'line.offset': 'Line offset',
+  'fill.opacity': 'Fill opacity',
+  'fill.offset': 'Fill offset',
 };
 
 /** Which properties a layer shows, in order. */
@@ -49,12 +57,21 @@ export function propsOf(l: Layer): PropName[] {
 }
 
 export function getProp(l: Layer, n: PropName): Prop {
+  if (isPartProp(n)) {
+    const [part, field] = n.split('.') as [PartName, 'opacity' | 'offset'];
+    return l.kind === 'drawings' ? (partOf(l, part)[field] as Prop) : (defaultPart()[field] as Prop);
+  }
   if (n === 'remap') return (l.kind === 'drawings' || l.kind === 'comp') && l.timeRemap ? l.timeRemap : { value: 0, keys: [] };
   if (n === 'zoom') return l.kind === 'camera' ? l.zoom : (l.transform.opacity as Prop);
   return l.transform[n] as Prop;
 }
 
 function setPropOn(l: Layer, n: PropName, p: Prop): void {
+  if (isPartProp(n)) {
+    const [part, field] = n.split('.') as [PartName, 'opacity' | 'offset'];
+    if (l.kind === 'drawings') l.parts = { ...l.parts, [part]: { ...partOf(l, part), [field]: p } };
+    return;
+  }
   if (n === 'remap') {
     // only keys mean anything here: without them the layer plays by its play mode
     if (l.kind === 'drawings' || l.kind === 'comp') l.timeRemap = p.keys.length ? (p as Prop<number>) : null;
@@ -243,7 +260,10 @@ export class CompEditor {
 
   /** The value kind of a row (for formatting and the value editor). */
   rowProp(n: PropKey): PropName {
-    return isPin(n) ? (n.split(':')[2] as PropName) : n;
+    const name = isPin(n) ? (n.split(':')[2] as PropName) : n;
+    // part rows format like the layer's own opacity / position
+    if (isPartProp(name)) return name.endsWith('opacity') ? 'opacity' : 'position';
+    return name;
   }
 
   /** Has this instance changed a pinned property? */
@@ -701,6 +721,26 @@ export class CompEditor {
     this.edit(flag === 'visible' ? (value ? 'Show layer' : 'Hide layer') : value ? 'Lock layer' : 'Unlock layer', (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (l) l[flag] = value;
+    });
+  }
+
+  /** Show / hide or recolour one part (Line or Fill) of a drawings layer. One undo step. */
+  setPart(id: string, part: PartName, patch: { visible?: boolean; tint?: string | null }): void {
+    const what = patch.visible !== undefined ? `${patch.visible ? 'Show' : 'Hide'} ${part}s` : patch.tint ? `Recolour ${part}s` : `Original ${part} colours`;
+    this.edit(what, (c) => {
+      const l = c.layers.find((x) => x.id === id);
+      if (l?.kind === 'drawings') l.parts = { ...l.parts, [part]: { ...partOf(l, part), ...patch } };
+    });
+  }
+
+  /** Back to the defaults for one part (visible, full opacity, own colours, no offset). */
+  resetPart(id: string, part: PartName): void {
+    this.edit(`Reset ${part}s`, (c) => {
+      const l = c.layers.find((x) => x.id === id);
+      if (l?.kind !== 'drawings' || !l.parts?.[part]) return;
+      const { [part]: _gone, ...rest } = l.parts;
+      void _gone;
+      l.parts = rest;
     });
   }
 

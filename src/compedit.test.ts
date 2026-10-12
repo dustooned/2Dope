@@ -310,6 +310,32 @@ describe('the box hugs the drawing', () => {
   });
 });
 
+describe('line and fill parts', () => {
+  it('part opacity and offset key like any property; visibility and tint are one undo step each', () => {
+    const { ed, app } = rig();
+    ed.autoKey = true;
+    ed.setValue('L1', 'fill.opacity', 40);
+    app.frame = 6;
+    ed.setValue('L1', 'fill.opacity', 80);
+    const l = ed.layer('L1')!;
+    expect(l.kind === 'drawings' && l.parts?.fill?.opacity.keys.map((k) => [k.f, k.v])).toEqual([
+      [0, 40],
+      [6, 80],
+    ]);
+    expect(ed.rowProp('fill.offset')).toBe('position');
+    ed.setPart('L1', 'line', { tint: '#00ff00' });
+    ed.setPart('L1', 'line', { visible: false });
+    const m = ed.layer('L1')!;
+    expect(m.kind === 'drawings' && [m.parts?.line?.tint, m.parts?.line?.visible]).toEqual(['#00ff00', false]);
+    app.history.undo();
+    const u = ed.layer('L1')!;
+    expect(u.kind === 'drawings' && [u.parts?.line?.tint, u.parts?.line?.visible]).toEqual(['#00ff00', true]);
+    ed.resetPart('L1', 'line');
+    const r = ed.layer('L1')!;
+    expect(r.kind === 'drawings' && r.parts?.line).toBeUndefined();
+  });
+});
+
 describe('keys survive a layer moving in time', () => {
   it('uses frames of the layer, not of the comp', () => {
     const { comp } = rig();

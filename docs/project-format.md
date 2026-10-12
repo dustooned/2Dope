@@ -62,7 +62,10 @@ assets/<hash>.png       one PNG per non-empty pixel plane (transparent RGBA)
           // optional, drawings and comp layers: "play" once | loop | pingpong | single (default once),
           // "speed" (default 1), "single" (the held frame, 0-based), "timeRemap" (keys: which content
           // frame to show, 0-based; hold keys = swaps; overrides play and speed)
-          "play": "loop"
+          "play": "loop",
+          // optional, drawings layers: Line / Fill part settings that differ from the defaults
+          // (visible true, opacity 100, own colours, offset [0, 0]); keys in layer time
+          "parts": { "line": { "tint": "#203040" }, "fill": { "opacity": { "value": 60 }, "offset": { "value": [4, 0] } } }
         },
         {
           "id": "P", "name": "Walk cycle", "kind": "comp", "comp": "c2", "play": "loop",
@@ -105,6 +108,8 @@ Display order of a drawing: fill, then line, then vector strokes.
   Early schema-2 files wrote `"loop": true`; it reads as `"play": "loop"`.
   A comp may not contain itself (refused on open).
 - Layers draw bottom to top with their blend mode; a layer with opacity or a blend mode is flattened first.
+- A drawings layer's **parts** draw fill first, then line (line plane + vector strokes), each shifted by its offset,
+  at its opacity, and with `tint` every painted pixel takes that colour (its alpha kept). A hidden part is not drawn.
 
 ## Rules
 

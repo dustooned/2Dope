@@ -1,15 +1,5 @@
 import { blenderHandles, type Prop, type Value } from '../core/anim';
-import {
-  compLength,
-  layerEnd,
-  drawingOf,
-  frameContent,
-  instanceComp,
-  nestedFrame,
-  type Comp,
-  type CompLayer,
-  type Layer,
-} from '../core/comp';
+import { compLength, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type Layer, partsActive } from '../core/comp';
 
 /**
  * The Blender handoff (spec principle 4). 2Dope writes a package: `scene.json` (this file's
@@ -191,6 +181,7 @@ export function planBlender(project: { name: string; main: string; width: number
       const anchorValue = t.anchor.keys.length ? t.anchor.keys[0]!.v : t.anchor.value;
       if (t.anchor.keys.length > 1) notes.add(`“${l.name}”: an animated anchor point is exported as its first value.`);
       if (l.blend !== 'normal') notes.add(`“${l.name}”: the ${l.blend} blend mode is exported as normal.`);
+      if (l.kind === 'drawings' && partsActive(l)) notes.add(`“${l.name}”: Line / Fill part settings (hide, fade, recolour, offset) are not in Blender yet; it gets the drawings as drawn.`);
       const ch = {
         ...channels(t.position, ['position.x', 'position.y'], l.start),
         ...channels(t.scale, ['scale.x', 'scale.y'], l.start),

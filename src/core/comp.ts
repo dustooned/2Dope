@@ -69,6 +69,45 @@ interface Timed {
 export interface DrawingsLayer extends LayerBase, Timed {
   kind: 'drawings';
   exposures: Exposure[];
+  /**
+   * Settings for the Line and Fill parts of every drawing this layer shows (missing = defaults).
+   * They let lines and colour be shown, faded, recoloured or shifted separately across the shot.
+   */
+  parts?: Partial<Record<PartName, Part>>;
+}
+
+/** The two parts of every drawing: linework (line plane + vector strokes) and flat colour. */
+export type PartName = 'line' | 'fill';
+/** Draw order, bottom first. */
+export const PART_NAMES: PartName[] = ['fill', 'line'];
+
+export interface Part {
+  visible: boolean;
+  /** 0..100, multiplies the layer's opacity. Keys in layer time. */
+  opacity: Prop<number>;
+  /** Recolour: every painted pixel of this part takes this colour (its alpha kept). null = own colours. */
+  tint: string | null;
+  /** Shift relative to the layer, in layer pixels. Keys in layer time. */
+  offset: Prop<Vec2>;
+}
+
+export function defaultPart(): Part {
+  return { visible: true, opacity: staticProp(100), tint: null, offset: staticProp<Vec2>([0, 0]) };
+}
+
+/** A drawings layer's settings for one part (defaults when it has none). */
+export function partOf(l: DrawingsLayer, name: PartName): Part {
+  return l.parts?.[name] ?? defaultPart();
+}
+
+/** Does this part look exactly like no settings at all? */
+export function isDefaultPart(p: Part): boolean {
+  return p.visible && p.tint === null && !p.opacity.keys.length && p.opacity.value === 100 && !p.offset.keys.length && p.offset.value[0] === 0 && p.offset.value[1] === 0;
+}
+
+/** Does any part of the layer change how its drawings look? */
+export function partsActive(l: DrawingsLayer): boolean {
+  return PART_NAMES.some((n) => !!l.parts?.[n] && !isDefaultPart(l.parts[n]!));
 }
 
 /** A precomp: another comp placed as one layer. Instances of the same comp share its content. */
@@ -332,14 +371,7 @@ export type Mat = [number, number, number, number, number, number];
 export const IDENTITY: Mat = [1, 0, 0, 1, 0, 0];
 
 export function mul(m: Mat, n: Mat): Mat {
-  return [
-    m[0] * n[0] + m[2] * n[1],
-    m[1] * n[0] + m[3] * n[1],
-    m[0] * n[2] + m[2] * n[3],
-    m[1] * n[2] + m[3] * n[3],
-    m[0] * n[4] + m[2] * n[5] + m[4],
-    m[1] * n[4] + m[3] * n[5] + m[5],
-  ];
+  return [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
 }
 
 export function invert(m: Mat): Mat {
@@ -443,7 +475,8 @@ export function wouldCycle(parentId: string, childId: string, comps: ReadonlyMap
 export function isPlainFlipbook(c: Comp): boolean {
   if (c.layers.length !== 1) return false;
   const l = c.layers[0]!;
-  if (l.kind !== 'drawings' || l.play !== 'once' || l.speed !== 1 || l.timeRemap?.keys.length || l.start !== 0 || l.in !== 0 || l.out !== null || l.blend !== 'normal' || !l.visible) return false;
+  if (l.kind !== 'drawings' || partsActive(l) || l.play !== 'once' || l.speed !== 1 || l.timeRemap?.keys.length || l.start !== 0 || l.in !== 0 || l.out !== null || l.blend !== 'normal' || !l.visible)
+    return false;
   const t = l.transform;
   const still = (p: Prop) => p.keys.length === 0;
   if (![t.anchor, t.position, t.scale, t.rotation, t.opacity].every(still)) return false;
