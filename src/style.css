@@ -2896,3 +2896,85 @@ body.ui-hidden .board {
 .subtitle[hidden] {
   display: none;
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Cleanup: top bar fits at laptop and iPad-portrait widths; short landscape screens give the
+   canvas more room */
+
+@media (max-width: 1400px) {
+  .topbar .ws .lbl,
+  .topbar .gbtn .lbl {
+    display: none;
+  }
+
+  .topbar .ws button,
+  .topbar .gbtn {
+    min-width: 40px;
+    padding: 0 8px;
+  }
+}
+
+@media (max-width: 900px) {
+  .group.file #pname {
+    width: 70px;
+  }
+
+  .topbar,
+  .topbar .tb-left,
+  .topbar .tb-right {
+    gap: 4px;
+  }
+
+  .topbar .icons button {
+    width: 36px;
+    min-width: 36px;
+  }
+}
+
+@media (max-height: 560px) {
+  .topbar {
+    min-height: 42px;
+    padding-top: max(3px, env(safe-area-inset-top));
+    padding-bottom: 3px;
+  }
+
+  .strip-track {
+    height: min(var(--track-h), 24vh) !important;
+  }
+
+  .board-cards {
+    height: min(var(--board-h), 36vh);
+  }
+
+  .mscroll {
+    height: min(var(--motion-h), 30vh);
+  }
+}
+
+/* dialog buttons stay in reach when a dialog scrolls (short landscape screens) */
+dialog {
+  overflow-y: auto;
+}
+
+dialog .vfoot,
+dialog .dfoot {
+  position: sticky;
+  bottom: -16px;
+  margin-bottom: -16px;
+  padding: 10px 0 16px;
+  background: var(--panel);
+}
+
+@media (max-height: 560px) {
+  dialog {
+    max-height: calc(100vh - 16px);
+    padding: 12px;
+  }
+
+  dialog .vfoot,
+  dialog .dfoot {
+    bottom: -12px;
+    margin-bottom: -12px;
+    padding-bottom: 12px;
+  }
+}
