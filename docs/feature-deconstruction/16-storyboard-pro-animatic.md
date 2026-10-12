@@ -37,8 +37,8 @@ The goal is a lighter version that fits our model, so nothing new needs syncing.
 | Link clips to panel | An audio clip can be **tied to a panel or layer** (it moves when the panel moves) or left free; the same choice as R6. |
 | Onion skin across panels | Our onion skin already skips holds (panels are drawings). |
 | Pitch mode | **Play with subtitles** (the dialogue caption under the picture). |
-| To Harmony | **"Animate this shot"**: opens the shot in Draw with the board as the guide underneath (Show animatic), so animation starts on top of the boards. |
-| Export movie / PDF | Animatic movie (with the phone MP4 export, step 9); **PDF board pages** (panels plus captions) later. Final renders leave guide layers out unless switched on. |
+| To Harmony | **No Harmony export** (user, 2026-10-11). Inside 2Dope, **"Animate this shot"** opens the shot in Draw with the board as the guide underneath (Show animatic), so animation starts on top of the boards. |
+| Export movie / PDF | **PDF board pages** (panel number, picture, duration, captions; 1–3 panels per row; our own PDF writer, works offline and on iPad), **PNG zip** (one image per panel + captions CSV), animatic movie with the MP4 export. Final renders leave guide layers out unless switched on. |
 | Acts, track changes, EDL/AAF, 3D, thumbnailing pages | Not now. |
 
 ## The flow in 2Dope
@@ -51,6 +51,22 @@ The goal is a lighter version that fits our model, so nothing new needs syncing.
 3. **Time / Motion** refine the shot. Every change to a shot's length ripples through the sequence,
    because it is all one set of comps on one clock.
 4. **Export:** the final shot or sequence without the boards, or the animatic with them, when switched on.
+
+## Quick panel input (user, 2026-10-11)
+
+Each board card has its fields right under the picture: **dialogue, action, slugging (timing), notes,
+duration**. Tap and type. Return moves to the same field of the next panel, so a scene's dialogue
+can be typed in one run. The same fields appear as X-sheet columns.
+
+## Priority (agreed order, 2026-10-11)
+
+1. Workspace tabs: Board · Draw · Time · Motion; timing tools move to Time (Sonnet)
+2. Storyboard core: board guide layer, panels with quick captions and durations, Show board in Draw (Opus)
+3. Storyboard export: PDF pages, PNG zip + captions CSV (Opus)
+4. Audio on the timeline, linked to a panel or free (Opus)
+5. Shots end to end (sequence comps) and camera move per panel (Opus)
+6. Clipping masks, rails in Draw, QuickShape, effects (iPad benchmark right before effects)
+7. Colour panel, asset bin, brush import, phone layout, drawing assist, Blender last
 
 ## Plan (replaces R7 in doc 15)
 
