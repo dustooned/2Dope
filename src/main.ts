@@ -18,6 +18,7 @@ import { Strip } from './ui/strip';
 import { XSheet } from './ui/xsheet';
 import { applyIcons } from './ui/icons';
 import { Sidebar } from './ui/sidebar';
+import { LayersPopover } from './ui/layerspop';
 
 const $ = <T extends HTMLElement>(sel: string) => {
   const e = document.querySelector<T>(sel);
@@ -85,6 +86,10 @@ const syncColor = () => {
 colorChip.addEventListener('input', () => app.setColor(colorChip.value));
 app.onColorChange = chain(app.onColorChange, syncColor);
 app.onNotice = (m) => files?.toast(m, [], 4000);
+const layersPop = new LayersPopover(app);
+const layersBtn = $<HTMLButtonElement>('#layers-btn');
+layersBtn.addEventListener('click', () => layersPop.toggle(layersBtn));
+app.openLayers = (anchor) => layersPop.toggle(anchor);
 syncColor();
 
 const finger = $<HTMLInputElement>('#finger');
@@ -298,6 +303,7 @@ menu.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((b) => b.addEven
 
 app.onFrameChange = () => {
   syncTools();
+  layersPop.update();
   strip.update();
   xsheet.update();
   quick.update();

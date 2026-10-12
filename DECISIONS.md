@@ -131,6 +131,12 @@
 - **The eraser cuts vector lines** on the Line plane: up to the nearest crossings with other vector lines (default), the whole line, or off. Cut ends lose their taper; one undo step with the raster erase.
 - Not yet: changing a vector line's width after drawing; vector strokes are always anti-aliased.
 
+## 2026-10-11: Layers in the Draw view
+
+- **Draw shows the whole comp around the layer you draw on**: layers below under it, layers above over it, each placed relative to the drawn-on layer (its page is the view's space), so moved or scaled layers line up as in Motion. Cameras and nulls are not drawn. "Others: Show / Fade / Hide" sets how they look (per device). Their drawings join the residency working set.
+- **Layers popover** (toolbar button and the strip's layer chip): tap to draw on a layer, eye, lock (locked layers refuse strokes with a message), up/down, rename (double-tap), add above, delete. All through the comp editor, so undoable and shared with Motion.
+- Not yet: thumbnails in the list, per-layer opacity slider, groups of drawing layers.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

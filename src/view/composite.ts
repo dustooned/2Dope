@@ -2,6 +2,8 @@ import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { valueAt } from '../core/anim';
 import {
+  IDENTITY,
+  invert,
   activeAt,
   drawingOf,
   instanceComp,
@@ -189,6 +191,32 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
   g.globalCompositeOperation = BLEND[l.blend];
   if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
   else if (source) g.drawImage(source, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * The Draw view's other layers: the comp's layers below (or above) the one being drawn on, at a
+ * frame, placed relative to it (the drawn-on layer's page is the view's space). Cameras and nulls
+ * are not drawn. `alpha` fades them (a light-table look); hidden layers stay hidden.
+ */
+export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, side: 'below' | 'above', alpha = 1): void {
+  const comps = project.comps;
+  const idx = c.layers.findIndex((l) => l.id === activeId);
+  const active = idx >= 0 ? c.layers[idx]! : null;
+  const rel = active ? invert(worldMatrix(c, active, frame)) : IDENTITY;
+  const base = g.getTransform();
+  for (let i = c.layers.length - 1; i >= 0; i--) {
+    const l = c.layers[i]!;
+    if (i === idx || l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps)) continue;
+    // layers[0] is the top; a layer not yet in the comp (a placeholder) goes to the bottom
+    const above = idx < 0 || i < idx;
+    if ((side === 'above') !== above) continue;
+    const a = opacityAt(l, frame) * alpha;
+    if (a <= 0) continue;
+    drawLayer(g, project, c, l, frame, base.multiply(toDom(mul(rel, worldMatrix(c, l, frame)))), a, 'all', {}, 0);
+  }
+  g.setTransform(base);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
 }

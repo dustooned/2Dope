@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { autoIcon, setLabel } from './icons';
+import { autoIcon, decorate, setLabel } from './icons';
 import { FPS_PRESETS, ROLES, type Drawing, type Role } from '../core/project';
 import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, type Exposure } from '../core/timeline';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './contextmenu';
@@ -70,6 +70,7 @@ export class Strip {
   private cell = loadCell();
   private drag: Drag | null = null;
   private flipBtn!: HTMLButtonElement;
+  private layerChip!: HTMLButtonElement;
   /** The flipbook's blank page after the last drawing (tap it, then draw). */
   private readonly blank = el('div', { class: 'blankpage', title: 'Add a frame at the end' }, '+');
 
@@ -193,7 +194,10 @@ export class Strip {
     zoom.append(el('span', { class: 'name' }, 'Zoom'), this.zoomRange);
 
     const rowA = el('div', { class: 'strip-row' });
-    rowA.append(nav, this.frameLabel, this.fpsSel, edit, zoom);
+    // which layer the strip shows (and you draw on); tap for the layer list
+    this.layerChip = btn('Layer', 'The layer you draw on. Tap for all layers.', () => app.openLayers?.(this.layerChip), 'layerchip');
+    decorate(this.layerChip, 'layers');
+    rowA.append(this.layerChip, nav, this.frameLabel, this.fpsSel, edit, zoom);
     const rowB = el('div', { class: 'strip-row' });
     rowB.append(exposure, roles, onion);
     bar.append(rowA, rowB);
@@ -385,6 +389,7 @@ export class Strip {
       this.rebuild();
     }
     const cell = this.cell;
+    setLabel(this.layerChip, app.project.isPlaceholder ? 'New layer' : app.project.layer.name);
     this.frameLabel.textContent = app.blankPage ? `${p.length + 1} / ${p.length} new` : `${app.lf + 1} / ${p.length}`;
     const l = locate(p.exposures, app.lf);
     const targets = app.targets;

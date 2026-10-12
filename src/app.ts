@@ -9,11 +9,11 @@ import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { brushMask, DEFAULT_FILL, fillFrom, lassoFill, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
-import { compLength, frameContent, invert, partOf, worldMatrix, type Layer, type PartName } from './core/comp';
+import { compLength, frameContent, invert, partOf, worldMatrix, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { CompEditor } from './compedit';
-import { drawComp } from './view/composite';
+import { drawComp, drawLayersAround } from './view/composite';
 import { drawMotionOverlay } from './view/overlay';
 import {
   addAfter,
@@ -49,6 +49,8 @@ const ONION_KEY = '2dope.m1.onion';
 const FILL_KEY = '2dope.m1.fill';
 const FLIPBOOK_KEY = '2dope.flipbook';
 const FILL_MODE_KEY = '2dope.fill.mode';
+const LAYERS_KEY = '2dope.draw.layers';
+const LAYERS_ALPHA_KEY = '2dope.draw.layersAlpha';
 const VECTOR_ERASE_KEY = '2dope.eraser.vector';
 const FILL_ACROSS_KEY = '2dope.fill.across';
 
@@ -633,6 +635,9 @@ export class App {
     this.onColorChange();
   }
 
+  /** Opens the Layers popover next to a button (set by main). */
+  openLayers: ((anchor: HTMLElement) => void) | null = null;
+
   /** Shows a short message to the person (the file UI sets it to a toast). */
   onNotice: ((message: string) => void) | null = null;
 
@@ -778,6 +783,54 @@ export class App {
     saveJSON(FLIPBOOK_KEY, on);
     if (!on) this.leaveBlankPage();
     this.onFrameChange();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Layers in the Draw view: every layer of the comp shows around the one being drawn on
+
+  /** Show the comp's other layers while drawing. */
+  showLayers = loadJSON<boolean>(LAYERS_KEY) ?? true;
+  /** How strongly the other layers show (1 = as they are, lower = a light-table fade). */
+  otherAlpha = loadJSON<number>(LAYERS_ALPHA_KEY) ?? 1;
+
+  setShowLayers(on: boolean, alpha = this.otherAlpha): void {
+    this.showLayers = on;
+    this.otherAlpha = Math.max(0.1, Math.min(1, alpha));
+    saveJSON(LAYERS_KEY, on);
+    saveJSON(LAYERS_ALPHA_KEY, this.otherAlpha);
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** The active comp's drawings layers, top first (what the Draw view's layer list shows). */
+  drawLayers(): DrawingsLayer[] {
+    return this.project.comp.layers.filter((l): l is DrawingsLayer => l.kind === 'drawings');
+  }
+
+  /** Draw on another layer: the strip, X-sheet and onion skin switch to it. */
+  pickLayer(id: string): void {
+    if (this.live || id === this.project.activeLayer) return;
+    this.leaveBlankPage();
+    this.focusLayer(id);
+    this.editor.select(id);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** A new drawings layer above the one being drawn on, starting at the playhead; draw on it. */
+  addDrawLayer(): void {
+    if (this.live) return;
+    const cur = this.project.isPlaceholder ? null : this.project.layer;
+    this.editor.select(cur ? cur.id : null);
+    this.editor.addLayer('drawings');
+    const made = this.editor.primary;
+    if (made && made.kind === 'drawings') {
+      this.focusLayer(made.id);
+      this.onCompChanged();
+      this.requestRender();
+      this.onFrameChange();
+    }
   }
 
   /** A new blank drawing after the last frame of the active layer, and go to it (the strip's + cell). */
@@ -1237,6 +1290,10 @@ export class App {
     if (this.playing) {
       this.playing = false;
       this.onFrameChange();
+    }
+    if (!this.project.isPlaceholder && this.project.layer.locked) {
+      this.onNotice?.(`“${this.project.layer.name}” is locked. Unlock it in Layers to draw on it.`);
+      return;
     }
     if (this.tool === 'fill') {
       if (!this.blankPage) this.beginFill(e);
@@ -2028,8 +2085,14 @@ export class App {
       drawMotionOverlay(g, this.editor, this.view, this.dpr);
       return;
     }
+    const comp = this.project.comp;
+    const activeId = this.project.layer.id;
+    if (this.showLayers) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', this.otherAlpha);
     this.drawOnion(g);
-    if (this.blankPage && !this.live) return;
+    if (this.blankPage && !this.live) {
+      if (this.showLayers) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', this.otherAlpha);
+      return;
+    }
     const live = this.live;
     const d = live ? live.drawing : this.drawing;
     if (d.parked) {
@@ -2069,6 +2132,7 @@ export class App {
       drawVectorStroke(g, { ...live.record, points: [...live.record.points, ...extra] });
     }
 
+    if (this.showLayers) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', this.otherAlpha);
     this.drawFillPath(g);
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
   }
@@ -2122,6 +2186,11 @@ export class App {
       return [...out];
     }
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
+    if (this.showLayers)
+      for (const id of frameContent(p.comps, p.comp.id, this.frame).drawings) {
+        const d = p.drawings.get(id);
+        if (d) out.add(d);
+      }
     const o = this.onion;
     if (o.enabled) {
       const keys = o.keysOnly ? (id: string) => p.drawing(id).role === 'key' : undefined;
