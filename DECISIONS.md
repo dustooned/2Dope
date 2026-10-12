@@ -169,7 +169,7 @@
 ## Queued (user, 2026-10-12)
 
 - ~~QuickShape~~ built (below).
-- **Student manual + "What's new"**: an in-app manual students can read right away (overview of the app, every feature by workspace) and an updates section.
+- ~~Student manual + What’s new~~ built: src/ui/manualtext.ts (content as data: overview, getting started, gestures, Board, Draw, Time, Motion, export, Lite, shortcuts; UPDATES newest first) and src/ui/manual.ts (contents, search, phone dropdown, Print / PDF). Menu > Help > Manual / What’s new, or ?. A dot on the menu button until new notes are opened; a one-time hint on first launch. **Keep the manual and UPDATES in step with every feature that ships.**
 
 ## 2026-10-12: QuickShape
 

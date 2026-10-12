@@ -222,6 +222,8 @@ export class App {
   onStrokeState: (active: boolean) => void = () => {};
   /** Keyboard hooks owned by the layout: Quick Animate (Tab) and the X-sheet (Shift+X). */
   onToggleQuick: () => void = () => {};
+  /** ? opens the manual. */
+  onOpenManual: () => void = () => {};
   onToggleXSheet: () => void = () => {};
   /** Fires after a different project replaced the current one. */
   onProjectLoaded: () => void = () => {};
@@ -2380,6 +2382,9 @@ export class App {
         break;
       case 'KeyH':
         this.flipView();
+        break;
+      case 'Slash':
+        if (e.shiftKey) this.onOpenManual();
         break;
       case 'Tab':
         // Tab = Quick Animate; Shift+Tab hides all interface (four-finger tap does too).

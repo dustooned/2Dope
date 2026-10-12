@@ -20,6 +20,7 @@ import { applyIcons } from './ui/icons';
 import { Sidebar } from './ui/sidebar';
 import { LayersPopover } from './ui/layerspop';
 import { BoardPanel } from './ui/board';
+import { hasNewUpdates, openManual } from './ui/manual';
 
 const $ = <T extends HTMLElement>(sel: string) => {
   const e = document.querySelector<T>(sel);
@@ -293,7 +294,30 @@ try {
 } catch {
   // default: toolbar shown
 }
+/** The manual and What's new; a dot on the menu button until new update notes are opened. */
+function syncNews(): void {
+  const news = hasNewUpdates();
+  dock.classList.toggle('has-news', news);
+  menu.querySelector('.news-btn')?.classList.toggle('has-news', news);
+}
+function showManual(at = 'overview'): void {
+  setMenu(false);
+  openManual(at, syncNews);
+}
+app.onOpenManual = () => showManual();
+syncNews();
+try {
+  // first time on this device: point at the manual once
+  if (!localStorage.getItem('2dope.manual.hinted')) {
+    localStorage.setItem('2dope.manual.hinted', '1');
+    setTimeout(() => files?.toast('New to 2Dope? The manual explains everything.', [{ label: 'Open manual', run: () => showManual() }], 9000), 1200);
+  }
+} catch {
+  // no storage: no hint
+}
 const menuActions: Record<string, () => void> = {
+  manual: () => showManual(),
+  updates: () => showManual('updates'),
   quick: () => quick.toggle(),
   panel: () => setPanel(!document.body.classList.contains('panel-open')),
   bar: toggleBar,
