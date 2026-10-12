@@ -9,7 +9,8 @@ import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { brushMask, DEFAULT_FILL, fillFrom, lassoFill, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
-import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { editPoint, rippleComp, shiftLater } from './core/ripple';
+import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type Comp, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { CompEditor } from './compedit';
@@ -54,6 +55,7 @@ const FLIPBOOK_KEY = '2dope.flipbook';
 const FILL_MODE_KEY = '2dope.fill.mode';
 const LAYERS_KEY = '2dope.draw.layers';
 const BOARD_ALPHA_KEY = '2dope.draw.boardAlpha';
+const RIPPLE_KEY = '2dope.ripple';
 const LAYERS_ALPHA_KEY = '2dope.draw.layersAlpha';
 const VECTOR_ERASE_KEY = '2dope.eraser.vector';
 const FILL_ACROSS_KEY = '2dope.fill.across';
@@ -1107,6 +1109,47 @@ export class App {
   }
 
   /** Run a timeline edit as an undoable command. */
+  // -------------------------------------------------------------------------------------------
+  // Ripple (doc 16, "Live edits"): a timing change inside a layer moves everything after it on
+  // every layer of the comp. On by default; Shift+R switches it; holding Alt flips it for one edit.
+
+  ripple = loadJSON<boolean>(RIPPLE_KEY) ?? true;
+  /** Alt is held: the next edit does the opposite of the Ripple switch. */
+  private altDown = false;
+
+  setRipple(on: boolean): void {
+    this.ripple = on;
+    saveJSON(RIPPLE_KEY, on);
+    this.onToolChange();
+    this.onNotice?.(on ? 'Ripple on: changes move everything after them' : 'Ripple off: changes stay where they are');
+  }
+
+  /** Is ripple on for the edit happening now? */
+  get rippling(): boolean {
+    return this.ripple !== this.altDown;
+  }
+
+  /**
+   * The whole comp after a timing change of one layer, when it ripples: null when ripple is off,
+   * the length did not change, or the change is at the very end of the layer (adding to the end
+   * pushes nothing, because nothing of that layer comes after it).
+   */
+  private rippleFor(layerId: string, before: Exposure[], after: Exposure[]): { before: Layer[]; after: Layer[]; durBefore: number | null; durAfter: number | null } | null {
+    if (!this.rippling) return null;
+    const ep = editPoint(before, after);
+    if (!ep) return null;
+    const total = totalFrames(before);
+    if (ep.delta > 0 ? ep.at >= total : ep.at - ep.delta >= total) return null;
+    const comp = this.project.comp;
+    const layer = comp.layers.find((l) => l.id === layerId);
+    if (!layer) return null;
+    const temp: Comp = { ...comp, layers: comp.layers.map((l) => (l.id === layerId ? ({ ...l, exposures: after } as Layer) : l)) };
+    const r = rippleComp(temp, this.project.comps, layerId, layer.start + ep.at, ep.delta);
+    const others = r.layers.some((l, i) => l !== temp.layers[i] && l.id !== layerId);
+    if (!others && r.duration === comp.duration) return null;
+    return { before: structuredClone(comp.layers), after: r.layers, durBefore: comp.duration, durAfter: r.duration };
+  }
+
   private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, keepSelection = false): void {
     if (this.live) return;
     const layer = this.project.editLayer();
@@ -1117,6 +1160,14 @@ export class App {
     const beforeSel = [...this.selection];
     const r = fn(beforeEx);
     if (r.ex === beforeEx) return;
+    const rip = this.rippleFor(layerId, beforeEx, r.ex);
+    const setLayers = (layers: Layer[] | null, dur: number | null) => {
+      const c = this.project.comps.get(compId);
+      if (!c || !layers) return false;
+      c.layers = structuredClone(layers);
+      c.duration = dur;
+      return true;
+    };
     const after = (): number[] => r.selection ?? (keepSelection ? beforeSel : []);
     // the layer object can be replaced by a comp-level undo, so find it again each time
     const find = () => {
@@ -1128,13 +1179,15 @@ export class App {
     const place = (lf: number, ex: Exposure[]) => (find()?.start ?? 0) + Math.max(0, Math.min(lf, totalFrames(ex) - 1));
     this.history.push(
       {
-        label,
+        label: rip ? `${label} (ripple)` : label,
         do: () => {
           this.blankPage = false;
           this.focusLayer(layerId);
           this.selection = after();
-          const l = find();
-          if (l) l.exposures = r.ex;
+          if (!setLayers(rip ? rip.after : null, rip?.durAfter ?? null)) {
+            const l = find();
+            if (l) l.exposures = r.ex;
+          }
           this.frame = place(r.frame, r.ex);
           this.requestRender();
           this.onFrameChange();
@@ -1144,8 +1197,10 @@ export class App {
           this.blankPage = false;
           this.focusLayer(layerId);
           this.selection = keepSelection || r.selection ? beforeSel : [];
-          const l = find();
-          if (l) l.exposures = beforeEx;
+          if (!setLayers(rip ? rip.before : null, rip?.durBefore ?? null)) {
+            const l = find();
+            if (l) l.exposures = beforeEx;
+          }
           this.frame = place(beforeFrame, beforeEx);
           this.requestRender();
           this.onFrameChange();
@@ -1339,6 +1394,26 @@ export class App {
     if (after === before) return;
     const compId = this.project.comp.id;
     const layerId = this.project.editLayer().id;
+    const rip = this.rippleFor(layerId, before, after);
+    if (rip) {
+      const set = (layers: Layer[], dur: number | null) => {
+        this.blankPage = false;
+        this.selection = [];
+        this.project.activeComp = compId;
+        const c = this.project.comps.get(compId);
+        if (c) {
+          c.layers = structuredClone(layers);
+          c.duration = dur;
+        }
+        this.focusLayer(layerId);
+        this.frame = Math.min(this.frame, this.compEnd - 1);
+        this.requestRender();
+        this.onFrameChange();
+        this.onDocChanged();
+      };
+      this.history.push({ label: `${label} (ripple)`, do: () => set(rip.after, rip.durAfter), undo: () => set(rip.before, rip.durBefore) }, false);
+      return;
+    }
     const set = (ex: Exposure[]) => {
       this.blankPage = false;
       this.selection = [];
@@ -1979,6 +2054,7 @@ export class App {
     const typing = target instanceof HTMLInputElement && target.type !== 'range' && target.type !== 'checkbox' && target.type !== 'color';
     if (typing || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
     // Panels that handle their own keys (the X-sheet grid) are left alone.
+    if (e.key === 'Alt') this.altDown = down;
     if (target?.closest?.('[data-own-keys]')) return;
     if (!down) {
       if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && this.scrubbing) this.endScrub();
@@ -1989,6 +2065,11 @@ export class App {
       return;
     }
     if (e.key === 'Alt') e.preventDefault();
+    if (e.code === 'KeyR' && e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      this.setRipple(!this.ripple);
+      return;
+    }
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.code === 'KeyZ') {
       e.preventDefault();

@@ -21,6 +21,7 @@ import {
   type Mat,
 } from './core/comp';
 import { defaultPart, localMatrix, nestedFrame, partOf, type PartName } from './core/comp';
+import { shiftLater } from './core/ripple';
 import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
 import { totalFrames } from './core/timeline';
 import { layerContentBox } from './view/contentbox';
@@ -799,6 +800,14 @@ export class CompEditor {
     this.edit(label, (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (!l) return;
+      // trimming the end (ripple on): the layers that started at or after the old end move with it
+      if (t.out !== undefined && t.out !== null && t.start === undefined && this.app.rippling) {
+        const oldEnd = layerEnd(l, this.app.project.comps, c.fps);
+        if (Number.isFinite(oldEnd)) {
+          const moved = shiftLater(c.layers, id, oldEnd, Math.round(t.out) - oldEnd);
+          if (moved !== c.layers) c.layers.splice(0, c.layers.length, ...moved);
+        }
+      }
       if (t.start !== undefined) {
         const d = Math.round(t.start) - l.start;
         l.start += d;

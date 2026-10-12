@@ -41,7 +41,10 @@ if (import.meta.env.DEV) (window as unknown as { __2dope: App }).__2dope = app;
 const toolButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-tool]')];
 const planeButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-plane]')];
 const partButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-part-eye]')];
+const rippleBtn = $<HTMLButtonElement>('#ripple-btn');
+rippleBtn.addEventListener('click', () => app.setRipple(!app.ripple));
 const syncTools = () => {
+  rippleBtn.setAttribute('aria-pressed', String(app.ripple));
   for (const b of partButtons) b.setAttribute('aria-pressed', String(app.partVisible(b.dataset.partEye === 'fill' ? 'fill' : 'line')));
   for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool));
   for (const b of planeButtons) b.setAttribute('aria-pressed', String(b.dataset.plane === app.plane));
