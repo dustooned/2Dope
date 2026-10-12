@@ -133,5 +133,5 @@ exists in Safari. The numbers decide how R4 is built.
 | R4 | Layer effects v1 (blur, glow, shadow, colour, tint, shake, boil, flicker), keyable, toggles | Opus |
 | R5 | QuickShape (doc 14) | Opus |
 | R6 | Audio in Motion and the X-sheet (waveform, scrub, tied to a layer or free) | Opus |
-| R7 | Animatic: guide layers (not exported unless switched on), storyboard view, panels from images, "Show animatic" in Draw | Opus (model, export), Sonnet (board UI) |
+| R7 | Animatic, refined after studying Storyboard Pro: steps R7a–e in doc 16 (guide layers, captions, sequence comps, board tab, camera per panel) | Opus / Sonnet |
 | then | Colour panel, asset bin, brush import, phone UI, the rest of drawing assist, **Blender last** | — |

@@ -20,6 +20,7 @@ Open-source Craft repos (Apache-2.0) may be reused with attribution.
 | 13 | [Clip Studio: fill, ink, layers, phone mode](13-clip-studio-fill-ink-layers-phone.md) | Clip Studio manual + Dreams colour panel: drag/enclose/leftover fill, crisp ink, brush import, line/fill parts, X-sheet touch editing, Lite phone mode; plan |
 | 14 | [Drawing assist](14-drawing-assist.md) | Procreate guides, Drawing Assist and QuickShape, plus Lazy Nezumi's rulers (radial speed lines, parallel, accuracy) from its manual; plan |
 | 15 | [Workspace roles, masks, effects](15-workspace-roles-masks-effects.md) | Draw / Time / Motion jobs, clipping masks and mattes, light layer effects, Dreams-style rails and zoom; revised plan |
+| 16 | [Storyboard Pro → Animatic](16-storyboard-pro-animatic.md) | Acts/sequences/shots/panels, captions, thumbnails + timeline, camera per panel, pitch mode, mapped onto comps / guide layers / exposures; animatic plan R7a–e |
 
 Reference clones: `E:\2026\Dev\Apps\2Dope\reference\` (+ `C:\Users\dusto\effectcraft`).
 
