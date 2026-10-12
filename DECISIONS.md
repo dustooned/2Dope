@@ -144,6 +144,15 @@
 - The strip class still owns those controls (one place that keeps them in step); main.ts mounts them into the X-sheet tab. Keyboard shortcuts (1–4, K/B/I, N, D, O, L) work everywhere as before.
 - **Board tab** (animatic / storyboard, doc 16) is not added yet: it arrives with its content in the storyboard-core step, so there is no empty tab.
 
+## 2026-10-11: Storyboard core (step 2 of doc 16's priority)
+
+- **The storyboard is a guide layer** (`guide: true`) in the shot's comp, on the same clock: panels are its frames (exposures), so retiming a panel is retiming everywhere and nothing needs syncing. Guide layers are left out of every final render (PNG sequence, Blender) unless `guideExport` is on.
+- **Captions live on exposures**: dialogue, action, slugging, notes (the X-sheet note is "notes"), additive in the file, capped at 1000 / 300 characters. Duplicated panels start without captions; merging equal neighbours keeps the first panel's captions and fills its empty fields.
+- **Board workspace** (first tab): the canvas draws on the selected panel (the board becomes the active layer while you are there, and the previous layer comes back when you leave); cards below with picture, duration (frames) and the four fields. Return moves to the same field of the next panel. + Panel (two seconds), duplicate, delete, move, import images as panels, play, Animate this shot.
+- **The real layer is never the board by accident**: with no layer picked, Draw falls back to the first non-guide layer (or a fresh one when drawing starts).
+- **Show board in Draw**: Layers popover → Board: Show / Fade (default) / Hide, independent of "Others". The current panel's dialogue shows as a subtitle in Board and while playing.
+- Next: export (PDF board pages, PNG zip + captions CSV), then audio, shots end to end, camera per panel.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

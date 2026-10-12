@@ -43,7 +43,8 @@
       </section>
       <section>
         <h3>Interface</h3>
-        <div class="menu-grid three">
+        <div class="menu-grid four">
+          <button type="button" data-ws="board">Board</button>
           <button type="button" data-ws="draw">Draw</button>
           <button type="button" data-ws="time">Time</button>
           <button type="button" data-ws="motion">Motion</button>
@@ -68,6 +69,7 @@
       <div class="tb-left">
         <button type="button" id="open-gallery" class="gbtn" data-icon="gallery" title="All your projects">Projects</button>
         <div class="group seg ws" id="ws" role="group" aria-label="Workspace">
+          <button type="button" data-ws="board" data-icon="board" title="Board: storyboard and animatic (panels, dialogue, timing)">Board</button>
           <button type="button" data-ws="draw" data-icon="draw" title="Draw: the canvas and the flipbook strip">Draw</button>
           <button type="button" data-ws="time" data-icon="time" title="Time: the exposure sheet">Time</button>
           <button type="button" data-ws="motion" data-icon="motion" title="Motion: layers, keyframes and the camera">Motion</button>
@@ -118,10 +120,12 @@
             <button type="button" data-action="undo" data-icon="undo" title="Undo (Ctrl+Z, two-finger tap)">Undo</button>
             <button type="button" data-action="redo" data-icon="redo" title="Redo (Ctrl+Shift+Z, three-finger tap)">Redo</button>
           </div>
+          <div id="subtitle" class="subtitle" aria-live="polite" hidden></div>
           <div id="stats" class="stats">Draw with a pen, mouse or (with Finger paints on) a finger. Alt + mouse = tilted pencil.</div>
         </div>
         <div id="splitter" class="splitter" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the timeline (double-tap to reset)" tabindex="0"></div>
         <section id="strip" class="strip" aria-label="Flipbook"></section>
+        <section id="board" class="board" aria-label="Storyboard"></section>
         <section id="motion" class="motion" aria-label="Layers and keyframes"></section>
       </div>
       <aside id="panel" class="panel" aria-label="Side panel">

@@ -77,7 +77,7 @@ export class LayersPopover {
     const layers = app.drawLayers();
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // rebuild only when something it shows changed (keeps double-taps and focus intact)
-    const sig = `${app.project.comp.id}|${active}|${app.showLayers}|${app.otherAlpha}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}`).join(',')}`;
+    const sig = `${app.project.comp.id}|${active}|${app.showLayers}|${app.otherAlpha}|${app.boardAlpha}|${app.board?.id ?? ''}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -108,7 +108,7 @@ export class LayersPopover {
       decorate(lock, 'lock');
       lock.classList.add('icon-only');
       lock.addEventListener('click', () => ed.setFlag(l.id, 'locked', !l.locked));
-      const name = el('button', { type: 'button', class: 'lp-name', title: 'Tap to draw on this layer. Double-tap to rename.' }, l.name);
+      const name = el('button', { type: 'button', class: 'lp-name', title: 'Tap to draw on this layer. Double-tap to rename.' }, l.guide ? `${l.name} · board` : l.name);
       name.addEventListener('click', async (e) => {
         if (e.detail >= 2) {
           const n = await askText('Layer name', l.name, 'Rename');
@@ -145,6 +145,25 @@ export class LayersPopover {
       others.append(b);
     }
     this.root.append(others);
+
+    if (app.board) {
+      const board = el('div', { class: 'lp-others', role: 'group', 'aria-label': 'Storyboard' });
+      board.append(el('span', { class: 'name' }, 'Board'));
+      for (const [label, a] of [
+        ['Show', 1],
+        ['Fade', 0.35],
+        ['Hide', 0],
+      ] as const) {
+        const b = el('button', { type: 'button' }, label);
+        b.setAttribute('aria-pressed', String(Math.abs(app.boardAlpha - a) < 0.01));
+        b.addEventListener('click', () => {
+          app.setBoardAlpha(a);
+          this.update();
+        });
+        board.append(b);
+      }
+      this.root.append(board);
+    }
 
     if (active) {
       const del = el('button', { type: 'button', class: 'lp-del danger', title: 'Delete the layer you are drawing on (undoable)' }, 'Delete layer');

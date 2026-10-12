@@ -2,7 +2,7 @@ import './style.css';
 
 // Tells the page's start-up watchdog (index.html) that the app code loaded.
 (window as unknown as { __2dopeBooted?: boolean }).__2dopeBooted = true;
-import { App } from './app';
+import { App, type Workspace } from './app';
 import type { Tool } from './core/stroke';
 import { saveMode, type DeviceMode } from './core/device';
 import { buildPanel } from './ui/panel';
@@ -19,6 +19,7 @@ import { XSheet } from './ui/xsheet';
 import { applyIcons } from './ui/icons';
 import { Sidebar } from './ui/sidebar';
 import { LayersPopover } from './ui/layerspop';
+import { BoardPanel } from './ui/board';
 
 const $ = <T extends HTMLElement>(sel: string) => {
   const e = document.querySelector<T>(sel);
@@ -170,18 +171,40 @@ const strip = new Strip(app, $('#strip'));
 // Timing tools (holds, marks, onion settings, layer toggles) belong to the Time workspace
 $('#tab-xsheet').prepend(strip.timingBar);
 const motion = new MotionPanel(app, $('#motion'));
+const board = new BoardPanel(app, $('#board'));
+// the panel's dialogue as a subtitle under the picture (Board, and while playing with a board)
+const subtitle = $('#subtitle');
+const showSubtitle = () => {
+  const b = app.board;
+  let text = '';
+  if (b && (app.workspace === 'board' || app.playing)) {
+    const f = app.frame - b.start;
+    let at = 0;
+    for (const e of b.exposures) {
+      if (f >= at && f < at + e.length) {
+        text = e.dialogue ?? '';
+        break;
+      }
+      at += e.length;
+    }
+  }
+  subtitle.hidden = !text;
+  subtitle.textContent = text;
+};
 
 // The handle between the canvas and the timeline; each workspace remembers its own height.
-const splitter = new Splitter($('#splitter'), $('.stage-col'), () => (app.workspace === 'motion' ? { name: '--motion-h', min: 120, def: 230 } : { name: '--track-h', min: 60, def: 96 }));
+const splitter = new Splitter($('#splitter'), $('.stage-col'), () =>
+  app.workspace === 'motion' ? { name: '--motion-h', min: 120, def: 230 } : app.workspace === 'board' ? { name: '--board-h', min: 160, def: 300 } : { name: '--track-h', min: 60, def: 96 },
+);
 
 // Workspaces: Draw, Time, Motion. The same project, arranged differently.
 const wsButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-ws]')];
 const WS_KEY = '2dope.m3.ws';
 let lastTab: 'brush' | 'xsheet' = 'brush';
-let prevWs: 'draw' | 'time' | 'motion' = 'draw';
+let prevWs: Workspace = 'draw';
 const applyWorkspace = () => {
   const w = app.workspace;
-  document.body.classList.remove('ws-draw', 'ws-time', 'ws-motion');
+  document.body.classList.remove('ws-board', 'ws-draw', 'ws-time', 'ws-motion');
   document.body.classList.add(`ws-${w}`);
   for (const b of wsButtons) b.setAttribute('aria-pressed', String(b.dataset.ws === w));
   if (w === 'time') {
@@ -198,6 +221,7 @@ const applyWorkspace = () => {
   splitter.restore();
   motion.update();
   strip.update();
+  board.update();
   try {
     localStorage.setItem(WS_KEY, w);
   } catch {
@@ -210,7 +234,7 @@ for (const b of wsButtons)
   b.addEventListener('click', () => {
     // Quick Animate is a Draw view: picking another workspace leaves it
     if (document.body.classList.contains('quick') && b.dataset.ws !== 'draw') quick.set(false);
-    app.setWorkspace(b.dataset.ws as 'draw' | 'time' | 'motion');
+    app.setWorkspace(b.dataset.ws as Workspace);
   });
 document.body.classList.add('ws-draw');
 for (const b of wsButtons) b.setAttribute('aria-pressed', String(b.dataset.ws === 'draw'));
@@ -305,6 +329,8 @@ menu.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((b) => b.addEven
 
 app.onFrameChange = () => {
   syncTools();
+  board.update();
+  showSubtitle();
   layersPop.update();
   strip.update();
   xsheet.update();
@@ -332,6 +358,7 @@ const showCrumb = () => {
 crumbBtn.addEventListener('click', () => app.editor.exit());
 backOut.addEventListener('click', () => app.editor.exit());
 app.onCompChanged = () => {
+  board.update();
   strip.reset();
   xsheet.reset();
   motion.update();

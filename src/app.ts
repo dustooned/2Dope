@@ -9,7 +9,7 @@ import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { brushMask, DEFAULT_FILL, fillFrom, lassoFill, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
-import { compLength, frameContent, invert, partOf, worldMatrix, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { CompEditor } from './compedit';
@@ -33,6 +33,9 @@ import {
   removeIndices,
   setHolds,
   shiftBlock,
+  setCaption,
+  startOf,
+  type CaptionField,
   totalFrames,
   type Edit,
   type Exposure,
@@ -50,6 +53,7 @@ const FILL_KEY = '2dope.m1.fill';
 const FLIPBOOK_KEY = '2dope.flipbook';
 const FILL_MODE_KEY = '2dope.fill.mode';
 const LAYERS_KEY = '2dope.draw.layers';
+const BOARD_ALPHA_KEY = '2dope.draw.boardAlpha';
 const LAYERS_ALPHA_KEY = '2dope.draw.layersAlpha';
 const VECTOR_ERASE_KEY = '2dope.eraser.vector';
 const FILL_ACROSS_KEY = '2dope.fill.across';
@@ -135,7 +139,7 @@ export interface InputStats {
 }
 
 /** Draw: the canvas and flipbook strip. Time: the X-sheet. Motion: layers, keys and the comp's result. */
-export type Workspace = 'draw' | 'time' | 'motion';
+export type Workspace = 'board' | 'draw' | 'time' | 'motion';
 
 export class App {
   project = new Project(1920, 1080);
@@ -174,6 +178,8 @@ export class App {
     this.editor.gestureEnd(true);
     const was = this.workspace;
     this.workspace = w;
+    if (w === 'board') this.enterBoard();
+    else if (was === 'board') this.leaveBoard();
     // Draw and Time look at the same page; Motion looks at the comp
     if ((was === 'motion') !== (w === 'motion')) this.fit();
     this.requestRender();
@@ -833,6 +839,133 @@ export class App {
     }
   }
 
+  // -------------------------------------------------------------------------------------------
+  // Storyboard / animatic (doc 16): a guide layer of panels on the shot's own clock
+
+  /** How strongly the storyboard shows under Draw (0 = hidden). */
+  boardAlpha = loadJSON<number>(BOARD_ALPHA_KEY) ?? 0.35;
+  /** The layer that was being drawn on before the Board workspace took over. */
+  private beforeBoard: string | null = null;
+
+  setBoardAlpha(a: number): void {
+    this.boardAlpha = Math.max(0, Math.min(1, a));
+    saveJSON(BOARD_ALPHA_KEY, this.boardAlpha);
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** The active comp's storyboard: its first guide drawings layer, or null. */
+  get board(): DrawingsLayer | null {
+    return this.project.comp.layers.find((l): l is DrawingsLayer => l.kind === 'drawings' && l.guide === true) ?? null;
+  }
+
+  private enterBoard(): void {
+    const b = this.board;
+    if (!b) return;
+    if (this.project.activeLayer !== b.id) this.beforeBoard = this.project.activeLayer;
+    this.focusLayer(b.id);
+    this.onCompChanged();
+  }
+
+  private leaveBoard(): void {
+    const b = this.board;
+    if (!b || this.project.activeLayer !== b.id) return;
+    const back = this.beforeBoard && this.project.comp.layers.some((l) => l.id === this.beforeBoard && l.kind === 'drawings') ? this.beforeBoard : '';
+    // '' falls back to the first real drawing layer (or a fresh one when drawing starts)
+    this.project.activeLayer = back;
+    this.selection = [];
+    this.onionCache.clear();
+    this.onCompChanged();
+  }
+
+  /** Start a storyboard: a guide layer under everything with one blank two-second panel. */
+  createBoard(): void {
+    if (this.live || this.board) return;
+    const p = this.project;
+    const len = Math.max(1, Math.round(p.comp.fps * 2));
+    this.editor.edit('Start storyboard', (c) => {
+      const d = p.newDrawing();
+      const l = drawingsLayer(p.newId('L'), 'Board', [{ drawing: d.id, length: len }], p.width, p.height, c.width, c.height);
+      l.guide = true;
+      c.layers.push(l);
+    });
+    if (this.workspace === 'board') this.enterBoard();
+  }
+
+  /** A new blank panel (two seconds) after the selected or current one. */
+  addPanel(): void {
+    const t = this.targets;
+    const d = this.project.newDrawing();
+    const at = t.length ? t[t.length - 1]! + 1 : this.project.exposures.length;
+    this.editTimeline('New panel', (ex) => insertAt(ex, at, [{ drawing: d.id, length: Math.max(1, Math.round(this.project.fps * 2)) }]));
+  }
+
+  /** Go to a panel (its first frame) and select it. */
+  goPanel(index: number): void {
+    const ex = this.project.exposures;
+    if (index < 0 || index >= ex.length) return;
+    this.setLayerFrame(startOf(ex, index));
+    this.setSelection([index]);
+  }
+
+  setPanelDuration(index: number, frames: number): void {
+    if (!Number.isFinite(frames) || frames < 1) return;
+    this.editTimeline('Panel duration', (ex) => ({ ex: setHolds(ex, [index], Math.round(frames)), frame: this.lf }), true);
+  }
+
+  setCaption(index: number, field: CaptionField, text: string): void {
+    this.editTimeline('Edit caption', (ex) => ({ ex: setCaption(ex, index, field, text), frame: this.lf }), true);
+  }
+
+  /** Images (board sketches, photos) as new two-second panels after the current one: one undo step. */
+  async importPanels(files: File[]): Promise<number> {
+    if (this.live || !files.length) return 0;
+    const p = this.project;
+    const made: string[] = [];
+    for (const f of files) {
+      try {
+        const img = await createImageBitmap(f);
+        const d = p.newDrawing();
+        const g = d.line.getContext('2d')!;
+        const k = Math.min(p.width / img.width, p.height / img.height);
+        const w = img.width * k;
+        const h = img.height * k;
+        g.drawImage(img, (p.width - w) / 2, (p.height - h) / 2, w, h);
+        img.close();
+        d.rev++;
+        this.residency.updateThumb(d);
+        made.push(d.id);
+      } catch {
+        // not an image the browser can read: skipped
+      }
+    }
+    if (!made.length) return 0;
+    const t = this.targets;
+    const at = t.length ? t[t.length - 1]! + 1 : p.exposures.length;
+    const len = Math.max(1, Math.round(p.fps * 2));
+    this.editTimeline(made.length > 1 ? `Import ${made.length} panels` : 'Import panel', (ex) =>
+      insertAt(
+        ex,
+        at,
+        made.map((id) => ({ drawing: id, length: len })),
+      ),
+    );
+    return made.length;
+  }
+
+  /** From the board to animation: Draw on the shot's first real layer, with the board faintly underneath. */
+  animateShot(): void {
+    if (this.live) return;
+    this.setWorkspace('draw');
+    const layer = this.project.comp.layers.find((l) => l.kind === 'drawings' && !l.guide);
+    if (layer) this.pickLayer(layer.id);
+    else {
+      this.project.activeLayer = '';
+      this.onCompChanged();
+    }
+    if (this.boardAlpha === 0) this.setBoardAlpha(0.35);
+  }
+
   /** A new blank drawing after the last frame of the active layer, and go to it (the strip's + cell). */
   appendFrame(): void {
     if (this.live) return;
@@ -842,7 +975,7 @@ export class App {
 
   /** Go to the blank page after the active layer's last frame. */
   goBlankPage(): void {
-    if (this.live || !this.flipbook || this.workspace === 'motion') return;
+    if (this.live || !this.flipbook || this.workspace === 'motion' || this.workspace === 'board') return;
     this.setLayerFrame(this.project.length - 1);
     if (this.playing) this.togglePlay();
     this.blankPage = true;
@@ -871,7 +1004,7 @@ export class App {
 
   nextFrame(): void {
     if (this.blankPage) return;
-    if (this.flipbook && this.workspace !== 'motion' && !this.playing && this.layerFrame >= this.project.length - 1) return this.goBlankPage();
+    if (this.flipbook && (this.workspace === 'draw' || this.workspace === 'time') && !this.playing && this.layerFrame >= this.project.length - 1) return this.goBlankPage();
     this.setFrame(this.frame + 1);
   }
 
@@ -1936,7 +2069,8 @@ export class App {
         this.togglePlay();
         break;
       case 'KeyN':
-        this.addFrame();
+        if (this.workspace === 'board') this.addPanel();
+        else this.addFrame();
         break;
       case 'KeyD':
         void this.duplicateSelection();
@@ -2087,10 +2221,12 @@ export class App {
     }
     const comp = this.project.comp;
     const activeId = this.project.layer.id;
-    if (this.showLayers) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', this.otherAlpha);
+    const others = this.showLayers ? this.otherAlpha : 0;
+    const around = others > 0 || this.boardAlpha > 0;
+    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha);
     this.drawOnion(g);
     if (this.blankPage && !this.live) {
-      if (this.showLayers) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', this.otherAlpha);
+      if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha);
       return;
     }
     const live = this.live;
@@ -2132,7 +2268,7 @@ export class App {
       drawVectorStroke(g, { ...live.record, points: [...live.record.points, ...extra] });
     }
 
-    if (this.showLayers) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', this.otherAlpha);
+    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha);
     this.drawFillPath(g);
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
   }
@@ -2186,7 +2322,7 @@ export class App {
       return [...out];
     }
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
-    if (this.showLayers)
+    if (this.showLayers || this.boardAlpha > 0)
       for (const id of frameContent(p.comps, p.comp.id, this.frame).drawings) {
         const d = p.drawings.get(id);
         if (d) out.add(d);

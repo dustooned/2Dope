@@ -2739,3 +2739,160 @@ body.ws-motion #layers-btn,
 body.ws-time #layers-btn {
   display: none;
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Board workspace: storyboard cards under the canvas */
+
+:root {
+  --board-h: 300px;
+}
+
+.board {
+  display: none;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+body.ws-board .board {
+  display: flex;
+}
+
+body.ws-board .strip,
+body.ws-board .motion,
+body.ui-hidden .board {
+  display: none;
+}
+
+.board-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.board-bar.none > :not(.board-title):not(.board-info) {
+  display: none;
+}
+
+.board-bar > * {
+  flex: 0 0 auto;
+}
+
+.board-title {
+  font-weight: 600;
+}
+
+.board-info {
+  margin-right: auto;
+}
+
+.board-cards {
+  display: flex;
+  gap: 10px;
+  height: min(var(--board-h), 46vh);
+  padding: 4px 10px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+}
+
+.board-empty {
+  margin: auto;
+  max-width: 420px;
+  text-align: center;
+}
+
+.board-empty button {
+  margin: 4px;
+}
+
+.bcard {
+  flex: 0 0 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+  overflow-y: auto;
+}
+
+.bcard.selected {
+  border-color: #c9739a;
+}
+
+.bcard.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.bhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bnum {
+  min-width: 22px;
+  font-weight: 700;
+}
+
+.bdur {
+  width: 64px;
+  min-height: 28px;
+  padding: 0 6px;
+}
+
+.bthumb {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #ffffff;
+}
+
+.bfield {
+  width: 100%;
+  resize: none;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.bfield:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* the panel's dialogue under the picture */
+.subtitle {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: min(80%, 720px);
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #ffffff;
+  font-size: 15px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.subtitle[hidden] {
+  display: none;
+}

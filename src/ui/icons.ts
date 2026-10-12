@@ -40,6 +40,7 @@ const P: Record<string, string> = {
   layers: '<path d="M12 4l9 4.5-9 4.5-9-4.5z"/><path d="M3 13l9 4.5 9-4.5"/>',
   camera: '<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5l5-3v9l-5-3z"/>',
   more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
+  board: '<rect x="3" y="4" width="8" height="6" rx="1"/><rect x="13" y="4" width="8" height="6" rx="1"/><path d="M3 14h8M3 17h6M13 14h8M13 17h6"/>',
   scissors: '<circle cx="6" cy="6.5" r="2.5"/><circle cx="6" cy="17.5" r="2.5"/><path d="M8 8l12 9M8 16L20 7"/>',
   lasso: '<path d="M7 17c-3-1.5-4-4-3-6.5C5.5 6 10 4 14.5 4.5S21 8 20 11.5 14 17 10 16.5"/><path d="M7 17c.5 1.5-.5 3-2 3.5"/>',
 };

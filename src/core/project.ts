@@ -139,7 +139,8 @@ export class Project {
     const c = this.comp;
     const chosen = c.layers.find((l) => l.id === this.activeLayer);
     if (chosen && chosen.kind === 'drawings') return chosen;
-    const first = c.layers.find((l): l is DrawingsLayer => l.kind === 'drawings');
+    // the storyboard (a guide layer) is only drawn on when picked; otherwise the first real layer
+    const first = c.layers.find((l): l is DrawingsLayer => l.kind === 'drawings' && !l.guide);
     if (first) {
       this.activeLayer = first.id;
       return first;
