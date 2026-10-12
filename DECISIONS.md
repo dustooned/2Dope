@@ -116,6 +116,13 @@
 - The Draw view applies hide and fade (the plane you are drawing on stays faintly visible), not offset or tint, so strokes land where the pen is.
 - A layer with changed parts is no longer a "plain flipbook", so export goes through the compositor and the Lines / Fills passes follow the parts. Blender gets drawings as drawn for now (noted in the package README).
 
+## 2026-10-11: Fill upgrades (step 5 of doc 13)
+
+- **Lines are read once per drawing** (`prepareFill`: barrier + gap distance), cached until the drawing's lines change; fills keep the cache valid (they only touch the Fill plane). A repeat tap is one flood.
+- **One fill gesture, three modes**: Tap / drag (every area the finger crosses fills; seeds on a line are refused so crossing a line does not fill the other side by accident), Lasso (every closed area at least 90 % inside the loop; the background leaks out and is skipped), Leftovers (scrub: unfilled specks whose flood stays small take the commonest colour around them, else the current colour). Each gesture is one undo step.
+- **Fill the next N drawings** at the same spot (distinct drawings, holds skipped), all in the same undo step. Leftovers stay on the current drawing (specks differ per drawing).
+- Not yet: "refer to other layers" (needs the active layer's transform to match the comp); a worker for very large pages.
+
 ## Open
 
 - Pressure curve per device (global) vs per brush only?

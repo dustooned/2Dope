@@ -7,7 +7,7 @@ import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
-import { computeFill, DEFAULT_FILL, type FillOptions } from './fill/fill';
+import { brushMask, DEFAULT_FILL, fillFrom, lassoFill, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
 import { compLength, frameContent, invert, partOf, worldMatrix, type Layer, type PartName } from './core/comp';
 import { valueAt } from './core/anim';
@@ -47,6 +47,35 @@ const COLOR_KEY = '2dope.m0.color';
 const ONION_KEY = '2dope.m1.onion';
 const FILL_KEY = '2dope.m1.fill';
 const FLIPBOOK_KEY = '2dope.flipbook';
+const FILL_MODE_KEY = '2dope.fill.mode';
+const FILL_ACROSS_KEY = '2dope.fill.across';
+
+/** Fill tool: tap or drag across areas, lasso around areas, or scrub up leftovers. */
+export type FillMode = 'tap' | 'lasso' | 'leftover';
+
+/** An inclusive pixel box (x1 < 0 = empty). */
+interface Box4 {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+const emptyBox = (): Box4 => ({ x0: Infinity, y0: Infinity, x1: -1, y1: -1 });
+function grow4(b: Box4, r: Box4): void {
+  b.x0 = Math.min(b.x0, r.x0);
+  b.y0 = Math.min(b.y0, r.y0);
+  b.x1 = Math.max(b.x1, r.x1);
+  b.y1 = Math.max(b.y1, r.y1);
+}
+
+/** One drawing's part of a fill's undo step. */
+interface FillEntry {
+  d: Drawing;
+  target: HTMLCanvasElement;
+  rect: { x: number; y: number; w: number; h: number };
+  before: ImageData;
+  after: ImageData;
+}
 
 interface LiveStroke {
   record: StrokeRecord;
@@ -282,64 +311,298 @@ export class App {
     saveJSON(FILL_KEY, this.fillOptions);
   }
 
-  /**
-   * Fill the region under the click. The region comes from the line plane plus vector strokes
-   * (what you see as line art); the color goes on the fill plane, under the lines.
-   */
-  private fillAt(e: PointerEvent): void {
-    if (this.project.isPlaceholder) this.project.editLayer();
-    const d = this.drawing;
-    if (!this.residency.isReady(d)) return;
-    const p = this.toPoint(e, e.timeStamp);
-    const x = Math.floor(p.x);
-    const y = Math.floor(p.y);
-    if (x < 0 || y < 0 || x >= this.docW || y >= this.docH) return;
+  // -------------------------------------------------------------------------------------------
+  // Fill tool: tap or drag across areas, lasso around areas, or scrub up leftovers. The line art
+  // is read once per drawing (a prepared map) and reused until the lines change.
+
+  /** How the fill tool works: tap / drag across areas, lasso around them, or scrub up leftovers. */
+  fillMode: FillMode = loadJSON<FillMode>(FILL_MODE_KEY) ?? 'tap';
+  /** Also fill the same spot on this many following drawings (0 = this drawing only). */
+  fillAcross = Math.max(0, Math.min(12, loadJSON<number>(FILL_ACROSS_KEY) ?? 0));
+
+  setFillMode(m: FillMode): void {
+    this.fillMode = m;
+    saveJSON(FILL_MODE_KEY, m);
+    this.onToolChange();
+  }
+
+  setFillAcross(n: number): void {
+    this.fillAcross = Math.max(0, Math.min(12, Math.round(n)));
+    saveJSON(FILL_ACROSS_KEY, this.fillAcross);
+    this.onToolChange();
+  }
+
+  private fillMapCache: { d: Drawing; rev: number; key: string; map: FillMap } | null = null;
+  private fillG: {
+    pointerId: number;
+    d: Drawing;
+    mode: FillMode;
+    /** Path of the lasso / leftover brush, or the drag's last point. */
+    points: [number, number][];
+    /** Seeds that filled something (replayed on the following drawings). */
+    seeds: [number, number][];
+    /** The fill plane before the gesture (for one undo step and for cancelling). */
+    before: ImageData;
+    /** Pixels filled so far in this gesture (a drag does not refill them). */
+    painted: Uint8Array;
+    box: Box4;
+  } | null = null;
+  private fillBusy = false;
+
+  /** The line art of a drawing as a fill map (line plane + vector strokes). */
+  private fillMapOf(d: Drawing): FillMap {
     this.fillScratch ??= makeCanvas(this.docW, this.docH);
-    const sg = this.fillScratch.getContext('2d', { willReadFrequently: true });
-    if (!sg) return;
+    const sg = this.fillScratch.getContext('2d', { willReadFrequently: true })!;
     sg.clearRect(0, 0, this.docW, this.docH);
     sg.drawImage(d.line, 0, 0);
     for (const v of d.vectors) drawVectorStroke(sg, v, this.lengthOf(v));
     const px = sg.getImageData(0, 0, this.docW, this.docH).data;
     const alpha = new Uint8Array(this.docW * this.docH);
     for (let i = 0; i < alpha.length; i++) alpha[i] = px[i * 4 + 3]!;
-    const r = computeFill(alpha, this.docW, this.docH, x, y, this.fillOptions);
-    if (!r) return;
+    return prepareFill(alpha, this.docW, this.docH, this.fillOptions);
+  }
 
+  /** The current drawing's fill map, reused while its lines stay the same. */
+  private fillMapFor(d: Drawing): FillMap {
+    const key = `${JSON.stringify(this.fillOptions)}|${d.vectors.length}`;
+    const c = this.fillMapCache;
+    if (c && c.d === d && c.rev === d.rev && c.key === key) return c.map;
+    const map = this.fillMapOf(d);
+    this.fillMapCache = { d, rev: d.rev, key, map };
+    return map;
+  }
+
+  /** Mark a drawing changed by a fill: its lines did not change, so its fill map stays valid. */
+  private touchFill(d: Drawing): void {
+    const c = this.fillMapCache;
+    const keep = c !== null && c.d === d && c.rev === d.rev;
+    this.touch(d);
+    if (keep && c) c.rev = d.rev;
+  }
+
+  private rgbOf(color: string): number {
+    return parseInt(color.replace('#', ''), 16) & 0xffffff;
+  }
+
+  /** Paint mask pixels (inside `box`) in one colour on a drawing's fill plane; returns the changed box. */
+  private paintMask(d: Drawing, mask: Uint8Array, box: Box4, rgb: number): void {
     const target = planeCanvas(d, 'fill');
-    const tg = target.getContext('2d');
-    if (!tg) return;
-    const rect = { x: r.x0, y: r.y0, w: r.x1 - r.x0 + 1, h: r.y1 - r.y0 + 1 };
-    const before = tg.getImageData(rect.x, rect.y, rect.w, rect.h);
-    const after = new ImageData(new Uint8ClampedArray(before.data), rect.w, rect.h);
-    const n = parseInt(this.color.replace('#', ''), 16);
-    const cr = (n >> 16) & 255;
-    const cg = (n >> 8) & 255;
-    const cb = n & 255;
+    const tg = target.getContext('2d')!;
+    const rect = { x: box.x0, y: box.y0, w: box.x1 - box.x0 + 1, h: box.y1 - box.y0 + 1 };
+    const img = tg.getImageData(rect.x, rect.y, rect.w, rect.h);
+    const [r, g, b] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255];
     for (let yy = 0; yy < rect.h; yy++) {
       for (let xx = 0; xx < rect.w; xx++) {
-        if (!r.mask[(rect.y + yy) * this.docW + rect.x + xx]) continue;
+        if (!mask[(rect.y + yy) * this.docW + rect.x + xx]) continue;
         const o = (yy * rect.w + xx) * 4;
-        after.data[o] = cr;
-        after.data[o + 1] = cg;
-        after.data[o + 2] = cb;
-        after.data[o + 3] = 255;
+        img.data[o] = r;
+        img.data[o + 1] = g;
+        img.data[o + 2] = b;
+        img.data[o + 3] = 255;
       }
     }
-    putPixels(target, rect, after);
+    putPixels(target, rect, img);
+  }
+
+  private beginFill(e: PointerEvent): void {
+    if (this.fillBusy) return;
+    if (this.project.isPlaceholder) this.project.editLayer();
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    const p = this.toPoint(e, e.timeStamp);
+    const target = planeCanvas(d, 'fill');
+    const before = target.getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
+    this.fillG = { pointerId: e.pointerId, d, mode: this.fillMode, points: [[p.x, p.y]], seeds: [], before, painted: new Uint8Array(this.docW * this.docH), box: emptyBox() };
+    if (this.fillMode === 'tap') this.fillSeed(p.x, p.y, false);
+    this.onStrokeState(true);
+    this.requestRender();
+  }
+
+  /** One seed of a tap or drag fill (skipped where this gesture already filled). */
+  private fillSeed(fx: number, fy: number, exact: boolean): void {
+    const g = this.fillG;
+    if (!g) return;
+    const x = Math.floor(fx);
+    const y = Math.floor(fy);
+    if (x < 0 || y < 0 || x >= this.docW || y >= this.docH || g.painted[y * this.docW + x]) return;
+    const r = fillFrom(this.fillMapFor(g.d), x, y, exact);
+    if (!r) return;
+    this.paintMask(g.d, r.mask, r, this.rgbOf(this.color));
+    for (let yy = r.y0; yy <= r.y1; yy++) for (let xx = r.x0; xx <= r.x1; xx++) if (r.mask[yy * this.docW + xx]) g.painted[yy * this.docW + xx] = 1;
+    grow4(g.box, r);
+    g.seeds.push([x, y]);
+    this.touchFill(g.d);
+  }
+
+  private fillMove(e: PointerEvent): void {
+    const g = this.fillG;
+    if (!g) return;
+    const events = e.getCoalescedEvents?.() ?? [];
+    for (const ev of events.length ? events : [e]) {
+      const p = this.toPoint(ev, ev.timeStamp);
+      const last = g.points[g.points.length - 1]!;
+      if (g.mode === 'tap') {
+        // drag fill: every area the finger passes over, sampled every 2 px so thin areas are not skipped
+        const steps = Math.max(1, Math.ceil(Math.hypot(p.x - last[0], p.y - last[1]) / 2));
+        for (let k = 1; k <= steps; k++) this.fillSeed(last[0] + ((p.x - last[0]) * k) / steps, last[1] + ((p.y - last[1]) * k) / steps, true);
+        g.points[g.points.length - 1] = [p.x, p.y];
+      } else if (Math.hypot(p.x - last[0], p.y - last[1]) >= 1.5 / this.view.zoom) g.points.push([p.x, p.y]);
+    }
+    this.requestRender();
+  }
+
+  /** Radius of the leftover brush (document px): half the brush size, at least 4. */
+  private leftoverRadius(): number {
+    return Math.max(4, this.brush.size / 2);
+  }
+
+  private endFill(cancel: boolean): void {
+    const g = this.fillG;
+    if (!g) return;
+    this.fillG = null;
+    this.onStrokeState(false);
+    const d = g.d;
+    const target = planeCanvas(d, 'fill');
+    if (cancel) {
+      target.getContext('2d')!.putImageData(g.before, 0, 0);
+      this.touchFill(d);
+      return;
+    }
+    const color = this.rgbOf(this.color);
+    let poly: Area | null = null;
+    if (g.mode === 'lasso') {
+      poly = polygonMask(g.points, this.docW, this.docH);
+      const r = poly ? lassoFill(this.fillMapFor(d), poly) : null;
+      if (r) {
+        this.paintMask(d, r.mask, r, color);
+        grow4(g.box, r);
+      }
+    } else if (g.mode === 'leftover') {
+      const brush = brushMask(g.points, this.leftoverRadius(), this.docW, this.docH);
+      if (brush) {
+        const rad = this.leftoverRadius();
+        const fillPx = target.getContext('2d')!.getImageData(0, 0, this.docW, this.docH).data;
+        const holes = leftoverHoles(fillPx, this.fillMapFor(d).alpha, this.docW, this.docH, brush, {
+          threshold: this.fillOptions.threshold,
+          maxArea: Math.max(64, Math.round(Math.PI * rad * rad * 3)),
+          under: this.fillOptions.under,
+          fallback: color,
+        });
+        for (const hole of holes) {
+          const m = new Uint8Array(this.docW * this.docH);
+          const box = emptyBox();
+          for (const i of hole.pixels) {
+            m[i] = 1;
+            const x = i % this.docW;
+            grow4(box, { x0: x, y0: (i - x) / this.docW, x1: x, y1: (i - x) / this.docW });
+          }
+          this.paintMask(d, m, box, hole.rgb);
+          grow4(g.box, box);
+        }
+      }
+    }
+    if (g.box.x1 < 0) {
+      this.requestRender();
+      return;
+    }
+    this.touchFill(d);
+    const entries = [this.fillEntry(d, g.before, g.box)];
+    const label = g.mode === 'lasso' ? 'Lasso fill' : g.mode === 'leftover' ? 'Fill leftovers' : g.seeds.length > 1 ? 'Drag fill' : 'Fill';
+    if (this.fillAcross > 0 && g.mode !== 'leftover') void this.fillFollowing(d, g.seeds, poly, color, entries, label);
+    else this.pushFill(label, entries);
+  }
+
+  /** Before / after of the changed box of a drawing's fill plane (the plane already shows "after"). */
+  private fillEntry(d: Drawing, before: ImageData, box: Box4): FillEntry {
+    const target = planeCanvas(d, 'fill');
+    const rect = { x: box.x0, y: box.y0, w: box.x1 - box.x0 + 1, h: box.y1 - box.y0 + 1 };
+    const b = new ImageData(rect.w, rect.h);
+    for (let y = 0; y < rect.h; y++) {
+      const from = ((rect.y + y) * before.width + rect.x) * 4;
+      b.data.set(before.data.subarray(from, from + rect.w * 4), y * rect.w * 4);
+    }
+    return { d, target, rect, before: b, after: target.getContext('2d')!.getImageData(rect.x, rect.y, rect.w, rect.h) };
+  }
+
+  private pushFill(label: string, entries: FillEntry[]): void {
     this.history.push({
-      label: 'Fill',
-      drawings: [d],
+      label,
+      drawings: entries.map((e) => e.d),
       do: () => {
-        putPixels(target, rect, after);
-        this.touch(d);
+        for (const e of entries) {
+          putPixels(e.target, e.rect, e.after);
+          this.touchFill(e.d);
+        }
       },
       undo: () => {
-        putPixels(target, rect, before);
-        this.touch(d);
+        for (const e of entries) {
+          putPixels(e.target, e.rect, e.before);
+          this.touchFill(e.d);
+        }
       },
     });
-    this.touch(d);
+  }
+
+  /** Repeat a fill at the same spot on the next drawings (distinct, holds skipped). One undo step for all. */
+  private async fillFollowing(first: Drawing, seeds: [number, number][], poly: Area | null, rgb: number, entries: FillEntry[], label: string): Promise<void> {
+    this.fillBusy = true;
+    try {
+      const ex = this.project.exposures;
+      const next = neighborDrawings(ex, this.lf, 0, this.fillAcross)
+        .after.map((n) => this.project.drawing(n.drawing))
+        .filter((x) => x !== first);
+      for (const d of next) {
+        await this.residency.pin(d);
+        try {
+          const map = this.fillMapOf(d);
+          const target = planeCanvas(d, 'fill');
+          const before = target.getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
+          const box = emptyBox();
+          const painted = new Uint8Array(this.docW * this.docH);
+          const results = poly ? [lassoFill(map, poly)] : seeds.map(([x, y], k) => (painted[y * this.docW + x] ? null : fillFrom(map, x, y, k > 0)));
+          for (const r of results) {
+            if (!r) continue;
+            this.paintMask(d, r.mask, r, rgb);
+            for (let yy = r.y0; yy <= r.y1; yy++) for (let xx = r.x0; xx <= r.x1; xx++) if (r.mask[yy * this.docW + xx]) painted[yy * this.docW + xx] = 1;
+            grow4(box, r);
+          }
+          if (box.x1 >= 0) {
+            this.touch(d);
+            entries.push(this.fillEntry(d, before, box));
+          }
+        } finally {
+          this.residency.unpin(d);
+        }
+      }
+    } finally {
+      this.fillBusy = false;
+      this.pushFill(entries.length > 1 ? `${label} (${entries.length} drawings)` : label, entries);
+    }
+  }
+
+  /** The lasso or leftover path while the pen is down (document space, on top of the drawing). */
+  private drawFillPath(g: CanvasRenderingContext2D): void {
+    const f = this.fillG;
+    if (!f || f.mode === 'tap' || f.points.length < 2) return;
+    g.save();
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(f.points[0]![0], f.points[0]![1]);
+    for (const p of f.points) g.lineTo(p[0], p[1]);
+    if (f.mode === 'lasso') {
+      g.closePath();
+      g.fillStyle = 'rgba(255, 90, 138, 0.12)';
+      g.fill();
+      g.setLineDash([6 / this.view.zoom, 4 / this.view.zoom]);
+      g.lineWidth = 1.5 / this.view.zoom;
+      g.strokeStyle = '#ff5a8a';
+    } else {
+      g.lineWidth = this.leftoverRadius() * 2;
+      g.strokeStyle = 'rgba(255, 90, 138, 0.3)';
+    }
+    g.stroke();
+    g.restore();
   }
 
   setBrush(b: BrushSettings): void {
@@ -432,6 +695,7 @@ export class App {
     if (resized) {
       this.raster.resize(p.width, p.height);
       this.fillScratch = null;
+      this.fillMapCache = null;
       this.fit();
     }
     this.onionCache.resize(p.width, p.height);
@@ -950,7 +1214,7 @@ export class App {
       this.onFrameChange();
     }
     if (this.tool === 'fill') {
-      if (!this.blankPage) this.fillAt(e);
+      if (!this.blankPage) this.beginFill(e);
       return;
     }
     const tool = this.tool;
@@ -1259,6 +1523,20 @@ export class App {
         ...(picked ? [{ label: 'Pick this colour', hint: picked, run: () => this.setColor(picked) }] : []),
         { title: 'Tool' },
         { chips: [tool('brush', 'Brush'), tool('eraser', 'Eraser'), tool('pen', 'Vector'), tool('fill', 'Fill')] },
+        ...(this.tool === 'fill'
+          ? [
+              { title: 'Fill' },
+              {
+                chips: [
+                  { label: 'Tap / drag', on: this.fillMode === 'tap', run: () => this.setFillMode('tap') },
+                  { label: 'Lasso', on: this.fillMode === 'lasso', run: () => this.setFillMode('lasso') },
+                  { label: 'Leftovers', on: this.fillMode === 'leftover', run: () => this.setFillMode('leftover') },
+                ],
+              },
+              { title: 'Also fill the next drawings' },
+              { chips: [0, 1, 2, 4, 8].map((n) => ({ label: n ? `+${n}` : 'Off', on: this.fillAcross === n, run: () => this.setFillAcross(n) })) },
+            ]
+          : []),
         { title: 'Draw on' },
         {
           chips: [
@@ -1314,6 +1592,7 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    if (this.fillG && e.pointerId === this.fillG.pointerId) return this.fillMove(e);
     const arm = this.holdArm;
     if (arm && arm.id === e.pointerId && Math.hypot(e.clientX - arm.x, e.clientY - arm.y) > HOLD_SLOP) this.disarmHold();
     if (this.motionPointer === e.pointerId) {
@@ -1349,6 +1628,7 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (this.fillG && e.pointerId === this.fillG.pointerId) this.endFill(cancelled && e.pointerType !== 'pen');
     this.disarmHold();
     if (this.held_ === e.pointerId) this.held_ = null;
     if (this.motionPointer === e.pointerId) {
@@ -1575,6 +1855,7 @@ export class App {
         this.setTool('pen');
         break;
       case 'KeyG':
+        if (e.shiftKey && this.tool === 'fill') this.setFillMode(this.fillMode === 'tap' ? 'lasso' : this.fillMode === 'lasso' ? 'leftover' : 'tap');
         this.setTool('fill');
         break;
       case 'KeyX':
@@ -1736,6 +2017,7 @@ export class App {
       drawVectorStroke(g, { ...live.record, points: [...live.record.points, ...extra] });
     }
 
+    this.drawFillPath(g);
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
   }
 

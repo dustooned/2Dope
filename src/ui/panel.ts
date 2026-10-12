@@ -228,7 +228,39 @@ function fillEditor(app: App): HTMLElement {
     row.append(el('span', { class: 'name' }, d.label), input, out);
     fs.append(row);
   }
-  fs.append(el('p', { class: 'hint' }, 'Reads the Line plane and vector strokes; paints the Fill plane under them. Use the On: Fill switch (X) to paint color by hand.'));
+  // how the tool works, and how many following drawings get the same fill
+  const modes = el('div', { class: 'row seg', role: 'group', 'aria-label': 'Fill mode' });
+  const modeBtns: HTMLButtonElement[] = [];
+  for (const [m, label, hint] of [
+    ['tap', 'Tap / drag', 'Tap an area, or drag across several to fill each one'],
+    ['lasso', 'Lasso', 'Draw a loop: every closed area inside it fills'],
+    ['leftover', 'Leftovers', 'Scrub over specks the fill missed (brush size)'],
+  ] as const) {
+    const b = el('button', { type: 'button', title: hint }, label);
+    b.addEventListener('click', () => {
+      app.setFillMode(m);
+      sync();
+    });
+    modeBtns.push(b);
+    modes.append(b);
+  }
+  const acrossRow = el('label', { class: 'row', title: 'After a fill, fill the same spot on this many following drawings too (one undo step)' });
+  const across = el('input', { type: 'range', min: '0', max: '12', step: '1' });
+  const acrossOut = el('output');
+  across.addEventListener('input', () => {
+    app.setFillAcross(Number(across.value));
+    sync();
+  });
+  acrossRow.append(el('span', { class: 'name' }, 'Next drawings'), across, acrossOut);
+  const sync = () => {
+    modeBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(['tap', 'lasso', 'leftover'][i] === app.fillMode)));
+    across.value = String(app.fillAcross);
+    acrossOut.textContent = app.fillAcross ? `+${app.fillAcross}` : 'off';
+  };
+  sync();
+  fs.insertBefore(acrossRow, fs.children[1] ?? null);
+  fs.insertBefore(modes, acrossRow);
+  fs.append(el('p', { class: 'hint' }, 'Reads the Line plane and vector strokes; paints the Fill plane under them. Shift+G switches Tap / Lasso / Leftovers.'));
   return fs;
 }
 
