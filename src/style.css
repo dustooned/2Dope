@@ -1671,8 +1671,7 @@ body.ws-motion .motion {
   display: flex;
 }
 
-body.ws-motion .strip,
-body.ws-time .strip {
+body.ws-motion .strip {
   display: none;
 }
 

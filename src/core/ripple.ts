@@ -39,7 +39,8 @@ export function rippleProp<T extends Value>(p: Prop<T>, at: number, delta: numbe
  */
 export function rippleExposures(ex: Exposure[], at: number, delta: number): Exposure[] {
   const total = totalFrames(ex);
-  if (!delta || at <= 0 || at >= total + (delta > 0 ? 1 : 0)) return ex;
+  // adding needs a hold before `at` to lengthen; removing can start at the very first frame
+  if (!delta || (delta > 0 ? at <= 0 : at < 0) || at >= total + (delta > 0 ? 1 : 0)) return ex;
   const out = ex.map((e) => ({ ...e }));
   if (delta > 0) {
     const l = locate(ex, at - 1);
@@ -101,10 +102,23 @@ export function rippleComp(c: Comp, comps: ReadonlyMap<string, Comp>, edited: st
       return l;
     }
     if (l.in >= P) {
-      // starts after the edit: the whole layer moves
-      l.start += delta;
-      l.in += delta;
-      if (l.out !== null) l.out += delta;
+      // starts after the edit: the whole layer moves. When frames are removed it moves back at
+      // most to the edit point: a layer that started inside the removed span (or right at it)
+      // must not slide before it (and never before the shot's first frame).
+      // a plain drawings layer starting inside the removed span loses the frames that were in it
+      // (deleting the first board panel removes the animation drawn for it), so the rest stays in step
+      if (delta < 0 && l.kind === 'drawings' && plain(l) && l.start === l.in && l.in < P - delta) {
+        const cut = Math.min(P - delta - l.in, totalFrames(l.exposures) - 1);
+        if (cut > 0) l.exposures = rippleExposures(l.exposures, 0, -cut);
+        l.start = P;
+        l.in = P;
+        if (l.out !== null) l.out = Math.max(P + 1, l.out + delta);
+        return l;
+      }
+      const shift = delta < 0 ? Math.max(delta, P - l.in) : delta;
+      l.start += shift;
+      l.in += shift;
+      if (l.out !== null) l.out += shift;
       return l;
     }
     if (end <= P) return orig; // over before the edit

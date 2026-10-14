@@ -9,7 +9,7 @@ import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { brushMask, DEFAULT_FILL, fillFrom, lassoFill, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
-import { editPoint, rippleComp, shiftLater } from './core/ripple';
+import { editPoint, rippleComp, rippleExposures, shiftLater } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type Comp, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { valueAt } from './core/anim';
@@ -856,6 +856,18 @@ export class App {
     this.scrubbing = false;
     this.lockFrame = null;
     const resized = p.width !== this.project.width || p.height !== this.project.height;
+    // repair: an older ripple could push layers to start before frame 0 (deleting the first
+    // board panel), which made their first frames unreachable. Slide such a shot back, all
+    // layers together so they stay in step.
+    for (const c of p.comps.values()) {
+      const first = Math.min(0, ...c.layers.map((l) => l.in));
+      if (first >= 0) continue;
+      for (const l of c.layers) {
+        l.start -= first;
+        l.in -= first;
+        if (l.out !== null) l.out -= first;
+      }
+    }
     this.project = p;
     this.selection = [];
     this.frame = 0;
@@ -1402,7 +1414,19 @@ export class App {
     // animation drawn in step with it (layers that ended where the board ended).
     const board = layer.kind === 'drawings' && layer.guide === true;
     const atEnd = ep.delta > 0 ? ep.at >= total : ep.at - ep.delta >= total;
-    if (atEnd && !board) return null;
+    if (atEnd && !board) {
+      // the animation grew or shrank at its end (flipbook, + Frame, a longer last hold): a board
+      // that ended with it follows, so the last panel stays in step
+      const b = this.board;
+      const oldEnd = layer.start + total;
+      if (!b || b.id === layerId || b.out !== null || b.start + totalFrames(b.exposures) !== oldEnd || !b.exposures.length) return null;
+      const layers = comp.layers.map((l) => {
+        if (l.id === layerId) return { ...l, exposures: after } as Layer;
+        if (l.id !== b.id) return l;
+        return { ...l, exposures: rippleExposures(b.exposures, oldEnd - b.start + Math.min(0, ep.delta), ep.delta) } as Layer;
+      });
+      return { before: structuredClone(comp.layers), after: structuredClone(layers), durBefore: comp.duration, durAfter: comp.duration };
+    }
     const temp: Comp = { ...comp, layers: comp.layers.map((l) => (l.id === layerId ? ({ ...l, exposures: after } as Layer) : l)) };
     const r = rippleComp(temp, this.project.comps, layerId, layer.start + ep.at, ep.delta);
     if (atEnd && board && ep.delta > 0) {
@@ -1497,6 +1521,40 @@ export class App {
     this.flashTimer = window.setTimeout(() => {
       if (this.editLine === shown) this.setEditLine(null);
     }, 1400);
+  }
+
+  /**
+   * Split the hold under the playhead in two: the frames from here on get a copy of the drawing,
+   * so the second part can be redrawn (a new key) while the first stays.
+   */
+  async splitHold(): Promise<void> {
+    if (this.live) return;
+    const ex = this.project.exposures;
+    const at = this.lf;
+    const i = ex.findIndex((_, k) => startOf(ex, k) <= at && at < startOf(ex, k) + ex[k]!.length);
+    const e = ex[i];
+    const k = e ? at - startOf(ex, i) : 0;
+    if (!e || k <= 0) {
+      this.onNotice?.('Move the playhead inside a held drawing (not its first frame) to split it there.');
+      return;
+    }
+    // the copy is made safely even if the drawing's pixels are parked (same as Duplicate)
+    const copies = await this.copyDrawings([e.drawing]);
+    const copy = copies?.[0];
+    if (!copy || this.project.exposures !== ex) return;
+    this.editTimeline('Split hold', (old) => ({
+      ex: [...old.slice(0, i), { ...old[i]!, length: k }, { drawing: copy, length: old[i]!.length - k }, ...old.slice(i + 1)],
+      frame: at,
+      selection: [i + 1],
+    }));
+  }
+
+  /** Touch multi-select: while on, tapping frames adds or removes them from the selection. */
+  multiSelect = false;
+  setMultiSelect(on: boolean): void {
+    this.multiSelect = on;
+    if (!on && this.selection.length > 1) this.setSelection([this.selection[this.selection.length - 1]!]);
+    this.onFrameChange();
   }
 
   addFrame(): void {

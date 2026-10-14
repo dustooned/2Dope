@@ -108,3 +108,36 @@ describe('ripple across a shot', () => {
     expect(moved.find((l) => l.id === 'A')).toBe(c.layers.find((l) => l.id === 'A'));
   });
 });
+
+describe('ripple: removing frames never pushes a layer before the edit', () => {
+  it('deleting the first board panel keeps the animation at frame 0', async () => {
+    const { rippleComp } = await import('./ripple');
+    const { drawingsLayer } = await import('./comp');
+    const board = drawingsLayer('B', 'Board', [{ drawing: 'p2', length: 12 }], 100, 100);
+    board.guide = true;
+    const anim = drawingsLayer(
+      'A',
+      'Animation',
+      [
+        { drawing: 'a1', length: 10 },
+        { drawing: 'a2', length: 12 },
+      ],
+      100,
+      100,
+    );
+    const comp = { id: 'c', name: 'c', width: 100, height: 100, fps: 24, duration: null, background: null, folder: null, layers: [board, anim], pins: [] };
+    // the board's first panel (10 frames at 0) was deleted: P = 0, delta = -10
+    const r = rippleComp(comp as never, new Map(), 'B', 0, -10);
+    const a = r.layers.find((l) => l.id === 'A')!;
+    expect(a.start).toBe(0);
+    expect(a.in).toBe(0);
+    // the animation drawn for the deleted panel goes with it; the rest stays in step
+    expect(a.kind === 'drawings' && a.exposures).toEqual([{ drawing: 'a2', length: 12 }]);
+    // a layer that started after the removed span moves back by the full amount
+    const late = drawingsLayer('L', 'Late', [{ drawing: 'x', length: 5 }], 100, 100);
+    late.start = 20;
+    late.in = 20;
+    const r2 = rippleComp({ ...comp, layers: [board, late] } as never, new Map(), 'B', 0, -10);
+    expect(r2.layers.find((l) => l.id === 'L')!.start).toBe(10);
+  });
+});

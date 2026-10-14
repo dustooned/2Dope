@@ -71,6 +71,7 @@ export class Strip {
   private cell = loadCell();
   private drag: Drag | null = null;
   private flipBtn!: HTMLButtonElement;
+  private selBtn!: HTMLButtonElement;
   /** Holds, marks, onion settings and layer toggles (shown in the Time workspace). */
   readonly timingBar: HTMLElement;
   private readonly togglesRow: HTMLElement;
@@ -110,6 +111,8 @@ export class Strip {
       btn('+ Frame', 'New drawing after this frame (N)', () => app.addFrame()),
       btn('Duplicate', 'Duplicate drawing (D)', () => void app.duplicateSelection()),
       btn('Delete', 'Delete the selected drawings, or this one (Delete)', () => app.deleteFrame()),
+      btn('Split', 'Split the hold at the playhead: the rest gets a copy of the drawing to redraw', () => void app.splitHold()),
+      (this.selBtn = btn('Select', 'Select several: tap frames to add or remove them (Shift+click on a computer)', () => app.setMultiSelect(!app.multiSelect))),
       (this.flipBtn = btn('Flipbook', 'Flipbook: a blank page waits after the last drawing; drawing on it adds the frame', () => app.setFlipbook(!app.flipbook))),
     );
 
@@ -262,6 +265,11 @@ export class Strip {
           this.drag = { kind: 'resize', index, before, startX: p.x, moved: false };
           // dragging the edge of an unselected block acts on that block only
           if (!app.selection.includes(index)) app.setSelection([index]);
+        } else if (app.multiSelect) {
+          // Select mode: a tap adds or removes this drawing
+          const sel = app.selection.includes(index) ? app.selection.filter((x) => x !== index) : [...app.selection, index].sort((a, b) => a - b);
+          app.setSelection(sel);
+          return;
         } else {
           this.drag = { kind: 'move', index, before, startX: p.x, moved: false, shift: e.shiftKey };
           // press and hold (still) on a drawing: its menu
@@ -442,6 +450,7 @@ export class Strip {
     this.playhead.style.width = `${cell}px`;
     this.playhead.style.transform = `translateX(${(app.blankPage ? p.length : app.lf) * cell}px)`;
     this.flipBtn.setAttribute('aria-pressed', String(app.flipbook));
+    this.selBtn.setAttribute('aria-pressed', String(app.multiSelect));
     this.blank.style.display = '';
     this.blank.style.left = `${p.length * cell}px`;
     this.blank.style.width = `${cell - 4}px`;
