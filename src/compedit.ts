@@ -21,7 +21,7 @@ import {
   type Mat,
 } from './core/comp';
 import { defaultPart, localMatrix, nestedFrame, partOf, type PartName } from './core/comp';
-import { shiftLater } from './core/ripple';
+import { rippleExposures, shiftLater } from './core/ripple';
 import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
 import { totalFrames } from './core/timeline';
 import { layerContentBox } from './view/contentbox';
@@ -804,8 +804,18 @@ export class CompEditor {
       if (t.out !== undefined && t.out !== null && t.start === undefined && this.app.rippling) {
         const oldEnd = layerEnd(l, this.app.project.comps, c.fps);
         if (Number.isFinite(oldEnd)) {
-          const moved = shiftLater(c.layers, id, oldEnd, Math.round(t.out) - oldEnd);
+          const delta = Math.round(t.out) - oldEnd;
+          const moved = shiftLater(c.layers, id, oldEnd, delta);
           if (moved !== c.layers) c.layers.splice(0, c.layers.length, ...moved);
+          // the board and the animation drawn in step with it (both ending at the old end) keep
+          // ending together: trimming one lengthens or shortens the other's last hold
+          const isBoard = (x: Layer) => x.kind === 'drawings' && x.guide === true;
+          for (const o of c.layers) {
+            if (o.id === id || o.kind !== 'drawings' || o.out !== null || !(isBoard(l) || isBoard(o))) continue;
+            const total = totalFrames(o.exposures);
+            if (o.start + total !== oldEnd || !delta) continue;
+            o.exposures = rippleExposures(o.exposures, total + Math.min(0, delta), delta);
+          }
         }
       }
       if (t.start !== undefined) {
