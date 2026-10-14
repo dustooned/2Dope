@@ -1394,12 +1394,29 @@ export class App {
     const ep = editPoint(before, after);
     if (!ep) return null;
     const total = totalFrames(before);
-    if (ep.delta > 0 ? ep.at >= total : ep.at - ep.delta >= total) return null;
     const comp = this.project.comp;
     const layer = comp.layers.find((l) => l.id === layerId);
     if (!layer) return null;
+    // An edit at a layer's very end pushes nothing (nothing of it comes after). The board is
+    // different: adding a panel after the last one, or retiming the last panel, must reach the
+    // animation drawn in step with it (layers that ended where the board ended).
+    const board = layer.kind === 'drawings' && layer.guide === true;
+    const atEnd = ep.delta > 0 ? ep.at >= total : ep.at - ep.delta >= total;
+    if (atEnd && !board) return null;
     const temp: Comp = { ...comp, layers: comp.layers.map((l) => (l.id === layerId ? ({ ...l, exposures: after } as Layer) : l)) };
     const r = rippleComp(temp, this.project.comps, layerId, layer.start + ep.at, ep.delta);
+    if (atEnd && board && ep.delta > 0) {
+      const oldEnd = layer.start + total;
+      const newPanel = after.length > before.length;
+      r.layers = r.layers.map((l) => {
+        if (l.id === layerId || l.kind !== 'drawings' || l.guide || l.out !== null || l.start + totalFrames(l.exposures) !== oldEnd) return l;
+        const c = structuredClone(l);
+        // a new panel gets a new blank drawing; a longer last panel holds the last drawing longer
+        if (newPanel) c.exposures = [...c.exposures, { drawing: this.project.newDrawing().id, length: ep.delta }];
+        else c.exposures[c.exposures.length - 1]!.length += ep.delta;
+        return c;
+      });
+    }
     const others = r.layers.some((l, i) => l !== temp.layers[i] && l.id !== layerId);
     if (!others && r.duration === comp.duration) return null;
     return { before: structuredClone(comp.layers), after: r.layers, durBefore: comp.duration, durAfter: r.duration };
