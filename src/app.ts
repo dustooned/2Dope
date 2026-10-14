@@ -1945,6 +1945,22 @@ export class App {
     window.addEventListener('blur', () => {
       this.held.clear();
       this.endScrub();
+      this.endStroke();
+    });
+    // The pen can lift off the canvas without the canvas hearing it (capture refused, pen-up
+    // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
+    // (An open stroke blocks frame changes and timeline edits.)
+    const lifted = (e: PointerEvent, cancelled: boolean) => {
+      if (this.live && e.pointerId === this.live.pointerId) this.onUp(e, cancelled);
+    };
+    window.addEventListener('pointerup', (e) => lifted(e, false));
+    window.addEventListener('pointercancel', (e) => lifted(e, true));
+    c.addEventListener('lostpointercapture', (e) => {
+      // a pen that is no longer pressed has lifted
+      if (this.live && e.pointerId === this.live.pointerId && e.buttons === 0) this.onUp(e, false);
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.endStroke();
     });
   }
 
@@ -1963,11 +1979,14 @@ export class App {
     const isTouch = e.pointerType === 'touch';
 
     // QuickShape: a finger touching down while a snapped shape is held makes it perfect
-    if (this.live?.shape && this.live.pointerId !== e.pointerId) {
+    if (isTouch && this.live?.shape && this.live.pointerId !== e.pointerId) {
       this.live.shape.constrain = true;
       this.redrawShape();
       return;
     }
+    // A new pen or mouse press while an old stroke is still open (its pen-up never arrived):
+    // finish the old stroke first, so nothing stays stuck and frames keep responding.
+    if (!isTouch && this.live && this.live.pointerId !== e.pointerId) this.endStroke();
     if (isTouch) {
       // Palm rejection: while the pen draws, fingers are ignored.
       if (this.live && this.live.record && this.live.pointerId !== e.pointerId) {
