@@ -25,6 +25,8 @@ Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framew
 | `fill/fill.ts` | Barriers, gap closing, flood/lasso/leftover fill algorithms. |
 | `view/` | Viewport coordinates, compositor, onion skins, overlays, pixel operations and content bounds. |
 | `ui/strip.ts`, `ui/xsheet.ts`, `ui/board.ts`, `ui/motion.ts` | Workspace views of shared document and commands. |
+| `ui/rails.ts` | Draw/Time timeline rails: every layer as a row in stacking order on the strip's clock and zoom; the active layer is the strip's own editable blocks (positioned by `--active-top`); LINE/FILL sublayers and groups fold open (`RailState`, per device). Folding never changes visibility or playback. |
+| `core/audio.ts`, `audio.ts`, `io/sound.ts`, `io/soundmix.ts`, `ui/audiotracks.ts` | Timeline audio: clips on comps (fixed or linked to a board panel), shared playback on the app clock, WAV assets in the asset store, mixing for video export, the foldable Audio lane. |
 | Other `ui/` modules | Gallery/files, project/export dialogs, brush/color/layer panels, Quick Animate, menus, splitter, icons, manual. |
 | `io/schema.ts`, `io/projectio.ts`, `io/persist.ts`, `io/autosave.ts` | File validation/migration, captures, library storage, save queue and versions. |
 | Other `io/` modules | PNG sequence plans/rendering, ZIP/PDF, storyboard/CSV export, Blender manifest/packages. |
@@ -64,7 +66,7 @@ Residency parks offscreen planes as PNG bytes or stored asset keys, shrinking ca
 ## Output and deployment
 
 - PNG output uses drawings directly for a plain flipbook or the shared Canvas 2D compositor for a composed shot. Sequences provide Combined/Lines/Fills/Matte passes and a manifest.
-- Quick Share video encodes every main-shot frame with the same compositor and residency pins at explicit timestamps. It is silent and opaque; controls/cancel keep the project modal. Output bytes are capped (32 MiB Lite, 64 MiB Full), with a conservative preflight estimate. The video library is loaded only when this export is opened.
+- Quick Share video encodes every main-shot frame with the same compositor and residency pins at explicit timestamps, and mixes the shot's audio clips (AAC in MP4, Opus in WebM). It is opaque; controls/cancel keep the project modal. Output bytes are capped (32 MiB Lite, 64 MiB Full), with a conservative preflight estimate. The video library is loaded only when this export is opened.
 - Storyboard export produces PDF or panel PNGs/captions CSV. PDF uses built-in WinAnsi text, with limited Unicode support.
 - Blender packages include images, `scene.json` and the importer. See `docs/blender.md` for supported mappings and simplifications.
 - Vite uses relative asset paths for static hosting. `.github/workflows/pages.yml` installs with Node 22, tests, builds and deploys `dist/` on `main` pushes/manual dispatch.

@@ -6,6 +6,9 @@
  */
 
 const P: Record<string, string> = {
+  select: '<rect x="4" y="4" width="13" height="13" rx="1.5" stroke-dasharray="3 2.4"/><path d="M13 13l7 3-3 1-1 3z"/>',
+  expandall: '<path d="M6 5l6 6 6-6"/><path d="M6 13l6 6 6-6"/>',
+  collapseall: '<path d="M6 11l6-6 6 6"/><path d="M6 19l6-6 6 6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   gallery:
     '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
@@ -117,6 +120,9 @@ const AUTO: Record<string, [string, boolean]> = {
   '+ Null': ['plus', false],
   '+ Camera': ['camera', false],
   Split: ['scissors', false],
+  Select: ['select', false],
+  '▾ All': ['expandall', true],
+  '▸ All': ['collapseall', true],
 };
 
 /** Give a text button its icon when its label is a known one (strip, Quick bar, Motion toolbar). */
@@ -125,7 +131,7 @@ export function autoIcon<T extends HTMLElement>(b: T): T {
   const hit = AUTO[label];
   if (!hit) return b;
   // glyph labels get a word as their accessible name
-  const words: Record<string, string> = { '⏮': 'Previous drawing', '◀': 'Previous frame', '▶': 'Next frame', '⏭': 'Next drawing', 'More ⋯': 'More' };
+  const words: Record<string, string> = { '⏮': 'Previous drawing', '◀': 'Previous frame', '▶': 'Next frame', '⏭': 'Next drawing', 'More ⋯': 'More', '▾ All': 'Expand all', '▸ All': 'Collapse all' };
   if (words[label]) b.textContent = words[label]!;
   decorate(b, hit[0]);
   if (hit[1]) b.classList.add('icon-only');

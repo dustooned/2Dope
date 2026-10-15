@@ -4,6 +4,13 @@ Prepared 2026-10-14 so another assistant can continue the app without relying on
 
 **Video-export branch follow-up:** see `docs/CLAUDE-VIDEO-EXPORT-HANDOFF.md` for the implemented Quick Share slice, its verification, the deployed touchscreen hotfix, and safe integration with Claude's main checkout. The baseline below predates that feature.
 
+## Latest (Claude, 2026-10-15)
+
+- `main` now includes Quick Share video export and timeline audio (Codex, merged `e9b3cdc`), the Audio manual section (`10b092b`) and **Draw timeline rails** (`2115826`, `src/ui/rails.ts`): every layer stacked as a row, LINE/FILL and groups folding open, Expand all / Collapse all, pinch or Ctrl+wheel time zoom, taller resizable timeline.
+- `npm install` is needed once after pulling (new dependency `mediabunny`).
+- Checked: 241 tests and the production build; in desktop Chromium, audio import / save / reload / playback, and the rails (rows, folding, switching layers, zoom). Not checked: a real MP4/WebM export with audio in the browser, iPad/Apple Pencil.
+- Next agreed with the user: Board views (Panels / Timeline / Split, Storyboard Pro-like) with audio alignment; then QuickShape edit pop-down, Dreams-style brush library, selection tools, image brush tips and .abr / Procreate brush import.
+
 ## Start here
 
 - Workspace: `E:\2026\Dev\Apps\2Dope`.
@@ -78,6 +85,8 @@ No application backend is present. Raster planes are saved as pixels; vector str
 | Memory/older devices | `src/core/residency.ts`, `src/core/device.ts`, `src/view/` | Residency/device tests; target-device stress testing. |
 | Blender | `src/io/blender.ts`, `src/io/blenderpack.ts`, `blender/2dope_import.py` | Planning tests; import/render in intended Blender version. |
 | Layout/controls/manual | `index.html`, `src/main.ts`, `src/style.css`, relevant `src/ui/` | Build and desktop/touch-width flows; update the manual when behavior changes. |
+| Draw/Time timeline rails | `src/ui/rails.ts`, `src/ui/strip.ts` | Rows follow comp order and the strip's cell width; the editable row keeps the strip's own pointer logic. |
+| Audio | `src/core/audio.ts`, `src/audio.ts`, `src/io/sound*.ts`, `src/ui/audiotracks.ts`, `src/io/exportvideo.ts` | Audio tests; import, playback sync, save/reload, video export with sound. |
 
 ## Invariants
 
