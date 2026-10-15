@@ -246,7 +246,7 @@ export const UPDATES: Update[] = [
     items: [
       'Animate this shot lines your frames up with the board: one drawing per panel, same lengths, and P1, P2… marks above the frame bar. Board and animation timing stay in sync.',
       'QuickShape keeps your pressure (thick and thin) and adjusts from the start point.',
-      'Board and animation stay in step both ways: adding or retiming frames in Draw (flipbook too), trimming a layer's end in Motion, or retiming the Board moves the other; deleting the first panel no longer shifts the shot before frame 0 (older projects are repaired when opened).',
+      'Board and animation stay in step both ways: adding or retiming frames in Draw (flipbook too), trimming a layer\'s end in Motion, or retiming the Board moves the other; deleting the first panel no longer shifts the shot before frame 0 (older projects are repaired when opened).',
       'Time has the frame bar with play and step controls; Draw has Split and touch Select.',
       'Every new project starts with its setup (name, size, frame rate), also the very first one and after deleting your last project.',
       'Procreate-style steady lines: Stabilisation, Motion filter and Expression join StreamLine in the Brush panel.',

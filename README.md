@@ -1,7 +1,12 @@
 # 2Dope (beta)
 
 A small, free 2D animation tool for 3D animators: draw, time, tweak, send to Blender.
-This folder is **milestone 0: the pen-feel prototype** (a "pen lab"). No timeline yet.
+The current app has **Board, Draw, Time, and Motion** workspaces, a local project library,
+frame-by-frame animation, layers/keyframes/precomps, storyboard export, PNG sequences, and Blender export.
+
+For development or continuing work with another coding assistant, start with **[HANDOFF.md](HANDOFF.md)**
+and **[AGENTS.md](AGENTS.md)**. The milestone sections below record how the app grew;
+older "comes next" descriptions are historical. See [ARCHITECTURE.md](ARCHITECTURE.md) for the current code map.
 
 ## Run it
 
