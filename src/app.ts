@@ -14,6 +14,7 @@ import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type Comp, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
+import { guardTouchContextMenus } from './ui/touchcontext';
 import { CompEditor } from './compedit';
 import { drawComp, drawLayersAround } from './view/composite';
 import { drawMotionOverlay } from './view/overlay';
@@ -1999,6 +2000,7 @@ export class App {
 
   private bindEvents(): void {
     const c = this.canvas;
+    guardTouchContextMenus(document, c);
     c.addEventListener('pointerdown', (e) => this.onDown(e));
     c.addEventListener('pointermove', (e) => this.onMove(e));
     c.addEventListener('pointerup', (e) => this.onUp(e, false));

@@ -241,6 +241,13 @@ export interface Update {
 
 export const UPDATES: Update[] = [
   {
+    date: '2026-10-14',
+    title: 'Touchscreen undo stays out of the right-click menu',
+    items: [
+      'Two-finger undo and other multi-finger canvas gestures no longer also open a right-click menu. Mouse right-click, pen-button menus and one-finger press-and-hold still work.',
+    ],
+  },
+  {
     date: '2026-10-12',
     title: 'Storyboard export, QuickShape, ripple and this manual',
     items: [
