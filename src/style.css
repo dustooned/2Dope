@@ -3654,3 +3654,175 @@ body:not(.ws-draw) .plane-badge {
   border-radius: 2px;
   opacity: 0.9;
 }
+
+/* ---- Board views: Panels / Timeline / Split ---- */
+.board-views button {
+  padding: 0 10px;
+}
+.btl {
+  position: relative;
+  flex: 0 0 auto;
+  height: min(var(--board-h), 46vh);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  user-select: none;
+}
+.btl[hidden],
+.board-cards[hidden] {
+  display: none !important;
+}
+.board[data-view='split'] .btl {
+  height: min(150px, 22vh);
+}
+.board[data-view='split'] .board-cards {
+  height: min(calc(var(--board-h) - 150px), 28vh);
+  min-height: 150px;
+}
+.btl-inner {
+  position: relative;
+  height: 100%;
+  min-width: 100%;
+}
+.btl-ruler {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.btl-ruler span {
+  position: absolute;
+  top: 2px;
+  padding-left: 3px;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.btl-panel {
+  position: absolute;
+  top: 22px;
+  bottom: 46px;
+  margin-left: 1px;
+  border: 1px solid #f0c040;
+  border-radius: 6px;
+  background: color-mix(in srgb, #f0c040 14%, var(--panel-2));
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.btl-panel.on {
+  box-shadow: 0 0 0 2px #f0c040 inset;
+}
+.btl-panel.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent) inset;
+}
+.btl-panel.dragging {
+  z-index: 5;
+  opacity: 0.85;
+  cursor: grabbing;
+}
+.btl-thumb {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  height: calc(100% - 26px);
+  max-height: 72px;
+  width: auto;
+  border-radius: 3px;
+}
+.btl-num {
+  position: absolute;
+  left: 5px;
+  bottom: 3px;
+  font-weight: 700;
+  font-size: 12px;
+  color: #f0c040;
+}
+.btl-len {
+  position: absolute;
+  right: 12px;
+  bottom: 3px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.btl-line {
+  position: absolute;
+  left: 22px;
+  right: 50px;
+  bottom: 3px;
+  overflow: hidden;
+  font-size: 10px;
+  font-style: italic;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.btl-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+  background: linear-gradient(90deg, transparent, rgba(240, 192, 64, 0.5));
+}
+.btl-audio {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 38px;
+  border-top: 1px dashed var(--line);
+}
+.btl-noaudio {
+  position: sticky;
+  left: 8px;
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 11px;
+}
+.btl-sound {
+  position: absolute;
+  top: 4px;
+  height: 30px;
+  border: 1px solid #3fbf8f;
+  border-radius: 5px;
+  background: rgba(63, 191, 143, 0.14);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.btl-sound.linked {
+  border-style: dashed;
+}
+.btl-sound.muted {
+  opacity: 0.5;
+}
+.btl-sound canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.btl-sname {
+  position: relative;
+  padding: 0 5px;
+  font-size: 10px;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px #000;
+}
+.btl-playhead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-left: 2px solid var(--accent);
+  background: rgba(255, 90, 138, 0.06);
+  pointer-events: none;
+  z-index: 6;
+}

@@ -204,6 +204,7 @@ const motion = new MotionPanel(app, $('#motion'));
 const board = new BoardPanel(app, $('#board'));
 const audioPlayback = new AudioPlayback(app);
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
+board.setAudio(audioPlayback);
 // the panel's dialogue as a subtitle under the picture (Board, and while playing with a board)
 const subtitle = $('#subtitle');
 const showSubtitle = () => {
@@ -465,7 +466,7 @@ app.fit();
 
 // Local autosave, versions, recovery. If browser storage is unavailable we still run (memory only).
 const { store, persistent } = await openStore();
-audioPlayback.bank.source = path => store.getAsset(path);
+audioPlayback.bank.source = (path) => store.getAsset(path);
 files = new FileUI(app, store, persistent);
 app.onDocChanged = chain(app.onDocChanged, () => audioPlayback.invalidate());
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;

@@ -1,6 +1,8 @@
 import type { App } from '../app';
 import { CAPTION_FIELDS, type CaptionField } from '../core/timeline';
+import type { AudioPlayback } from '../audio';
 import { openBoardExport } from './boardexport';
+import { BoardTimeline } from './boardtimeline';
 import { attachContextMenu } from './contextmenu';
 import { frameMenu } from './framemenu';
 import { autoIcon, decorate, setLabel } from './icons';
@@ -30,6 +32,10 @@ export class BoardPanel {
   private readonly fileIn = el('input', { type: 'file', accept: 'image/*', multiple: '', hidden: '' });
   private sig = '';
   private thumbs = new Map<string, number>();
+  /** Panels (cards), Timeline (blocks on the clock, with audio) or Split (both). Remembered per device. */
+  private view: 'panels' | 'timeline' | 'split' = 'panels';
+  private readonly timeline: BoardTimeline;
+  private readonly viewBtns: HTMLButtonElement[] = [];
 
   constructor(
     private readonly app: App,
@@ -42,6 +48,24 @@ export class BoardPanel {
       else autoIcon(b);
       return b;
     };
+    this.timeline = new BoardTimeline(app);
+    try {
+      const v = localStorage.getItem('2dope.board.view');
+      if (v === 'timeline' || v === 'split') this.view = v;
+    } catch {
+      // default view
+    }
+    const views = el('div', { class: 'seg board-views', role: 'group', 'aria-label': 'Board view' });
+    for (const [v, label, hint] of [
+      ['panels', '▦ Panels', 'Cards: picture, timing and captions for each panel'],
+      ['timeline', '▭ Timeline', 'Panels on the clock, as long as they last, with the audio underneath'],
+      ['split', '◫ Split', 'Timeline on top, cards below'],
+    ] as const) {
+      const b = el('button', { type: 'button', title: hint }, label);
+      b.addEventListener('click', () => this.setView(v));
+      this.viewBtns.push(b);
+      views.append(b);
+    }
     this.playBtn = btn('Play', 'Play the animatic (dialogue shows as subtitles)', () => app.togglePlay());
     this.playBtn.classList.add('icon-only');
     this.fileIn.addEventListener('change', async () => {
@@ -54,6 +78,7 @@ export class BoardPanel {
     this.bar.append(
       el('span', { class: 'board-title' }, 'Storyboard'),
       this.info,
+      views,
       btn('Panel', 'New panel after this one', () => app.addPanel(), 'plus'),
       btn('Duplicate', 'Duplicate the selected panels', () => app.duplicateSelection()),
       btn('Delete', 'Delete the selected panels', () => app.deleteFrame()),
@@ -65,7 +90,8 @@ export class BoardPanel {
       btn('Animate this shot', 'Draw the animation on top of the board', () => app.animateShot(), 'draw'),
     );
     for (const b of this.bar.querySelectorAll<HTMLButtonElement>('button')) if (['Duplicate', 'Delete', 'Earlier', 'Later'].includes(b.getAttribute('aria-label') ?? '')) b.classList.add('icon-only');
-    root.append(this.bar, this.cards, this.fileIn);
+    root.append(this.bar, this.timeline.root, this.cards, this.fileIn);
+    this.applyView();
     attachContextMenu(this.cards, ({ target }) => {
       const card = (target as HTMLElement | null)?.closest<HTMLElement>('.bcard');
       if (!card || (target as HTMLElement).closest('textarea, input')) return null;
@@ -76,10 +102,36 @@ export class BoardPanel {
     this.update();
   }
 
+  /** The shared audio playback (for waveforms on the timeline view). */
+  setAudio(a: AudioPlayback): void {
+    this.timeline.setAudio(a);
+    this.update();
+  }
+
+  setView(v: 'panels' | 'timeline' | 'split'): void {
+    this.view = v;
+    try {
+      localStorage.setItem('2dope.board.view', v);
+    } catch {
+      // not remembered
+    }
+    this.applyView();
+    this.update();
+  }
+
+  private applyView(): void {
+    this.root.dataset.view = this.view;
+    this.viewBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(['panels', 'timeline', 'split'][i] === this.view)));
+    this.timeline.root.hidden = this.view === 'panels' || !this.app.board;
+    this.cards.hidden = this.view === 'timeline' && !!this.app.board;
+  }
+
   /** Refresh: rebuild the cards when panels change (never while typing in one). */
   update(): void {
     const app = this.app;
     const b = app.board;
+    this.applyView();
+    this.timeline.update();
     setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     if (!b) {
       if (this.sig !== 'empty') {

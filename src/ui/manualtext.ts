@@ -86,6 +86,13 @@ export const MANUAL: ManualSection[] = [
           'Press Play to watch the animatic. Dialogue shows as subtitles.',
         ],
       },
+      {
+        list: [
+          'Three views (buttons in the Board bar): Panels shows the cards; Timeline shows the panels on the clock, as long as they last, with the audio underneath; Split shows both.',
+          'In Timeline: drag the right edge of a panel to make it longer or shorter (Ripple moves everything after it, the animation too); drag a panel sideways to move it; tap to go there; press and hold for its menu.',
+          'Drag a sound on the Timeline to line it up with a panel (a sound linked to a panel moves with it). Pinch or Ctrl / ⌘ + wheel zooms time.',
+        ],
+      },
       'Animate this shot takes you to Draw with the board showing faintly underneath, on the panel you were looking at. The first time, your animation layer gets one blank drawing per panel, each as long as its panel, so your frames start in step with the board. Yellow P1, P2… marks above the frame bar show where each panel starts.',
       { tip: 'Board and animation stay in sync (with Ripple on): make a panel longer and the animation under it gets longer too; add frames to the animation and the board panel makes room.' },
       {
@@ -271,6 +278,7 @@ export const UPDATES: Update[] = [
     title: 'Timeline audio and Quick Share video export',
     items: [
       'Menu > Export video makes an MP4 or WebM of the whole shot, with its audio. Choose size, quality and background; watch the progress, cancel if needed, then preview and save your video.',
+      'Board views: Panels, Timeline (panels on the clock with the audio underneath: drag edges to retime, drag panels to reorder, drag sounds to line them up) and Split.',
       'Draw timeline rails: every layer stacked as a row like Procreate Dreams, LINE / FILL and groups fold open and closed (▾ All / ▸ All), pinch or Ctrl + wheel zooms time.',
       'Audio: open the Audio lane under any workspace and tap + Audio (WAV, MP3, M4A, OGG or FLAC, up to 2 minutes). Move it with Start, trim it with Source in / out, set its volume or mute it. Link current panel ties a clip (say a line of dialogue) to a board panel so it follows that panel when you retime the board.',
       'Video keeps the shot frame rate and holds, including camera moves and precomps. PNG sequences remain the option for transparent production output.',
