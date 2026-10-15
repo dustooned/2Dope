@@ -170,3 +170,25 @@ describe('QuickShape pressure', () => {
     expect(sampleProfile(prof, 0.5)).toBeCloseTo(0.5, 1);
   });
 });
+
+describe('Edit shape: fit the stroke as a chosen shape', () => {
+  it('turns one stroke into each shape', async () => {
+    const { fitAs } = await import('./quickshape');
+    // a rough, slightly squashed circle
+    const stroke = Array.from({ length: 80 }, (_, i) => {
+      const a = (i / 79) * Math.PI * 2;
+      return { x: 100 + Math.cos(a) * 60 + Math.sin(i * 1.3) * 2, y: 100 + Math.sin(a) * 45 };
+    });
+    expect(fitAs('line', stroke)?.kind).toBe('line');
+    expect(fitAs('ellipse', stroke)?.kind).toBe('ellipse');
+    const c = fitAs('circle', stroke);
+    expect(c?.kind === 'ellipse' && c.rx === c.ry).toBe(true);
+    const r = fitAs('rect', stroke);
+    expect(r?.kind === 'rect' && r.w).toBeGreaterThan(r?.kind === 'rect' ? r.h : 0);
+    const sq = fitAs('square', stroke);
+    expect(sq?.kind === 'rect' && sq.w === sq.h).toBe(true);
+    expect(fitAs('arc', stroke)?.kind).toBe('arc');
+    expect(fitAs('polyline', stroke)?.kind).toBe('polyline');
+    expect(fitAs('line', [{ x: 0, y: 0 }])).toBeNull();
+  });
+});

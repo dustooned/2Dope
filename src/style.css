@@ -3826,3 +3826,24 @@ body:not(.ws-draw) .plane-badge {
   pointer-events: none;
   z-index: 6;
 }
+
+/* QuickShape: Edit shape button after a snap */
+.shape-pop {
+  position: absolute;
+  left: 50%;
+  top: 44px;
+  transform: translateX(-50%);
+  z-index: 21;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: rgba(38, 38, 45, 0.95);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.shape-pop[hidden],
+body:not(.ws-draw) .shape-pop {
+  display: none;
+}

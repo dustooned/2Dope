@@ -46,7 +46,7 @@ import {
 import { Smoother, smoothStroke } from './brush/smoothing';
 import { eraseVectors, type VectorErase } from './core/vectorcut';
 import { drawingBox } from './view/contentbox';
-import { constrainShape, editShape, pressureProfile, recognizeShape, sampleProfile, SHAPE_NAMES, shapeOutline, type Shape } from './core/quickshape';
+import { constrainShape, editShape, fitAs, pressureProfile, recognizeShape, sampleProfile, SHAPE_CHOICES, SHAPE_NAMES, shapeOutline, type Shape, type ShapeChoice } from './core/quickshape';
 import { drawVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
 import { snapRotation, Viewport } from './view/viewport';
@@ -114,7 +114,7 @@ interface LiveStroke {
   /** Where the pen last came to rest (screen px), for QuickShape's hold. */
   still: { x: number; y: number };
   /** Set once QuickShape snapped the stroke: the recognised shape and the pen point at the snap. */
-  shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; profile: number[] };
+  shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; profile: number[]; raw: StrokePoint[] };
 }
 
 interface TouchInfo {
@@ -383,8 +383,101 @@ export class App {
     const base = recognizeShape(pts);
     if (!base) return;
     // the shape keeps the pressure you drew with, start to end
-    live.shape = { base, grab: live.lastRaw, now: live.lastRaw, constrain: false, profile: pressureProfile(base, pts) };
+    live.shape = { base, grab: live.lastRaw, now: live.lastRaw, constrain: false, profile: pressureProfile(base, pts), raw: pts.map((q) => ({ ...q })) };
     this.redrawShape();
+  }
+
+  /**
+   * The last snapped shape while it can still be changed (Edit shape): the hand-drawn points, the
+   * stroke it became and its undo step. Cleared by any other stroke or edit.
+   */
+  lastShape: { raw: StrokePoint[]; choice: ShapeChoice | 'stroke'; rec: StrokeRecord; drawing: Drawing; plane: Plane; canvas: HTMLCanvasElement; cmd: ReturnType<History['peekUndo']> } | null = null;
+  /** Main shows or hides the Edit shape button. */
+  onShapeChange: () => void = () => {};
+
+  /** Is the Edit shape menu still valid (nothing done since the snap)? */
+  get shapeEditable(): boolean {
+    const s = this.lastShape;
+    return !!s && !this.live && this.history.peekUndo() === s.cmd && this.project.drawings.get(s.drawing.id) === s.drawing;
+  }
+
+  /**
+   * Edit shape: replace the last snapped shape with the stroke fitted as another shape (or the
+   * hand-drawn line itself). The pressure you drew with is kept. One undo step replaces another.
+   */
+  swapShape(choice: ShapeChoice | 'stroke'): void {
+    const s = this.lastShape;
+    if (!s || !this.shapeEditable || !this.residency.isReady(s.drawing)) {
+      this.lastShape = null;
+      this.onShapeChange();
+      return;
+    }
+    if (choice === s.choice) return;
+    let pts: StrokePoint[];
+    const last = s.raw[s.raw.length - 1]!;
+    if (choice === 'stroke') pts = s.raw.map((q) => ({ ...q }));
+    else {
+      const shape = fitAs(choice, s.raw);
+      if (!shape) {
+        this.onNotice?.(`This stroke cannot make a ${(SHAPE_CHOICES.find((c) => c.id === choice)?.label ?? choice).replace(/^\S+\s/, '').toLowerCase()}.`);
+        return;
+      }
+      const profile = pressureProfile(shape, s.raw);
+      const outline = shapeOutline(shape, Math.max(1, 2 / this.view.zoom));
+      const n = Math.max(1, outline.length - 1);
+      pts = outline.map((q, i) => ({ x: q.x, y: q.y, pressure: sampleProfile(profile, i / n), tiltX: last.tiltX, tiltY: last.tiltY, t: i }));
+    }
+    // take the old shape away, then commit the new one
+    this.history.undo();
+    const d = s.drawing;
+    const rec: StrokeRecord = { ...s.rec, id: newStrokeId(), points: pts };
+    const label = choice === 'stroke' ? 'Keep my stroke' : (SHAPE_CHOICES.find((c) => c.id === choice)?.label ?? choice).replace(/^\S+\s/, '');
+    if (rec.tool === 'pen') {
+      const id = rec.id;
+      this.history.push(
+        {
+          label: `Vector ${label.toLowerCase()}`,
+          drawings: [d],
+          do: () => {
+            d.vectors = [...d.vectors, rec];
+            this.touch(d);
+          },
+          undo: () => {
+            d.vectors = d.vectors.filter((v) => v.id !== id);
+            this.touch(d);
+          },
+        },
+        false,
+      );
+    } else {
+      this.raster.bind(s.canvas);
+      this.raster.begin(rec);
+      const walker = new DabWalker(rec.brush, rec.seed);
+      for (const q of pts) this.raster.addDabs(walker.push(q));
+      const c = this.raster.commit(false);
+      if (c) {
+        const canvas = s.canvas;
+        this.history.push({
+          label,
+          drawings: [d],
+          do: () => {
+            putPixels(canvas, c.rect, c.after);
+            this.touch(d);
+          },
+          undo: () => {
+            putPixels(canvas, c.rect, c.before);
+            this.touch(d);
+          },
+        });
+        this.touch(d);
+      }
+    }
+    s.rec = rec;
+    s.choice = choice;
+    s.cmd = this.history.peekUndo();
+    this.residency.updateThumb(d);
+    this.requestRender();
+    this.onShapeChange();
   }
 
   /** Re-render the snapped stroke for the current pen position (resize/turn) and constrain state. */
@@ -1982,6 +2075,9 @@ export class App {
         this.touch(d);
       }
     }
+    // a snapped shape can be changed from the Edit shape button until something else happens
+    this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo() } : null;
+    this.onShapeChange();
     this.residency.updateThumb(d);
     this.requestRender();
   }

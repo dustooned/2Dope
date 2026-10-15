@@ -132,6 +132,7 @@ export const MANUAL: ManualSection[] = [
         tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. The LINE | FILL switch in the toolbar (or X) picks which one brushes paint on; a yellow FILL badge on the canvas reminds you when you are painting colour. In Layers, the layer you draw on shows its LINE and FILL with an eye each.',
       },
       'QuickShape: draw a line, circle, box or triangle roughly and keep the pencil still at the end. It snaps to a clean shape and keeps the pressure you drew with, thick and thin. Keep holding and move to adjust it: the start stays put and the pencil drags the other end. Touch a second finger (or hold Shift) to make it perfect: a circle, a square, an even polygon or a straight angle. Turn it off in the Brush panel under Assist.',
+      'Edit shape: after a snap, a button at the top of the canvas shows what it became (say “Ellipse · Edit shape ▾”). Tap it to switch to Line, Polyline, Arc, Ellipse, Circle, Rectangle, Square or Polygon, or Keep my stroke to undo the snap. Your pressure is kept, and it stays one undo step. The button goes away after a few seconds or when you do something else.',
       { figure: 'quickshape' },
       { figure: 'onion' },
       {
@@ -278,6 +279,7 @@ export const UPDATES: Update[] = [
     title: 'Timeline audio and Quick Share video export',
     items: [
       'Menu > Export video makes an MP4 or WebM of the whole shot, with its audio. Choose size, quality and background; watch the progress, cancel if needed, then preview and save your video.',
+      'QuickShape Edit shape: after a snap, tap the button at the top of the canvas to switch the shape (Line, Arc, Ellipse, Circle, Rectangle, Square, Polygon…) or keep your own stroke.',
       'Board views: Panels, Timeline (panels on the clock with the audio underneath: drag edges to retime, drag panels to reorder, drag sounds to line them up) and Split.',
       'Draw timeline rails: every layer stacked as a row like Procreate Dreams, LINE / FILL and groups fold open and closed (▾ All / ▸ All), pinch or Ctrl + wheel zooms time.',
       'Audio: open the Audio lane under any workspace and tap + Audio (WAV, MP3, M4A, OGG or FLAC, up to 2 minutes). Move it with Start, trim it with Source in / out, set its volume or mute it. Link current panel ties a clip (say a line of dialogue) to a board panel so it follows that panel when you retime the board.',

@@ -24,6 +24,8 @@ import { Sidebar } from './ui/sidebar';
 import { LayersPopover } from './ui/layerspop';
 import { BoardPanel } from './ui/board';
 import { ColorPanel } from './ui/colorpanel';
+import { showContextMenu } from './ui/contextmenu';
+import { SHAPE_CHOICES } from './core/quickshape';
 import { hasNewUpdates, openManual } from './ui/manual';
 
 const $ = <T extends HTMLElement>(sel: string) => {
@@ -64,6 +66,38 @@ planeBadge.hidden = true;
 planeBadge.title = 'Brushes paint on FILL: colour under your ink. Press X or tap LINE to paint ink again.';
 planeBadge.addEventListener('click', () => app.setPlane('line'));
 document.querySelector('#stage')?.append(planeBadge);
+
+// QuickShape: after a snap, an Edit shape button (Procreate style) to switch the shape or keep the stroke
+const shapeBtn = document.createElement('button');
+shapeBtn.type = 'button';
+shapeBtn.className = 'shape-pop';
+shapeBtn.hidden = true;
+shapeBtn.title = 'Edit shape: change what the stroke snapped to, or keep your own stroke';
+document.querySelector('#stage')?.append(shapeBtn);
+let shapeTimer = 0;
+const syncShape = () => {
+  const s = app.lastShape;
+  const ok = !!s && app.shapeEditable;
+  shapeBtn.hidden = !ok;
+  clearTimeout(shapeTimer);
+  if (!ok || !s) return;
+  const label = s.choice === 'stroke' ? '✎ Your stroke' : (SHAPE_CHOICES.find((c) => c.id === (s.choice as string))?.label ?? s.choice);
+  shapeBtn.textContent = `${label}  ·  Edit shape ▾`;
+  // it waits a while, then gets out of the way
+  shapeTimer = window.setTimeout(() => (shapeBtn.hidden = true), 8000);
+};
+app.onShapeChange = syncShape;
+shapeBtn.addEventListener('click', () => {
+  if (!app.shapeEditable) return syncShape();
+  clearTimeout(shapeTimer);
+  const r = shapeBtn.getBoundingClientRect();
+  const cur = app.lastShape?.choice;
+  showContextMenu(r.left, r.bottom + 4, [
+    ...SHAPE_CHOICES.map((c) => ({ label: c.label, on: cur === c.id, run: () => app.swapShape(c.id) })),
+    { sep: true },
+    { label: '✎ Keep my stroke', on: cur === 'stroke', run: () => app.swapShape('stroke') },
+  ]);
+});
 for (const b of partButtons) b.addEventListener('click', () => app.togglePart(b.dataset.partEye === 'fill' ? 'fill' : 'line'));
 for (const b of planeButtons) b.addEventListener('click', () => app.setPlane(b.dataset.plane === 'fill' ? 'fill' : 'line'));
 for (const b of toolButtons) b.addEventListener('click', () => app.setTool(b.dataset.tool as Tool));
@@ -92,6 +126,10 @@ app.history.onChange = () => {
   for (const b of redoBtns) b.disabled = !app.history.canRedo;
 };
 app.history.onChange();
+// an undo or another edit ends the Edit shape window
+app.history.onChange = chain(app.history.onChange, () => {
+  if (!shapeBtn.hidden && !app.shapeEditable) shapeBtn.hidden = true;
+});
 
 // Icons on every button that asks for one, the brush sidebar, and the colour circle
 applyIcons();

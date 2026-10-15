@@ -529,3 +529,83 @@ export function sampleProfile(profile: readonly number[], t: number): number {
   const b = profile[Math.min(profile.length - 1, i + 1)]!;
   return a + (b - a) * (x - i);
 }
+
+/** What the Edit shape menu offers: the six shapes plus their perfect versions. */
+export type ShapeChoice = ShapeKind | 'circle' | 'square';
+export const SHAPE_CHOICES: { id: ShapeChoice; label: string }[] = [
+  { id: 'line', label: '／ Line' },
+  { id: 'polyline', label: '⌇ Polyline' },
+  { id: 'arc', label: '◠ Arc' },
+  { id: 'ellipse', label: '⬭ Ellipse' },
+  { id: 'circle', label: '◯ Circle' },
+  { id: 'rect', label: '▭ Rectangle' },
+  { id: 'square', label: '□ Square' },
+  { id: 'polygon', label: '⬠ Polygon' },
+];
+
+/**
+ * Fit the hand-drawn stroke as a chosen shape (the Edit shape menu), whatever it was recognised
+ * as. Null when the stroke cannot make that shape (too short, or no corners for a polygon).
+ */
+export function fitAs(choice: ShapeChoice, raw: readonly V[]): Shape | null {
+  if (raw.length < 2 || pathLength(raw) < 6) return null;
+  const p = resample(raw, 96);
+  const first = p[0]!;
+  const last = p[p.length - 1]!;
+  const diag = Math.max(1, bboxDiag(p));
+  switch (choice) {
+    case 'line':
+      return { kind: 'line', a: { ...first }, b: { ...last } };
+    case 'polyline': {
+      const pts = simplify(p, Math.max(3, 0.06 * diag));
+      return pts.length >= 2 ? { kind: 'polyline', pts } : null;
+    }
+    case 'arc': {
+      const c = fitCircle(p);
+      if (!c) return null;
+      let sweep = 0;
+      for (let i = 1; i < p.length; i++) {
+        let d = Math.atan2(p[i]!.y - c.cy, p[i]!.x - c.cx) - Math.atan2(p[i - 1]!.y - c.cy, p[i - 1]!.x - c.cx);
+        if (d > Math.PI) d -= 2 * Math.PI;
+        if (d < -Math.PI) d += 2 * Math.PI;
+        sweep += d;
+      }
+      sweep = Math.max(-2 * Math.PI, Math.min(2 * Math.PI, sweep));
+      return { kind: 'arc', cx: c.cx, cy: c.cy, r: c.r, start: Math.atan2(first.y - c.cy, first.x - c.cx), sweep };
+    }
+    case 'ellipse':
+    case 'circle': {
+      const pc = pca(p);
+      const e: Shape = { kind: 'ellipse', cx: pc.cx, cy: pc.cy, rx: Math.max(1, Math.sqrt(2 * pc.l1)), ry: Math.max(1, Math.sqrt(2 * pc.l2)), rot: pc.rot };
+      return choice === 'circle' ? constrainShape(e) : e;
+    }
+    case 'rect':
+    case 'square': {
+      // the box around the stroke, turned to its main direction
+      const pc = pca(p);
+      const cos = Math.cos(pc.rot);
+      const sin = Math.sin(pc.rot);
+      let u0 = Infinity;
+      let u1 = -Infinity;
+      let v0 = Infinity;
+      let v1 = -Infinity;
+      for (const q of p) {
+        const u = (q.x - pc.cx) * cos + (q.y - pc.cy) * sin;
+        const v = -(q.x - pc.cx) * sin + (q.y - pc.cy) * cos;
+        u0 = Math.min(u0, u);
+        u1 = Math.max(u1, u);
+        v0 = Math.min(v0, v);
+        v1 = Math.max(v1, v);
+      }
+      const mu = (u0 + u1) / 2;
+      const mv = (v0 + v1) / 2;
+      const r: Shape = { kind: 'rect', cx: pc.cx + mu * cos - mv * sin, cy: pc.cy + mu * sin + mv * cos, w: Math.max(1, (u1 - u0) / 2), h: Math.max(1, (v1 - v0) / 2), rot: pc.rot };
+      return choice === 'square' ? constrainShape(r) : r;
+    }
+    case 'polygon': {
+      const ring = dist(first, last) < 0.2 * pathLength(p) ? p.slice(0, -1) : p;
+      const corners = closedCorners(ring, Math.max(3, 0.07 * diag));
+      return corners.length >= 3 ? { kind: 'polygon', pts: corners.slice(0, 12) } : null;
+    }
+  }
+}
