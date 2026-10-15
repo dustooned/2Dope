@@ -19,7 +19,7 @@ export const MANUAL: ManualSection[] = [
     id: 'overview',
     title: 'What 2Dope is',
     blocks: [
-      '2Dope is a free 2D animation app that runs in your browser, made first for iPad and pencil, and also for computers and phones. You can plan a shot with a storyboard, draw it frame by frame, time it, put it together with moves and a camera, and export it as images, a storyboard PDF or a package for Blender.',
+      '2Dope is a free 2D animation app that runs in your browser, made first for iPad and pencil, and also for computers and phones. You can plan a shot with a storyboard, draw it frame by frame, time it, put it together with moves and a camera, and export it as video, images, a storyboard PDF or a package for Blender.',
       'Everything you make is saved on this device automatically. Nothing is uploaded.',
       'The app has four workspaces, one for each stage of the work. Switch between them with the buttons at the top:',
       {
@@ -186,10 +186,12 @@ export const MANUAL: ManualSection[] = [
           'Export .2dope: a backup file of the whole project. Keep it safe or move it to another device (Import .2dope…).',
           'Export frame (PNG): the frame you are on, with a transparent background.',
           'Export sequence…: the whole shot as numbered PNG images in a .zip. Choose passes (everything, lines only, fills only, matte), size and background.',
+          'Export video…: a silent MP4 or WebM of the whole shot, at its own frame rate. Pick 720p, 1080p or Original size, Standard or High quality, and a white or black background for transparent areas. Preview it, then Save video. It includes layers, moves, the camera and precomps, even while you are editing inside one. Your drawing view and its onion skins are not exported.',
           'Board > Export: the storyboard as a PDF or as panel images with a captions spreadsheet.',
           'Export for Blender: a package Blender opens with the 2Dope add-on (image planes, camera, groups, keyframes).',
         ],
       },
+      'Video export needs a secure browser tab with video encoding support. If a format or size is unavailable, try the other format or a smaller size. Cancel stops encoding and lets you try again. Videos have an opaque background and no audio; use a PNG sequence for transparent production files. The storyboard stays out unless Include the storyboard is already on in Export sequence.',
       { tip: 'Browsers can clear saved data if a device runs out of space. Export a .2dope backup now and then, especially before a deadline.' },
     ],
   },
@@ -240,6 +242,14 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  {
+    date: '2026-10-15',
+    title: 'Quick Share video export',
+    items: [
+      'Menu > Export video makes a silent MP4 or WebM of the whole shot. Choose size, quality and background; watch the progress, cancel if needed, then preview and save your video.',
+      'Video keeps the shot frame rate and holds, including camera moves and precomps. PNG sequences remain the option for transparent production output.',
+    ],
+  },
   {
     date: '2026-10-14',
     title: 'Touchscreen undo stays out of the right-click menu',

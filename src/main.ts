@@ -1,4 +1,6 @@
 import './style.css';
+import { AudioPlayback } from './audio';
+import { AudioTracks } from './ui/audiotracks';
 
 // Tells the page's start-up watchdog (index.html) that the app code loaded.
 (window as unknown as { __2dopeBooted?: boolean }).__2dopeBooted = true;
@@ -8,6 +10,7 @@ import { saveMode, type DeviceMode } from './core/device';
 import { buildPanel } from './ui/panel';
 import { openStore } from './io/persist';
 import { ExportUI } from './ui/exportdialog';
+import { VideoExportUI } from './ui/videoexport';
 import { FileUI } from './ui/files';
 import { Gallery } from './ui/gallery';
 import { MotionPanel } from './ui/motion';
@@ -199,6 +202,8 @@ const strip = new Strip(app, $('#strip'));
 $('#tab-xsheet').prepend(strip.timingBar);
 const motion = new MotionPanel(app, $('#motion'));
 const board = new BoardPanel(app, $('#board'));
+const audioPlayback = new AudioPlayback(app);
+const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 // the panel's dialogue as a subtitle under the picture (Board, and while playing with a board)
 const subtitle = $('#subtitle');
 const showSubtitle = () => {
@@ -269,6 +274,7 @@ for (const b of wsButtons) b.setAttribute('aria-pressed', String(b.dataset.ws ==
 // Quick Animate (a lighter view of the same project)
 let files: FileUI | null = null;
 let exporter: ExportUI | null = null;
+const videoExporter = new VideoExportUI(app, (message) => files?.toast(message), audioPlayback.bank);
 const quick = new Quick(app, $('#quickbar'), {
   exportPng: () => void app.exportPNG(),
   saveFile: () => void files?.exportProject(),
@@ -345,6 +351,7 @@ const menuActions: Record<string, () => void> = {
   panel: () => setPanel(!document.body.classList.contains('panel-open')),
   bar: toggleBar,
   'export-seq': () => exporter?.open(),
+  'export-video': () => videoExporter.open(),
   blender: () => void exportForBlender(),
 };
 
@@ -378,6 +385,8 @@ async function exportForBlender(): Promise<void> {
 menu.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((b) => b.addEventListener('click', () => menuActions[b.dataset.menu ?? '']?.()));
 
 app.onFrameChange = () => {
+  audioPlayback.sync();
+  audioTracks.update();
   syncTools();
   board.update();
   showSubtitle();
@@ -456,7 +465,9 @@ app.fit();
 
 // Local autosave, versions, recovery. If browser storage is unavailable we still run (memory only).
 const { store, persistent } = await openStore();
+audioPlayback.bank.source = path => store.getAsset(path);
 files = new FileUI(app, store, persistent);
+app.onDocChanged = chain(app.onDocChanged, () => audioPlayback.invalidate());
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;
 exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
 const newUI = new NewProjectUI(app.device.lite ? app.device.limits : null);

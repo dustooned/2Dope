@@ -452,11 +452,13 @@ export function assetsOf(p: ProjectFile): Set<string> {
     if (d.line) s.add(d.line);
     if (d.fill) s.add(d.fill);
   }
+  for (const sound of Object.values(p.sounds ?? {})) s.add(sound.path);
   return s;
 }
 
 /** Does a saved project have anything worth keeping? */
 export function hasContent(file: ProjectFile): boolean {
+  if (Object.keys(file.sounds ?? {}).length) return true;
   const comps = Object.values(file.comps);
   if (comps.length > 1 || comps.some((c) => c.layers.length > 1)) return true;
   if (mainLength(file) > 1) return true;

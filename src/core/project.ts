@@ -3,6 +3,7 @@ import { drawVectorStroke } from '../brush/vector';
 import { strokeLength, type StrokeRecord } from './stroke';
 import { drawingsLayer, newComp, type BinFolder, type Comp, type DrawingsLayer } from './comp';
 import { drawingAt, totalFrames, type Exposure } from './timeline';
+import type { SoundAsset } from './audio';
 
 /** What a drawing is for in the animation: a key pose, a breakdown between keys, or an inbetween. */
 export type Role = 'key' | 'breakdown' | 'inbetween';
@@ -100,6 +101,7 @@ export class Project {
   created = new Date().toISOString();
   readonly drawings = new Map<string, Drawing>();
   readonly comps = new Map<string, Comp>();
+  readonly sounds = new Map<string, SoundAsset>();
   folders: BinFolder[] = [];
   /** The comp that is "the shot" (what export and Blender take by default). */
   main = 'c1';

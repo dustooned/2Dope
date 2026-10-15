@@ -46,6 +46,12 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
   const folders: ProjectFile['folders'] = {};
   for (const f of project.folders) folders[f.id] = { name: f.name, parent: f.parent };
   const used = [...project.usedDrawings()];
+  const usedSounds = new Set([...project.comps.values()].flatMap(c => (c.audio ?? []).map(clip => clip.asset)));
+  const soundJobs = [...usedSounds].map(id => {
+    const sound = project.sounds.get(id);
+    if (!sound) throw new Error(`Audio asset ${id} is missing.`);
+    return { id, ...sound };
+  });
   const main = project.comps.has(project.main) ? project.main : [...project.comps.keys()][0]!;
   const base = {
     name: project.name,
@@ -91,6 +97,16 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
         return key;
       };
       const drawings: Record<string, DrawingFile> = {};
+      const sounds: NonNullable<ProjectFile['sounds']> = {};
+      for (const sound of soundJobs) {
+        sounds[sound.id] = { name: sound.name, path: sound.path, duration: sound.duration };
+        if (sound.bytes) assets.set(sound.path, sound.bytes);
+        else if (opt.mode === 'archive') {
+          const bytes = await opt.source?.(sound.path);
+          if (!bytes) throw new Error(`Audio asset ${sound.name} is missing. The project was not exported.`);
+          assets.set(sound.path, bytes);
+        }
+      }
       const keys: { d: Drawing; rev: number; line: string | null; fill: string | null }[] = [];
       for (const p of planes) {
         const line = await keyOf(p.line);
@@ -111,6 +127,7 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
         comps,
         folders,
         drawings,
+        ...(soundJobs.length ? { sounds } : {}),
       };
       return {
         file,
@@ -144,6 +161,7 @@ export function loadProjectFile(file: ProjectFile): Loaded {
   project.folders = foldersOf(file);
   project.main = file.main;
   project.activeComp = file.main;
+  for (const [id, sound] of Object.entries(file.sounds ?? {})) project.sounds.set(id, { ...sound, bytes: null });
   const ref = (key: string | null): PlaneRef | null => (key ? { key, bytes: null } : null);
   for (const [id, f] of Object.entries(file.drawings)) {
     const d = project.adopt(id, f.num, f.vectors, f.role ?? null, { rev: 0, line: ref(f.line), fill: ref(f.fill) });

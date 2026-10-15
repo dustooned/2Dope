@@ -1,0 +1,11 @@
+2Dope third-party software
+
+Mediabunny 1.61.4, by Vanilagy and contributors
+License: Mozilla Public License 2.0 (see mediabunny-LICENSE.txt)
+The library is used without source modifications.
+
+The corresponding TypeScript source and license are included in the exact npm package:
+https://registry.npmjs.org/mediabunny/-/mediabunny-1.61.4.tgz
+Project: https://github.com/Vanilagy/mediabunny
+
+This notice and license are included in the production distribution under third-party/.

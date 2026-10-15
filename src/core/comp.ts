@@ -1,5 +1,6 @@
 import { staticProp, valueAt, type Prop, type Vec2 } from './anim';
 import { drawingAt, totalFrames, type Exposure } from './timeline';
+import { soundStart, type SoundClip } from './audio';
 
 /**
  * Comps and layers (design doc 11 §2). One project holds several comps: the shot and any
@@ -158,6 +159,8 @@ export type Layer = DrawingsLayer | CompLayer | CameraLayer | NullLayer;
 export type LayerKind = Layer['kind'];
 
 export interface Comp {
+  /** Audio clips use this comp's clock; independent of drawing-layer visibility. */
+  audio?: SoundClip[];
   id: string;
   name: string;
   width: number;
@@ -347,6 +350,10 @@ export function compLength(c: Comp, comps: ReadonlyMap<string, Comp>, seen: Set<
   if (seen.has(c.id)) return 1;
   seen.add(c.id);
   let end = 1;
+  for (const clip of c.audio ?? []) {
+    const start = soundStart(clip, c);
+    if (start !== null) end = Math.max(end, Math.ceil(start + (clip.trimOut - clip.trimIn) * c.fps));
+  }
   for (const l of c.layers) {
     if (l.out !== null) end = Math.max(end, l.out);
     else if (l.kind === 'drawings') {
