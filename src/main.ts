@@ -226,7 +226,7 @@ const showSubtitle = () => {
 
 // The handle between the canvas and the timeline; each workspace remembers its own height.
 const splitter = new Splitter($('#splitter'), $('.stage-col'), () =>
-  app.workspace === 'motion' ? { name: '--motion-h', min: 120, def: 230 } : app.workspace === 'board' ? { name: '--board-h', min: 160, def: 300 } : { name: '--track-h', min: 60, def: 96 },
+  app.workspace === 'motion' ? { name: '--motion-h', min: 120, def: 230 } : app.workspace === 'board' ? { name: '--board-h', min: 160, def: 300 } : { name: '--track-h', min: 60, def: 112 },
 );
 
 // Workspaces: Draw, Time, Motion. The same project, arranged differently.

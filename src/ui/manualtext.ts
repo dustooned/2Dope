@@ -103,6 +103,14 @@ export const MANUAL: ManualSection[] = [
     blocks: [
       'Draw is just for drawing: brushes, colours and layers. The bar at the bottom shows your frames.',
       {
+        list: [
+          'The timeline shows every layer as a row (rails), front layer on top, on one clock. The layer you draw on is the big row with its frames; tap another row name to draw on that layer.',
+          'The arrow by a layer name folds open its LINE and FILL rows (each with an eye; tap LINE or FILL to paint on it). A group folds open to show the layers inside.',
+          '▾ All opens every row, ▸ All folds them back to one row per layer. Folding only tidies the timeline: it never hides a layer or changes playback.',
+          'Zoom time with the Zoom slider, a two-finger pinch on the timeline, or Ctrl / ⌘ + mouse wheel. Drag the line above the timeline to make it taller or shorter.',
+        ],
+      },
+      {
         keys: [
           ['Brush (B)', 'Pixel brushes: pencil, ink, brush pen, fine liner, pixel ink and more. Pressure and tilt work with a pencil.', 'brush'],
           ['Pen (P)', 'Vector lines: always crisp, can be resized later without going blurry.', 'pen'],
@@ -263,6 +271,7 @@ export const UPDATES: Update[] = [
     title: 'Timeline audio and Quick Share video export',
     items: [
       'Menu > Export video makes an MP4 or WebM of the whole shot, with its audio. Choose size, quality and background; watch the progress, cancel if needed, then preview and save your video.',
+      'Draw timeline rails: every layer stacked as a row like Procreate Dreams, LINE / FILL and groups fold open and closed (▾ All / ▸ All), pinch or Ctrl + wheel zooms time.',
       'Audio: open the Audio lane under any workspace and tap + Audio (WAV, MP3, M4A, OGG or FLAC, up to 2 minutes). Move it with Start, trim it with Source in / out, set its volume or mute it. Link current panel ties a clip (say a line of dialogue) to a board panel so it follows that panel when you retime the board.',
       'Video keeps the shot frame rate and holds, including camera moves and precomps. PNG sequences remain the option for transparent production output.',
     ],

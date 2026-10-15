@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { ACTIVE_H, buildRails, foldKeys, RailState } from './rails';
 import { autoIcon, decorate, setLabel } from './icons';
 import { FPS_PRESETS, ROLES, type Drawing, type Role } from '../core/project';
 import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, totalFrames, type Exposure } from '../core/timeline';
@@ -71,6 +72,9 @@ export class Strip {
   private cell = loadCell();
   private drag: Drag | null = null;
   private flipBtn!: HTMLButtonElement;
+  /** Which rail rows are folded open (groups, LINE / FILL). */
+  private readonly rails = new RailState();
+  private readonly smallThumbs = new Map<string, { rev: number; canvas: HTMLCanvasElement }>();
   private selBtn!: HTMLButtonElement;
   /** Holds, marks, onion settings and layer toggles (shown in the Time workspace). */
   readonly timingBar: HTMLElement;
@@ -202,6 +206,21 @@ export class Strip {
       this.update();
     });
     zoom.append(el('span', { class: 'name' }, 'Zoom'), this.zoomRange);
+    // rails: fold every group and LINE / FILL open or closed (folding only hides rows)
+    const fold = el('div', { class: 'group', role: 'group', 'aria-label': 'Layer rows' });
+    fold.append(
+      btn('▾ All', 'Expand all: show every group and LINE / FILL row', () => {
+        this.rails.setAll(foldKeys(app), true);
+        this.signature = '';
+        this.update();
+      }),
+      btn('▸ All', 'Collapse all: one row per layer', () => {
+        this.rails.setAll([], false);
+        this.signature = '';
+        this.update();
+      }),
+    );
+    zoom.append(fold);
 
     const rowA = el('div', { class: 'strip-row' });
     // which layer the strip shows (and you draw on); tap for the layer list
@@ -242,11 +261,64 @@ export class Strip {
     return Math.max(0, Math.min(Math.floor(x / this.cell), this.app.project.length - 1));
   }
 
+  /** Time zoom around a point: pinch with two fingers, or Ctrl / ⌘ + wheel. */
+  private zoomAt(cell: number, clientX: number): void {
+    const next = Math.max(20, Math.min(120, Math.round(cell)));
+    if (next === this.cell) return;
+    const r = this.track.getBoundingClientRect();
+    const frame = (this.track.scrollLeft + clientX - r.left) / this.cell;
+    this.cell = next;
+    try {
+      localStorage.setItem(ZOOM_KEY, String(this.cell));
+    } catch {
+      // not persisted: fine
+    }
+    this.signature = '';
+    this.update();
+    this.track.scrollLeft = frame * this.cell - (clientX - r.left);
+  }
+
+  private bindZoom(): void {
+    let pinch: { d: number; cell: number } | null = null;
+    const dist = (t: TouchList) => Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY);
+    this.track.addEventListener(
+      'touchstart',
+      (e) => {
+        if (e.touches.length === 2) pinch = { d: Math.max(1, dist(e.touches)), cell: this.cell };
+      },
+      { passive: true },
+    );
+    this.track.addEventListener(
+      'touchmove',
+      (e) => {
+        if (!pinch || e.touches.length !== 2) return;
+        e.preventDefault();
+        this.zoomAt((pinch.cell * dist(e.touches)) / pinch.d, (e.touches[0]!.clientX + e.touches[1]!.clientX) / 2);
+      },
+      { passive: false },
+    );
+    this.track.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) pinch = null;
+    });
+    this.track.addEventListener(
+      'wheel',
+      (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        this.zoomAt(this.cell * Math.exp(-e.deltaY * 0.004), e.clientX);
+      },
+      { passive: false },
+    );
+  }
+
   private bindPointer(): void {
+    this.bindZoom();
     const app = this.app;
     this.track.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       const target = e.target as HTMLElement;
+      // the rails' name tags and the other layers' rows handle their own taps
+      if (target.closest('.rail-tag, .rblock')) return;
       const p = this.local(e);
       try {
         this.track.setPointerCapture(e.pointerId);
@@ -430,7 +502,8 @@ export class Strip {
     const p = app.project;
     const sel = new Set(app.selection);
     const sig =
-      `${this.cell}#${app.timeFormat}#` + p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).thumbRev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
+      `${this.cell}#${app.timeFormat}#${this.railSig()}#` +
+      p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).thumbRev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
     if (sig !== this.signature) {
       this.signature = sig;
       this.rebuild();
@@ -530,6 +603,23 @@ export class Strip {
       ruler.append(n);
     }
     this.inner.append(ruler);
+    // every layer as a rail (front on top); the layer you draw on is the editable row
+    const rails = buildRails(
+      this.app,
+      this.rails,
+      cell,
+      RULER_H,
+      p.layer.start,
+      Math.max(p.length * cell + cell * 2, 200),
+      (d) => this.smallThumb(d),
+      () => {
+        this.signature = '';
+        this.update();
+      },
+    );
+    this.inner.append(...rails.nodes);
+    this.inner.style.setProperty('--active-top', `${rails.activeTop}px`);
+    this.inner.style.height = `${Math.max(rails.height + 4, RULER_H + ACTIVE_H)}px`;
     // the storyboard's panels, so drawings can be lined up with them (not on the board itself)
     const b = this.app.board;
     if (b && p.layer.id !== b.id) {
@@ -562,6 +652,39 @@ export class Strip {
     this.inner.append(this.blank, this.lockMark, this.playhead, this.marquee);
     const used = new Set(p.exposures.map((x) => x.drawing));
     for (const id of this.thumbs.keys()) if (!used.has(id)) this.thumbs.delete(id);
+  }
+
+  /** What the rails show, for the rebuild check. */
+  private railSig(): string {
+    const app = this.app;
+    const c = app.project.comp;
+    return `${c.id}|${app.project.activeLayer}|${app.plane}|${[...this.rails.open].join(',')}|${c.layers
+      .map(
+        (l) =>
+          `${l.id}:${l.name}:${l.visible ? 1 : 0}${l.locked ? 1 : 0}:${l.start}:${l.in}:${l.out}:${l.label}:${l.kind === 'drawings' ? `${l.exposures.map((e) => `${e.drawing}.${e.length}`).join('/')}:${l.parts?.line?.visible !== false}${l.parts?.fill?.visible !== false}` : l.kind === 'comp' ? l.comp : ''}`,
+      )
+      .join('|')}`;
+  }
+
+  /** A small preview for a rail block (separate from the editable row's thumbnails). */
+  private smallThumb(d: Drawing): HTMLCanvasElement {
+    const hit = this.smallThumbs.get(d.id);
+    if (hit && hit.rev === d.thumbRev) return hit.canvas.cloneNode(true) as HTMLCanvasElement;
+    const c = el('canvas', { width: '48', height: '28', class: 'rthumb' });
+    const g = c.getContext('2d');
+    if (g) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 48, 28);
+      const t = d.thumb;
+      if (t) {
+        const s = Math.min(48 / t.width, 28 / t.height);
+        g.drawImage(t, 0, 0, t.width * s, t.height * s);
+      }
+    }
+    this.smallThumbs.set(d.id, { rev: d.thumbRev, canvas: c });
+    const copy = c.cloneNode(true) as HTMLCanvasElement;
+    copy.getContext('2d')?.drawImage(c, 0, 0);
+    return copy;
   }
 
   private thumb(d: Drawing): HTMLCanvasElement {
