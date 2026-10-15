@@ -203,7 +203,10 @@ export class Project {
   /** A fresh id with a prefix (c = comp, L = layer, f = folder) not used anywhere in the project. */
   newId(prefix: string): string {
     const used = new Set<string>([...this.comps.keys(), ...this.folders.map((f) => f.id)]);
-    for (const c of this.comps.values()) for (const l of c.layers) used.add(l.id);
+    for (const c of this.comps.values()) {
+      for (const l of c.layers) used.add(l.id);
+      for (const clip of c.audio ?? []) used.add(clip.id);
+    }
     for (let i = 1; ; i++) if (!used.has(`${prefix}${i}`)) return `${prefix}${i}`;
   }
 

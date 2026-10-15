@@ -1,5 +1,5 @@
 import type { SoundAsset } from '../core/audio';
-import { waveform } from '../core/audio';
+import { buildWaveform, type WaveformData } from '../core/waveform';
 import type { Project } from '../core/project';
 import { hashBytes } from './hash';
 
@@ -29,6 +29,7 @@ export function wavBytes(buffer: AudioBuffer): Uint8Array {
 export class SoundBank {
   private project: Project | null = null;
   private buffers = new Map<string, AudioBuffer>();
+  private waveforms = new Map<string, WaveformData>();
   private pending = new Map<string, Promise<AudioBuffer>>();
   private context: OfflineAudioContext | null = null;
   source: (path: string) => Promise<Uint8Array | null> = async () => null;
@@ -36,13 +37,16 @@ export class SoundBank {
   use(project: Project): void {
     if (this.project === project) return;
     this.project = project;
-    this.buffers.clear(); this.pending.clear(); this.context = null;
+    this.buffers.clear(); this.waveforms.clear(); this.pending.clear(); this.context = null;
   }
   private get decoder() { return this.context ??= new OfflineAudioContext(2, 1, SOUND_RATE); }
   get(id: string): AudioBuffer | undefined { return this.buffers.get(id); }
-  peaks(id: string): number[] {
+  waveform(id: string): WaveformData | undefined {
+    const cached = this.waveforms.get(id); if (cached) return cached;
     const b = this.buffers.get(id);
-    return b ? waveform(Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c))) : [];
+    if (!b) return undefined;
+    const data = buildWaveform(Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c)), b.sampleRate);
+    this.waveforms.set(id, data); return data;
   }
   async load(project: Project, id: string): Promise<AudioBuffer> {
     this.use(project);
@@ -85,7 +89,7 @@ export class SoundBank {
       if (decoded.duration > SOUND_MAX_SECONDS || decoded.numberOfChannels > 2) throw new Error('Choose mono or stereo audio up to two minutes long.');
       const bytes = wavBytes(decoded);
       const id = `s${hashBytes(bytes).replace(/[^A-Za-z0-9_-]/g, '')}`;
-      if (this.project === project) this.buffers.set(id, decoded);
+      if (this.project === project && !this.buffers.has(id)) this.buffers.set(id, decoded);
       return { id, sound: { name: file.name.slice(0, 120), duration: decoded.duration, path: `assets/${hashBytes(bytes)}.wav`, bytes } };
     } finally { media.removeAttribute('src'); media.load(); URL.revokeObjectURL(url); }
   }

@@ -3,6 +3,7 @@ import { drawingsLayer, newComp } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { exportVideo, videoSupport } from './exportvideo';
 import { DEFAULT_VIDEO, planVideo } from './videoplan';
+import type { SoundBank } from './sound';
 
 const rig = vi.hoisted(() => ({
   supported: new Set(['avc', 'vp9', 'vp8']),
@@ -17,6 +18,9 @@ const rig = vi.hoisted(() => ({
   onAdd: null as null | (() => void),
   onProbe: null as null | (() => void),
   failSetup: false,
+  supportsAudio: true,
+  audioCodec: '',
+  audioChunks: [] as { length: number; first: number }[],
 }));
 
 vi.mock('../brush/raster', () => ({
@@ -42,6 +46,7 @@ vi.mock('mediabunny', () => {
     target: BufferTarget;
     constructor(options: { target: BufferTarget }) { this.target = options.target; }
     addVideoTrack(_source: unknown, metadata: { frameRate: number }) { rig.rate = metadata.frameRate; }
+    addAudioTrack() {}
     async start() { this.state = 'started'; }
     async cancel() { rig.cancelled++; this.state = 'canceled'; }
     async finalize() {
@@ -61,7 +66,11 @@ vi.mock('mediabunny', () => {
   }
   return {
     BufferTarget, Output, CanvasSource,
-    AudioBufferSource: class {}, canEncodeAudio: async () => true,
+    AudioBufferSource: class {
+      constructor(options: { codec: string }) { rig.audioCodec = options.codec; }
+      async add(buffer: { length: number; first: number }) { rig.audioChunks.push({ length: buffer.length, first: buffer.first }); }
+      close() {}
+    }, canEncodeAudio: async () => rig.supportsAudio,
     Mp4OutputFormat: class {}, WebMOutputFormat: class {}, Quality: class {},
     canEncodeVideo: async (codec: string) => { rig.onProbe?.(); return rig.supported.has(codec); },
   };
@@ -89,6 +98,12 @@ beforeEach(() => {
   rig.writtenBytes = 8;
   rig.onAdd = rig.onProbe = null;
   rig.failSetup = false;
+  rig.supportsAudio = true; rig.audioCodec = ''; rig.audioChunks = [];
+  vi.stubGlobal('AudioBuffer', class {
+    length: number; first = 0;
+    constructor(options: { length: number }) { this.length = options.length; }
+    copyToChannel(data: Float32Array, channel: number) { if (channel === 0) this.first = data[0] ?? 0; }
+  });
   vi.stubGlobal('isSecureContext', true);
   vi.stubGlobal('VideoEncoder', class {});
   vi.stubGlobal('VideoFrame', class {});
@@ -96,6 +111,35 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('offline video export', () => {
+  const withAudio = () => {
+    const p = project();
+    p.comps.get(p.main)!.audio = [{ id: 'a1', asset: 's1', name: 'Sound', start: 0, trimIn: 0, trimOut: 0.25, gain: 0.5, muted: false, link: null }];
+    const pcm = new Float32Array(12000).fill(0.25);
+    const bank = { load: vi.fn(async () => {}), get: () => ({ sampleRate: 44100, numberOfChannels: 1, getChannelData: () => pcm }) } as unknown as SoundBank;
+    return { p, bank };
+  };
+  it('encodes mixed audio with the matching MP4/WebM codec and exact total sample count', async () => {
+    const { p, bank } = withAudio();
+    await exportVideo(p, DEFAULT_VIDEO, () => {}, new AbortController().signal, residency(), undefined, bank);
+    expect(rig.audioCodec).toBe('aac');
+    expect(rig.audioChunks).toEqual(Array.from({ length: 3 }, () => ({ length: 3675, first: 0.125 })));
+    rig.audioChunks = [];
+    await exportVideo(p, { format: 'webm' }, () => {}, new AbortController().signal, residency(), undefined, bank);
+    expect(rig.audioCodec).toBe('opus');
+    expect(rig.audioChunks.reduce((n, c) => n + c.length, 0)).toBe(11025);
+  });
+  it('reports unavailable audio encoding without producing a silent replacement video', async () => {
+    const { p, bank } = withAudio(); rig.supportsAudio = false;
+    await expect(exportVideo(p, DEFAULT_VIDEO, () => {}, new AbortController().signal, residency(), undefined, bank)).rejects.toThrow(/cannot encode audio/);
+    expect(rig.canvases).toHaveLength(0); expect(rig.encoded).toHaveLength(0);
+  });
+  it('keeps muted audio out of the mux and includes active audio in the export budget', async () => {
+    const { p, bank } = withAudio(); const audible = planVideo(p, DEFAULT_VIDEO).estimatedBytes;
+    p.comps.get(p.main)!.audio![0]!.muted = true;
+    expect(planVideo(p, DEFAULT_VIDEO).estimatedBytes).toBeLessThan(audible);
+    await exportVideo(p, DEFAULT_VIDEO, () => {}, new AbortController().signal, residency(), undefined, bank);
+    expect(rig.audioChunks).toHaveLength(0); expect(rig.audioCodec).toBe('');
+  });
   it('encodes every main-shot frame, including holds, at exact timestamps and releases pixel pins', async () => {
     const hold = residency();
     const result = await exportVideo(project(), DEFAULT_VIDEO, () => {}, new AbortController().signal, hold);

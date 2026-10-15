@@ -14,6 +14,8 @@ Prepared 2026-10-14 so another assistant can continue the app without relying on
 
 ## Latest (Claude, 2026-10-15)
 
+**Codex audio polish follow-up:** `docs/CLAUDE-AUDIO-POLISH-HANDOFF.md` records the waveform/settings improvements, multiple-clip ID fix, low-overhead caching, and real MP4/WebM-with-audio verification on `codex/audio-waveforms`. The user limited this follow-up to audio; selection/brush import remains separate work.
+
 - `main` now includes Quick Share video export and timeline audio (Codex, merged `e9b3cdc`), the Audio manual section (`10b092b`) and **Draw timeline rails** (`2115826`, `src/ui/rails.ts`): every layer stacked as a row, LINE/FILL and groups folding open, Expand all / Collapse all, pinch or Ctrl+wheel time zoom, taller resizable timeline.
 - `npm install` is needed once after pulling (new dependency `mediabunny`).
 - Checked: 241 tests and the production build; in desktop Chromium, audio import / save / reload / playback, and the rails (rows, folding, switching layers, zoom). Not checked: a real MP4/WebM export with audio in the browser, iPad/Apple Pencil.

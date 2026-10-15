@@ -8,7 +8,7 @@ export interface SoundVoice { asset: string; gain: number; sourceTime(t: number)
 const mod = (x: number, n: number) => ((x % n) + n) % n;
 
 /** Compile the shared comp hierarchy into continuous audio time. Frozen images hold silence. */
-export function soundVoices(project: Project, compId: string): SoundVoice[] {
+export function soundVoices(project: Pick<Project, 'comps'>, compId: string): SoundVoice[] {
   const voices: SoundVoice[] = [];
   const walk = (id: string, map: (t: number) => number | null, path: Set<string>) => {
     const c = project.comps.get(id); if (!c || path.has(id) || path.size > 8) return;

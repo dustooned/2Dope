@@ -1,5 +1,6 @@
 import type { App } from '../app';
 import type { AudioPlayback } from '../audio';
+import { paintWaveform } from './waveform';
 import { soundStart, type SoundClip } from '../core/audio';
 import { blockDropIndex, startOf } from '../core/timeline';
 import { rulerStep } from '../core/timecode';
@@ -252,6 +253,7 @@ export class BoardTimeline {
     const width = Math.max(total * cell + 120, this.root.clientWidth);
     this.inner.replaceChildren();
     this.inner.style.width = `${width}px`;
+    this.inner.style.setProperty('--btl-audio-height', `${Math.max(38, clips(app).length * 36 + 4)}px`);
     // ruler
     const ruler = el('div', { class: 'btl-ruler' });
     const step = Math.max(1, rulerStep(cell, p.fps, app.timeFormat));
@@ -290,7 +292,7 @@ export class BoardTimeline {
     // audio, lined up on the same clock
     const lane = el('div', { class: 'btl-audio' });
     if (!clips(app).length) lane.append(el('span', { class: 'hint btl-noaudio' }, 'No audio yet: add a sound in the Audio lane below, then drag it here to line it up with a panel.'));
-    for (const clip of clips(app)) {
+    for (const [index, clip] of clips(app).entries()) {
       const start = soundStart(clip, p.comp);
       if (start === null) continue;
       const len = (clip.trimOut - clip.trimIn) * p.comp.fps;
@@ -300,21 +302,14 @@ export class BoardTimeline {
         title: `${clip.name}${clip.link ? ' · follows its panel' : ''} · drag to move`,
       });
       s.style.left = `${start * cell}px`;
+      s.style.top = `${4 + index * 36}px`;
       s.style.width = `${Math.max(4, len * cell)}px`;
       const c = el('canvas', { width: '400', height: '30' });
       s.append(c, el('span', { class: 'btl-sname' }, `${clip.link ? '🔗 ' : ''}${clip.name}`));
       const draw = () => {
-        const peaks = this.audio?.bank.peaks(clip.asset) ?? [];
-        const g = c.getContext('2d');
-        if (!g || !peaks.length) return;
-        const dur = p.sounds.get(clip.asset)?.duration || clip.trimOut;
-        g.clearRect(0, 0, 400, 30);
-        g.fillStyle = clip.muted ? '#777887' : '#77d9ba';
-        for (let x = 0; x < 400; x++) {
-          const t = clip.trimIn + (x / 400) * (clip.trimOut - clip.trimIn);
-          const v = peaks[Math.min(peaks.length - 1, Math.floor((t / dur) * peaks.length))] ?? 0;
-          g.fillRect(x, 15 - v * 14, 1, Math.max(1, v * 28));
-        }
+        if (!c.isConnected || app.project !== p) return;
+        const data = this.audio?.bank.waveform(clip.asset);
+        if (data) paintWaveform(c, data, clip);
       };
       if (this.audio) void this.audio.bank.load(p, clip.asset).then(draw, () => {});
       lane.append(s);
