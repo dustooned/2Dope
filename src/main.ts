@@ -8,6 +8,7 @@ import { saveMode, type DeviceMode } from './core/device';
 import { buildPanel } from './ui/panel';
 import { openStore } from './io/persist';
 import { ExportUI } from './ui/exportdialog';
+import { VideoExportUI } from './ui/videoexport';
 import { FileUI } from './ui/files';
 import { Gallery } from './ui/gallery';
 import { MotionPanel } from './ui/motion';
@@ -269,6 +270,7 @@ for (const b of wsButtons) b.setAttribute('aria-pressed', String(b.dataset.ws ==
 // Quick Animate (a lighter view of the same project)
 let files: FileUI | null = null;
 let exporter: ExportUI | null = null;
+const videoExporter = new VideoExportUI(app, (message) => files?.toast(message));
 const quick = new Quick(app, $('#quickbar'), {
   exportPng: () => void app.exportPNG(),
   saveFile: () => void files?.exportProject(),
@@ -345,6 +347,7 @@ const menuActions: Record<string, () => void> = {
   panel: () => setPanel(!document.body.classList.contains('panel-open')),
   bar: toggleBar,
   'export-seq': () => exporter?.open(),
+  'export-video': () => videoExporter.open(),
   blender: () => void exportForBlender(),
 };
 

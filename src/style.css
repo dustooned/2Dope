@@ -964,6 +964,35 @@ body.ui-hidden .strip {
   min-height: 2.6em;
 }
 
+.video-export {
+  width: min(560px, calc(100vw - 24px));
+}
+
+.video-export video {
+  display: block;
+  width: 100%;
+  max-height: 55vh;
+  margin: 12px 0;
+  background: #000;
+}
+
+.video-save {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #15151b;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.video-export select {
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* Tablets and phones: the canvas gets the room.
    The top bar and the timeline controls become one scrollable row each, and the side panel
    slides over the canvas from a Panel button instead of sitting beside it. */

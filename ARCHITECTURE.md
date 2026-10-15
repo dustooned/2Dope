@@ -4,7 +4,7 @@ Current code map reviewed 2026-10-14. See `HANDOFF.md` for the checked baseline 
 
 ## Runtime and entry point
 
-Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framework, backend, or runtime dependency is listed in `package.json`. Compositing currently uses Canvas 2D; WebGL and sparse tiles are not the current implementation.
+Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framework or backend. Video export lazily loads the pinned `mediabunny` dependency for browser encoding/muxing. Compositing currently uses Canvas 2D; WebGL and sparse tiles are not the current implementation.
 
 `index.html` supplies the initial UI and startup watchdog. `src/main.ts` creates `App`, connects panels/callbacks, opens storage, and starts `FileUI`. `src/style.css` supplies workspace, Quick Animate, phone, and Lite layouts.
 
@@ -28,6 +28,7 @@ Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framew
 | Other `ui/` modules | Gallery/files, project/export dialogs, brush/color/layer panels, Quick Animate, menus, splitter, icons, manual. |
 | `io/schema.ts`, `io/projectio.ts`, `io/persist.ts`, `io/autosave.ts` | File validation/migration, captures, library storage, save queue and versions. |
 | Other `io/` modules | PNG sequence plans/rendering, ZIP/PDF, storyboard/CSV export, Blender manifest/packages. |
+| `io/videoplan.ts`, `io/exportvideo.ts`, `ui/videoexport.ts` | Main-shot video sizing/timing/budgets, offline MP4/WebM encoding, capability checks, modal preview/download. |
 | `blender/2dope_import.py` | Blender importer, bundled as raw source by `io/blenderpack.ts`. |
 
 ## Document and clocks
@@ -63,6 +64,7 @@ Residency parks offscreen planes as PNG bytes or stored asset keys, shrinking ca
 ## Output and deployment
 
 - PNG output uses drawings directly for a plain flipbook or the shared Canvas 2D compositor for a composed shot. Sequences provide Combined/Lines/Fills/Matte passes and a manifest.
+- Quick Share video encodes every main-shot frame with the same compositor and residency pins at explicit timestamps. It is silent and opaque; controls/cancel keep the project modal. Output bytes are capped (32 MiB Lite, 64 MiB Full), with a conservative preflight estimate. The video library is loaded only when this export is opened.
 - Storyboard export produces PDF or panel PNGs/captions CSV. PDF uses built-in WinAnsi text, with limited Unicode support.
 - Blender packages include images, `scene.json` and the importer. See `docs/blender.md` for supported mappings and simplifications.
 - Vite uses relative asset paths for static hosting. `.github/workflows/pages.yml` installs with Node 22, tests, builds and deploys `dist/` on `main` pushes/manual dispatch.

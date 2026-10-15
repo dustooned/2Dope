@@ -2,6 +2,8 @@
 
 Prepared 2026-10-14 so another assistant can continue the app without relying on a previous chat.
 
+**Video-export branch follow-up:** see `docs/CLAUDE-VIDEO-EXPORT-HANDOFF.md` for the implemented Quick Share slice, its verification, the deployed touchscreen hotfix, and safe integration with Claude's main checkout. The baseline below predates that feature.
+
 ## Start here
 
 - Workspace: `E:\2026\Dev\Apps\2Dope`.

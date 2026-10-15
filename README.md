@@ -3,6 +3,8 @@
 A small, free 2D animation tool for 3D animators: draw, time, tweak, send to Blender.
 The current app has **Board, Draw, Time, and Motion** workspaces, a local project library,
 frame-by-frame animation, layers/keyframes/precomps, storyboard export, PNG sequences, and Blender export.
+This branch also adds **Menu → Export video…** for silent MP4/WebM sharing, with size, quality,
+background, progress/cancel, preview and download. See [the Claude feature handoff](docs/CLAUDE-VIDEO-EXPORT-HANDOFF.md).
 
 For development or continuing work with another coding assistant, start with **[HANDOFF.md](HANDOFF.md)**
 and **[AGENTS.md](AGENTS.md)**. The milestone sections below record how the app grew;
