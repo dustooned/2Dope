@@ -177,6 +177,22 @@ export const MANUAL: ManualSection[] = [
     ],
   },
   {
+    id: 'audio',
+    title: 'Audio',
+    blocks: [
+      'Sound plays on the same clock as everything else, in every workspace. Open the Audio lane under the canvas to see it.',
+      {
+        steps: [
+          'Tap + Audio and pick a file (WAV, MP3, M4A, OGG or FLAC, up to 2 minutes). It starts at the frame you are on.',
+          'Start frame moves the clip. Source in and Source out trim the sound itself (in seconds).',
+          'Set Volume, or Mute a clip while you work.',
+          'Link current panel ties the clip to the board panel you are on: retime or move that panel and the clip goes with it. Handy for dialogue.',
+        ],
+      },
+      { tip: 'Audio is saved inside the project and in .2dope files, and it goes into video exports. PNG sequences are pictures only.' },
+    ],
+  },
+  {
     id: 'export',
     title: 'Saving and exporting',
     blocks: [
@@ -191,7 +207,7 @@ export const MANUAL: ManualSection[] = [
           'Export for Blender: a package Blender opens with the 2Dope add-on (image planes, camera, groups, keyframes).',
         ],
       },
-      'Video export needs a secure browser tab with video encoding support. If a format or size is unavailable, try the other format or a smaller size. Cancel stops encoding and lets you try again. Videos have an opaque background and no audio; use a PNG sequence for transparent production files. The storyboard stays out unless Include the storyboard is already on in Export sequence.',
+      'Video export needs a secure browser tab with video encoding support. If a format or size is unavailable, try the other format or a smaller size. Cancel stops encoding and lets you try again. Videos have an opaque background and include the audio clips of the shot (AAC in MP4, Opus in WebM); use a PNG sequence for transparent production files. The storyboard stays out unless Include the storyboard is already on in Export sequence.',
       { tip: 'Browsers can clear saved data if a device runs out of space. Export a .2dope backup now and then, especially before a deadline.' },
     ],
   },
@@ -244,18 +260,17 @@ export interface Update {
 export const UPDATES: Update[] = [
   {
     date: '2026-10-15',
-    title: 'Quick Share video export',
+    title: 'Timeline audio and Quick Share video export',
     items: [
-      'Menu > Export video makes a silent MP4 or WebM of the whole shot. Choose size, quality and background; watch the progress, cancel if needed, then preview and save your video.',
+      'Menu > Export video makes an MP4 or WebM of the whole shot, with its audio. Choose size, quality and background; watch the progress, cancel if needed, then preview and save your video.',
+      'Audio: open the Audio lane under any workspace and tap + Audio (WAV, MP3, M4A, OGG or FLAC, up to 2 minutes). Move it with Start, trim it with Source in / out, set its volume or mute it. Link current panel ties a clip (say a line of dialogue) to a board panel so it follows that panel when you retime the board.',
       'Video keeps the shot frame rate and holds, including camera moves and precomps. PNG sequences remain the option for transparent production output.',
     ],
   },
   {
     date: '2026-10-14',
     title: 'Touchscreen undo stays out of the right-click menu',
-    items: [
-      'Two-finger undo and other multi-finger canvas gestures no longer also open a right-click menu. Mouse right-click, pen-button menus and one-finger press-and-hold still work.',
-    ],
+    items: ['Two-finger undo and other multi-finger canvas gestures no longer also open a right-click menu. Mouse right-click, pen-button menus and one-finger press-and-hold still work.'],
   },
   {
     date: '2026-10-12',
@@ -263,7 +278,7 @@ export const UPDATES: Update[] = [
     items: [
       'Animate this shot lines your frames up with the board: one drawing per panel, same lengths, and P1, P2… marks above the frame bar. Board and animation timing stay in sync.',
       'QuickShape keeps your pressure (thick and thin) and adjusts from the start point.',
-      'Board and animation stay in step both ways: adding or retiming frames in Draw (flipbook too), trimming a layer\'s end in Motion, or retiming the Board moves the other; deleting the first panel no longer shifts the shot before frame 0 (older projects are repaired when opened).',
+      "Board and animation stay in step both ways: adding or retiming frames in Draw (flipbook too), trimming a layer's end in Motion, or retiming the Board moves the other; deleting the first panel no longer shifts the shot before frame 0 (older projects are repaired when opened).",
       'Time has the frame bar with play and step controls; Draw has Split and touch Select.',
       'Every new project starts with its setup (name, size, frame rate), also the very first one and after deleting your last project.',
       'Procreate-style steady lines: Stabilisation, Motion filter and Expression join StreamLine in the Brush panel.',
