@@ -24,6 +24,7 @@ import { Sidebar } from './ui/sidebar';
 import { LayersPopover } from './ui/layerspop';
 import { BoardPanel } from './ui/board';
 import { ColorPanel } from './ui/colorpanel';
+import { BrushLibrary } from './ui/brushlib';
 import { showContextMenu } from './ui/contextmenu';
 import { SHAPE_CHOICES } from './core/quickshape';
 import { hasNewUpdates, openManual } from './ui/manual';
@@ -93,14 +94,20 @@ shapeBtn.addEventListener('click', () => {
   const r = shapeBtn.getBoundingClientRect();
   const cur = app.lastShape?.choice;
   showContextMenu(r.left, r.bottom + 4, [
-    ...SHAPE_CHOICES.map((c) => ({ label: c.label, on: cur === c.id, run: () => app.swapShape(c.id) })),
+    ...SHAPE_CHOICES.map((c) => ({ label: c.label, checked: cur === c.id, run: () => app.swapShape(c.id) })),
     { sep: true },
-    { label: '✎ Keep my stroke', on: cur === 'stroke', run: () => app.swapShape('stroke') },
+    { label: '✎ Keep my stroke', checked: cur === 'stroke', run: () => app.swapShape('stroke') },
   ]);
 });
 for (const b of partButtons) b.addEventListener('click', () => app.togglePart(b.dataset.partEye === 'fill' ? 'fill' : 'line'));
 for (const b of planeButtons) b.addEventListener('click', () => app.setPlane(b.dataset.plane === 'fill' ? 'fill' : 'line'));
-for (const b of toolButtons) b.addEventListener('click', () => app.setTool(b.dataset.tool as Tool));
+// tapping the tool you already use opens the brush library (Procreate style)
+for (const b of toolButtons)
+  b.addEventListener('click', () => {
+    const t = b.dataset.tool as Tool;
+    if (t === app.tool && t !== 'fill') brushLib.toggle(b);
+    else app.setTool(t);
+  });
 app.onToolChange = syncTools;
 syncTools();
 
@@ -232,6 +239,10 @@ try {
 
 // Narrow screens: the side panel is an overlay opened from the Panel button; tapping the canvas closes it.
 const setPanel = (open: boolean) => document.body.classList.toggle('panel-open', open);
+const brushLib = new BrushLibrary(app, () => {
+  setPanel(true);
+  showTab('brush');
+});
 $('#panel-toggle').addEventListener('click', () => setPanel(!document.body.classList.contains('panel-open')));
 $('#stage').addEventListener('pointerdown', () => app.workspace !== 'time' && setPanel(false), { capture: true });
 

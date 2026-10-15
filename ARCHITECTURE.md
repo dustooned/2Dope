@@ -26,6 +26,7 @@ Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framew
 | `view/` | Viewport coordinates, compositor, onion skins, overlays, pixel operations and content bounds. |
 | `ui/strip.ts`, `ui/xsheet.ts`, `ui/board.ts`, `ui/motion.ts` | Workspace views of shared document and commands. |
 | `ui/boardtimeline.ts` | Board Timeline/Split views: panels as blocks on the comp clock (edge drag = `setPanelDuration`, body drag = `moveSelectionTo`), audio clips lined up underneath (drag = clip start or linked offset, one undo step), pinch/Ctrl+wheel zoom. |
+| `core/brushlib.ts`, `ui/brushlib.ts` | Brush library: categories for the built-in presets, My brushes (per device, validated on read), preview strokes, Studio = the Brush panel. Opens by tapping the active Brush/Vector/Eraser tool. |
 | `ui/rails.ts` | Draw/Time timeline rails: every layer as a row in stacking order on the strip's clock and zoom; the active layer is the strip's own editable blocks (positioned by `--active-top`); LINE/FILL sublayers and groups fold open (`RailState`, per device). Folding never changes visibility or playback. |
 | `core/audio.ts`, `audio.ts`, `io/sound.ts`, `io/soundmix.ts`, `ui/audiotracks.ts` | Timeline audio: clips on comps (fixed or linked to a board panel), shared playback on the app clock, WAV assets in the asset store, mixing for video export, the foldable Audio lane. |
 | Other `ui/` modules | Gallery/files, project/export dialogs, brush/color/layer panels, Quick Animate, menus, splitter, icons, manual. |

@@ -125,6 +125,9 @@ export const MANUAL: ManualSection[] = [
           ['Fill (G)', 'Fills areas closed by your lines. Tap or drag across areas, lasso around them, or brush over leftover gaps.', 'fill'],
         ],
       },
+      {
+        tip: 'Brush library: tap the Brush (or Vector, or Eraser) tool you are already using. Brushes are sorted into Sketching, Inking, Painting and My brushes, each with a preview stroke. Tap to use one, double-tap to open all its settings (Studio). Tune a brush and tap ＋ Save brush to keep it in My brushes; hold a brush to duplicate, rename or delete it.',
+      },
       'The circle at the top right is your colour. Tap it for the colour panel: a hue ring around a saturation / brightness square (Disc), or H, S, B sliders and a hex box (Values); the colour before and now (tap the old half to go back); Recent colours; and a Palette (+ adds the current colour, hold a swatch to remove it). System… opens your device’s own picker.',
       'The sliders on the left are brush size and opacity, with undo and redo under them.',
       { figure: 'linefill' },
@@ -279,6 +282,7 @@ export const UPDATES: Update[] = [
     title: 'Timeline audio and Quick Share video export',
     items: [
       'Menu > Export video makes an MP4 or WebM of the whole shot, with its audio. Choose size, quality and background; watch the progress, cancel if needed, then preview and save your video.',
+      'Brush library: tap the tool you are using again. Categories with preview strokes, double-tap for all settings, save your own brushes into My brushes.',
       'QuickShape Edit shape: after a snap, tap the button at the top of the canvas to switch the shape (Line, Arc, Ellipse, Circle, Rectangle, Square, Polygon…) or keep your own stroke.',
       'Board views: Panels, Timeline (panels on the clock with the audio underneath: drag edges to retime, drag panels to reorder, drag sounds to line them up) and Split.',
       'Draw timeline rails: every layer stacked as a row like Procreate Dreams, LINE / FILL and groups fold open and closed (▾ All / ▸ All), pinch or Ctrl + wheel zooms time.',

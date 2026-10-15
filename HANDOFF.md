@@ -9,7 +9,7 @@ Prepared 2026-10-14 so another assistant can continue the app without relying on
 - `main` now includes Quick Share video export and timeline audio (Codex, merged `e9b3cdc`), the Audio manual section (`10b092b`) and **Draw timeline rails** (`2115826`, `src/ui/rails.ts`): every layer stacked as a row, LINE/FILL and groups folding open, Expand all / Collapse all, pinch or Ctrl+wheel time zoom, taller resizable timeline.
 - `npm install` is needed once after pulling (new dependency `mediabunny`).
 - Checked: 241 tests and the production build; in desktop Chromium, audio import / save / reload / playback, and the rails (rows, folding, switching layers, zoom). Not checked: a real MP4/WebM export with audio in the browser, iPad/Apple Pencil.
-- Board views (Panels / Timeline / Split) with audio alignment are done (`src/ui/boardtimeline.ts`); QuickShape Edit shape pop-down done (`fitAs` in `src/core/quickshape.ts`, `App.swapShape`). Next: Dreams-style brush library, selection tools, image brush tips and .abr / Procreate brush import.
+- Board views (Panels / Timeline / Split) with audio alignment are done (`src/ui/boardtimeline.ts`); QuickShape Edit shape pop-down done (`fitAs` in `src/core/quickshape.ts`, `App.swapShape`); brush library done (`src/core/brushlib.ts`, `src/ui/brushlib.ts`: categories, previews, double-tap Studio, My brushes in localStorage `2dope.brushes.mine`). Next: selection tools, image brush tips and .abr / Procreate brush import.
 
 ## Start here
 

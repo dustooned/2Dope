@@ -214,7 +214,10 @@ export function buildPanel(app: App, root: HTMLElement): void {
   const refresh = () => {
     for (const r of refreshers) r();
     const idx = PRESETS.findIndex((p) => p.name === app.brush.name);
-    presetSel.value = String(Math.max(0, idx));
+    // a brush from My brushes: show its name (the library holds it)
+    presetSel.querySelector('option[data-mine]')?.remove();
+    if (idx < 0) presetSel.append(el('option', { value: 'mine', 'data-mine': '' }, `⭐ ${app.brush.name}`));
+    presetSel.value = idx < 0 ? 'mine' : String(idx);
     drawPreview();
   };
   const prevBrush = app.onBrushChange;
