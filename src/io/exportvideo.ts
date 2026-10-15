@@ -3,6 +3,8 @@ import { frameContent } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { drawComp, releaseScratch } from '../view/composite';
 import { planVideo, VIDEO_MAX_BYTES, type VideoPlan } from './videoplan';
+import { mixSound, soundVoices } from './soundmix';
+import { SOUND_RATE, type SoundBank } from './sound';
 
 type VideoCodec = 'avc' | 'vp9' | 'vp8';
 export interface VideoSupport { codec: VideoCodec | null; message: string }
@@ -51,6 +53,7 @@ export async function exportVideo(
   signal: AbortSignal,
   hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void },
   maxBytes = VIDEO_MAX_BYTES,
+  sounds?: SoundBank,
 ): Promise<VideoResult> {
   const check = () => { if (signal.aborted) throw new DOMException('Video export cancelled', 'AbortError'); };
   check();
@@ -59,7 +62,15 @@ export async function exportVideo(
   const support = await videoSupport(plan);
   check();
   if (!support.codec) throw new Error(support.message);
-  const { Output, BufferTarget, Mp4OutputFormat, WebMOutputFormat, CanvasSource, Quality } = await import('mediabunny');
+  const { Output, BufferTarget, Mp4OutputFormat, WebMOutputFormat, CanvasSource, AudioBufferSource, canEncodeAudio, Quality } = await import('mediabunny');
+  const voices = soundVoices(project, plan.comp);
+  const audioCodec = plan.options.format === 'mp4' ? 'aac' : 'opus';
+  if (voices.length) {
+    if (!sounds) throw new Error('Audio assets are unavailable. Reopen the project and try again.');
+    if (!await canEncodeAudio(audioCodec, { numberOfChannels: 2, sampleRate: SOUND_RATE, bitrate: 128000 }))
+      throw new Error(`This browser cannot encode audio in ${plan.options.format.toUpperCase()}. Try the other video format.`);
+    await Promise.all([...new Set(voices.map(v => v.asset))].map(id => sounds.load(project, id)));
+  }
   check();
   const canvas = makeCanvas(plan.width, plan.height);
   const g = canvas.getContext('2d');
@@ -85,6 +96,8 @@ export async function exportVideo(
       alpha: 'discard', latencyMode: 'quality', keyFrameInterval: 2,
     });
     output.addVideoTrack(source, { frameRate: plan.fps });
+    const audio = voices.length ? new AudioBufferSource({ codec: audioCodec, bitrate: 128000 }) : null;
+    if (audio) output.addAudioTrack(audio);
     signal.addEventListener('abort', cancel, { once: true });
     check();
     await output.start();
@@ -110,6 +123,15 @@ export async function exportVideo(
         drawComp(g, project, plan.comp, frame, { backgrounds: true, export: true });
         // Await backpressure before reusing the canvas or unpinning this frame's drawings.
         await source.add(frame / plan.fps, 1 / plan.fps);
+        if (audio && sounds) {
+          check();
+          const first = Math.round(frame * SOUND_RATE / plan.fps);
+          const last = Math.round((frame + 1) * SOUND_RATE / plan.fps);
+          const data = mixSound(voices, sounds, first / SOUND_RATE, last - first, SOUND_RATE);
+          const buffer = new AudioBuffer({ length: last - first, numberOfChannels: 2, sampleRate: SOUND_RATE });
+          buffer.copyToChannel(data[0], 0); buffer.copyToChannel(data[1], 1);
+          await audio.add(buffer);
+        }
       } finally {
         for (const drawing of pinned) hold.unpin(drawing);
       }
@@ -118,6 +140,7 @@ export async function exportVideo(
     }
     check();
     source.close();
+    audio?.close();
     onProgress({ done: plan.frames, total: plan.frames, label: 'Finishing the video…' });
     await output.finalize();
     check();

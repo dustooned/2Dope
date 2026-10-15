@@ -20,6 +20,7 @@ import {
   type Transform,
 } from '../core/comp';
 import { CAPTION_FIELDS } from '../core/timeline';
+import type { SoundClip } from '../core/audio';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
 
 /**
@@ -32,7 +33,7 @@ import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 2;
+export const SCHEMA = 3;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -121,6 +122,7 @@ export interface LayerFile {
 }
 
 export interface CompFile {
+  audio?: SoundClip[];
   name: string;
   width: number;
   height: number;
@@ -146,6 +148,7 @@ export interface DrawingFile {
 }
 
 export interface ProjectFile {
+  sounds?: Record<string, { name: string; path: string; duration: number }>;
   format: typeof FORMAT;
   schema: number;
   /** The app version that wrote the file. */
@@ -176,6 +179,7 @@ const MAX_COMPS = 500;
 const MAX_LAYERS = 1000;
 const MAX_KEYS = 100_000;
 export const ASSET_PATH = /^assets\/[A-Za-z0-9_.-]{1,120}\.png$/;
+export const SOUND_PATH = /^assets\/[A-Za-z0-9_.-]{1,120}\.wav$/;
 const TOOLS: Tool[] = ['brush', 'eraser', 'pen', 'fill'];
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -442,6 +446,7 @@ export function migrate(input: unknown): Record<string, unknown> {
   if (typeof schema !== 'number' || !Number.isInteger(schema) || schema < 1) throw new SchemaError('the project has no valid schema version');
   if (schema > SCHEMA) throw new SchemaError(`this project was made by a newer version of 2Dope (file format ${schema}, this version reads up to ${SCHEMA}). Update 2Dope to open it.`);
   if (schema < 2) raw = from1to2(raw);
+  if ((raw.schema as number) < 3) raw = { ...raw, schema: 3 };
   return raw;
 }
 
@@ -456,6 +461,14 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
   if (ids.length > MAX_DRAWINGS) throw new SchemaError('the project has too many drawings');
 
   const drawings: Record<string, DrawingFile> = {};
+  const sounds: NonNullable<ProjectFile['sounds']> = {};
+  if (raw.sounds !== undefined) {
+    if (!isObj(raw.sounds) || Object.keys(raw.sounds).length > 64) throw new SchemaError('the project has too many audio assets');
+    for (const [id, sound] of Object.entries(raw.sounds)) {
+      if (!ID.test(id) || !isObj(sound) || typeof sound.path !== 'string' || !SOUND_PATH.test(sound.path)) throw new SchemaError('an audio asset has an invalid path or id');
+      sounds[id] = { name: str(sound.name, 'audio name'), path: sound.path, duration: num(sound.duration, 'audio duration', 0.001, 120) };
+    }
+  }
   let vectorTotal = 0;
   for (const id of ids) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new SchemaError(`drawing id "${id}" is not allowed`);
@@ -517,6 +530,27 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
       folder: typeof c.folder === 'string' && folders[c.folder] ? c.folder : null,
       layers,
     };
+    if (c.audio !== undefined) {
+      if (!Array.isArray(c.audio) || c.audio.length > 64) throw new SchemaError('too many audio clips');
+      const clipIds = new Set<string>();
+      comps[id]!.audio = c.audio.map((rawClip: unknown): SoundClip => {
+        if (!isObj(rawClip) || typeof rawClip.id !== 'string' || !ID.test(rawClip.id) || clipIds.has(rawClip.id)) throw new SchemaError('invalid or duplicate audio clip id');
+        clipIds.add(rawClip.id);
+        const asset = typeof rawClip.asset === 'string' ? rawClip.asset : '';
+        const sound = sounds[asset];
+        if (!sound) throw new SchemaError('an audio clip references a missing asset');
+        const trimIn = num(rawClip.trimIn, 'audio source in', 0, sound.duration);
+        const trimOut = num(rawClip.trimOut, 'audio source out', 0.001, sound.duration + 0.0001);
+        if (trimOut <= trimIn) throw new SchemaError('audio source out must follow source in');
+        let link: SoundClip['link'] = null;
+        if (rawClip.link !== null && rawClip.link !== undefined) {
+          const a = rawClip.link;
+          if (!isObj(a) || typeof a.layer !== 'string' || !ID.test(a.layer) || typeof a.drawing !== 'string' || !ID.test(a.drawing)) throw new SchemaError('invalid audio panel link');
+          link = { layer: a.layer, drawing: a.drawing, occurrence: int(a.occurrence ?? 0, 'audio panel occurrence', 0, MAX_FRAMES), offset: int(a.offset, 'audio panel offset', -MAX_FRAMES, MAX_FRAMES) };
+        }
+        return { id: rawClip.id, asset, name: str(rawClip.name, 'clip name'), start: int(rawClip.start, 'audio start', 0, MAX_FRAMES), trimIn, trimOut, gain: num(rawClip.gain, 'audio volume', 0, 2), muted: rawClip.muted === true, link };
+      });
+    }
     if (Array.isArray(c.pins)) {
       const pins = c.pins
         .filter((p): p is { layer: string; prop: PinProp } => isObj(p) && typeof p.layer === 'string' && layerIds.has(p.layer) && PIN_PROPS.includes(p.prop as PinProp))
@@ -542,6 +576,7 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     comps,
     folders,
     drawings,
+    ...(Object.keys(sounds).length ? { sounds } : {}),
   };
 }
 
@@ -562,6 +597,7 @@ export function assetPaths(p: ProjectFile): Set<string> {
     if (d.line) s.add(d.line);
     if (d.fill) s.add(d.fill);
   }
+  for (const sound of Object.values(p.sounds ?? {})) s.add(sound.path);
   return s;
 }
 
@@ -653,6 +689,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
       folder: c.folder,
       layers,
       pins: (c.pins ?? []).map((p) => ({ ...p })),
+      ...(c.audio?.length ? { audio: structuredClone(c.audio) } : {}),
     });
   }
   return out;
@@ -717,6 +754,7 @@ export function compFile(c: Comp): CompFile {
     }),
   };
   if (c.pins.length) out.pins = c.pins.map((p) => ({ ...p }));
+  if (c.audio?.length) out.audio = structuredClone(c.audio);
   return out;
 }
 

@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import type { SoundBank } from '../io/sound';
 import { exportVideo, videoSupport } from '../io/exportvideo';
 import { sanitizeName } from '../io/exportplan';
 import { planVideo, videoOptions, VIDEO_LITE_MAX_BYTES, VIDEO_MAX_BYTES, type VideoOptions } from '../io/videoplan';
@@ -24,7 +25,7 @@ export class VideoExportUI {
   private checkId = 0;
   private url: string | null = null;
 
-  constructor(private readonly app: App, private readonly toast: (message: string) => void) {
+  constructor(private readonly app: App, private readonly toast: (message: string) => void, private readonly sounds: SoundBank) {
     document.body.append(this.dialog);
     this.dialog.addEventListener('cancel', (e) => {
       if (this.abort) { e.preventDefault(); this.abort.abort(); }
@@ -55,7 +56,7 @@ export class VideoExportUI {
     this.releaseUrl();
     const d = this.dialog;
     d.replaceChildren(el('h2', {}, 'Export video'));
-    d.append(el('p', { class: 'hint' }, 'A silent video of the whole shot, with its layers, camera and timing.'));
+    d.append(el('p', { class: 'hint' }, 'A video of the whole shot, with its layers, camera, timing and unmuted audio.'));
     const select = <K extends keyof VideoOptions>(label: string, key: K, choices: [VideoOptions[K], string][]) => {
       const row = el('label', { class: 'xrow' });
       const input = el('select', { 'aria-label': label });
@@ -128,7 +129,7 @@ export class VideoExportUI {
         bar.max = p.total;
         bar.value = p.done;
         status.textContent = p.label;
-      }, controller.signal, this.app.residency, this.maxBytes);
+      }, controller.signal, this.app.residency, this.maxBytes, this.sounds);
       if (controller.signal.aborted || !d.open) return;
       this.url = URL.createObjectURL(result.blob);
       d.replaceChildren(el('h2', {}, 'Video ready'));

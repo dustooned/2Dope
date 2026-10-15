@@ -61,6 +61,7 @@ vi.mock('mediabunny', () => {
   }
   return {
     BufferTarget, Output, CanvasSource,
+    AudioBufferSource: class {}, canEncodeAudio: async () => true,
     Mp4OutputFormat: class {}, WebMOutputFormat: class {}, Quality: class {},
     canEncodeVideo: async (codec: string) => { rig.onProbe?.(); return rig.supported.has(codec); },
   };

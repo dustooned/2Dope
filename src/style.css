@@ -968,6 +968,21 @@ body.ui-hidden .strip {
   width: min(560px, calc(100vw - 24px));
 }
 
+.audio-tracks { flex: 0 0 auto; max-height: 32vh; overflow: auto; border-top: 1px solid var(--line); background: var(--panel); font-size: 12px; }
+.audio-tracks > summary { padding: 8px 12px; cursor: pointer; color: #9ce3ce; }
+.audio-body { padding: 0 10px 8px; }
+.audio-toolbar, .audio-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.audio-toolbar { color: var(--muted); margin-bottom: 6px; }
+.audio-clip > summary { padding: 4px; cursor: pointer; }
+.audio-clip .audio-lane { display: block; }
+.audio-lane { height: 36px; position: relative; overflow: hidden; background: #17191f; border-radius: 5px; cursor: crosshair; }
+.audio-lane::after { content: ''; position: absolute; left: var(--audio-playhead); top: 0; bottom: 0; border-left: 2px solid var(--accent); pointer-events: none; }
+.audio-lane canvas { position: absolute; height: 36px; background: #25443c; }
+.audio-controls { margin: 6px 0 12px; }
+.audio-controls label { display: flex; flex-direction: column; gap: 3px; color: var(--muted); }
+.audio-controls input { width: 90px; }
+body.ui-hidden .audio-tracks, body.quick .audio-tracks { display: none; }
+
 .video-export video {
   display: block;
   width: 100%;
