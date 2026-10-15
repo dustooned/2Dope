@@ -1,6 +1,6 @@
 {
   "name": "2dope",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "2Dope: a small, free 2D animation tool for 3D animators. Milestone 0: pen-feel prototype.",
   "type": "module",
