@@ -973,12 +973,15 @@ body.ui-hidden .strip {
 .audio-body { padding: 0 10px 8px; }
 .audio-toolbar, .audio-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .audio-toolbar { color: var(--muted); margin-bottom: 6px; }
-.audio-clip > summary { padding: 4px; cursor: pointer; }
-.audio-clip .audio-lane { display: block; }
+.audio-clip { margin-top: 8px; }
+.audio-clip-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 0 5px; }
+.audio-clip-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-settings { flex-shrink: 0; min-height: 30px; padding: 3px 8px; font-size: 11px; }
 .audio-lane { height: 36px; position: relative; overflow: hidden; background: #17191f; border-radius: 5px; cursor: crosshair; }
 .audio-lane::after { content: ''; position: absolute; left: var(--audio-playhead); top: 0; bottom: 0; border-left: 2px solid var(--accent); pointer-events: none; }
 .audio-lane canvas { position: absolute; height: 36px; background: #25443c; }
 .audio-controls { margin: 6px 0 12px; }
+.audio-controls[hidden] { display: none; }
 .audio-controls label { display: flex; flex-direction: column; gap: 3px; color: var(--muted); }
 .audio-controls input { width: 90px; }
 body.ui-hidden .audio-tracks, body.quick .audio-tracks { display: none; }
@@ -3664,9 +3667,9 @@ body:not(.ws-draw) .plane-badge {
   flex: 0 0 auto;
   height: min(var(--board-h), 46vh);
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
   border-top: 1px solid var(--line);
   background: var(--bg);
   user-select: none;
@@ -3686,6 +3689,7 @@ body:not(.ws-draw) .plane-badge {
   position: relative;
   height: 100%;
   min-width: 100%;
+  min-height: calc(100px + var(--btl-audio-height, 38px));
 }
 .btl-ruler {
   position: absolute;
@@ -3706,7 +3710,7 @@ body:not(.ws-draw) .plane-badge {
 .btl-panel {
   position: absolute;
   top: 22px;
-  bottom: 46px;
+  bottom: calc(var(--btl-audio-height, 38px) + 8px);
   margin-left: 1px;
   border: 1px solid #f0c040;
   border-radius: 6px;
@@ -3776,7 +3780,7 @@ body:not(.ws-draw) .plane-badge {
   left: 0;
   right: 0;
   bottom: 4px;
-  height: 38px;
+  height: var(--btl-audio-height, 38px);
   border-top: 1px dashed var(--line);
 }
 .btl-noaudio {

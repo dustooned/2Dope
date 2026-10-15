@@ -1,10 +1,11 @@
-# The .2dope project format (schema 2)
+# The .2dope project format (schema 3)
 
 A `.2dope` file is a ZIP archive:
 
 ```
 project.json            the project (plain JSON, see below)
 assets/<hash>.png       one PNG per non-empty pixel plane (transparent RGBA)
+assets/<hash>.wav       normalized PCM audio assets
 ```
 
 - Assets are **content-addressed**: the file name is a hash of the bytes, so identical drawings share one file
@@ -18,7 +19,7 @@ assets/<hash>.png       one PNG per non-empty pixel plane (transparent RGBA)
 ```jsonc
 {
   "format": "2dope",
-  "schema": 2,                       // bumped only for breaking changes (schema 1 files are upgraded on open)
+  "schema": 3,                       // schema 1/2 files are upgraded on open
   "savedBy": "2Dope 0.0.2",
   "name": "Bounce",
   "created": "2026-10-10T09:00:00.000Z",
@@ -148,3 +149,18 @@ most recent ones within a budget: about 200 MB on iPad, 900 MB on desktop). The 
 **parked**: canvases shrink to 0×0 and the pixels stay as stored assets (or PNG bytes until the next
 autosave). Opening a project decodes nothing up front; drawings come back as they are shown.
 See `src/core/residency.ts`.
+
+## Audio fields (schema 3)
+
+Project-level `sounds` maps each sound ID to `{ name, path, duration }`: the path is a validated
+`assets/<hash>.wav` entry and duration is in seconds (up to 120). Each comp can contain an `audio`
+array with clip records `{ id, asset, name, start, trimIn, trimOut, gain, muted, link }`.
+`start` is a zero-based comp frame; source trims are seconds and gain is a linear 0–2 multiplier.
+A null link keeps the clip fixed. A panel link is `{ layer, drawing, occurrence, offset }`, with
+its offset measured in comp frames relative to the linked panel. A removed panel silences the
+linked clip until the panel returns or the clip is unlinked.
+
+Audio assets participate in library/version references and garbage collection just like PNGs.
+Standalone archive capture must include every referenced WAV. Schema 1/2 files migrate to 3;
+older app versions refuse schema 3, protecting audio from being silently stripped on a save.
+Waveform caches and clip-settings disclosure state are UI/runtime data and are not stored here.

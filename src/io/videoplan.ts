@@ -1,5 +1,6 @@
 import { compLength } from '../core/comp';
 import type { Project } from '../core/project';
+import { soundVoices } from './soundmix';
 
 export interface VideoOptions {
   format: 'mp4' | 'webm';
@@ -63,7 +64,8 @@ export function planVideo(project: Pick<Project, 'comps' | 'main' | 'comp'>, raw
   const bitrate = Math.round(Math.max(500_000, Math.min(24_000_000, sz.width * sz.height * fps * (options.quality === 'high' ? 0.2 : 0.1))));
   const duration = frames / fps;
   // A conservative estimate; actual writes are independently capped by the encoder adapter.
-  const estimatedBytes = Math.ceil(bitrate * duration / 8 * 1.25) + 1024 * 1024;
+  const audioBitrate = soundVoices(project, comp.id).length ? 128000 : 0;
+  const estimatedBytes = Math.ceil((bitrate + audioBitrate) * duration / 8 * 1.25) + 1024 * 1024;
   if (estimatedBytes > maxBytes)
     throw new Error('This video may be too large for an in-browser export. Choose a smaller size or Standard quality, or export a PNG sequence.');
   return { comp: comp.id, frames, fps, duration, ...sz, bitrate, estimatedBytes, options };

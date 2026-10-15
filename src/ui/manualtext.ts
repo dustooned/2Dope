@@ -199,12 +199,12 @@ export const MANUAL: ManualSection[] = [
     id: 'audio',
     title: 'Audio',
     blocks: [
-      'Sound plays on the same clock as everything else, in every workspace. Open the Audio lane under the canvas to see it.',
+        'Sound plays on the same clock as everything else, in every workspace. Open the Audio lane under the canvas to see each clip as a waveform. The wave stays visible while its Settings are folded shut; folding the whole Audio lane gives the canvas more room.',
       {
         steps: [
           'Tap + Audio and pick a file (WAV, MP3, M4A, OGG or FLAC, up to 2 minutes). It starts at the frame you are on.',
-          'Start frame moves the clip. Source in and Source out trim the sound itself (in seconds).',
-          'Set Volume, or Mute a clip while you work.',
+            'Open the clip\'s Settings. Start frame moves the clip. Source in and Source out trim the sound itself (in seconds). Press Enter or leave the field to apply an edit; Escape cancels a typed edit.',
+            'Set Volume, or Mute a clip while you work. The waveform follows the source trim and volume, shows both stereo channels, and turns grey when muted. Tap the waveform lane to move the playhead.',
           'Link current panel ties the clip to the board panel you are on: retime or move that panel and the clip goes with it. Handy for dialogue.',
         ],
       },
@@ -277,6 +277,14 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  {
+    date: '2026-10-15',
+    title: 'Clearer audio waveforms',
+    items: [
+      'Audio waves stay visible with clip Settings folded shut. Trims and volume update the wave, stereo peaks are included, and the Board timeline stacks overlapping sounds in separate rows.',
+      'Audio settings remember their folded state while switching workspaces. Enter or leaving a number field applies it; Escape cancels a typed edit. Multiple imported sounds now keep distinct clip IDs so they save independently.',
+    ],
+  },
   {
     date: '2026-10-15',
     title: 'Timeline audio and Quick Share video export',

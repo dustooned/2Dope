@@ -29,6 +29,7 @@ Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framew
 | `core/brushlib.ts`, `ui/brushlib.ts` | Brush library: categories for the built-in presets, My brushes (per device, validated on read), preview strokes, Studio = the Brush panel. Opens by tapping the active Brush/Vector/Eraser tool. |
 | `ui/rails.ts` | Draw/Time timeline rails: every layer as a row in stacking order on the strip's clock and zoom; the active layer is the strip's own editable blocks (positioned by `--active-top`); LINE/FILL sublayers and groups fold open (`RailState`, per device). Folding never changes visibility or playback. |
 | `core/audio.ts`, `audio.ts`, `io/sound.ts`, `io/soundmix.ts`, `ui/audiotracks.ts` | Timeline audio: clips on comps (fixed or linked to a board panel), shared playback on the app clock, WAV assets in the asset store, mixing for video export, the foldable Audio lane. |
+| `core/waveform.ts`, `ui/waveform.ts` | Cached multiresolution audio extrema and one trim/gain/stereo-aware waveform renderer shared by the Audio lane and Board timeline. Waveform drawing is static; only the CSS playhead moves during playback. |
 | Other `ui/` modules | Gallery/files, project/export dialogs, brush/color/layer panels, Quick Animate, menus, splitter, icons, manual. |
 | `io/schema.ts`, `io/projectio.ts`, `io/persist.ts`, `io/autosave.ts` | File validation/migration, captures, library storage, save queue and versions. |
 | Other `io/` modules | PNG sequence plans/rendering, ZIP/PDF, storyboard/CSV export, Blender manifest/packages. |
@@ -63,7 +64,7 @@ Undoable document edits use commands and must update revisions/rendering, panel 
 
 Residency parks offscreen planes as PNG bytes or stored asset keys, shrinking canvases to 0-by-0. Rendering, export and pixel undo must request the necessary drawings through it. `device.ts` controls memory, page size, undo depth, onions and display resolution.
 
-`.2dope` is a self-contained ZIP of schema-2 `project.json` and PNGs. Library captures can reference stored assets; archive captures must collect the bytes. File schema and database version are separate concepts. See `docs/project-format.md`.
+`.2dope` is a self-contained ZIP of schema-3 `project.json`, PNG drawing assets and PCM WAV sound assets. Schema 1/2 files migrate on open; older builds refuse schema 3 rather than silently losing audio. Library captures can reference stored assets; archive captures must collect the bytes. File schema and database version are separate concepts. See `docs/project-format.md`.
 
 ## Output and deployment
 

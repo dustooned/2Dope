@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { compLayer, compLength, drawingsLayer, newComp } from './comp';
 import { soundStart, soundWindow, waveform, type SoundClip } from './audio';
 import { mixSound, soundVoices } from '../io/soundmix';
-import type { Project } from './project';
+import { Project } from './project';
 import { assetPaths, compFile, compsFromFile, SCHEMA, validateProjectFile } from '../io/schema';
 import { assetsOf } from '../io/persist';
 
@@ -14,6 +14,15 @@ function fixture() {
   return c;
 }
 describe('shared audio timing and storage', () => {
+  it('allocates distinct clip ids across comps so multiple imports can save independently', () => {
+    const p = new Project(400, 300, false);
+    const c = fixture(); p.comps.set(c.id, c);
+    expect(p.newId('a')).toBe('a2');
+    c.audio!.push(clip({ id: p.newId('a') }));
+    expect(p.newId('a')).toBe('a3');
+    const nested = newComp('c2', 'Nested', 400, 300, 12); nested.audio = [clip({ id: 'a3' })]; p.comps.set(nested.id, nested);
+    expect(p.newId('a')).toBe('a4');
+  });
   it('follows a linked panel through retiming, reordering, removal and restoration', () => {
     const c = fixture(), board = c.layers[0]!;
     if (board.kind !== 'drawings') throw new Error('fixture');
