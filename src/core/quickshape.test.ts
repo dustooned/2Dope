@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { constrainShape, editShape, recognizeShape, shapeOutline, type V } from './quickshape';
+import { constrainShape, editShape, fitAs, recognizeShape, shapeOutline, type V } from './quickshape';
 
 /** A wobbly hand-drawn version of a path (deterministic). */
 function wobble(p: V[], amount: number): V[] {
@@ -19,6 +19,71 @@ function ellipse(cx: number, cy: number, rx: number, ry: number, from = 0, to = 
 }
 
 describe('QuickShape', () => {
+  it('fits elongated rotated ovals without shrinking the long axis or inventing corners', () => {
+    for (const ratio of [1, 2, 4, 6]) for (const rot of [0, 0.6, 1.4]) {
+      const points = ellipse(0, 0, 120, 120 / ratio, 0.7, 0.7 + 2 * Math.PI, 240).map(q => ({
+        x: 230 + q.x * Math.cos(rot) - q.y * Math.sin(rot),
+        y: 180 + q.x * Math.sin(rot) + q.y * Math.cos(rot),
+      }));
+      for (const s of [recognizeShape(points), fitAs('ellipse', points)]) {
+        expect(s?.kind).toBe('ellipse');
+        if (s?.kind !== 'ellipse') continue;
+        expect(Math.abs(s.cx - 230)).toBeLessThan(0.2);
+        expect(Math.abs(s.cy - 180)).toBeLessThan(0.2);
+        expect(Math.abs(s.rx - 120)).toBeLessThan(0.2);
+        expect(Math.abs(s.ry - 120 / ratio)).toBeLessThan(0.2);
+        // Compare the actual contour, including orientation, rather than just fit parameters.
+        const c = Math.cos(rot), n = Math.sin(rot);
+        for (const q of shapeOutline(s, 8)) {
+          const x = (q.x - 230) * c + (q.y - 180) * n;
+          const y = -(q.x - 230) * n + (q.y - 180) * c;
+          expect(Math.abs(Math.hypot(x / 120, y / (120 / ratio)) - 1)).toBeLessThan(0.01);
+        }
+      }
+    }
+  });
+
+  it('keeps a noisy narrow oval smooth and close to its drawn bounds', () => {
+    const s = recognizeShape(wobble(ellipse(200, 200, 120, 30, 0.4, 0.4 + 2 * Math.PI, 240), 1));
+    expect(s?.kind).toBe('ellipse');
+    if (s?.kind === 'ellipse') {
+      expect(Math.abs(s.rx - 120)).toBeLessThan(2);
+      expect(Math.abs(s.ry - 30)).toBeLessThan(2);
+    }
+  });
+
+  it('fits line direction from the stroke instead of a shaky final point', () => {
+    const points = Array.from({ length: 101 }, (_, i) => ({ x: i * 2, y: i === 100 ? 10 : Math.sin(i) * 0.5 }));
+    for (const s of [recognizeShape(points), fitAs('line', points)]) {
+      expect(s?.kind).toBe('line');
+      if (s?.kind === 'line') {
+        expect(Math.abs(s.b.y - s.a.y)).toBeLessThan(3);
+        expect(s.b.x - s.a.x).toBeGreaterThan(195);
+      }
+    }
+    const reversed = fitAs('line', [...points].reverse());
+    expect(reversed?.kind === 'line' && reversed.a.x > reversed.b.x).toBe(true);
+  });
+
+  it('keeps square orientation when choosing Rectangle after recognition', () => {
+    const rot = 0.4;
+    const points = along([{ x: -50, y: -50 }, { x: 50, y: -50 }, { x: 50, y: 50 }, { x: -50, y: 50 }, { x: -50, y: -50 }], 40)
+      .map(q => ({ x: q.x * Math.cos(rot) - q.y * Math.sin(rot), y: q.x * Math.sin(rot) + q.y * Math.cos(rot) }));
+    const s = fitAs('rect', points);
+    expect(s?.kind).toBe('rect');
+    if (s?.kind === 'rect') {
+      expect(Math.abs(s.w - 50)).toBeLessThan(2);
+      expect(Math.abs(s.h - 50)).toBeLessThan(2);
+      expect(Math.abs(Math.sin(4 * (s.rot - rot)))).toBeLessThan(0.05);
+    }
+  });
+
+  it('rejects a line as an ellipse and keeps a closed-stroke Line conversion usable', () => {
+    expect(fitAs('ellipse', along([{ x: 0, y: 0 }, { x: 200, y: 0 }]))).toBeNull();
+    const s = fitAs('line', ellipse(0, 0, 90, 40));
+    expect(s?.kind === 'line' && Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y)).toBeGreaterThan(170);
+  });
+
   it('ignores tiny strokes and scribbles', () => {
     expect(
       recognizeShape([

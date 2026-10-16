@@ -172,13 +172,10 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
         }
       }
       const kind = l.kind === 'comp' ? 'group' : l.kind === 'drawings' && l.guide ? 'board' : '';
-      const name = el('button', { type: 'button', class: 'rail-name', title: r.active ? 'You draw on this layer' : r.depth === 0 && l.kind === 'drawings' ? `Draw on ${l.name}` : l.name }, l.name);
+      const name = el('button', { type: 'button', class: 'rail-name', title: r.active ? 'You draw on this layer' : r.depth === 0 && l.kind === 'drawings' ? `Draw on ${l.name}` : r.depth === 0 && l.kind === 'comp' ? `Edit drawings inside ${l.name}` : l.name }, l.name);
       if (kind && kind !== l.name.toLowerCase()) name.append(el('span', { class: 'rail-kind' }, kind));
       if (r.depth === 0 && l.kind === 'drawings' && !r.active) name.addEventListener('click', () => app.pickLayer(l.id));
-      if (r.depth === 0 && l.kind === 'comp') {
-        name.title = `Edit drawings inside ${l.name}`;
-        name.addEventListener('click', () => { if (!app.strokeActive) ed.enter(l.id); });
-      }
+      if (r.depth === 0 && l.kind === 'comp') name.addEventListener('click', () => { if (!app.strokeActive) ed.enter(l.id); });
       tag.append(name);
     } else {
       // LINE / FILL sublayer: its own eye (the layer you draw on), and which one brushes paint on

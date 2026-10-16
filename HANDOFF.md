@@ -6,6 +6,8 @@
 
 **Selection fill branch (Codex, 2026-10-16):** [Selection fill implementation and verification](docs/CLAUDE-SELECTION-FILL-HANDOFF.md). Adds temporary spatial lasso selection, direct Fill selected area and bounded connected-region/Leftovers fills. Isolated `codex/selection-fill` from `7e275ac`; not merged, pushed or deployed. 250 tests and production build passed; desktop browser verified with stated limits. Preserve separate QuickShape/audio branches when integrating.
 
+**Isolated follow-up (2026-10-15):** [Shape precision and nested drawing entry](docs/CLAUDE-QUICKSHAPE-FLIPBOOK-HANDOFF.md) records demonstrated geometry fixes, direct group-rail entry into existing drawing editing, verification and remaining precision/flipbook work. Branch `codex/quickshape-precision`; not merged or deployed. Preserve the independent audio-polish branch and Claude's current checkout.
+
 Prepared 2026-10-14 so another assistant can continue the app without relying on a previous chat.
 
 **Video-export branch follow-up:** see `docs/CLAUDE-VIDEO-EXPORT-HANDOFF.md` for the implemented Quick Share slice, its verification, the deployed touchscreen hotfix, and safe integration with Claude's main checkout. The baseline below predates that feature.

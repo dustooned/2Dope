@@ -138,12 +138,14 @@ export const MANUAL: ManualSection[] = [
         tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. Choosing LINE selects the vector Pen; choosing FILL selects the Bucket in Tap / drag mode. X switches between them. This also works in Layers, rails and Quick Animate. To brush or erase on either part, choose that part first, then Brush or Eraser. The canvas label shows the actual tool destination. Each part has a separate visibility eye.',
       },
       'QuickShape: draw a line, circle, box or triangle roughly and keep the pencil still at the end. It snaps to a clean shape and keeps the pressure you drew with, thick and thin. Keep holding and move to adjust it: the start stays put and the pencil drags the other end. Touch a second finger (or hold Shift) to make it perfect: a circle, a square, an even polygon or a straight angle. Turn it off in the Brush panel under Assist.',
+      'Shape precision: lines fit the direction of the whole stroke rather than a shaky endpoint. Narrow and tilted ovals fit their outline, and choosing Rectangle keeps a recognized square or rectangle aligned with its drawn edges.',
       'Edit shape: after a snap, a button at the top of the canvas shows what it became (say “Ellipse · Edit shape ▾”). Tap it to switch to Line, Polyline, Arc, Ellipse, Circle, Rectangle, Square or Polygon, or Keep my stroke to undo the snap. Your pressure is kept, and it stays one undo step. The button goes away after a few seconds or when you do something else.',
       { figure: 'quickshape' },
       { figure: 'onion' },
       {
         list: [
           'Flipbook mode: past your last drawing there is a blank page. Draw on it and a new frame is made for you.',
+          'To draw inside a grouped animation, tap its group name on the timeline rail. Use the back-out breadcrumb to return to the shot. In Motion, the group Playback menu controls once, loop, ping-pong, hold a frame and speed.',
           'Onion skin (O) shows the drawings before and after. Lock (L) pins a frame so you can flip back to it.',
           'Layers: the Layers button shows your other layers around the one you draw on: Show, Fade or Hide them. Tap a layer to draw on it; the eye hides it, the lock protects it.',
           'Fill options: fill across the next drawings at once, close small gaps in your lines, and Use lines from other layers (ink on one layer, colour on another: the fill stops at the ink).',
@@ -294,6 +296,14 @@ export const UPDATES: Update[] = [
     date: '2026-10-15',
     title: 'Select an area before filling',
     items: ['Fill > Select area creates a visible lasso selection. Fill selected area colors the entire selection without detecting closed ink. Tap / drag and Leftovers stay inside it. Clear selection or Esc removes it; changing frames or layers clears it. Each fill remains one undo step.'],
+  },
+  {
+    date: '2026-10-15',
+    title: 'Shape precision and drawing inside groups',
+    items: [
+      'QuickShape fits narrow and rotated ellipses without shrinking their long axis, uses the full stroke for straight-line direction, and preserves rectangle edge alignment in Edit shape.',
+      'Draw and Time: tap a group name in the existing timeline rails to edit its drawings inside. The back-out breadcrumb returns to the shot; Motion retains its playback and speed controls.',
+    ],
   },
   {
     date: '2026-10-15',

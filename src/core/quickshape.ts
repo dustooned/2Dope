@@ -176,6 +176,72 @@ function pca(p: readonly V[]): { cx: number; cy: number; l1: number; l2: number;
   return { cx, cy, l1: tr / 2 + disc, l2: Math.max(0, tr / 2 - disc), rot: 0.5 * Math.atan2(2 * xy, xx - yy) };
 }
 
+/** Fit the line's direction from the whole stroke rather than two possibly shaky endpoints. */
+function fitLine(p: readonly V[]): Extract<Shape, { kind: 'line' }> {
+  const pc = pca(p);
+  const ux = Math.cos(pc.rot), uy = Math.sin(pc.rot);
+  const project = (q: V) => (q.x - pc.cx) * ux + (q.y - pc.cy) * uy;
+  let a = project(p[0]!), b = project(p[p.length - 1]!);
+  // Explicitly converting a closed stroke to a line still needs a useful length.
+  const values = p.map(project);
+  const lo = Math.min(...values), hi = Math.max(...values);
+  if (Math.abs(b - a) < (hi - lo) * 0.25) { a = lo; b = hi; }
+  return { kind: 'line', a: { x: pc.cx + ux * a, y: pc.cy + uy * a }, b: { x: pc.cx + ux * b, y: pc.cy + uy * b } };
+}
+
+/** Small pivoted solver; normalization keeps the conic fit well conditioned at canvas scale. */
+function solve(matrix: number[][], rhs: number[]): number[] | null {
+  const n = rhs.length;
+  const a = matrix.map((row, i) => [...row, rhs[i]!]);
+  for (let k = 0; k < n; k++) {
+    let pivot = k;
+    for (let i = k + 1; i < n; i++) if (Math.abs(a[i]![k]!) > Math.abs(a[pivot]![k]!)) pivot = i;
+    if (Math.abs(a[pivot]![k]!) < 1e-10) return null;
+    [a[k], a[pivot]] = [a[pivot]!, a[k]!];
+    const scale = a[k]![k]!;
+    for (let j = k; j <= n; j++) a[k]![j] = a[k]![j]! / scale;
+    for (let i = 0; i < n; i++) if (i !== k) {
+      const f = a[i]![k]!;
+      for (let j = k; j <= n; j++) a[i]![j] = a[i]![j]! - f * a[k]![j]!;
+    }
+  }
+  return a.map(row => row[n]!);
+}
+
+/**
+ * Fit an ellipse boundary. PCA gives the orientation of point mass, not ellipse radii:
+ * uniform distance samples spend more time near the narrow ends of an elongated oval.
+ * Solve a normalized conic instead, rejecting degenerate/non-elliptic solutions.
+ */
+function fitEllipse(p: readonly V[]): Extract<Shape, { kind: 'ellipse' }> | null {
+  if (p.length < 5) return null;
+  const o = centroid(p), scale = bboxDiag(p) / 2;
+  if (!(scale > 0)) return null;
+  const m = Array.from({ length: 5 }, () => Array<number>(5).fill(0));
+  const rhs = Array<number>(5).fill(0);
+  for (const q of p) {
+    const x = (q.x - o.x) / scale, y = (q.y - o.y) / scale;
+    const v = [x * x, x * y, y * y, x, y];
+    for (let i = 0; i < 5; i++) {
+      rhs[i] = rhs[i]! + v[i]!;
+      for (let j = 0; j < 5; j++) m[i]![j] = m[i]![j]! + v[i]! * v[j]!;
+    }
+  }
+  const coefficients = solve(m, rhs);
+  if (!coefficients) return null;
+  const [a, b, c, d, e] = coefficients as [number, number, number, number, number];
+  const det = 4 * a * c - b * b;
+  if (det <= 1e-8 || a <= 0 || c <= 0) return null;
+  const x = (b * e - 2 * c * d) / det, y = (b * d - 2 * a * e) / det;
+  const k = 1 + a * x * x + b * x * y + c * y * y;
+  const disc = Math.hypot(a - c, b);
+  const low = (a + c - disc) / 2, high = (a + c + disc) / 2;
+  if (low <= 0 || k <= 0) return null;
+  const rx = Math.sqrt(k / low) * scale, ry = Math.sqrt(k / high) * scale;
+  if (![rx, ry, x, y].every(Number.isFinite) || rx > 4 * scale || ry < 0.001 * scale) return null;
+  return { kind: 'ellipse', cx: o.x + x * scale, cy: o.y + y * scale, rx, ry, rot: 0.5 * Math.atan2(-b, c - a) };
+}
+
 function bboxDiag(p: readonly V[]): number {
   let x0 = Infinity;
   let y0 = Infinity;
@@ -213,7 +279,7 @@ export function recognizeShape(raw: readonly V[]): Shape | null {
     const chord = gap;
     let dev = 0;
     for (const q of p) dev = Math.max(dev, segDist(q, first, last));
-    if (dev < Math.max(3, 0.07 * chord)) return { kind: 'line', a: { ...first }, b: { ...last } };
+    if (dev < Math.max(3, 0.07 * chord)) return fitLine(p);
     const eps = Math.max(3, 0.06 * diag);
     // an arc: a circle fits well and the stroke bends one way
     const c = fitCircle(p);
@@ -239,24 +305,21 @@ export function recognizeShape(raw: readonly V[]): Shape | null {
 
   // closed: an ellipse, or a polygon (a rectangle when its corners are square)
   const ring = p.slice(0, -1);
-  const pc = pca(ring);
-  const rx = Math.sqrt(2 * pc.l1);
-  const ry = Math.sqrt(2 * pc.l2);
+  const fitted = fitEllipse(ring);
   let err = 0;
-  if (ry > 1) {
-    const cos = Math.cos(-pc.rot);
-    const sin = Math.sin(-pc.rot);
+  if (fitted && fitted.ry > 1) {
+    const cos = Math.cos(-fitted.rot);
+    const sin = Math.sin(-fitted.rot);
     for (const q of ring) {
-      const dx = q.x - pc.cx;
-      const dy = q.y - pc.cy;
-      const u = (dx * cos - dy * sin) / rx;
-      const v = (dx * sin + dy * cos) / ry;
+      const dx = q.x - fitted.cx;
+      const dy = q.y - fitted.cy;
+      const u = (dx * cos - dy * sin) / fitted.rx;
+      const v = (dx * sin + dy * cos) / fitted.ry;
       err += (Math.hypot(u, v) - 1) ** 2;
     }
     err = Math.sqrt(err / ring.length);
   } else err = Infinity;
-  const ellipse: Shape = { kind: 'ellipse', cx: pc.cx, cy: pc.cy, rx, ry, rot: pc.rot };
-  if (err < 0.06) return ellipse;
+  if (fitted && err < 0.06) return fitted;
   const corners = closedCorners(ring, Math.max(3, 0.07 * diag));
   if (corners.length >= 3 && corners.length <= 8) {
     if (corners.length === 4 && corners.every((c, i) => Math.abs(angleBetween(corners[(i + 3) % 4]!, c, corners[(i + 1) % 4]!) - Math.PI / 2) < (22 * Math.PI) / 180)) {
@@ -286,7 +349,7 @@ export function recognizeShape(raw: readonly V[]): Shape | null {
     }
     return { kind: 'polygon', pts: corners };
   }
-  return err < 0.12 ? ellipse : null;
+  return fitted && err < 0.12 ? fitted : null;
 }
 
 function rotScale(q: V, o: V, s: number, a: number): V {
@@ -555,7 +618,7 @@ export function fitAs(choice: ShapeChoice, raw: readonly V[]): Shape | null {
   const diag = Math.max(1, bboxDiag(p));
   switch (choice) {
     case 'line':
-      return { kind: 'line', a: { ...first }, b: { ...last } };
+      return fitLine(p);
     case 'polyline': {
       const pts = simplify(p, Math.max(3, 0.06 * diag));
       return pts.length >= 2 ? { kind: 'polyline', pts } : null;
@@ -575,12 +638,15 @@ export function fitAs(choice: ShapeChoice, raw: readonly V[]): Shape | null {
     }
     case 'ellipse':
     case 'circle': {
-      const pc = pca(p);
-      const e: Shape = { kind: 'ellipse', cx: pc.cx, cy: pc.cy, rx: Math.max(1, Math.sqrt(2 * pc.l1)), ry: Math.max(1, Math.sqrt(2 * pc.l2)), rot: pc.rot };
+      const e = fitEllipse(p);
+      if (!e) return null;
       return choice === 'circle' ? constrainShape(e) : e;
     }
     case 'rect':
     case 'square': {
+      // Four fitted edges give a stable rotation even when a square has equal PCA axes.
+      const recognized = recognizeShape(raw);
+      if (recognized?.kind === 'rect') return choice === 'square' ? constrainShape(recognized) : recognized;
       // the box around the stroke, turned to its main direction
       const pc = pca(p);
       const cos = Math.cos(pc.rot);
