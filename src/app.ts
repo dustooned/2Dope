@@ -331,7 +331,13 @@ export class App {
   }
 
   setPlane(p: Plane): void {
+    if (this.fillG) this.endFill(true);
     this.plane = p;
+    this.tool = p === 'line' ? 'pen' : 'fill';
+    if (p === 'fill') {
+      this.fillMode = 'tap';
+      saveJSON(FILL_MODE_KEY, 'tap');
+    }
     this.onToolChange();
   }
 
@@ -2383,8 +2389,8 @@ export class App {
         { title: 'Draw on' },
         {
           chips: [
-            { label: 'Line', on: this.plane === 'line', run: () => this.plane !== 'line' && this.togglePlane() },
-            { label: 'Fill', on: this.plane === 'fill', run: () => this.plane !== 'fill' && this.togglePlane() },
+            { label: 'Line', on: this.plane === 'line', run: () => this.setPlane('line') },
+            { label: 'Fill', on: this.plane === 'fill', run: () => this.setPlane('fill') },
           ],
         },
         ...(this.drawing.vectors.length

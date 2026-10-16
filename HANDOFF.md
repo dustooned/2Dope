@@ -1,5 +1,7 @@
 # 2Dope maintenance handoff
 
+**UI follow-up (2026-10-16):** selecting Line activates vector Pen; Fill activates Bucket in Tap/drag mode. Toolbar/parts/rails/Quick Animate/X share `setPlane`; visibility eyes remain independent. See UI clarity handoff follow-up. 250 tests, build and affected production browser flows passed. Still isolated on `codex/ui-clarity`.
+
 **UI clarity branch (Codex, 2026-10-16):** [Implementation, integration and browser checks](docs/CLAUDE-UI-CLARITY-HANDOFF.md). `codex/ui-clarity` builds on selection/fill `5caf0aa`: explicit paint-target cue, groups/shared folding in Layers and rails, sidebar fitting the stage. 250 tests and production build passed; Full/Lite desktop and narrow/tall-timeline browser checks completed with stated limits. No merge/push/deployment. Separate QuickShape/audio branches remain separate.
 
 **Selection fill branch (Codex, 2026-10-16):** [Selection fill implementation and verification](docs/CLAUDE-SELECTION-FILL-HANDOFF.md). Adds temporary spatial lasso selection, direct Fill selected area and bounded connected-region/Leftovers fills. Isolated `codex/selection-fill` from `7e275ac`; not merged, pushed or deployed. 250 tests and production build passed; desktop browser verified with stated limits. Preserve separate QuickShape/audio branches when integrating.

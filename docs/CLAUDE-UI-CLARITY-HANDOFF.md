@@ -1,5 +1,11 @@
 # UI clarity handoff — 2026-10-16
 
+## Follow-up: automatic Line/Pen and Fill/Bucket
+
+User requested automatic tool changes when selecting drawing parts. Shared `App.setPlane` now chooses vector Pen for Line, and Bucket (`fill`, Tap/drag mode) for Fill. Fill resets Select area/Leftovers even when choosing the already-active Fill part. It cancels an in-progress fill gesture before switching. Toolbar, Layers, rail parts, Quick Animate and X use this same method; context-menu same-part choices now call it explicitly. Visibility eyes remain independent. Users can still choose Brush/Eraser after choosing a part to paint/erase that part. Tool switching itself makes no document history entry or file-format change.
+
+Rechecked: 250 tests + production build + diff check passed. Production browser verified toolbar Line/Pen, same-plane Fill reset from Select area to Tap/drag, X, active rail Fill, Layers Line/Fill, eye independence and Quick Animate toggles. Screenshot `2dope-auto-tool-check.png` in the same visualization directory below. No merge/push/deployment.
+
 ## Integration and scope
 
 Branch `codex/ui-clarity`, checkout `E:\2026\Dev\Apps\2Dope\codex-ui-clarity`, based on selection/fill `5caf0aa`. Includes that foundation through ancestry. No merge, push or deployment; main and Claude's application source preserved. Separate audio/QuickShape branches are not merged here. The simple rail group-entry handler overlaps the equivalent change in QuickShape `65cf3e1`; retain it once when integrating. Preserve all feature manual/update notes when resolving overlaps.

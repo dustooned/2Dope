@@ -77,7 +77,7 @@ export class Quick {
     for (const f of FPS_PRESETS) this.fps.append(el('option', { value: String(f) }, `${f}`));
     this.fps.addEventListener('change', () => app.setFps(Number(this.fps.value)));
 
-    this.planeBtn = btn('Line', 'Drawing on the Line plane. Tap to draw color on the Fill plane (X).', () => app.togglePlane());
+    this.planeBtn = btn('Line', 'Switch Line / Fill (X): Line selects Pen; Fill selects Bucket (Tap / drag).', () => app.togglePlane());
     this.lockBtn = btn('Lock', 'Scrub lock (L)', () => app.toggleLock());
     this.flipBtn = btn('Flipbook', 'Flipbook: step past the last frame for a blank page; drawing on it adds the frame', () => app.setFlipbook(!app.flipbook));
 

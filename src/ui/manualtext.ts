@@ -135,7 +135,7 @@ export const MANUAL: ManualSection[] = [
       'Fill selection: in Fill options choose Select area, then draw a loop. This only selects: tap Fill selected area to color everything inside, even across open ink. Tap / drag fills connected regions inside the selection; Leftovers keeps its cleanup behavior within that boundary. Clear selection or Esc removes the boundary. It is temporary, applies only to this frame, and clears on frame/layer/project changes. Next drawings is suspended while selected. Brushes remain unrestricted; selection transforms and warp are not available yet.',
       { figure: 'linefill' },
       {
-        tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. The LINE | FILL switch in the toolbar (or X) picks which one brushes paint on; a yellow FILL badge on the canvas reminds you when you are painting colour. In Layers, the layer you draw on shows its LINE and FILL with an eye each.',
+        tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. Choosing LINE selects the vector Pen; choosing FILL selects the Bucket in Tap / drag mode. X switches between them. This also works in Layers, rails and Quick Animate. To brush or erase on either part, choose that part first, then Brush or Eraser. The canvas label shows the actual tool destination. Each part has a separate visibility eye.',
       },
       'QuickShape: draw a line, circle, box or triangle roughly and keep the pencil still at the end. It snaps to a clean shape and keeps the pressure you drew with, thick and thin. Keep holding and move to adjust it: the start stays put and the pencil drags the other end. Touch a second finger (or hold Shift) to make it perfect: a circle, a square, an even polygon or a straight angle. Turn it off in the Brush panel under Assist.',
       'Edit shape: after a snap, a button at the top of the canvas shows what it became (say “Ellipse · Edit shape ▾”). Tap it to switch to Line, Polyline, Arc, Ellipse, Circle, Rectangle, Square or Polygon, or Keep my stroke to undo the snap. Your pressure is kept, and it stays one undo step. The button goes away after a few seconds or when you do something else.',
@@ -280,6 +280,11 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  {
+    date: '2026-10-16',
+    title: 'Line selects Pen; Fill selects Bucket',
+    items: ['Choosing Line automatically activates the vector Pen. Choosing Fill activates the Bucket in Tap / drag mode, even after using Select area or Leftovers. Toolbar, layer parts, rails, Quick Animate and X share this behavior; visibility eyes do not switch tools.'],
+  },
   {
     date: '2026-10-16',
     title: 'Clear paint targets and consistent layer folding',
