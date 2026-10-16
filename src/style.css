@@ -4016,3 +4016,21 @@ body:not(.ws-draw) .shape-pop {
     gap: 6px;
   }
 }
+
+/* Workspace focus is view-only; playback/timing continue while panels are folded. */
+.focusbar { display: flex; align-items: center; flex: 0 0 auto; gap: 6px; padding: 5px 10px 5px 62px; border-bottom: 1px solid var(--line); background: var(--panel); overflow-x: auto; }
+.focusbar button { min-height: 34px; white-space: nowrap; flex: 0 0 auto; }
+#focus-context { margin-right: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.focusbar button[aria-expanded="false"] { opacity: .65; }
+body.tools-folded:not(.quick) .topbar .tools, body.tools-folded:not(.quick) .topbar .planes, body.tools-folded:not(.quick) .topbar .parts, body.tools-folded:not(.quick) .topbar .colorchip, body.tools-folded:not(.quick) .sidebar .vslider { display: none; }
+body.timeline-folded:not(.quick) #strip, body.timeline-folded:not(.quick) #board, body.timeline-folded:not(.quick) #motion, body.timeline-folded:not(.quick) #splitter, body.timeline-folded:not(.quick) .audio-tracks { display: none !important; }
+body:not(.panel-open) #panel { display: none; }
+#panel-toggle { display: inline-flex; }
+body.ws-motion #focus-tools, body.ws-time #focus-tools, body.ws-motion #panel-toggle { display: none; }
+body.quick .focusbar, body.ui-hidden .focusbar { display: none; }
+.motion-extra summary { cursor: pointer; padding: 6px 10px; min-height: 32px; font-size: 12px; }
+.export-hub { width: min(540px, calc(100vw - 24px)); max-height: 88dvh; overflow-y: auto; }
+.export-hub > button { display: block; width: 100%; margin: 7px 0; min-height: 42px; text-align: left; }
+.export-hub > img { display: block; max-width: 100%; max-height: 42dvh; margin: 12px auto; }
+.export-hub p { line-height: 1.5; }
+@media (max-width: 600px) { #focus-context { display: none; } .focusbar { padding-left: 8px; } #panel-toggle { display: inline-flex !important; } }

@@ -195,7 +195,13 @@ export class MotionPanel {
       ),
     );
 
-    this.bar.append(rowA, rowC);
+    const extra = el('details', { class: 'motion-extra' });
+    extra.append(el('summary', {}, 'Keyframes, easing and view options'), rowC);
+    try { extra.open = localStorage.getItem('2dope.motion.extra') === '1'; } catch { /* folded */ }
+    extra.addEventListener('toggle', () => {
+      try { localStorage.setItem('2dope.motion.extra', extra.open ? '1' : '0'); } catch { /* optional */ }
+    });
+    this.bar.append(rowA, extra);
     this.scroll.append(this.grid);
     root.append(this.bar, this.scroll);
     root.style.setProperty('--row-h', `${this.rowH}px`);

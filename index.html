@@ -26,6 +26,7 @@
           <button type="button" data-file="open" title="Bring a .2dope file into your projects">Import .2dope…</button>
           <button type="button" data-action="export" title="Export this frame as PNG with alpha">Export frame (PNG)</button>
           <button type="button" data-menu="export-seq" title="Export the whole shot as PNG sequences">Export sequence…</button>
+          <button type="button" data-menu="export-hub">Export and finish…</button>
           <button type="button" data-menu="export-video" title="Save a video of the whole shot">Export video…</button>
           <button type="button" data-menu="blender" title="A package Blender opens with the 2Dope add-on: image planes, camera, precomps, keyframes">Export for Blender</button>
         </div>
@@ -114,11 +115,17 @@
           <button type="button" id="ripple-btn" data-icon="ripple" title="Ripple (Shift+R): a change moves everything after it, on every timeline. Hold Alt to flip it for one edit.">Ripple</button>
           <button type="button" id="panel-toggle" data-icon="panel" title="Brush settings and X-sheet">Panel</button>
           <button type="button" id="enter-quick" data-icon="quick" title="Quick Animate: just the canvas, a slim strip and the essentials (Tab)">Quick</button>
-          <button type="button" id="export-seq" data-icon="export" title="Export the whole shot as PNG sequences with alpha (Lines / Fills / Matte passes)">Export</button>
+          <button type="button" id="export-seq" data-icon="export" title="Export: video, GIF, images, storyboard, Blender and project backup">Export</button>
           <button type="button" id="bar-collapse" data-icon="collapse" title="Shrink the toolbar to the menu button" aria-label="Hide toolbar">Hide</button>
         </div>
       </div>
     </header>
+    <nav class="focusbar" aria-label="Workspace layout">
+      <span id="focus-context"></span>
+      <button id="focus-tools" type="button" aria-expanded="true">Tools</button>
+      <button id="focus-timeline" type="button" aria-expanded="true" aria-controls="strip board motion splitter">Timeline</button>
+      <button id="focus-export" type="button">Export and finish</button>
+    </nav>
     <main class="workspace">
       <div class="stage-col">
         <div id="stage" class="stage">

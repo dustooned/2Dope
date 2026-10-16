@@ -1,5 +1,7 @@
 # 2Dope maintenance handoff
 
+**Workspace/export follow-up (2026-10-16):** [Focused UI and GIF handoff](docs/CLAUDE-WORKSPACE-EXPORT-HANDOFF.md), isolated `codex/workspace-export` from integration `38a8468`. Remembered Tools/Timeline folds, Motion extra-controls disclosure, unified export hub and bounded GIF preview/save. 276 tests and production build pass; desktop/narrow checks and real GIF file saved. No main merge, push or deployment.
+
 **Combined review (2026-10-16):** use [integration handoff](docs/CLAUDE-INTEGRATION-REVIEW.md) first. `codex/integration-review` combines selection/fill, UI/automatic tool switching, QuickShape precision and audio polish from freshly checked `7e275ac`. 264 tests and production build passed; combined production browser checks completed with explicit archive/device/console limits. Main unchanged; not pushed, merged to main or deployed. Original per-feature reports below are historical and retain their own branch-specific status.
 
 **UI follow-up (2026-10-16):** selecting Line activates vector Pen; Fill activates Bucket in Tap/drag mode. Toolbar/parts/rails/Quick Animate/X share `setPlane`; visibility eyes remain independent. See UI clarity handoff follow-up. 250 tests, build and affected production browser flows passed. Still isolated on `codex/ui-clarity`.

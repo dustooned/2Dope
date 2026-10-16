@@ -32,3 +32,14 @@ shot/matte/shot_matte_0001.png ...  white silhouette of the whole drawing (alpha
 ```
 
 This is the seed of the Blender hand-off manifest (milestone 2): it already says where each pass lives, the frame rate, the size and how drawings are timed.
+
+
+## Export and finish / GIF (2026-10-16)
+
+Top-bar Export, the workspace layout row, or Menu → Export and finish opens the format hub. Existing direct menu/Quick sequence paths remain available. Video, current PNG, PNG passes, storyboard PDF/images, Blender package and editable .2dope backup retain their existing exporters; storyboard is disabled until a board exists.
+
+GIF renders the **main shot**, including nested compositions/camera/transforms and the existing storyboard export flag, using the shared compositor and per-frame residency. It never changes the playhead or document. Silent infinite loop, opaque white background, fixed RGB332 256-colour palette, no dithering. Whole-shot export only: maximum 15 seconds, roughly 12 output samples per second, longest edge 480 px (320 in Lite), without upscaling. Centisecond delays are rounded cumulatively to preserve total duration within 5 ms. No frame selection/range or transparency in this first slice.
+
+A deliberately simple GIF89a writer emits 9-bit literal LZW codes with a clear every 250 pixels; this is valid but less compact than dictionary compression. Preflight and actual byte caps are 24 MiB Full / 12 MiB Lite, with only one frame canvas/resident drawing set plus bounded encoded output retained. Dense/longer GIFs can hit the cap before 15 seconds: choose video/PNG instead. Cancel releases pins, canvas/scratch and partial output; preview URLs are released on close. No new dependency, archive schema or migration.
+
+Reference: [GIF89a specification](https://www.w3.org/Graphics/GIF/spec-gif89a.txt), image data, graphic control and application extension blocks. Palette, reset frequency, export limits and UI are our design decisions. GIF and Graphics Interchange Format are CompuServe service marks.

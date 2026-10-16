@@ -1,3 +1,5 @@
+import { openExportHub } from './ui/exporthub';
+import { openBoardExport } from './ui/boardexport';
 import './style.css';
 import { AudioPlayback } from './audio';
 import { AudioTracks } from './ui/audiotracks';
@@ -247,7 +249,11 @@ try {
 }
 
 // Narrow screens: the side panel is an overlay opened from the Panel button; tapping the canvas closes it.
-const setPanel = (open: boolean) => document.body.classList.toggle('panel-open', open);
+const setPanel = (open: boolean) => {
+  document.body.classList.toggle('panel-open', open);
+  $('#panel-toggle').setAttribute('aria-expanded', String(open));
+  setTimeout(() => app.fit(), 60);
+};
 const brushLib = new BrushLibrary(app, () => {
   setPanel(true);
   showTab('brush');
@@ -294,6 +300,26 @@ const wsButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-ws]')]
 const WS_KEY = '2dope.m3.ws';
 let lastTab: 'brush' | 'xsheet' = 'brush';
 let prevWs: Workspace = 'draw';
+// View-only preferences: no document changes, history entries or timing edits.
+function syncFocus(): void {
+  let prefs: { tools?: boolean; timeline?: boolean } = {};
+  try { prefs = JSON.parse(localStorage.getItem(`2dope.focus.${app.workspace}`) ?? '{}') ?? {}; } catch { /* defaults */ }
+  document.body.classList.toggle('tools-folded', prefs.tools === false);
+  document.body.classList.toggle('timeline-folded', prefs.timeline === false);
+  $('#focus-tools').setAttribute('aria-expanded', String(prefs.tools !== false));
+  $('#focus-timeline').setAttribute('aria-expanded', String(prefs.timeline !== false));
+  $('#focus-context').textContent = { draw: 'Draw · make your art', time: 'Time · adjust exposure', motion: 'Motion · composite and animate', board: 'Board · plan the story' }[app.workspace];
+}
+for (const part of ['tools', 'timeline'] as const) {
+  $(`#focus-${part}`).addEventListener('click', () => {
+    const folded = document.body.classList.toggle(`${part}-folded`);
+    $(`#focus-${part}`).setAttribute('aria-expanded', String(!folded));
+    if (part === 'tools' && folded) setPanel(false);
+    try { localStorage.setItem(`2dope.focus.${app.workspace}`, JSON.stringify({ tools: !document.body.classList.contains('tools-folded'), timeline: !document.body.classList.contains('timeline-folded') })); } catch { /* optional */ }
+    setTimeout(() => app.fit(), 60);
+  });
+}
+syncFocus();
 const applyWorkspace = () => {
   const w = app.workspace;
   document.body.classList.remove('ws-board', 'ws-draw', 'ws-time', 'ws-motion');
@@ -309,6 +335,7 @@ const applyWorkspace = () => {
   } else {
     setPanel(false);
   }
+  syncFocus();
   prevWs = w;
   splitter.restore();
   motion.update();
@@ -410,6 +437,7 @@ const menuActions: Record<string, () => void> = {
   quick: () => quick.toggle(),
   panel: () => setPanel(!document.body.classList.contains('panel-open')),
   bar: toggleBar,
+  'export-hub': () => showExportHub(),
   'export-seq': () => exporter?.open(),
   'export-video': () => videoExporter.open(),
   blender: () => void exportForBlender(),
@@ -544,7 +572,16 @@ document.querySelectorAll('[data-file="new"]').forEach((b) =>
   }),
 );
 if (import.meta.env.DEV) (window as unknown as { __gallery: Gallery }).__gallery = gallery;
-$('#export-seq').addEventListener('click', () => exporter?.open());
+$('#export-seq').addEventListener('click', showExportHub);
+$('#focus-export').addEventListener('click', showExportHub);
 if (import.meta.env.DEV) (window as unknown as { __export: ExportUI }).__export = exporter;
 await files.start();
 if (!persistent) files.toast('Browser storage is unavailable here (private window?), so your work will not survive closing this tab. Export a .2dope file to keep it.');
+
+function showExportHub(): void {
+  openExportHub(app, {
+    video: () => videoExporter.open(), sequence: () => exporter?.open(),
+    backup: () => void files?.exportProject(), blender: () => void exportForBlender(),
+    board: () => openBoardExport(app, m => files?.toast(m)),
+  });
+}

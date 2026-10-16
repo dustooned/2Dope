@@ -226,11 +226,12 @@ export const MANUAL: ManualSection[] = [
           'Export .2dope: a backup file of the whole project. Keep it safe or move it to another device (Import .2dope…).',
           'Export frame (PNG): the frame you are on, with a transparent background.',
           'Export sequence…: the whole shot as numbered PNG images in a .zip. Choose passes (everything, lines only, fills only, matte), size and background.',
-          'Export video…: a silent MP4 or WebM of the whole shot, at its own frame rate. Pick 720p, 1080p or Original size, Standard or High quality, and a white or black background for transparent areas. Preview it, then Save video. It includes layers, moves, the camera and precomps, even while you are editing inside one. Your drawing view and its onion skins are not exported.',
+          'Export video…: an MP4 or WebM with audio of the whole shot, at its own frame rate. Pick 720p, 1080p or Original size, Standard or High quality, and a white or black background for transparent areas. Preview it, then Save video. It includes layers, moves, the camera and precomps, even while you are editing inside one. Your drawing view and its onion skins are not exported.',
           'Board > Export: the storyboard as a PDF or as panel images with a captions spreadsheet.',
           'Export for Blender: a package Blender opens with the 2Dope add-on (image planes, camera, groups, keyframes).',
         ],
       },
+      'Export and finish gathers video, looping GIF, PNG frame/sequence, storyboard, Blender and .2dope backup. GIF uses simplified 256 colours and a white background, with no audio or transparency; limits keep browser memory bounded. It exports the whole main shot even inside a group. Preview before saving. Tools and Timeline controls remember their folding separately in each workspace; the Panel button opens Brush settings or the X-sheet. Motion keeps keyframe/easing/view options folded until needed.',
       'Video export needs a secure browser tab with video encoding support. If a format or size is unavailable, try the other format or a smaller size. Cancel stops encoding and lets you try again. Videos have an opaque background and include the audio clips of the shot (AAC in MP4, Opus in WebM); use a PNG sequence for transparent production files. The storyboard stays out unless Include the storyboard is already on in Export sequence.',
       { tip: 'Browsers can clear saved data if a device runs out of space. Export a .2dope backup now and then, especially before a deadline.' },
     ],
@@ -282,6 +283,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-16', title: 'Focused workspaces and Export and finish', items: ['Tools and Timeline fold independently and remember each workspace. Motion keeps its extra keyframe/easing controls under a disclosure. Export and finish gathers existing formats and adds a previewable, silent looping GIF (up to 15 seconds, 12 fps, 480 px; 320 px in Lite).'] },
   {
     date: '2026-10-16',
     title: 'Line selects Pen; Fill selects Bucket',
