@@ -11,6 +11,33 @@
 **Selection fill branch (Codex, 2026-10-16):** [Selection fill implementation and verification](docs/CLAUDE-SELECTION-FILL-HANDOFF.md). Adds temporary spatial lasso selection, direct Fill selected area and bounded connected-region/Leftovers fills. Isolated `codex/selection-fill` from `7e275ac`; not merged, pushed or deployed. 250 tests and production build passed; desktop browser verified with stated limits. Preserve separate QuickShape/audio branches when integrating.
 
 **Isolated follow-up (2026-10-15):** [Shape precision and nested drawing entry](docs/CLAUDE-QUICKSHAPE-FLIPBOOK-HANDOFF.md) records demonstrated geometry fixes, direct group-rail entry into existing drawing editing, verification and remaining precision/flipbook work. Branch `codex/quickshape-precision`; not merged or deployed. Preserve the independent audio-polish branch and Claude's current checkout.
+**Combined review branch (2026-10-16):** `codex/integration-review` at `38a8468`, checkout `../codex-integration`; [integration handoff](../codex-integration/docs/CLAUDE-INTEGRATION-REVIEW.md). Combines selection/fill, UI/automatic tools, QuickShape and audio polish. 264 tests and production build passed; combined browser checks completed with explicit archive/device/console limits. This main checkout's application source remains unchanged; nothing pushed, merged into main or deployed. Review that branch before further features.
+
+**Isolated UI implementation (2026-10-16):** `codex/ui-clarity` commit `82d9100` builds on selection/fill `5caf0aa`; [handoff](../codex-ui-clarity/docs/CLAUDE-UI-CLARITY-HANDOFF.md). Paint-target cue, shared layer folding/group access and sidebar fit implemented and checked (250 tests + production build, browser Full/Lite/narrow/Quick Animate). Not merged/pushed/deployed; main application code untouched. See limits and integration overlap notes before incorporating.
+
+**Layers/masks + overall UI study (2026-10-16):** [Five-page evidence and workflow comparison](docs/LAYERS-MASKS-AND-UI-STUDY.md) covers drawing hierarchy, clipping versus Alpha Lock/layer masks, editing context, preferences and mini Flipbook. Recommends improving existing target/hierarchy cues and essential-control access before separate transform/clipping features. Flags ambiguous Dreams clipping wording and unresolved render rules. Design only; no application code or mockup changed.
+
+**Focused manual continuation (2026-10-16):** [Selection/transform evidence and remaining decisions](docs/SELECTION-TRANSFORM-MANUAL-STUDY.md) checks three official pages against main and isolated selection branch `5caf0aa`. Records selection/layer scope, numeric transforms, session undo, clipping and a version-dependent interpolation-default conflict. Design only; no app code changed. The selection/fill branch remains separate; earlier paragraphs describing its absence apply to main.
+
+**Latest research comparison (2026-10-15):** [Manuals → existing source → remaining capability](docs/MANUAL-TO-SOURCE-COMPARISON.md) covers placement, groups, trim/ripple/gaps and media sync. Read it before choosing structural work. It records existing grouping/ungrouping and Motion timing rather than treating these as missing. No application changes were made.
+
+## Current-state reconciliation (Codex, 2026-10-15)
+
+The user clarified that this is maintenance and extension of the **existing app**, not a replacement UI. Start with current source and the existing interface. The standalone timeline mockup is an unapproved exploration; do not treat its shell, ripple rules, group model or controls as an implementation specification.
+
+| User priority | Present in checked source | Remaining work |
+|---|---|---|
+| Draw rails, groups, sublayers, zoom | `ui/rails.ts` stacks layers, folds Line/Fill and nested comp rows; `ui/strip.ts` has pinch/Ctrl-wheel zoom and the active editable row. | Extend the current editor for the requested freer placement and cross-rail editing. Organizational grouping is not equivalent to the current precomp rows. Confirm concrete changes before structural work. |
+| Ripple and shared timing | `app.ts` already stores a Ripple switch (default on), Alt inverts it; `rippleFor`, `core/ripple.ts` and `compedit.ts` coordinate timing. Board panel duration/reorder commands already exist. | Audit and extend existing rules; do not replace them with the mockup's proposed single-rail semantics. Preserve Board/animation sync, keys and linked sound. |
+| General media import | `ui/audiotracks.ts` imports audio; `ui/board.ts` already offers Images with an image file picker; `App.importPanels` decodes images as panels. | A unified media workflow and direct placement remain design work. Image import is not wholly absent. No general video-import flow was established in this bounded source check. |
+| Optional audio scrubbing | `App.beginScrub` pauses playback; `AudioPlayback.sync` stops audio while paused. | Add a bounded, cancellable audition path and shared toggle. Existing `endScrub` can return to a locked home frame: preserve that behavior. |
+| UI cleanup and future Rust | Existing workspaces use shared project/comp timing; current features include Board views, Motion editing, brush library and QuickShape. | Improve the actual controls incrementally; stabilize behavior and file compatibility before any Rust implementation. |
+
+Checked local Git: `beta/main` remains `7e275ac` with documentation-only pending changes. Sibling `codex-video-export` is clean at `1104e93` on `codex/audio-waveforms`; audio polish has not been merged into local main. No fetch or deployed-site check was performed. Prior audio-polish test/browser/export results are historical evidence, not checks rerun in this reconciliation.
+
+**Recommended next code slice:** Audio scrub on/off, in an isolated worktree/branch after explicit feature selection. Reuse existing timing/mixing and protect normal playback, undo/autosave, scrub lock and device budgets. The broader free-timeline request remains queued; no new UI shell is required. This reconciliation used source/Git reads and documentation edits only; no application tests/build or browser flow was run.
+
+**New user direction (2026-10-15):** read [Timeline, media and UI direction](docs/TIMELINE-AND-MEDIA-DIRECTION.md) before choosing the next feature. Audio scrubbing, general media import, a free-arrangement shared timeline with ripple/groups, UI cleanup and later Rust preparation now guide planning. This records requirements and proposals; implementation has not started.
 
 Prepared 2026-10-14 so another assistant can continue the app without relying on a previous chat.
 
