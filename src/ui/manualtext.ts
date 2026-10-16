@@ -133,6 +133,7 @@ export const MANUAL: ManualSection[] = [
       'The paint-target label on the canvas shows the comp path, drawing layer, drawing number and Line or Fill destination. It warns when the target is hidden or locked; tap it to open Layers. With no drawing layer in the open comp, New layer on paint means a new layer will be created when you draw, rather than painting into a child group.',
       'Layers and timeline rails share their folding: expand a drawing to reveal Line and Fill, or expand a group to preview its children. Tap a group name to edit inside, then use the breadcrumb to go back. Folding never changes visibility or timing. Undo and redo stay inside the canvas area when the timeline gets taller; in a very short canvas the sidebar becomes horizontal.',
       'Fill selection: in Fill options choose Select area, then draw a loop. This only selects: tap Fill selected area to color everything inside, even across open ink. Tap / drag fills connected regions inside the selection; Leftovers keeps its cleanup behavior within that boundary. Clear selection or Esc removes the boundary. It is temporary, applies only to this frame, and clears on frame/layer/project changes. Next drawings is suspended while selected. Brushes remain unrestricted; selection transforms and warp are not available yet.',
+      'Transform selection: with a selection made, tap Transform. Drag the canvas to move it; Scale and Rotate sliders and the Flip buttons change it about its centre. Whole vector lines inside the selection come along. Apply (or Enter) keeps it as one undo step; Cancel (or Esc) puts everything back. It works on this drawing only, and you cannot change frames or layers while it is open.',
       { figure: 'linefill' },
       {
         tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. Choosing LINE selects the vector Pen; choosing FILL selects the Bucket in Tap / drag mode. X switches between them. This also works in Layers, rails and Quick Animate. To brush or erase on either part, choose that part first, then Brush or Eraser. The canvas label shows the actual tool destination. Each part has a separate visibility eye.',
@@ -284,6 +285,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-16', title: 'Transform a selection', items: ['After Select area, tap Transform to move, scale, rotate or flip what is inside the selection on this drawing. Apply keeps it as one undo step; Cancel puts it back.'] },
   { date: '2026-10-16', title: 'Hear audio while scrubbing', items: ['A new box in the Audio lane plays a short slice of sound at each frame you scrub to. Off by default; it stops when you let go.'] },
   { date: '2026-10-16', title: 'Focused workspaces and Export and finish', items: ['Tools and Timeline fold independently and remember each workspace. Motion keeps its extra keyframe/easing controls under a disclosure. Export and finish gathers existing formats and adds a previewable, silent looping GIF (up to 15 seconds, 12 fps, 480 px; 320 px in Lite).'] },
   {

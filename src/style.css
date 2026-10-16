@@ -1196,6 +1196,15 @@ body.drawing .dock {
   flex: 1 1 auto;
   min-height: 32px;
 }
+.fill-transform {
+  margin: 6px 0;
+  padding: 6px;
+  border: 1px solid var(--line, #8884);
+  border-radius: var(--radius);
+}
+.fill-transform[hidden] {
+  display: none;
+}
 
 .seg {
   gap: 0;

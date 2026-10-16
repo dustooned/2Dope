@@ -7,6 +7,7 @@ import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
+import { applyPoint, clipRect, IDENTITY, isIdentity, matrixFor, transformedRect, transformRegion, transformVectors, unionRect, type Rect, type XParams } from './core/selxform';
 import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures, shiftLater } from './core/ripple';
@@ -309,7 +310,7 @@ export class App {
 
   /** True while a stroke is being drawn (autosave waits for it to end). */
   get strokeActive(): boolean {
-    return this.live !== null || this.fillG !== null || this.fillBusy;
+    return this.live !== null || this.fillG !== null || this.fillBusy || this.xf !== null;
   }
 
   get viewW(): number {
@@ -551,6 +552,7 @@ export class App {
     if (!s) return null;
     if (s.project !== this.project || s.comp !== this.project.comp.id || s.layer !== this.project.activeLayer || s.frame !== this.frame || s.drawing !== this.drawing || this.blankPage) {
       this.spatial = null;
+      this.cancelTransform();
       return null;
     }
     return s.area;
@@ -559,6 +561,152 @@ export class App {
   clearSpatialSelection(): void {
     if (this.fillG || this.fillBusy) return;
     this.spatial = null;
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** A live selection transform: the selected pixels (and whole vector strokes inside) are previewed on the canvases, one undo step on Apply. */
+  private xf: {
+    d: Drawing; area: Area; points: [number, number][]; pivot: [number, number]; params: XParams;
+    baseLine: ImageData; baseFill: ImageData | null; vectors: StrokeRecord[]; region: Rect | null;
+    drag: { id: number; x: number; y: number; dx: number; dy: number } | null;
+  } | null = null;
+
+  get transforming(): boolean {
+    return this.xf !== null;
+  }
+
+  get transformParams(): XParams | null {
+    return this.xf ? { ...this.xf.params } : null;
+  }
+
+  /** Start moving / scaling / rotating / flipping the selection. */
+  beginTransform(): boolean {
+    const s = this.spatial;
+    const area = this.spatialSelection;
+    if (!s || !area || this.xf || this.strokeActive || this.playing || this.project.layer.locked) return false;
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return false;
+    const W = this.docW, H = this.docH;
+    this.xf = {
+      d, area, points: s.points.map((p) => [p[0], p[1]]), pivot: [(area.x0 + area.x1 + 1) / 2, (area.y0 + area.y1 + 1) / 2], params: { ...IDENTITY },
+      baseLine: d.line.getContext('2d')!.getImageData(0, 0, W, H), baseFill: d.fill ? d.fill.getContext('2d')!.getImageData(0, 0, W, H) : null,
+      vectors: d.vectors, region: null, drag: null,
+    };
+    this.requestRender();
+    this.onToolChange();
+    return true;
+  }
+
+  setTransform(patch: Partial<XParams>): void {
+    const x = this.xf;
+    if (!x) return;
+    const p = { ...x.params, ...patch };
+    p.scale = Math.max(0.1, Math.min(8, p.scale));
+    p.rotate = ((((p.rotate + 180) % 360) + 360) % 360) - 180;
+    x.params = p;
+    this.renderTransform();
+    this.onToolChange();
+  }
+
+  /** Flip is a mirror about the selection's centre; flipping twice returns to the start. */
+  flipTransform(axis: 'h' | 'v'): void {
+    const x = this.xf;
+    if (!x) return;
+    this.setTransform(axis === 'h' ? { flipH: !x.params.flipH } : { flipV: !x.params.flipV });
+  }
+
+  private renderTransform(): void {
+    const x = this.xf;
+    if (!x) return;
+    const W = this.docW, H = this.docH, a = x.area;
+    const m = matrixFor(x.params, x.pivot[0], x.pivot[1]);
+    const region = unionRect(unionRect(transformedRect(m, a, W, H), clipRect(a.x0, a.y0, a.x1 + 1, a.y1 + 1, W, H)), x.region);
+    x.region = region;
+    if (!region) return;
+    const put = (canvas: HTMLCanvasElement, base: ImageData) =>
+      canvas.getContext('2d')!.putImageData(new ImageData(transformRegion(base.data, W, H, a.mask, m, region), region.w, region.h), region.x, region.y);
+    put(x.d.line, x.baseLine);
+    if (x.baseFill && x.d.fill) put(x.d.fill, x.baseFill);
+    x.d.vectors = transformVectors(x.vectors, a.mask, W, H, m, x.params.scale).vectors;
+    this.touch(x.d);
+    this.requestRender();
+  }
+
+  /** The selection outline where the transform would leave it. */
+  private transformedPoints(): [number, number][] | null {
+    const x = this.xf;
+    if (!x) return null;
+    const m = matrixFor(x.params, x.pivot[0], x.pivot[1]);
+    return x.points.map((p) => applyPoint(m, p[0], p[1]));
+  }
+
+  cancelTransform(): void {
+    const x = this.xf;
+    if (!x) return;
+    this.xf = null;
+    if (x.region) {
+      const r = x.region;
+      const back = (canvas: HTMLCanvasElement | null, base: ImageData | null) => {
+        if (!canvas || !base) return;
+        canvas.getContext('2d')!.putImageData(base, 0, 0, r.x, r.y, r.w, r.h);
+      };
+      back(x.d.line, x.baseLine);
+      back(x.d.fill, x.baseFill);
+      x.d.vectors = x.vectors;
+      this.touch(x.d);
+    }
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  applyTransform(): void {
+    const x = this.xf;
+    if (!x) return;
+    const region = x.region;
+    if (!region || isIdentity(x.params)) {
+      this.cancelTransform();
+      return;
+    }
+    const pts = this.transformedPoints()!;
+    this.xf = null;
+    const d = x.d, W = this.docW, H = this.docH;
+    const grab = (base: ImageData) => {
+      const b = new ImageData(region.w, region.h);
+      for (let y = 0; y < region.h; y++) {
+        const from = ((region.y + y) * W + region.x) * 4;
+        b.data.set(base.data.subarray(from, from + region.w * 4), y * region.w * 4);
+      }
+      return b;
+    };
+    const lineBefore = grab(x.baseLine), lineAfter = d.line.getContext('2d')!.getImageData(region.x, region.y, region.w, region.h);
+    const fillBefore = x.baseFill ? grab(x.baseFill) : null;
+    const fillAfter = x.baseFill && d.fill ? d.fill.getContext('2d')!.getImageData(region.x, region.y, region.w, region.h) : null;
+    const vBefore = x.vectors, vAfter = d.vectors;
+    const area = polygonMask(pts, W, H);
+    const selBefore = this.spatial;
+    const selAfter = selBefore && area ? { ...selBefore, area, points: pts } : null;
+    this.spatial = selAfter;
+    this.history.push({
+      label: 'Transform selection',
+      drawings: [d],
+      do: () => {
+        putPixels(d.line, region, lineAfter);
+        if (fillAfter && d.fill) putPixels(d.fill, region, fillAfter);
+        d.vectors = vAfter;
+        this.spatial = selAfter;
+        this.touch(d);
+      },
+      undo: () => {
+        putPixels(d.line, region, lineBefore);
+        if (fillBefore && d.fill) putPixels(d.fill, region, fillBefore);
+        d.vectors = vBefore;
+        this.spatial = selBefore;
+        this.touch(d);
+      },
+    });
+    this.touch(d);
+    this.residency.updateThumb(d);
     this.requestRender();
     this.onToolChange();
   }
@@ -878,7 +1026,7 @@ export class App {
   /** The lasso or leftover path while the pen is down (document space, on top of the drawing). */
   private drawFillPath(g: CanvasRenderingContext2D): void {
     const selected = this.spatialSelection ? this.spatial : null;
-    const f = this.fillG ?? (selected ? { mode: 'lasso', points: selected.points } : null);
+    const f = this.fillG ?? (selected ? { mode: 'lasso', points: this.transformedPoints() ?? selected.points } : null);
     if (!f || f.mode === 'tap' || f.points.length < 2) return;
     g.save();
     g.lineJoin = 'round';
@@ -990,6 +1138,7 @@ export class App {
 
   /** Replace the whole project (open, restore, new). Clears undo and per-project view state. */
   loadProject(p: Project): void {
+    this.cancelTransform();
     if (this.fillG) this.endFill(true);
     this.spatial = null;
     if (this.live) this.endStroke(true);
@@ -2174,13 +2323,13 @@ export class App {
     // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
-      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId)) this.onUp(e, cancelled);
+      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
     window.addEventListener('pointercancel', (e) => lifted(e, true));
     c.addEventListener('lostpointercapture', (e) => {
       // a pen that is no longer pressed has lifted
-      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId))) this.onUp(e, false);
+      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id))) this.onUp(e, false);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -2201,6 +2350,14 @@ export class App {
       this.canvas.setPointerCapture(e.pointerId);
     } catch {
       // Capture can fail for pointers the browser no longer tracks; drawing still works.
+    }
+    if (this.xf) {
+      // dragging the canvas moves the selection being transformed
+      if (!this.xf.drag) {
+        const p = this.toPoint(e, e.timeStamp);
+        this.xf.drag = { id: e.pointerId, x: p.x, y: p.y, dx: this.xf.params.dx, dy: this.xf.params.dy };
+      }
+      return;
     }
     const isTouch = e.pointerType === 'touch';
     if (this.fillG && this.fillG.pointerId !== e.pointerId) {
@@ -2449,6 +2606,12 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    const xd = this.xf?.drag;
+    if (xd && e.pointerId === xd.id) {
+      const p = this.toPoint(e, e.timeStamp);
+      this.setTransform({ dx: xd.dx + (p.x - xd.x), dy: xd.dy + (p.y - xd.y) });
+      return;
+    }
     if (this.fillG && e.pointerId === this.fillG.pointerId) return this.fillMove(e);
     const arm = this.holdArm;
     if (arm && arm.id === e.pointerId && Math.hypot(e.clientX - arm.x, e.clientY - arm.y) > HOLD_SLOP) this.disarmHold();
@@ -2496,6 +2659,10 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (this.xf?.drag && e.pointerId === this.xf.drag.id) {
+      this.xf.drag = null;
+      return;
+    }
     if (this.fillG && e.pointerId === this.fillG.pointerId) this.endFill(cancelled);
     this.disarmHold();
     if (this.held_ === e.pointerId) this.held_ = null;
@@ -2716,6 +2883,11 @@ export class App {
       return;
     }
     if (mod) return;
+    if (this.xf && (e.code === 'Escape' || e.code === 'Enter')) {
+      if (e.code === 'Enter') this.applyTransform();
+      else this.cancelTransform();
+      return;
+    }
     if (e.code === 'Escape' && this.workspace !== 'motion') {
       if (this.fillG) this.endFill(true);
       else this.clearSpatialSelection();

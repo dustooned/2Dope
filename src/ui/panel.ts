@@ -287,11 +287,50 @@ function fillEditor(app: App, refreshers: (() => void)[]): HTMLElement {
   const clearSelected = el('button', { type: 'button' }, 'Clear selection');
   fillSelected.addEventListener('click', () => app.fillSelectedArea());
   clearSelected.addEventListener('click', () => app.clearSpatialSelection());
-  selectionActions.append(fillSelected, clearSelected);
+  const transform = el('button', { type: 'button', title: 'Move, scale, rotate or flip what is inside the selection (this drawing only). Drag the canvas to move.' }, 'Transform');
+  transform.addEventListener('click', () => app.beginTransform());
+  selectionActions.append(transform, fillSelected, clearSelected);
+  // live transform controls: shown only while a transform is open
+  const xbox = el('div', { class: 'fill-transform', hidden: '' });
+  const xrow = (name: string, min: number, max: number, step: number, set: (n: number) => void) => {
+    const label = el('label', { class: 'row' });
+    const input = el('input', { type: 'range', min: String(min), max: String(max), step: String(step) });
+    const out = el('output');
+    input.addEventListener('input', () => set(Number(input.value)));
+    label.append(el('span', { class: 'name' }, name), input, out);
+    xbox.append(label);
+    return { input, out };
+  };
+  const xScale = xrow('Scale', 10, 300, 1, (n) => app.setTransform({ scale: n / 100 }));
+  const xRot = xrow('Rotate', -180, 180, 1, (n) => app.setTransform({ rotate: n }));
+  const xBtns = el('div', { class: 'fill-selection-actions' });
+  const flipH = el('button', { type: 'button', title: 'Mirror left to right' }, 'Flip ↔');
+  const flipV = el('button', { type: 'button', title: 'Mirror top to bottom' }, 'Flip ↕');
+  const xReset = el('button', { type: 'button' }, 'Reset');
+  const xApply = el('button', { type: 'button', class: 'primary', title: 'Keep the change (Enter). One undo step.' }, 'Apply');
+  const xCancel = el('button', { type: 'button', title: 'Put everything back (Esc)' }, 'Cancel');
+  flipH.addEventListener('click', () => app.flipTransform('h'));
+  flipV.addEventListener('click', () => app.flipTransform('v'));
+  xReset.addEventListener('click', () => app.setTransform({ dx: 0, dy: 0, scale: 1, rotate: 0, flipH: false, flipV: false }));
+  xApply.addEventListener('click', () => app.applyTransform());
+  xCancel.addEventListener('click', () => app.cancelTransform());
+  xBtns.append(flipH, flipV, xReset, xApply, xCancel);
+  xbox.append(xBtns);
   const sync = () => {
     modeBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(['tap', 'lasso', 'leftover'][i] === app.fillMode)));
     across.value = String(app.fillAcross);
     const selected = !!app.spatialSelection;
+    const xp = app.transformParams;
+    xbox.hidden = !xp;
+    if (xp) {
+      xScale.input.value = String(Math.round(xp.scale * 100));
+      xScale.out.textContent = `${Math.round(xp.scale * 100)}%`;
+      xRot.input.value = String(Math.round(xp.rotate));
+      xRot.out.textContent = `${Math.round(xp.rotate)}°`;
+      flipH.setAttribute('aria-pressed', String(xp.flipH));
+      flipV.setAttribute('aria-pressed', String(xp.flipV));
+    }
+    transform.disabled = !selected || app.strokeActive || app.playing || app.project.layer.locked;
     fillSelected.disabled = !selected || app.strokeActive || app.playing || app.project.layer.locked;
     clearSelected.disabled = !selected || app.strokeActive;
     across.disabled = selected || app.fillMode !== 'tap';
@@ -315,6 +354,7 @@ function fillEditor(app: App, refreshers: (() => void)[]): HTMLElement {
   fs.insertBefore(acrossRow, fs.children[1] ?? null);
   fs.insertBefore(modes, acrossRow);
   fs.insertBefore(selectionActions, acrossRow);
+  fs.insertBefore(xbox, acrossRow);
   fs.append(el('p', { class: 'hint' }, 'Selection bounds fills on this frame; brushes stay unrestricted. Change frames/layers or press Esc to clear. Shift+G switches modes. Colors stay under your ink.'));
   return fs;
 }
