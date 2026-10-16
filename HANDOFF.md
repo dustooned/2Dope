@@ -1,56 +1,16 @@
 # 2Dope maintenance handoff
 
-**Workspace/export follow-up (2026-10-16):** [Focused UI and GIF handoff](docs/CLAUDE-WORKSPACE-EXPORT-HANDOFF.md), isolated `codex/workspace-export` from integration `38a8468`. Remembered Tools/Timeline folds, Motion extra-controls disclosure, unified export hub and bounded GIF preview/save. 276 tests and production build pass; desktop/narrow checks and real GIF file saved. No main merge, push or deployment.
+## Current state (2026-10-16)
 
-**Combined review (2026-10-16):** use [integration handoff](docs/CLAUDE-INTEGRATION-REVIEW.md) first. `codex/integration-review` combines selection/fill, UI/automatic tool switching, QuickShape precision and audio polish from freshly checked `7e275ac`. 264 tests and production build passed; combined production browser checks completed with explicit archive/device/console limits. Main unchanged; not pushed, merged to main or deployed. Original per-feature reports below are historical and retain their own branch-specific status.
+`main` at `542be38` is pushed. Everything Codex built is merged: spatial selection and fill, paint-target cues and shared layer folding, Line selects Pen / Fill selects Bucket, QuickShape precision, audio waveforms, per-workspace Tools/Timeline folding, the Export and finish hub with GIF export. Claude added optional **hear-while-scrubbing** (box in the Audio lane, off by default). The per-feature Codex branches and worktrees were deleted; their reports stay in `docs/CLAUDE-*-HANDOFF.md` as history.
 
-**UI follow-up (2026-10-16):** selecting Line activates vector Pen; Fill activates Bucket in Tap/drag mode. Toolbar/parts/rails/Quick Animate/X share `setPlane`; visibility eyes remain independent. See UI clarity handoff follow-up. 250 tests, build and affected production browser flows passed. Still isolated on `codex/ui-clarity`.
+- Checked after the merge: 276 tests and the production build. In desktop Chromium: audio scrub (slices only while scrubbing, none after release), `.2dope` export and re-import (clip, sound and drawings kept), MP4 export with audio decoded.
+- Still not checked: iPad/Apple Pencil/Safari, memory pressure on weak devices, Blender import. An unattributed `MutationObserver.observe` error appears in some QA logs.
+- **Not built yet:** selection transform and warp, clipping masks, effect stacks, brush tips and `.abr`/`.brushset` import, a free-arrangement timeline with cross-rail moves, general media/video import, Rust desktop.
 
-**UI clarity branch (Codex, 2026-10-16):** [Implementation, integration and browser checks](docs/CLAUDE-UI-CLARITY-HANDOFF.md). `codex/ui-clarity` builds on selection/fill `5caf0aa`: explicit paint-target cue, groups/shared folding in Layers and rails, sidebar fitting the stage. 250 tests and production build passed; Full/Lite desktop and narrow/tall-timeline browser checks completed with stated limits. No merge/push/deployment. Separate QuickShape/audio branches remain separate.
+**Design studies (evidence and proposals, not features):** [layers/masks/UI](docs/LAYERS-MASKS-AND-UI-STUDY.md), [selection/transform](docs/SELECTION-TRANSFORM-MANUAL-STUDY.md), [manuals vs source](docs/MANUAL-TO-SOURCE-COMPARISON.md), [timeline/media/UI direction](docs/TIMELINE-AND-MEDIA-DIRECTION.md), [art effects and clipping](docs/ART-EFFECTS-DIRECTION.md), [brush import](docs/NATIVE-BRUSH-IMPORT-DIRECTION.md). The free-timeline request needs concrete changes confirmed before structural work; do not treat the standalone timeline mockup as a spec.
 
-**Selection fill branch (Codex, 2026-10-16):** [Selection fill implementation and verification](docs/CLAUDE-SELECTION-FILL-HANDOFF.md). Adds temporary spatial lasso selection, direct Fill selected area and bounded connected-region/Leftovers fills. Isolated `codex/selection-fill` from `7e275ac`; not merged, pushed or deployed. 250 tests and production build passed; desktop browser verified with stated limits. Preserve separate QuickShape/audio branches when integrating.
-
-**Isolated follow-up (2026-10-15):** [Shape precision and nested drawing entry](docs/CLAUDE-QUICKSHAPE-FLIPBOOK-HANDOFF.md) records demonstrated geometry fixes, direct group-rail entry into existing drawing editing, verification and remaining precision/flipbook work. Branch `codex/quickshape-precision`; not merged or deployed. Preserve the independent audio-polish branch and Claude's current checkout.
-**Combined review branch (2026-10-16):** `codex/integration-review` at `38a8468`, checkout `../codex-integration`; [integration handoff](../codex-integration/docs/CLAUDE-INTEGRATION-REVIEW.md). Combines selection/fill, UI/automatic tools, QuickShape and audio polish. 264 tests and production build passed; combined browser checks completed with explicit archive/device/console limits. This main checkout's application source remains unchanged; nothing pushed, merged into main or deployed. Review that branch before further features.
-
-**Isolated UI implementation (2026-10-16):** `codex/ui-clarity` commit `82d9100` builds on selection/fill `5caf0aa`; [handoff](../codex-ui-clarity/docs/CLAUDE-UI-CLARITY-HANDOFF.md). Paint-target cue, shared layer folding/group access and sidebar fit implemented and checked (250 tests + production build, browser Full/Lite/narrow/Quick Animate). Not merged/pushed/deployed; main application code untouched. See limits and integration overlap notes before incorporating.
-
-**Layers/masks + overall UI study (2026-10-16):** [Five-page evidence and workflow comparison](docs/LAYERS-MASKS-AND-UI-STUDY.md) covers drawing hierarchy, clipping versus Alpha Lock/layer masks, editing context, preferences and mini Flipbook. Recommends improving existing target/hierarchy cues and essential-control access before separate transform/clipping features. Flags ambiguous Dreams clipping wording and unresolved render rules. Design only; no application code or mockup changed.
-
-**Focused manual continuation (2026-10-16):** [Selection/transform evidence and remaining decisions](docs/SELECTION-TRANSFORM-MANUAL-STUDY.md) checks three official pages against main and isolated selection branch `5caf0aa`. Records selection/layer scope, numeric transforms, session undo, clipping and a version-dependent interpolation-default conflict. Design only; no app code changed. The selection/fill branch remains separate; earlier paragraphs describing its absence apply to main.
-
-**Latest research comparison (2026-10-15):** [Manuals → existing source → remaining capability](docs/MANUAL-TO-SOURCE-COMPARISON.md) covers placement, groups, trim/ripple/gaps and media sync. Read it before choosing structural work. It records existing grouping/ungrouping and Motion timing rather than treating these as missing. No application changes were made.
-
-## Current-state reconciliation (Codex, 2026-10-15)
-
-The user clarified that this is maintenance and extension of the **existing app**, not a replacement UI. Start with current source and the existing interface. The standalone timeline mockup is an unapproved exploration; do not treat its shell, ripple rules, group model or controls as an implementation specification.
-
-| User priority | Present in checked source | Remaining work |
-|---|---|---|
-| Draw rails, groups, sublayers, zoom | `ui/rails.ts` stacks layers, folds Line/Fill and nested comp rows; `ui/strip.ts` has pinch/Ctrl-wheel zoom and the active editable row. | Extend the current editor for the requested freer placement and cross-rail editing. Organizational grouping is not equivalent to the current precomp rows. Confirm concrete changes before structural work. |
-| Ripple and shared timing | `app.ts` already stores a Ripple switch (default on), Alt inverts it; `rippleFor`, `core/ripple.ts` and `compedit.ts` coordinate timing. Board panel duration/reorder commands already exist. | Audit and extend existing rules; do not replace them with the mockup's proposed single-rail semantics. Preserve Board/animation sync, keys and linked sound. |
-| General media import | `ui/audiotracks.ts` imports audio; `ui/board.ts` already offers Images with an image file picker; `App.importPanels` decodes images as panels. | A unified media workflow and direct placement remain design work. Image import is not wholly absent. No general video-import flow was established in this bounded source check. |
-| Optional audio scrubbing | `App.beginScrub` pauses playback; `AudioPlayback.sync` stops audio while paused. | Add a bounded, cancellable audition path and shared toggle. Existing `endScrub` can return to a locked home frame: preserve that behavior. |
-| UI cleanup and future Rust | Existing workspaces use shared project/comp timing; current features include Board views, Motion editing, brush library and QuickShape. | Improve the actual controls incrementally; stabilize behavior and file compatibility before any Rust implementation. |
-
-Checked local Git: `beta/main` remains `7e275ac` with documentation-only pending changes. Sibling `codex-video-export` is clean at `1104e93` on `codex/audio-waveforms`; audio polish has not been merged into local main. No fetch or deployed-site check was performed. Prior audio-polish test/browser/export results are historical evidence, not checks rerun in this reconciliation.
-
-**Recommended next code slice:** Audio scrub on/off, in an isolated worktree/branch after explicit feature selection. Reuse existing timing/mixing and protect normal playback, undo/autosave, scrub lock and device budgets. The broader free-timeline request remains queued; no new UI shell is required. This reconciliation used source/Git reads and documentation edits only; no application tests/build or browser flow was run.
-
-**New user direction (2026-10-15):** read [Timeline, media and UI direction](docs/TIMELINE-AND-MEDIA-DIRECTION.md) before choosing the next feature. Audio scrubbing, general media import, a free-arrangement shared timeline with ripple/groups, UI cleanup and later Rust preparation now guide planning. This records requirements and proposals; implementation has not started.
-
-Prepared 2026-10-14 so another assistant can continue the app without relying on a previous chat.
-
-**Video-export branch follow-up:** see `docs/CLAUDE-VIDEO-EXPORT-HANDOFF.md` for the implemented Quick Share slice, its verification, the deployed touchscreen hotfix, and safe integration with Claude's main checkout. The baseline below predates that feature.
-
-## Latest (Claude, 2026-10-15)
-
-**Codex audio polish follow-up:** `docs/CLAUDE-AUDIO-POLISH-HANDOFF.md` records the waveform/settings improvements, multiple-clip ID fix, low-overhead caching, and real MP4/WebM-with-audio verification on `codex/audio-waveforms`. The user limited this follow-up to audio; selection/brush import remains separate work.
-
-- `main` now includes Quick Share video export and timeline audio (Codex, merged `e9b3cdc`), the Audio manual section (`10b092b`) and **Draw timeline rails** (`2115826`, `src/ui/rails.ts`): every layer stacked as a row, LINE/FILL and groups folding open, Expand all / Collapse all, pinch or Ctrl+wheel time zoom, taller resizable timeline.
-- `npm install` is needed once after pulling (new dependency `mediabunny`).
-- Checked: 241 tests and the production build; in desktop Chromium, audio import / save / reload / playback, and the rails (rows, folding, switching layers, zoom). Not checked: a real MP4/WebM export with audio in the browser, iPad/Apple Pencil.
-- Board views (Panels / Timeline / Split) with audio alignment are done (`src/ui/boardtimeline.ts`); QuickShape Edit shape pop-down done (`fitAs` in `src/core/quickshape.ts`, `App.swapShape`); brush library done (`src/core/brushlib.ts`, `src/ui/brushlib.ts`: categories, previews, double-tap Studio, My brushes in localStorage `2dope.brushes.mine`). Next: selection tools, image brush tips and .abr / Procreate brush import.
+Prepared 2026-10-14; updated 2026-10-16 so another assistant can continue without a previous chat.
 
 ## Start here
 
@@ -155,7 +115,7 @@ This is a smoke check, not full regression coverage. Tests include mock App/canv
 
 ## Open work and evidence gaps
 
-- **Video export is queued in `DECISIONS.md`** (quick sharing and a higher-quality transparent export). No video encoder/export implementation was found. Confirm formats, transparency and devices before implementing; historical codec notes need fresh compatibility checks.
+- **Video export** exists (Quick Share MP4/WebM with audio, plus looping GIF). A higher-quality transparent export is still queued in `DECISIONS.md`; confirm formats and devices before building it.
 - **Latest timing fixes need repeatable browser regression coverage:** both ends of layers, two-way board/animation synchronization, undo/redo. Pure timeline/ripple tests include first-panel deletion, but there is no checked-in end-to-end browser runner.
 - **Real iPad/Apple Pencil checks remain necessary:** pressure/tilt, palm rejection, touch conflicts, playback feel, long-project memory. Desktop/mocked tests do not establish these results.
 - **Blender import/render was not rerun.** `docs/blender.md` records earlier checks and simplifications: non-normal blend modes, animated anchors, nested cameras, combined Line/Fill images.
