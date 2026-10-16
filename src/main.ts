@@ -21,6 +21,7 @@ import { Strip } from './ui/strip';
 import { XSheet } from './ui/xsheet';
 import { applyIcons } from './ui/icons';
 import { Sidebar } from './ui/sidebar';
+import { drawRailState } from './ui/rails';
 import { LayersPopover } from './ui/layerspop';
 import { BoardPanel } from './ui/board';
 import { ColorPanel } from './ui/colorpanel';
@@ -56,17 +57,25 @@ const syncTools = () => {
   for (const b of partButtons) b.setAttribute('aria-pressed', String(app.partVisible(b.dataset.partEye === 'fill' ? 'fill' : 'line')));
   for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool));
   for (const b of planeButtons) b.setAttribute('aria-pressed', String(b.dataset.plane === app.plane));
-  // a clear sign on the canvas while brushes paint on FILL (under the ink)
-  const onFill = app.plane === 'fill' && (app.tool === 'brush' || app.tool === 'eraser');
-  planeBadge.hidden = !onFill;
-  planeBadge.textContent = app.tool === 'eraser' ? 'FILL · erasing colour only' : 'FILL · painting under your lines';
+  const layer = app.project.layer;
+  const plane = app.tool === 'fill' ? 'fill' : app.tool === 'pen' ? 'line' : app.plane;
+  const selection = app.tool === 'fill' && app.fillMode === 'lasso';
+  const path = app.editor.crumbs().map((c) => c.comp.name).join(' › ');
+  const drawing = app.blankPage ? 'Blank page' : `Drawing ${app.drawing.num}`;
+  const target = selection ? 'Area selection' : plane === 'fill' ? 'Fill' : 'Line';
+  const warning = layer.locked ? ' · Locked' : !layer.visible || !app.partVisible(plane) ? ' · Hidden' : '';
+  paintTarget.textContent = app.project.isPlaceholder
+    ? `${path} › New layer on paint · ${target}`
+    : `${path} › ${layer.name} · ${drawing} · ${target}${warning}`;
+  paintTarget.title = `${paintTarget.textContent}. Open Layers to choose where you draw.`;
+  paintTarget.setAttribute('aria-label', `Paint target: ${paintTarget.textContent}`);
+  paintTarget.classList.toggle('fill-target', !selection && plane === 'fill');
 };
-const planeBadge = document.createElement('div');
-planeBadge.className = 'plane-badge';
-planeBadge.hidden = true;
-planeBadge.title = 'Brushes paint on FILL: colour under your ink. Press X or tap LINE to paint ink again.';
-planeBadge.addEventListener('click', () => app.setPlane('line'));
-document.querySelector('#stage')?.append(planeBadge);
+const paintTarget = document.createElement('button');
+paintTarget.type = 'button';
+paintTarget.className = 'paint-target';
+paintTarget.addEventListener('click', () => layersPop.toggle(paintTarget));
+document.querySelector('#stage')?.append(paintTarget);
 
 // QuickShape: after a snap, an Edit shape button (Procreate style) to switch the shape or keep the stroke
 const shapeBtn = document.createElement('button');
@@ -247,6 +256,7 @@ $('#panel-toggle').addEventListener('click', () => setPanel(!document.body.class
 $('#stage').addEventListener('pointerdown', () => app.workspace !== 'time' && setPanel(false), { capture: true });
 
 const strip = new Strip(app, $('#strip'));
+drawRailState.onChange = () => { layersPop.update(); strip.update(); };
 // Timing tools (holds, marks, onion settings, layer toggles) belong to the Time workspace
 $('#tab-xsheet').prepend(strip.timingBar);
 const motion = new MotionPanel(app, $('#motion'));

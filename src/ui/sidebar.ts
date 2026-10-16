@@ -39,6 +39,9 @@ export class Sidebar {
       () => app.brush.opacity,
     );
     this.update();
+    // The stage can shrink when the timeline or Audio lane grows, independently of the window.
+    const stage = root.parentElement;
+    if (stage) new ResizeObserver(() => root.classList.toggle('compact', stage.clientHeight < 220)).observe(stage);
   }
 
   private bind(el: HTMLElement, set: (t: number) => void, get: () => number): void {

@@ -130,6 +130,8 @@ export const MANUAL: ManualSection[] = [
       },
       'The circle at the top right is your colour. Tap it for the colour panel: a hue ring around a saturation / brightness square (Disc), or H, S, B sliders and a hex box (Values); the colour before and now (tap the old half to go back); Recent colours; and a Palette (+ adds the current colour, hold a swatch to remove it). System… opens your device’s own picker.',
       'The sliders on the left are brush size and opacity, with undo and redo under them.',
+      'The paint-target label on the canvas shows the comp path, drawing layer, drawing number and Line or Fill destination. It warns when the target is hidden or locked; tap it to open Layers. With no drawing layer in the open comp, New layer on paint means a new layer will be created when you draw, rather than painting into a child group.',
+      'Layers and timeline rails share their folding: expand a drawing to reveal Line and Fill, or expand a group to preview its children. Tap a group name to edit inside, then use the breadcrumb to go back. Folding never changes visibility or timing. Undo and redo stay inside the canvas area when the timeline gets taller; in a very short canvas the sidebar becomes horizontal.',
       'Fill selection: in Fill options choose Select area, then draw a loop. This only selects: tap Fill selected area to color everything inside, even across open ink. Tap / drag fills connected regions inside the selection; Leftovers keeps its cleanup behavior within that boundary. Clear selection or Esc removes the boundary. It is temporary, applies only to this frame, and clears on frame/layer/project changes. Next drawings is suspended while selected. Brushes remain unrestricted; selection transforms and warp are not available yet.',
       { figure: 'linefill' },
       {
@@ -278,6 +280,11 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  {
+    date: '2026-10-16',
+    title: 'Clear paint targets and consistent layer folding',
+    items: ['The canvas identifies your comp, layer, drawing and actual Line/Fill destination, including hidden/locked warnings. Tap the label for Layers. Layers now includes groups, explicit edit-inside navigation, child previews and the same fold state as the rails. The sidebar fits the canvas height so undo/redo remain reachable when the timeline grows.'],
+  },
   {
     date: '2026-10-15',
     title: 'Select an area before filling',

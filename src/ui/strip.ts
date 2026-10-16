@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { ACTIVE_H, buildRails, foldKeys, RailState } from './rails';
+import { ACTIVE_H, buildRails, foldKeys, drawRailState } from './rails';
 import { autoIcon, decorate, setLabel } from './icons';
 import { FPS_PRESETS, ROLES, type Drawing, type Role } from '../core/project';
 import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, totalFrames, type Exposure } from '../core/timeline';
@@ -73,7 +73,7 @@ export class Strip {
   private drag: Drag | null = null;
   private flipBtn!: HTMLButtonElement;
   /** Which rail rows are folded open (groups, LINE / FILL). */
-  private readonly rails = new RailState();
+  private readonly rails = drawRailState;
   private readonly smallThumbs = new Map<string, { rev: number; canvas: HTMLCanvasElement }>();
   private selBtn!: HTMLButtonElement;
   /** Holds, marks, onion settings and layer toggles (shown in the Time workspace). */

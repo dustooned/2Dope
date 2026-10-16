@@ -29,6 +29,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 /** Which rows are folded open (layer ids for groups, `id#parts` for Line / Fill). Remembered per device. */
 export class RailState {
   readonly open: Set<string>;
+  onChange: () => void = () => {};
   constructor() {
     let keys: string[] = [];
     try {
@@ -54,8 +55,12 @@ export class RailState {
     } catch {
       // not remembered: fine
     }
+    this.onChange();
   }
 }
+
+/** Both layer views fold the same hierarchy; this is view state, never document history. */
+export const drawRailState = new RailState();
 
 type Row = { kind: 'layer'; layer: Layer; depth: number; active: boolean; offset: number; foldable: boolean } | { kind: 'part'; layer: Layer; part: 'line' | 'fill'; offset: number; active: boolean };
 
@@ -170,6 +175,10 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
       const name = el('button', { type: 'button', class: 'rail-name', title: r.active ? 'You draw on this layer' : r.depth === 0 && l.kind === 'drawings' ? `Draw on ${l.name}` : l.name }, l.name);
       if (kind && kind !== l.name.toLowerCase()) name.append(el('span', { class: 'rail-kind' }, kind));
       if (r.depth === 0 && l.kind === 'drawings' && !r.active) name.addEventListener('click', () => app.pickLayer(l.id));
+      if (r.depth === 0 && l.kind === 'comp') {
+        name.title = `Edit drawings inside ${l.name}`;
+        name.addEventListener('click', () => { if (!app.strokeActive) ed.enter(l.id); });
+      }
       tag.append(name);
     } else {
       // LINE / FILL sublayer: its own eye (the layer you draw on), and which one brushes paint on

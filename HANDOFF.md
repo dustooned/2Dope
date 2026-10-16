@@ -1,5 +1,7 @@
 # 2Dope maintenance handoff
 
+**UI clarity branch (Codex, 2026-10-16):** [Implementation, integration and browser checks](docs/CLAUDE-UI-CLARITY-HANDOFF.md). `codex/ui-clarity` builds on selection/fill `5caf0aa`: explicit paint-target cue, groups/shared folding in Layers and rails, sidebar fitting the stage. 250 tests and production build passed; Full/Lite desktop and narrow/tall-timeline browser checks completed with stated limits. No merge/push/deployment. Separate QuickShape/audio branches remain separate.
+
 **Selection fill branch (Codex, 2026-10-16):** [Selection fill implementation and verification](docs/CLAUDE-SELECTION-FILL-HANDOFF.md). Adds temporary spatial lasso selection, direct Fill selected area and bounded connected-region/Leftovers fills. Isolated `codex/selection-fill` from `7e275ac`; not merged, pushed or deployed. 250 tests and production build passed; desktop browser verified with stated limits. Preserve separate QuickShape/audio branches when integrating.
 
 Prepared 2026-10-14 so another assistant can continue the app without relying on a previous chat.

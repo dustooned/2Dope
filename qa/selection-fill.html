@@ -4,8 +4,11 @@
 <style>body{margin:0;font:14px system-ui;background:#eee;color:#222}header{padding:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}button{padding:8px}iframe{width:100%;height:calc(100vh - 100px);border:0}</style>
 <header><strong>QA only · scripted pen paths</strong><button data-path="line">Draw divider</button><button data-path="select">Lasso rectangle</button><button data-path="tap">Tap left region</button><button data-path="drag">Drag across divider</button><button data-path="cancel">Cancelled lasso</button><button data-path="cancelfill">Cancelled fill</button><output id="result">Create a test project first; choose the matching tool in the app.</output></header>
 <iframe src="../dist/index.html" title="Production 2Dope test build"></iframe>
+<button id="phone">Phone layout</button><button id="desktop">Desktop layout</button>
 <script>
 const frame = document.querySelector('iframe');
+document.querySelector('#phone').onclick = () => { frame.style.width='390px'; frame.style.height='580px'; };
+document.querySelector('#desktop').onclick = () => { frame.style.width='100%'; frame.style.height='calc(100vh - 100px)'; };
 for (const button of document.querySelectorAll('[data-path]')) button.onclick = async () => {
   const canvas = frame.contentDocument.querySelector('#canvas');
   if (!canvas || [...frame.contentDocument.querySelectorAll('[role="dialog"]')].some(el => el.getClientRects().length)) return;
