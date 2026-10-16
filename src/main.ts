@@ -19,6 +19,7 @@ import { MotionPanel } from './ui/motion';
 import { Splitter } from './ui/splitter';
 import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
+import { TracksSheet } from './ui/sheet';
 import { Strip } from './ui/strip';
 import { XSheet } from './ui/xsheet';
 import { applyIcons } from './ui/icons';
@@ -262,6 +263,8 @@ $('#panel-toggle').addEventListener('click', () => setPanel(!document.body.class
 $('#stage').addEventListener('pointerdown', () => app.workspace !== 'time' && setPanel(false), { capture: true });
 
 const strip = new Strip(app, $('#strip'));
+// Draw and Time: a touch-first handle bar on the timeline (closed / half / full, drag or swipe).
+const sheet = new TracksSheet(app, $('.stage-col'), $('#strip'), () => setTimeout(() => app.fit(), 60));
 drawRailState.onChange = () => { layersPop.update(); strip.update(); };
 // Timing tools (holds, marks, onion settings, layer toggles) belong to the Time workspace
 $('#tab-xsheet').prepend(strip.timingBar);
@@ -269,6 +272,18 @@ const motion = new MotionPanel(app, $('#motion'));
 const board = new BoardPanel(app, $('#board'));
 const audioPlayback = new AudioPlayback(app);
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
+// In the tracks sheet, sounds are rows under the layers; their settings open in a floating card.
+strip.audio = { active: () => sheet.active, sig: () => audioTracks.railSig(), rows: (t, x, c, w) => audioTracks.railRows(t, x, c, w) };
+{
+  const addSound = document.createElement('button');
+  addSound.type = 'button';
+  addSound.className = 'tracks-add';
+  addSound.textContent = '+ Audio';
+  addSound.title = 'Import a sound (WAV, MP3, M4A, OGG, FLAC) at the playhead';
+  addSound.addEventListener('pointerdown', (e) => e.stopPropagation());
+  addSound.addEventListener('click', (e) => { e.stopPropagation(); audioTracks.pickFile(); });
+  sheet.bar.insertBefore(addSound, sheet.bar.querySelector('.spacer'));
+}
 board.setAudio(audioPlayback);
 // the panel's dialogue as a subtitle under the picture (Board, and while playing with a board)
 const subtitle = $('#subtitle');
@@ -305,13 +320,18 @@ function syncFocus(): void {
   let prefs: { tools?: boolean; timeline?: boolean } = {};
   try { prefs = JSON.parse(localStorage.getItem(`2dope.focus.${app.workspace}`) ?? '{}') ?? {}; } catch { /* defaults */ }
   document.body.classList.toggle('tools-folded', prefs.tools === false);
-  document.body.classList.toggle('timeline-folded', prefs.timeline === false);
+  document.body.classList.toggle('timeline-folded', prefs.timeline === false && !TracksSheet.WORKSPACES.has(app.workspace));
   $('#focus-tools').setAttribute('aria-expanded', String(prefs.tools !== false));
   $('#focus-timeline').setAttribute('aria-expanded', String(prefs.timeline !== false));
   $('#focus-context').textContent = { draw: 'Draw · make your art', time: 'Time · adjust exposure', motion: 'Motion · composite and animate', board: 'Board · plan the story' }[app.workspace];
 }
 for (const part of ['tools', 'timeline'] as const) {
   $(`#focus-${part}`).addEventListener('click', () => {
+    if (part === 'timeline' && sheet.active) {
+      sheet.toggle();
+      $('#focus-timeline').setAttribute('aria-expanded', String(sheet.current !== 'peek'));
+      return;
+    }
     const folded = document.body.classList.toggle(`${part}-folded`);
     $(`#focus-${part}`).setAttribute('aria-expanded', String(!folded));
     if (part === 'tools' && folded) setPanel(false);
@@ -338,6 +358,10 @@ const applyWorkspace = () => {
   syncFocus();
   prevWs = w;
   splitter.restore();
+  document.body.classList.toggle('sheet-ws', sheet.active);
+  sheet.restore();
+  sheet.update();
+  if (sheet.active) $('#focus-timeline').setAttribute('aria-expanded', String(sheet.current !== 'peek'));
   motion.update();
   strip.update();
   board.update();
@@ -357,6 +381,9 @@ for (const b of wsButtons)
   });
 document.body.classList.add('ws-draw');
 for (const b of wsButtons) b.setAttribute('aria-pressed', String(b.dataset.ws === 'draw'));
+document.body.classList.toggle('sheet-ws', sheet.active);
+sheet.restore();
+sheet.update();
 
 // Quick Animate (a lighter view of the same project)
 let files: FileUI | null = null;
@@ -473,6 +500,7 @@ async function exportForBlender(): Promise<void> {
 menu.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((b) => b.addEventListener('click', () => menuActions[b.dataset.menu ?? '']?.()));
 
 app.onFrameChange = chain(app.onFrameChange, () => {
+  sheet.update();
   audioPlayback.sync();
   audioTracks.update();
   syncTools();

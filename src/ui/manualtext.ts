@@ -206,6 +206,7 @@ export const MANUAL: ManualSection[] = [
     title: 'Audio',
     blocks: [
         'Sound plays on the same clock as everything else, in every workspace. Open the Audio lane under the canvas to see each clip as a waveform. The wave stays visible while its Settings are folded shut; folding the whole Audio lane gives the canvas more room.',
+        'Tracks in Draw and Time: the bar above the timeline holds Play, the time and + Audio. Tap the bar to step closed, half and full; drag it to any height, or swipe it down to close. Each sound is a row under your layers with its waveform. Tap a sound for its settings card; close it with the X, Escape, a tap outside, or a swipe down on its top.',
         'Hear while scrubbing: tick the box in the Audio lane to hear a short slice of sound at each frame as you drag the timeline or Shift-step. It is off by default, remembered on this device, and stops the moment you let go.',
       {
         steps: [
@@ -285,6 +286,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-16', title: 'Tracks sheet in Draw and Time', items: ['One touch-friendly bar above the timeline: tap to step closed / half / full, drag, or swipe down to close; Play and the time stay visible when closed. Sounds are rows under the layers, and their settings open in a card you can close with a tap outside or a swipe.'] },
   { date: '2026-10-16', title: 'Transform a selection', items: ['After Select area, tap Transform to move, scale, rotate or flip what is inside the selection on this drawing. Apply keeps it as one undo step; Cancel puts it back.'] },
   { date: '2026-10-16', title: 'Hear audio while scrubbing', items: ['A new box in the Audio lane plays a short slice of sound at each frame you scrub to. Off by default; it stops when you let go.'] },
   { date: '2026-10-16', title: 'Focused workspaces and Export and finish', items: ['Tools and Timeline fold independently and remember each workspace. Motion keeps its extra keyframe/easing controls under a disclosure. Export and finish gathers existing formats and adds a previewable, silent looping GIF (up to 15 seconds, 12 fps, 480 px; 320 px in Lite).'] },

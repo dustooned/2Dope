@@ -1,3 +1,4 @@
+import type { ExtraRows } from './rails';
 import type { App } from '../app';
 import { ACTIVE_H, buildRails, foldKeys, drawRailState } from './rails';
 import { autoIcon, decorate, setLabel } from './icons';
@@ -69,6 +70,8 @@ export class Strip {
   private readonly roleBtns = new Map<Role, HTMLButtonElement>();
   private readonly thumbs = new Map<string, { rev: number; canvas: HTMLCanvasElement }>();
   private signature = '';
+  /** Sounds as rows under the layers (the tracks sheet); set by main. */
+  audio: { active(): boolean; sig(): string; rows: ExtraRows } | null = null;
   private cell = loadCell();
   private drag: Drag | null = null;
   private flipBtn!: HTMLButtonElement;
@@ -502,7 +505,7 @@ export class Strip {
     const p = app.project;
     const sel = new Set(app.selection);
     const sig =
-      `${this.cell}#${app.timeFormat}#${this.railSig()}#` +
+      `${this.cell}#${app.timeFormat}#${this.railSig()}#${this.audio?.active() ? this.audio.sig() : ''}#` +
       p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).thumbRev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
     if (sig !== this.signature) {
       this.signature = sig;
@@ -616,6 +619,7 @@ export class Strip {
         this.signature = '';
         this.update();
       },
+      this.audio?.active() ? this.audio.rows : undefined,
     );
     this.inner.append(...rails.nodes);
     this.inner.style.setProperty('--active-top', `${rails.activeTop}px`);

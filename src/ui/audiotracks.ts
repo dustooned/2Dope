@@ -111,42 +111,152 @@ export class AudioTracks {
         settings.setAttribute('aria-expanded', String(!controls.hidden));
       };
       head.append(settings);
-      const change = (patch: Partial<SoundClip>) => { this.edit('Edit audio clip', list => list.map(s => s.id === clip.id ? { ...s, ...patch } : s)); this.signature = ''; };
-      const field = (name: string, value: number, min: number, max: number, step: string, apply: (n: number) => void) => {
-        const label = el('label', name); const input = el('input'); input.type = 'number'; input.value = String(Math.round(value * 1000) / 1000); input.min = String(min); input.max = String(max); input.step = step; input.setAttribute('aria-label', `${clip.name} ${name}`);
-        let committed = value;
-        const commit = () => {
-          const n = input.value.trim() ? Number(input.value) : NaN;
-          if (Number.isFinite(n) && n >= min && n <= max) {
-            if (n !== committed) { committed = n; apply(n); }
-          } else input.value = String(committed);
-          if (input.isConnected) this.update(true);
-        };
-        input.onchange = commit;
-        input.onblur = commit;
-        input.onkeydown = e => {
-          if (e.key === 'Enter') { e.preventDefault(); commit(); input.blur(); }
-          if (e.key === 'Escape') { input.value = String(committed); input.blur(); }
-        };
-        label.append(input); controls.append(label);
-      };
-      field('Start frame', (start ?? clip.start) + 1, 1, 1000000, '1', n => change(clip.link ? { link: { ...clip.link, offset: clip.link.offset + Math.round(n) - 1 - (start ?? clip.start) } } : { start: Math.round(n) - 1 }));
-      field('Source in', clip.trimIn, 0, clip.trimOut - 0.001, '0.01', n => change({ trimIn: n }));
-      field('Source out', clip.trimOut, clip.trimIn + 0.001, app.project.sounds.get(clip.asset)?.duration ?? clip.trimOut, '0.01', n => change({ trimOut: n }));
-      field('Volume %', clip.gain * 100, 0, 200, '1', n => change({ gain: n / 100 }));
-      const button = (name: string, fn: () => void) => { const b = el('button', name); b.type = 'button'; b.onclick = () => { fn(); b.blur(); this.update(true); }; controls.append(b); };
-      button(clip.muted ? 'Unmute' : 'Mute', () => change({ muted: !clip.muted }));
-      button(clip.link ? 'Unlink panel' : 'Link current panel', () => {
-        if (clip.link) { change({ start: Math.max(0, start ?? clip.start), link: null }); return; }
-        const board = app.board; const at = board ? locate(board.exposures, app.frame - board.start) : null;
-        if (!board || !at) { app.onNotice?.('Move the playhead onto a storyboard panel first.'); return; }
-        const drawing = board.exposures[at.index]!.drawing;
-        const occurrence = board.exposures.slice(0, at.index).filter(e => e.drawing === drawing).length;
-        change({ link: { layer: board.id, drawing, occurrence, offset: clip.start - board.start - at.start } });
-      });
-      button('Delete clip', () => this.edit('Delete audio clip', list => list.filter(s => s.id !== clip.id)));
-      if (start === null) controls.append(el('span', 'Linked panel removed: clip is silent. Unlink to place it manually.'));
+      this.fillControls(controls, clip, () => this.update(true));
       row.append(head, lane, controls); this.body.append(row);
     }
+  }
+
+  /** The clip's settings (start, trims, volume, mute, link, delete) into `controls`; `after` runs after each edit. */
+  private fillControls(controls: HTMLElement, clip: SoundClip, after: () => void): void {
+    const app = this.app; const c = app.project.comp;
+    const start = soundStart(clip, c);
+    const change = (patch: Partial<SoundClip>) => { this.edit('Edit audio clip', list => list.map(s => s.id === clip.id ? { ...s, ...patch } : s)); this.signature = ''; };
+    const field = (name: string, value: number, min: number, max: number, step: string, apply: (n: number) => void) => {
+      const label = el('label', name); const input = el('input'); input.type = 'number'; input.value = String(Math.round(value * 1000) / 1000); input.min = String(min); input.max = String(max); input.step = step; input.setAttribute('aria-label', `${clip.name} ${name}`);
+      let committed = value;
+      const commit = () => {
+        const n = input.value.trim() ? Number(input.value) : NaN;
+        if (Number.isFinite(n) && n >= min && n <= max) {
+          if (n !== committed) { committed = n; apply(n); }
+        } else input.value = String(committed);
+        if (input.isConnected) after();
+      };
+      input.onchange = commit;
+      input.onblur = commit;
+      input.onkeydown = e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); input.blur(); }
+        if (e.key === 'Escape') { input.value = String(committed); input.blur(); }
+      };
+      label.append(input); controls.append(label);
+    };
+    field('Start frame', (start ?? clip.start) + 1, 1, 1000000, '1', n => change(clip.link ? { link: { ...clip.link, offset: clip.link.offset + Math.round(n) - 1 - (start ?? clip.start) } } : { start: Math.round(n) - 1 }));
+    field('Source in', clip.trimIn, 0, clip.trimOut - 0.001, '0.01', n => change({ trimIn: n }));
+    field('Source out', clip.trimOut, clip.trimIn + 0.001, app.project.sounds.get(clip.asset)?.duration ?? clip.trimOut, '0.01', n => change({ trimOut: n }));
+    field('Volume %', clip.gain * 100, 0, 200, '1', n => change({ gain: n / 100 }));
+    const button = (name: string, fn: () => void) => { const b = el('button', name); b.type = 'button'; b.onclick = () => { fn(); b.blur(); after(); }; controls.append(b); };
+    button(clip.muted ? 'Unmute' : 'Mute', () => change({ muted: !clip.muted }));
+    button(clip.link ? 'Unlink panel' : 'Link current panel', () => {
+      if (clip.link) { change({ start: Math.max(0, start ?? clip.start), link: null }); return; }
+      const board = app.board; const at = board ? locate(board.exposures, app.frame - board.start) : null;
+      if (!board || !at) { app.onNotice?.('Move the playhead onto a storyboard panel first.'); return; }
+      const drawing = board.exposures[at.index]!.drawing;
+      const occurrence = board.exposures.slice(0, at.index).filter(e => e.drawing === drawing).length;
+      change({ link: { layer: board.id, drawing, occurrence, offset: clip.start - board.start - at.start } });
+    });
+    button('Delete clip', () => this.edit('Delete audio clip', list => list.filter(s => s.id !== clip.id)));
+    if (start === null) controls.append(el('span', 'Linked panel removed: clip is silent. Unlink to place it manually.'));
+  }
+
+  // ---- Tracks sheet: audio as rows in the shared track stack, settings in a floating card ----
+
+  private card: HTMLElement | null = null;
+  private cardClip = '';
+  private picker: HTMLInputElement | null = null;
+  private cardOff: () => void = () => {};
+
+  /** Open the file picker to import a sound (the tracks sheet's + Audio). */
+  pickFile(): void {
+    if (!this.picker) {
+      const f = el('input'); f.type = 'file'; f.accept = 'audio/*,.wav,.mp3,.m4a,.ogg,.flac'; f.hidden = true;
+      f.onchange = () => { const file = f.files?.[0]; if (file) void this.import(file); f.value = ''; };
+      document.body.append(f); this.picker = f;
+    }
+    this.picker.click();
+  }
+
+  /** Changes when the rows must be rebuilt. */
+  railSig(): string {
+    const c = this.app.project.comp;
+    return `${c.id}:${c.fps}:${JSON.stringify(c.audio ?? [])}:${this.importing}`;
+  }
+
+  /** One row per clip under the drawing rails, lined up on the same clock (`x0` = frame at the left edge). */
+  railRows(top: number, x0: number, cell: number, width: number): { nodes: HTMLElement[]; height: number } {
+    const app = this.app; const c = app.project.comp; const project = app.project;
+    const nodes: HTMLElement[] = [];
+    let y = top;
+    const H = 38;
+    for (const clip of c.audio ?? []) {
+      const row = el('div'); row.className = `rail audio${clip.muted ? ' off' : ''}`;
+      row.style.top = `${y}px`; row.style.height = `${H}px`; row.style.width = `${width}px`;
+      const tag = el('div'); tag.className = 'rail-tag';
+      const mute = el('button', clip.muted ? 'Unmute' : 'Mute'); mute.type = 'button'; mute.className = 'rail-btn';
+      mute.setAttribute('aria-pressed', String(clip.muted)); mute.title = clip.muted ? 'Unmute this sound' : 'Mute this sound';
+      mute.onclick = () => this.edit(clip.muted ? 'Unmute audio' : 'Mute audio', list => list.map(s => s.id === clip.id ? { ...s, muted: !s.muted } : s));
+      const name = el('button', `\u266A ${clip.name}`); name.type = 'button'; name.className = 'rail-name'; name.title = 'Sound settings';
+      name.onclick = () => this.openCard(clip.id);
+      tag.append(mute, name); row.append(tag);
+      const start = soundStart(clip, c);
+      const b = el('div'); b.className = 'rblock audio-block'; b.title = 'Tap for this sound\u2019s settings';
+      b.style.left = `${((start ?? clip.start) - x0) * cell}px`;
+      b.style.width = `${Math.max(6, (clip.trimOut - clip.trimIn) * c.fps * cell - 3)}px`;
+      const canvas = el('canvas'); canvas.height = 28; canvas.setAttribute('aria-label', `${clip.name} waveform`);
+      b.append(canvas);
+      b.onclick = () => this.openCard(clip.id);
+      const draw = () => {
+        if (!canvas.isConnected || app.project !== project) return;
+        const data = this.playback.bank.waveform(clip.asset);
+        if (data) paintWaveform(canvas, data, clip);
+      };
+      void this.playback.bank.load(project, clip.asset).then(() => setTimeout(draw, 0)).catch(() => {});
+      setTimeout(draw, 50);
+      row.append(b); nodes.push(row); y += H;
+    }
+    return { nodes, height: y - top };
+  }
+
+  /** A floating card with one sound's settings. Closes with X, Escape, a tap outside, or a swipe down on its top. */
+  openCard(clipId: string): void {
+    this.closeCard();
+    const card = el('div'); card.className = 'audio-card'; card.setAttribute('role', 'dialog');
+    this.card = card; this.cardClip = clipId;
+    document.body.append(card);
+    this.renderCard();
+    const outside = (e: PointerEvent) => { if (this.card && !this.card.contains(e.target as Node)) this.closeCard(); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && this.card) { e.stopPropagation(); this.closeCard(); } };
+    setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+    document.addEventListener('keydown', esc, true);
+    this.cardOff = () => { document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', esc, true); };
+  }
+
+  get cardOpen(): boolean {
+    return this.card !== null;
+  }
+
+  closeCard(): void {
+    this.cardOff(); this.cardOff = () => {};
+    this.card?.remove(); this.card = null; this.cardClip = '';
+  }
+
+  private renderCard(): void {
+    const card = this.card; if (!card) return;
+    const clip = (this.app.project.comp.audio ?? []).find(s => s.id === this.cardClip);
+    if (!clip) { this.closeCard(); return; }
+    card.replaceChildren();
+    card.setAttribute('aria-label', `${clip.name} settings`);
+    const head = el('div'); head.className = 'audio-card-head';
+    head.append(el('span', `\u266A ${clip.name}`));
+    const x = el('button', '\u2715'); x.type = 'button'; x.className = 'audio-card-x'; x.setAttribute('aria-label', 'Close');
+    x.onclick = () => this.closeCard();
+    head.append(x);
+    let y0 = -1;
+    head.addEventListener('pointerdown', e => { y0 = e.clientY; });
+    head.addEventListener('pointerup', e => { if (y0 >= 0 && e.clientY - y0 > 50) this.closeCard(); y0 = -1; });
+    const controls = el('div'); controls.className = 'audio-controls';
+    this.fillControls(controls, clip, () => setTimeout(() => this.renderCard(), 0));
+    const scrub = el('label', 'Hear while scrubbing'); scrub.className = 'audio-scrub';
+    const box = el('input'); box.type = 'checkbox'; box.checked = this.playback.scrubOn; box.onchange = () => this.playback.setScrub(box.checked);
+    scrub.prepend(box);
+    card.append(head, controls, scrub);
   }
 }

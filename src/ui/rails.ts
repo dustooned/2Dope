@@ -116,7 +116,10 @@ export interface RailsOut {
  * Build the rail rows. `x0` is the comp frame at the left edge (the active layer's start), so
  * every row lines up with the editable blocks. `thumb` gives a small preview canvas.
  */
-export function buildRails(app: App, state: RailState, cell: number, top: number, x0: number, width: number, thumb: (d: Drawing) => HTMLCanvasElement, changed: () => void): RailsOut {
+/** Extra rows under the layers (the tracks sheet sounds). */
+export type ExtraRows = (top: number, x0: number, cell: number, width: number) => { nodes: HTMLElement[]; height: number };
+
+export function buildRails(app: App, state: RailState, cell: number, top: number, x0: number, width: number, thumb: (d: Drawing) => HTMLCanvasElement, changed: () => void, extra?: ExtraRows): RailsOut {
   const rows = rowsOf(app, state);
   const nodes: HTMLElement[] = [];
   let y = top;
@@ -241,6 +244,11 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
     }
     nodes.push(row);
     y += h;
+  }
+  if (extra) {
+    const more = extra(y, x0, cell, width);
+    nodes.push(...more.nodes);
+    y += more.height;
   }
   return { nodes, activeTop, height: y };
 }

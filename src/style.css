@@ -4043,3 +4043,34 @@ body.quick .focusbar, body.ui-hidden .focusbar { display: none; }
 .export-hub > img { display: block; max-width: 100%; max-height: 42dvh; margin: 12px auto; }
 .export-hub p { line-height: 1.5; }
 @media (max-width: 600px) { #focus-context { display: none; } .focusbar { padding-left: 8px; } #panel-toggle { display: inline-flex !important; } }
+
+/* Tracks sheet (Draw, Time): a 52 px handle bar with Play and the time; tap, drag or swipe it. */
+.tracks-handle { position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 8px 10px 4px; border-top: 1px solid var(--line); background: var(--panel); touch-action: none; cursor: ns-resize; user-select: none; }
+.tracks-handle[hidden] { display: none; }
+.tracks-grip { position: absolute; left: 50%; top: 4px; width: 44px; height: 5px; margin-left: -22px; border-radius: 3px; background: var(--line); }
+.tracks-handle.active .tracks-grip, .tracks-handle:hover .tracks-grip { background: var(--accent); }
+.tracks-handle button { min-width: 44px; min-height: 40px; }
+.tracks-handle .spacer { flex: 1; }
+.tracks-time { cursor: pointer; font-variant-numeric: tabular-nums; }
+.tracks-size::after { content: 'B4'; margin-left: 6px; display: inline-block; transition: transform .15s; }
+.tracks-size[data-state="full"]::after { transform: rotate(180deg); }
+body.sheet-ws #splitter { display: none; }
+body.sheet-peek:not(.quick) #strip, body.sheet-peek:not(.quick) .audio-tracks { display: none !important; }
+body.sheet-full .strip-track { height: min(var(--track-h), 70vh) !important; }
+body.quick .tracks-handle, body.ui-hidden .tracks-handle { display: none; }
+
+body.sheet-ws .audio-tracks { display: none !important; }
+.rail.audio .audio-block { top: 4px; bottom: 4px; height: auto; background: #3a3320; border: 1px solid #8a7430; border-radius: 6px; overflow: hidden; cursor: pointer; padding: 0; }
+.rail.audio .audio-block canvas { display: block; width: 100%; height: 100%; }
+.rail.audio.off .audio-block { filter: grayscale(1); opacity: .6; }
+.tracks-add { min-height: 40px; }
+.audio-card { position: fixed; z-index: 60; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); max-height: 70dvh; overflow: auto; padding: 0 14px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px #0008; }
+.audio-card-head { position: sticky; top: 0; display: flex; align-items: center; gap: 8px; min-height: 52px; background: var(--panel); font-weight: 600; touch-action: none; }
+.audio-card-head::before { content: ''; position: absolute; left: 50%; top: 5px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line); }
+.audio-card-head span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-card-x { width: 44px; height: 44px; font-size: 18px; }
+.audio-card .audio-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.audio-card .audio-controls label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.audio-card .audio-controls input { width: 110px; min-height: 36px; }
+.audio-card .audio-controls button { min-height: 40px; }
+.audio-card .audio-scrub { display: flex; gap: 6px; align-items: center; margin-top: 10px; }
