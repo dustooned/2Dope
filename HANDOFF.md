@@ -1,5 +1,7 @@
 # 2Dope maintenance handoff
 
+**Combined review (2026-10-16):** use [integration handoff](docs/CLAUDE-INTEGRATION-REVIEW.md) first. `codex/integration-review` combines selection/fill, UI/automatic tool switching, QuickShape precision and audio polish from freshly checked `7e275ac`. 264 tests and production build passed; combined production browser checks completed with explicit archive/device/console limits. Main unchanged; not pushed, merged to main or deployed. Original per-feature reports below are historical and retain their own branch-specific status.
+
 **UI follow-up (2026-10-16):** selecting Line activates vector Pen; Fill activates Bucket in Tap/drag mode. Toolbar/parts/rails/Quick Animate/X share `setPlane`; visibility eyes remain independent. See UI clarity handoff follow-up. 250 tests, build and affected production browser flows passed. Still isolated on `codex/ui-clarity`.
 
 **UI clarity branch (Codex, 2026-10-16):** [Implementation, integration and browser checks](docs/CLAUDE-UI-CLARITY-HANDOFF.md). `codex/ui-clarity` builds on selection/fill `5caf0aa`: explicit paint-target cue, groups/shared folding in Layers and rails, sidebar fitting the stage. 250 tests and production build passed; Full/Lite desktop and narrow/tall-timeline browser checks completed with stated limits. No merge/push/deployment. Separate QuickShape/audio branches remain separate.
