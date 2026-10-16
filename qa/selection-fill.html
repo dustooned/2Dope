@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>2Dope selection fill check</title>
+<style>body{margin:0;font:14px system-ui;background:#eee;color:#222}header{padding:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}button{padding:8px}iframe{width:100%;height:calc(100vh - 100px);border:0}</style>
+<header><strong>QA only · scripted pen paths</strong><button data-path="line">Draw divider</button><button data-path="select">Lasso rectangle</button><button data-path="tap">Tap left region</button><button data-path="drag">Drag across divider</button><button data-path="cancel">Cancelled lasso</button><button data-path="cancelfill">Cancelled fill</button><output id="result">Create a test project first; choose the matching tool in the app.</output></header>
+<iframe src="../dist/index.html" title="Production 2Dope test build"></iframe>
+<script>
+const frame = document.querySelector('iframe');
+for (const button of document.querySelectorAll('[data-path]')) button.onclick = async () => {
+  const canvas = frame.contentDocument.querySelector('#canvas');
+  if (!canvas || [...frame.contentDocument.querySelectorAll('[role="dialog"]')].some(el => el.getClientRects().length)) return;
+  document.querySelectorAll('header button').forEach(b=>b.disabled=true);
+  document.querySelector('#result').textContent = 'Running '+button.textContent+'…';
+  const rect = canvas.getBoundingClientRect(), cx = rect.width / 2, cy = rect.height / 2;
+  const paths = { line:[[cx,cy-100],[cx,cy+100]], select:[[cx-100,cy-60],[cx+100,cy-60],[cx+100,cy+60],[cx-100,cy+60],[cx-100,cy-60]], tap:[[cx-70,cy]], drag:[[cx-70,cy],[cx+70,cy]], cancelfill:[[cx-70,cy],[cx+70,cy]], cancel:[[cx-160,cy-100],[cx+160,cy-100],[cx+160,cy+100]] };
+  const points = paths[button.dataset.path];
+  const send = (type, p, buttons = 1) => canvas.dispatchEvent(new frame.contentWindow.PointerEvent(type, { bubbles:true, pointerId:9999, pointerType:'pen', isPrimary:true, button:0, buttons, pressure:buttons ? 0.55 : 0, clientX:rect.left+p[0], clientY:rect.top+p[1] }));
+  send('pointerdown',points[0]);
+  for (let j=1;j<points.length;j++) {
+    const a=points[j-1], b=points[j];
+    for (let i=1;i<=20;i++) { send('pointermove',[a[0]+(b[0]-a[0])*i/20,a[1]+(b[1]-a[1])*i/20]); await new Promise(r=>setTimeout(r,4)); }
+  }
+  send(button.dataset.path.startsWith('cancel')?'pointercancel':'pointerup',points.at(-1),0);
+  document.querySelector('#result').textContent = 'Completed '+button.textContent+' through normal pointer handlers.';
+  document.querySelectorAll('header button').forEach(b=>b.disabled=false);
+};
+</script>
+

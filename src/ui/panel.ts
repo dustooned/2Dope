@@ -175,7 +175,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
     body.append(fs);
   }
 
-  body.prepend(fillEditor(app));
+  body.prepend(fillEditor(app, refreshers));
   root.append(head, preview, body);
 
   function drawPreview(): void {
@@ -236,7 +236,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
   refresh();
 }
 
-function fillEditor(app: App): HTMLElement {
+function fillEditor(app: App, refreshers: (() => void)[]): HTMLElement {
   const fs = el('fieldset');
   fs.append(el('legend', {}, 'Fill (G)'));
   const defs: { prop: 'gap' | 'under' | 'threshold'; label: string; min: number; max: number; step: number; unit: string; hint: string }[] = [
@@ -263,7 +263,7 @@ function fillEditor(app: App): HTMLElement {
   const modeBtns: HTMLButtonElement[] = [];
   for (const [m, label, hint] of [
     ['tap', 'Tap / drag', 'Tap an area, or drag across several to fill each one'],
-    ['lasso', 'Lasso', 'Draw a loop: every closed area inside it fills'],
+    ['lasso', 'Select area', 'Draw a lasso selection, then fill it or use Tap / drag inside it'],
     ['leftover', 'Leftovers', 'Scrub over specks the fill missed (brush size)'],
   ] as const) {
     const b = el('button', { type: 'button', title: hint }, label);
@@ -282,10 +282,20 @@ function fillEditor(app: App): HTMLElement {
     sync();
   });
   acrossRow.append(el('span', { class: 'name' }, 'Next drawings'), across, acrossOut);
+  const selectionActions = el('div', { class: 'fill-selection-actions' });
+  const fillSelected = el('button', { type: 'button' }, 'Fill selected area');
+  const clearSelected = el('button', { type: 'button' }, 'Clear selection');
+  fillSelected.addEventListener('click', () => app.fillSelectedArea());
+  clearSelected.addEventListener('click', () => app.clearSpatialSelection());
+  selectionActions.append(fillSelected, clearSelected);
   const sync = () => {
     modeBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(['tap', 'lasso', 'leftover'][i] === app.fillMode)));
     across.value = String(app.fillAcross);
-    acrossOut.textContent = app.fillAcross ? `+${app.fillAcross}` : 'off';
+    const selected = !!app.spatialSelection;
+    fillSelected.disabled = !selected || app.strokeActive || app.playing || app.project.layer.locked;
+    clearSelected.disabled = !selected || app.strokeActive;
+    across.disabled = selected || app.fillMode !== 'tap';
+    acrossOut.textContent = selected ? 'selection only' : app.fillAcross ? `+${app.fillAcross}` : 'off';
   };
   const referRow = el('label', { class: 'row toggle', title: 'Fill stops at the lines on your other visible layers too: ink on one layer, colour on another' });
   const refer = el('input', { type: 'checkbox' });
@@ -296,10 +306,16 @@ function fillEditor(app: App): HTMLElement {
     refer.checked = app.fillRefer;
   };
   syncAll();
+  refreshers.push(syncAll);
+  const prevFrame = app.onFrameChange;
+  app.onFrameChange = () => { prevFrame(); syncAll(); };
+  const prevTool = app.onToolChange;
+  app.onToolChange = () => { prevTool(); syncAll(); };
   fs.insertBefore(referRow, fs.children[1] ?? null);
   fs.insertBefore(acrossRow, fs.children[1] ?? null);
   fs.insertBefore(modes, acrossRow);
-  fs.append(el('p', { class: 'hint' }, 'Reads the Line plane and vector strokes; paints the Fill plane under them. Shift+G switches Tap / Lasso / Leftovers.'));
+  fs.insertBefore(selectionActions, acrossRow);
+  fs.append(el('p', { class: 'hint' }, 'Selection bounds fills on this frame; brushes stay unrestricted. Change frames/layers or press Esc to clear. Shift+G switches modes. Colors stay under your ink.'));
   return fs;
 }
 

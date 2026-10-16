@@ -157,20 +157,23 @@ export function computeFill(alpha: Uint8Array, w: number, h: number, sx: number,
  * the nearest open pixel (drag and lasso fills use it, so a finger crossing a line does not fill
  * the region on the other side by accident).
  */
-export function fillFrom(map: FillMap, sx: number, sy: number, exact = false): FillResult | null {
+export function fillFrom(map: FillMap, sx: number, sy: number, exact = false, selection?: Uint8Array): FillResult | null {
   const { w, h, alpha, barrier, dist, want, opts } = map;
   if (sx < 0 || sy < 0 || sx >= w || sy >= h) return null;
   const N = w * h;
   let seed = sy * w + sx;
+  if (selection && !selection[seed]) return null;
   if (barrier[seed]) {
     if (exact) return null;
     seed = nearestOpen(barrier, w, h, sx, sy, 3);
     if (seed < 0) return null;
   }
+  if (selection && !selection[seed]) return null;
 
   // Gap closing: block pixels within `rr` of a line. rr is capped so the seed itself stays open.
   const rr = dist ? Math.min(want, Math.max(0, dist[seed]! - 1)) : 0;
-  const open = (i: number) => (dist ? dist[i]! > rr : !barrier[i]);
+  const inside = (i: number) => !selection || !!selection[i];
+  const open = (i: number) => inside(i) && (dist ? dist[i]! > rr : !barrier[i]);
 
   // Flood fill from the seed through open pixels.
   const mask = new Uint8Array(N);
@@ -199,7 +202,7 @@ export function fillFrom(map: FillMap, sx: number, sy: number, exact = false): F
   // Give back the closing band: grow `rr` pixels into pixels that are not line themselves.
   if (rr > 0) {
     const f = boundary(mask, w, h, x0, y0, x1, y1);
-    grow(mask, w, h, f, rr, (j) => !barrier[j] && dist![j]! <= rr);
+    grow(mask, w, h, f, rr, (j) => inside(j) && !barrier[j] && dist![j]! <= rr);
   }
 
   // Grow under the line, only through pixels the line covers.
@@ -209,7 +212,7 @@ export function fillFrom(map: FillMap, sx: number, sy: number, exact = false): F
     const bx1 = Math.min(w - 1, x1 + rr + 1);
     const by1 = Math.min(h - 1, y1 + rr + 1);
     const f = boundary(mask, w, h, bx0, by0, bx1, by1);
-    grow(mask, w, h, f, opts.under, (j) => alpha[j]! > 0);
+    grow(mask, w, h, f, opts.under, (j) => inside(j) && alpha[j]! > 0);
   }
 
   // Final bounding box and count.

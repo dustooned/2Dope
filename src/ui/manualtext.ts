@@ -122,7 +122,7 @@ export const MANUAL: ManualSection[] = [
           ['Brush (B)', 'Pixel brushes: pencil, ink, brush pen, fine liner, pixel ink and more. Pressure and tilt work with a pencil.', 'brush'],
           ['Pen (P)', 'Vector lines: always crisp, can be resized later without going blurry.', 'pen'],
           ['Eraser (E)', 'Erases pixels. On vector lines it cuts up to where lines cross (change this in the eraser options).', 'eraser'],
-          ['Fill (G)', 'Fills areas closed by your lines. Tap or drag across areas, lasso around them, or brush over leftover gaps.', 'fill'],
+          ['Fill (G)', 'Tap or drag across connected regions. Select area draws a lasso boundary; Fill selected area colors all of it. Leftovers cleans missed specks.', 'fill'],
         ],
       },
       {
@@ -130,6 +130,7 @@ export const MANUAL: ManualSection[] = [
       },
       'The circle at the top right is your colour. Tap it for the colour panel: a hue ring around a saturation / brightness square (Disc), or H, S, B sliders and a hex box (Values); the colour before and now (tap the old half to go back); Recent colours; and a Palette (+ adds the current colour, hold a swatch to remove it). System… opens your device’s own picker.',
       'The sliders on the left are brush size and opacity, with undo and redo under them.',
+      'Fill selection: in Fill options choose Select area, then draw a loop. This only selects: tap Fill selected area to color everything inside, even across open ink. Tap / drag fills connected regions inside the selection; Leftovers keeps its cleanup behavior within that boundary. Clear selection or Esc removes the boundary. It is temporary, applies only to this frame, and clears on frame/layer/project changes. Next drawings is suspended while selected. Brushes remain unrestricted; selection transforms and warp are not available yet.',
       { figure: 'linefill' },
       {
         tip: 'Line and Fill: every drawing has a Line part and a Fill part. Fill paints under your lines, so colouring never covers the ink. The LINE | FILL switch in the toolbar (or X) picks which one brushes paint on; a yellow FILL badge on the canvas reminds you when you are painting colour. In Layers, the layer you draw on shows its LINE and FILL with an eye each.',
@@ -277,6 +278,11 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  {
+    date: '2026-10-15',
+    title: 'Select an area before filling',
+    items: ['Fill > Select area creates a visible lasso selection. Fill selected area colors the entire selection without detecting closed ink. Tap / drag and Leftovers stay inside it. Clear selection or Esc removes it; changing frames or layers clears it. Each fill remains one undo step.'],
+  },
   {
     date: '2026-10-15',
     title: 'Timeline audio and Quick Share video export',

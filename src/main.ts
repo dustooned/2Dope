@@ -434,7 +434,7 @@ async function exportForBlender(): Promise<void> {
 }
 menu.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((b) => b.addEventListener('click', () => menuActions[b.dataset.menu ?? '']?.()));
 
-app.onFrameChange = () => {
+app.onFrameChange = chain(app.onFrameChange, () => {
   audioPlayback.sync();
   audioTracks.update();
   syncTools();
@@ -445,7 +445,7 @@ app.onFrameChange = () => {
   xsheet.update();
   quick.update();
   if (app.workspace === 'motion') motion.update();
-};
+});
 app.onToolChange = chain(app.onToolChange, () => quick.update());
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
