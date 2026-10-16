@@ -14,6 +14,14 @@ export class AudioPlayback {
   private origin = { t: 0, f: 0, fps: 12, len: 1 };
   private starting = false;
   private project: App['project'] | null = null;
+  private auditioned = -1;
+  /** Optional: hear a short slice of the mix at each frame you scrub to. Off by default, remembered per device. */
+  scrubOn = (() => { try { return localStorage.getItem('2dope.audio.scrub') === '1'; } catch { return false; } })();
+  setScrub(on: boolean): void {
+    this.scrubOn = on;
+    try { localStorage.setItem('2dope.audio.scrub', on ? '1' : '0'); } catch { /* optional */ }
+    if (!on) this.stop();
+  }
   constructor(private readonly app: App) {
     this.bank = new SoundBank(() => app.device.lite);
     document.addEventListener('visibilitychange', () => { if (document.hidden && app.playing) app.togglePlay(); });
@@ -28,7 +36,13 @@ export class AudioPlayback {
   sync(): void {
     const app = this.app, p = app.project, c = p.comp;
     this.bank.use(p);
-    if (!app.playing) { if (this.nodes.size || this.starting) this.stop(); this.key = ''; return; }
+    if (!app.playing) {
+      this.key = '';
+      if (app.scrubbing && this.scrubOn) { this.audition(); return; }
+      this.auditioned = -1;
+      if (this.nodes.size || this.starting) this.stop();
+      return;
+    }
     const key = `${c.id}:${c.fps}:${app.compEnd}`;
     const expected = this.context ? (this.origin.f + (this.context.currentTime - this.origin.t) * this.origin.fps) % this.origin.len : -10;
     const restart = this.project !== p || this.key !== key || (!this.starting && Math.abs(expected - app.frame) > 1.5);
@@ -49,6 +63,26 @@ export class AudioPlayback {
         this.stop(); if (app.playing) app.togglePlay(); app.onNotice?.(e instanceof Error ? e.message : String(e));
       });
     } else if (!this.starting && this.voices.length) this.fillQueue();
+  }
+  /** One short, bounded slice of the mix at the scrubbed frame; the next frame or letting go cuts it off. */
+  private audition(): void {
+    const app = this.app, p = app.project, c = p.comp, frame = Math.round(app.frame);
+    if (frame === this.auditioned) return;
+    const voices = soundVoices(p, c.id);
+    if (!voices.length) { this.stop(); return; }
+    const missing = [...new Set(voices.map(v => v.asset))].filter(id => !this.bank.get(id));
+    if (missing.length) { void Promise.all(missing.map(id => this.bank.load(p, id))).catch(() => {}); return; }
+    this.auditioned = frame;
+    this.stop();
+    const ctx = this.context ??= new AudioContext();
+    void ctx.resume().catch(() => {});
+    const seconds = Math.min(0.15, Math.max(0.08, 1 / c.fps));
+    const data = mixSound(voices, this.bank, frame / c.fps, Math.round(SOUND_RATE * seconds), SOUND_RATE, app.compEnd / c.fps);
+    const buffer = ctx.createBuffer(2, data[0].length, SOUND_RATE);
+    buffer.copyToChannel(data[0], 0); buffer.copyToChannel(data[1], 1);
+    const source = ctx.createBufferSource(); source.buffer = buffer; source.connect(ctx.destination);
+    source.onended = () => { source.disconnect(); this.nodes.delete(source); };
+    source.start(); this.nodes.add(source);
   }
   private fillQueue(): void {
     const ctx = this.context!;

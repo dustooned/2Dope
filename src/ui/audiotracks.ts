@@ -75,7 +75,11 @@ export class AudioTracks {
     const file = el('input'); file.type = 'file'; file.accept = 'audio/*,.wav,.mp3,.m4a,.ogg,.flac'; file.hidden = true;
     file.onchange = () => { const f = file.files?.[0]; if (f) void this.import(f); file.value = ''; };
     const add = el('button', this.importing ? 'Loading audio…' : '+ Audio'); add.type = 'button'; add.disabled = this.importing; add.onclick = () => file.click();
-    const toolbar = el('div'); toolbar.className = 'audio-toolbar'; toolbar.append(add, el('span', 'One clock across Board, Draw, Time and Motion. Clip edges use seconds; Start uses frames.'));
+    const scrub = el('label', 'Hear while scrubbing'); scrub.className = 'audio-scrub';
+    scrub.title = 'Play a short slice of sound at each frame you scrub to. Stops when you let go.';
+    const box = el('input'); box.type = 'checkbox'; box.checked = this.playback.scrubOn; box.onchange = () => this.playback.setScrub(box.checked);
+    scrub.prepend(box);
+    const toolbar = el('div'); toolbar.className = 'audio-toolbar'; toolbar.append(add, scrub, el('span', 'One clock across Board, Draw, Time and Motion. Clip edges use seconds; Start uses frames.'));
     this.body.append(toolbar, file);
     for (const clip of clips) {
       const row = el('div'); row.className = 'audio-clip'; row.setAttribute('role', 'group'); row.setAttribute('aria-label', clip.name);

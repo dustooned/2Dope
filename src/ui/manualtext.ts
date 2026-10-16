@@ -205,6 +205,7 @@ export const MANUAL: ManualSection[] = [
     title: 'Audio',
     blocks: [
         'Sound plays on the same clock as everything else, in every workspace. Open the Audio lane under the canvas to see each clip as a waveform. The wave stays visible while its Settings are folded shut; folding the whole Audio lane gives the canvas more room.',
+        'Hear while scrubbing: tick the box in the Audio lane to hear a short slice of sound at each frame as you drag the timeline or Shift-step. It is off by default, remembered on this device, and stops the moment you let go.',
       {
         steps: [
           'Tap + Audio and pick a file (WAV, MP3, M4A, OGG or FLAC, up to 2 minutes). It starts at the frame you are on.',
@@ -283,6 +284,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-16', title: 'Hear audio while scrubbing', items: ['A new box in the Audio lane plays a short slice of sound at each frame you scrub to. Off by default; it stops when you let go.'] },
   { date: '2026-10-16', title: 'Focused workspaces and Export and finish', items: ['Tools and Timeline fold independently and remember each workspace. Motion keeps its extra keyframe/easing controls under a disclosure. Export and finish gathers existing formats and adds a previewable, silent looping GIF (up to 15 seconds, 12 fps, 480 px; 320 px in Lite).'] },
   {
     date: '2026-10-16',
