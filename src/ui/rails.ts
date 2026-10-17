@@ -174,7 +174,7 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
           tag.append(lock);
         }
       }
-      const kind = l.kind === 'comp' ? 'group' : l.kind === 'drawings' && l.guide ? 'board' : '';
+      const kind = l.kind === 'comp' ? 'group' : l.kind === 'drawings' && l.guide ? 'board' : l.kind === 'drawings' && l.cel ? 'linked' : '';
       const name = el('button', { type: 'button', class: 'rail-name', title: r.active ? 'You draw on this layer' : r.depth === 0 && l.kind === 'drawings' ? `Draw on ${l.name}` : r.depth === 0 && l.kind === 'comp' ? `Edit drawings inside ${l.name}` : l.name }, l.name);
       if (kind && kind !== l.name.toLowerCase()) name.append(el('span', { class: 'rail-kind' }, kind));
       if (r.depth === 0 && l.kind === 'drawings' && !r.active) name.addEventListener('click', () => app.pickLayer(l.id));

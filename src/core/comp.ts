@@ -46,6 +46,8 @@ interface LayerBase {
    */
   guide?: boolean;
   guideExport?: boolean;
+  /** Linked art layers: drawings layers sharing a `cel` group keep the same cels and timing. */
+  cel?: string;
 }
 
 /** Is this layer left out of a final render? */

@@ -62,7 +62,10 @@ export class FlipMode {
     const lf = app.lf;
     for (let i = 0; i < ex.length; i++) { if (lf >= at && lf < at + ex[i]!.length) cur = i; at += ex[i]!.length; }
     if (app.blankPage) cur = -1;
-    const sig = `${p.layer.id}|${cur}|${app.blankPage}|${app.playing}|` + ex.map((e) => `${e.drawing}:${p.drawing(e.drawing).thumbRev}`).join(',');
+    // every linked art layer of these cels, drawn back to front into each bubble
+    const stack = [...app.celLayers].reverse();
+    if (!stack.length) stack.push(p.layer as never);
+    const sig = `${p.layer.id}|${cur}|${app.blankPage}|${app.playing}|` + stack.map((l) => l.exposures.map((e) => `${e.drawing}:${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
     if (sig === this.sig) return;
     this.sig = sig;
 
@@ -73,13 +76,18 @@ export class FlipMode {
     const list = el('div', { class: 'flip-list' });
     let start = 0;
     ex.forEach((e, i) => {
-      const d = p.drawing(e.drawing);
       const b = el('button', { type: 'button', class: `flip-cel${i === cur ? ' on' : ''}`, title: `Drawing ${i + 1}`, 'aria-label': `Drawing ${i + 1}`, 'aria-pressed': String(i === cur) });
       const c = el('canvas', { width: '96', height: '72' });
       const g = c.getContext('2d');
       if (g) {
         g.fillStyle = '#fff'; g.fillRect(0, 0, 96, 72);
-        if (d.thumb) { const s = Math.min(96 / d.thumb.width, 72 / d.thumb.height); g.drawImage(d.thumb, (96 - d.thumb.width * s) / 2, (72 - d.thumb.height * s) / 2, d.thumb.width * s, d.thumb.height * s); }
+        for (const l of stack) {
+          const le = l.exposures[i];
+          const t = le ? p.drawing(le.drawing).thumb : null;
+          if (!t) continue;
+          const s = Math.min(96 / t.width, 72 / t.height);
+          g.drawImage(t, (96 - t.width * s) / 2, (72 - t.height * s) / 2, t.width * s, t.height * s);
+        }
       }
       b.append(c, el('span', { class: 'flip-num' }, String(i + 1)));
       const f = start;

@@ -1,3 +1,4 @@
+import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
 import { History } from './core/history';
 import { newSeed } from './core/rng';
@@ -1265,6 +1266,43 @@ export class App {
     this.onFrameChange();
   }
 
+  /** The layers linked to the one you draw on (itself included), front first. */
+  get celLayers(): DrawingsLayer[] {
+    if (this.project.isPlaceholder) return [];
+    const me = this.project.layer;
+    if (me.kind !== 'drawings' || me.guide) return [];
+    return [me, ...celMembers(this.project.comp, me.id)].sort((a, b) => this.project.comp.layers.indexOf(a) - this.project.comp.layers.indexOf(b));
+  }
+
+  /** A new art layer linked to the one you draw on: the same cels and timing, blank drawings, the same placement. Draw on it. */
+  addCelLayer(): void {
+    if (this.strokeActive || this.project.isPlaceholder) return;
+    const p = this.project;
+    const src = p.layer;
+    if (src.kind !== 'drawings' || src.guide) return;
+    const group = src.cel ?? src.id;
+    const id = p.newId('L');
+    const count = this.celLayers.length;
+    this.editor.edit('Add art layer', (cc) => {
+      const s = cc.layers.find((l) => l.id === src.id);
+      if (!s || s.kind !== 'drawings') return;
+      s.cel = group;
+      const made = drawingsLayer(id, `${s.name} \u00b7 ${count + 1}`, s.exposures.map((e) => ({ drawing: p.newDrawing().id, length: e.length })), p.width, p.height, cc.width, cc.height);
+      made.start = s.start;
+      made.in = s.in;
+      made.out = s.out;
+      made.transform = structuredClone(s.transform);
+      made.parent = s.parent;
+      made.label = s.label;
+      made.cel = group;
+      cc.layers.splice(cc.layers.indexOf(s), 0, made);
+    });
+    this.focusLayer(id);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
   /** A new drawings layer above the one being drawn on, starting at the playhead; draw on it. */
   addDrawLayer(): void {
     if (this.live) return;
@@ -1756,6 +1794,23 @@ export class App {
     const r = fn(beforeEx);
     if (r.ex === beforeEx) return;
     const rip = this.rippleFor(layerId, beforeEx, r.ex);
+    // linked art layers: every layer in this cel group takes the same cels (each keeps its own art)
+    const linked = celMembers(this.project.comp, layerId).map((m) => ({
+      id: m.id,
+      before: m.exposures,
+      after: syncExposures(beforeEx, r.ex, m.exposures, () => this.project.newDrawing().id),
+    }));
+    if (rip && linked.length)
+      rip.after = rip.after.map((l) => {
+        const k = linked.find((x) => x.id === l.id);
+        return k && l.kind === 'drawings' ? ({ ...l, exposures: k.after } as Layer) : l;
+      });
+    const setLinked = (which: 'before' | 'after') => {
+      for (const k of linked) {
+        const m = this.project.comps.get(compId)?.layers.find((x) => x.id === k.id);
+        if (m && m.kind === 'drawings') m.exposures = k[which];
+      }
+    };
     const setLayers = (layers: Layer[] | null, dur: number | null) => {
       const c = this.project.comps.get(compId);
       if (!c || !layers) return false;
@@ -1782,6 +1837,7 @@ export class App {
           if (!setLayers(rip ? rip.after : null, rip?.durAfter ?? null)) {
             const l = find();
             if (l) l.exposures = r.ex;
+            setLinked('after');
           }
           this.frame = place(r.frame, r.ex);
           this.requestRender();
@@ -1795,6 +1851,7 @@ export class App {
           if (!setLayers(rip ? rip.before : null, rip?.durBefore ?? null)) {
             const l = find();
             if (l) l.exposures = beforeEx;
+            setLinked('before');
           }
           this.frame = place(beforeFrame, beforeEx);
           this.requestRender();

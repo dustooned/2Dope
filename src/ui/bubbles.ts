@@ -39,6 +39,8 @@ export class Bubbles {
   private readonly modeName = el('span', { class: 'bub-name' });
   level: UiLevel = 'simple';
   private sig = '';
+  /** The Layers bubble shows this cel's linked layers in the context bar. */
+  private layersOpen = false;
 
   constructor(private readonly app: App, stage: HTMLElement, private readonly hooks: BubbleHooks) {
     if (hooks.flip) {
@@ -108,7 +110,7 @@ export class Bubbles {
   }
 
   private toolsFor(ws: Workspace): [ToolKey, string, string][] {
-    if (this.flipOn) return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', '']];
+    if (this.flipOn) return [['brush', 'Brush', 'brush'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso']];
     if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     if (ws === 'time') return [['flip', 'Flipbook', 'flipbook'], ['onion', 'Onion', 'onion'], ['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
@@ -132,7 +134,7 @@ export class Bubbles {
         a.setFillMode('lasso');
         break;
       case 'color': this.hooks.colorPanel(b); break;
-      case 'layers': this.hooks.layers(b); break;
+      case 'layers': this.layersOpen = !this.layersOpen; break;
       case 'flip': a.flipToBlank(); break;
       case 'onion': a.toggleOnion(); break;
     }
@@ -148,7 +150,8 @@ export class Bubbles {
     const sel = !!a.spatialSelection;
     const xp = a.transformParams;
     const flip = this.flipOn;
-    const sig = [this.level, ws, flip, cur, a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
+    const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
+    const sig = [this.level, ws, flip, cur, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
     this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Animate', motion: 'Move', board: 'Story' }[ws];
@@ -160,7 +163,7 @@ export class Bubbles {
     for (const [k, label, icon] of this.toolsFor(ws)) {
       const b = icon ? this.bubble(label, icon, label) : el('button', { type: 'button', class: 'bub bub-color', title: 'Colour', 'aria-label': 'Colour' });
       if (k === 'color') b.style.setProperty('--chip', a.color);
-      const on = k === cur || (k === 'onion' && a.onion.enabled) || (k === 'flip' && a.blankPage);
+      const on = k === 'layers' ? this.layersOpen : k === cur || (k === 'onion' && a.onion.enabled) || (k === 'flip' && a.blankPage);
       b.setAttribute('aria-pressed', String(on));
       b.addEventListener('click', () => this.pickTool(k, b));
       this.tools.append(b);
@@ -169,7 +172,15 @@ export class Bubbles {
     // context: only what the chosen tool needs
     this.ctx.replaceChildren();
     const add = (...c: HTMLElement[]) => this.ctx.append(...c);
-    if (xp) {
+    if (this.layersOpen && (ws === 'draw' || ws === 'time') && !xp) {
+      // tight layer control: only this cel's linked layers, front first; tap one to draw on it
+      const me = a.project.isPlaceholder ? '' : a.project.activeLayer;
+      cels.forEach((l) => {
+        add(this.chip(l.name, l.id === me ? 'You draw on this layer' : `Draw on ${l.name}`, l.id === me, () => { if (l.id !== me) a.pickLayer(l.id); this.sig = ''; this.update(); }));
+      });
+      add(this.chip('+ Layer', 'A new art layer for these cels: same frames and timing, its own drawing', false, () => { a.addCelLayer(); this.sig = ''; this.update(); }));
+      if (!flip) add(this.chip('All layers', 'Every layer of the shot', false, (b) => this.hooks.layers(b)));
+    } else if (xp) {
       const step = (label: string, title: string, patch: () => Partial<XParams>) => this.chip(label, title, false, () => a.setTransform(patch()));
       add(
         step('− Size', 'Smaller', () => ({ scale: xp.scale / 1.1 })),
