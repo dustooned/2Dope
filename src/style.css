@@ -4190,3 +4190,6 @@ body.eyedropping #canvas { cursor: crosshair; }
 .xs-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail.more { background: transparent; }
 .rail.more .rail-more { color: var(--muted); font-size: 12px; }
+body.ui-simple .motion [data-dup], body.ui-clean .motion [data-dup] { display: none !important; }
+.mmore { min-height: 32px; display: flex; align-items: center; padding-left: 8px; }
+.mmore-btn { color: var(--muted); font-size: 12px; min-height: 30px; }

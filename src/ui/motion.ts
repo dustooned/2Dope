@@ -73,6 +73,8 @@ export class MotionPanel {
   private cell = loadNum(ZOOM_KEY, 28, 8, 80);
   private rowH = loadNum(ROW_KEY, 44, 32, 72);
   private signature = '';
+  /** Simple screen: every layer row shows (otherwise the selected layers, their linked layers and cameras). */
+  private allRows = (() => { try { return localStorage.getItem('2dope.motion.allRows') === '1'; } catch { return false; } })();
   private drag: Drag | null = null;
   private startX = 0;
   private readonly pointers = new Map<number, { x: number; y: number }>();
@@ -132,6 +134,8 @@ export class MotionPanel {
       this.update();
     });
     this.groupBtn = btn('Group', 'Put the selected layers into a new comp (a precomp)', () => void this.groupSelected());
+    // the Motion bubbles already offer these: the simple screen hides them here
+    const dup = (b: HTMLElement) => { b.dataset.dup = ''; return b; };
     const rowA = row(
       this.crumbsEl,
       group(
@@ -142,16 +146,16 @@ export class MotionPanel {
         this.fpsSel,
       ),
       group(
-        btn('+ Drawing', 'A new drawings layer at the playhead', () => ed.addLayer('drawings')),
+        dup(btn('+ Drawing', 'A new drawings layer at the playhead', () => ed.addLayer('drawings'))),
         btn('+ Null', 'An empty handle to parent other layers to', () => ed.addLayer('null')),
-        btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera')),
+        dup(btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera'))),
       ),
       group(
         btn('↑', 'Move the selected layer up', () => ed.primary && ed.reorder(ed.primary.id, -1)),
         btn('↓', 'Move the selected layer down', () => ed.primary && ed.reorder(ed.primary.id, 1)),
         this.multiBtn,
-        this.groupBtn,
-        this.splitBtn,
+        dup(this.groupBtn),
+        dup(this.splitBtn),
         this.delBtn,
       ),
     );
@@ -259,7 +263,8 @@ export class MotionPanel {
     // cheap signature: a counter for edits, plus what else changes how rows look
     let content = 0;
     for (const l of c.layers) if (l.kind === 'drawings') for (const e of l.exposures) content += e.length + 1;
-    const sig = `${c.id}|${ed.rev}|${ed.selected.join(',')}|${[...ed.keys].join(',')}|${[...ed.open].join(',')}|${this.cell}|${this.rowH}|${content}|${app.compEnd}`;
+    const simple = !document.body.classList.contains('ui-full');
+    const sig = `${simple}|${this.allRows}|${c.id}|${ed.rev}|${ed.selected.join(',')}|${[...ed.keys].join(',')}|${[...ed.open].join(',')}|${this.cell}|${this.rowH}|${content}|${app.compEnd}`;
     // never rebuild the rows under a finger that is dragging one of them
     if (sig !== this.signature && !this.drag && !this.scrubbing) {
       this.signature = sig;
@@ -406,8 +411,16 @@ export class MotionPanel {
     ruler.append(corner, rr);
     this.grid.append(ruler);
 
-    // layers
-    for (const l of c.layers) {
+    // layers. On the simple screen only the ones you work with show (the selected layers, their
+    // linked art layers, cameras); the rest fold into one row, like Draw's timeline
+    const simple = !document.body.classList.contains('ui-full');
+    const picked = new Set(ed.selected);
+    const cels = new Set(c.layers.filter((l) => picked.has(l.id) && l.kind === 'drawings' && l.cel).map((l) => (l.kind === 'drawings' ? l.cel : '')));
+    const keep = (l: (typeof c.layers)[number]) => picked.has(l.id) || l.kind === 'camera' || (l.kind === 'drawings' && !!l.cel && cels.has(l.cel));
+    const folding = simple && c.layers.length > 4 && picked.size > 0;
+    const hidden = folding ? c.layers.filter((l) => !keep(l)).length : 0;
+    const shown = folding && !this.allRows ? c.layers.filter(keep) : c.layers;
+    for (const l of shown) {
       this.grid.append(this.layerRow(l, end));
       if (ed.open.has(l.id)) {
         for (const n of ed.rowsOf(l)) this.grid.append(this.propRow(l, n, end));
@@ -418,6 +431,18 @@ export class MotionPanel {
           }
         }
       }
+    }
+    if (hidden) {
+      const more = el('div', { class: 'mrow mmore' });
+      const b = el('button', { type: 'button', class: 'mmore-btn', title: this.allRows ? 'Show only the selected layers, their linked layers and cameras' : 'Show every layer' }, this.allRows ? '\u25be Fewer layers' : `\u25b8 ${hidden} more layer${hidden === 1 ? '' : 's'}`);
+      b.addEventListener('click', () => {
+        this.allRows = !this.allRows;
+        try { localStorage.setItem('2dope.motion.allRows', this.allRows ? '1' : '0'); } catch { /* optional */ }
+        this.signature = '';
+        this.update();
+      });
+      more.append(b);
+      this.grid.append(more);
     }
     if (!c.layers.length) {
       const empty = el('div', { class: 'mempty' });

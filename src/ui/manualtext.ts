@@ -286,6 +286,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-17', title: 'A calmer Motion', items: ['On the simple screen, Motion lists the selected layers, their linked layers and cameras; the rest fold into one row (tap to see all). Its toolbar keeps frame stepping, fps, + Null, up / down, Select and Delete; adding layers and cameras, grouping and splitting are in the Motion bubbles.'] },
   { date: '2026-10-17', title: 'A calmer timeline', items: ['The timeline rows in Draw and Timing show the layer you draw on, its linked art layers and the board; every other layer folds into one row (▸ 9 more layers). Tap it to see them all, tap Fewer layers to fold them again. The X-sheet Show line opens the layer cards instead of listing every layer.'] },
   { date: '2026-10-17', title: 'Image brush tips', items: ['Brush Studio > Tip: Import image uses a picture as the brush tip (like Procreate’s shape source); white or opaque parts paint, black or see-through parts do not. Round goes back to the round tip. Save the brush to My brushes to keep it. Brush files (.abr, .brushset) come next.'] },
   { date: '2026-10-17', title: 'Smudge', items: ['The Smudge bubble (next to Brush) drags the paint under your stroke along, on Line or Fill, at the brush size. Softer and Stronger set how much paint it carries. Each smudge is one undo step.'] },
