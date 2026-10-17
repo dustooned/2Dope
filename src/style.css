@@ -4106,3 +4106,19 @@ body.quick .bub-modes, body.quick .bub-tools, body.quick .bub-ctx, body.ui-hidde
 }
 body.ui-simple .paint-target, body.ui-clean .paint-target { top: 66px; left: 56px; transform: none; max-width: calc(50% - 60px); }
 @media (max-width: 700px) { body.ui-simple .paint-target, body.ui-clean .paint-target { top: 176px; left: 8px; max-width: calc(100% - 16px); } }
+
+/* Flip: beginner mode. Drawing bubbles at the bottom of the canvas; no timeline. */
+.flip-row { position: absolute; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); padding: 6px; border-radius: 22px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); }
+.flip-row[hidden] { display: none; }
+.flip-list { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.flip-cel { position: relative; flex: 0 0 auto; width: 64px; height: 50px; min-height: 50px; padding: 0; border-radius: 12px; overflow: hidden; border: 2px solid transparent; background: #fff; }
+.flip-cel canvas { display: block; width: 100%; height: 100%; }
+.flip-cel.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.flip-num { position: absolute; right: 4px; bottom: 2px; font-size: 10px; color: #333; }
+.flip-add { background: var(--panel-2); color: var(--text); font-size: 26px; line-height: 1; border: 2px dashed var(--line); }
+.flip-btn { width: 50px; height: 50px; min-height: 50px; padding: 0; border-radius: 50%; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
+.flip-btn .lbl { display: none; }
+.flip-nudge { position: absolute; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 16px; background: var(--panel); border: 1px solid var(--accent); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); }
+.flip-nudge[hidden] { display: none; }
+body.flipmode .tracks-handle, body.flipmode #strip, body.flipmode .audio-tracks, body.flipmode #splitter, body.flipmode .paint-target, body.flipmode #stats { display: none !important; }
+body.quick .flip-row, body.quick .flip-nudge, body.ui-full .flip-row, body.ui-full .flip-nudge { display: none !important; }

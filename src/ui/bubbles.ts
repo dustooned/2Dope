@@ -19,6 +19,8 @@ export interface BubbleHooks {
   colorPanel(anchor: HTMLElement): void;
   layers(anchor: HTMLElement): void;
   fit(): void;
+  /** Flip: the beginner drawing-only mode (a sub-mode of Draw). */
+  flip?: { on(): boolean; set(on: boolean): void };
 }
 
 type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'flip' | 'onion' | 'layers';
@@ -39,11 +41,22 @@ export class Bubbles {
   private sig = '';
 
   constructor(private readonly app: App, stage: HTMLElement, private readonly hooks: BubbleHooks) {
-    const modes: [Workspace, string, string][] = [['draw', 'Draw', 'draw'], ['time', 'Animate', 'flipbook'], ['motion', 'Move', 'motion'], ['board', 'Story', 'board']];
+    if (hooks.flip) {
+      const flip = this.bubble('Flip', 'flipbook', 'Flip: just draw frame after frame, no timing yet');
+      flip.dataset.mode = 'flip';
+      flip.addEventListener('click', () => hooks.flip!.set(true));
+      this.modes.append(flip);
+    }
+    const modes: [Workspace, string, string][] = [['draw', 'Draw', 'draw'], ['time', 'Animate', 'time'], ['motion', 'Move', 'motion'], ['board', 'Story', 'board']];
     for (const [ws, label, icon] of modes) {
       const b = this.bubble(label, icon, `${label}`);
       b.dataset.ws = ws;
-      b.addEventListener('click', () => app.setWorkspace(ws));
+      b.addEventListener('click', () => {
+        hooks.flip?.set(false);
+        app.setWorkspace(ws);
+        this.sig = '';
+        this.update();
+      });
       this.modes.append(b);
     }
     this.modes.append(this.modeName);
@@ -90,7 +103,12 @@ export class Bubbles {
     return a.tool as ToolKey;
   }
 
+  private get flipOn(): boolean {
+    return !!this.hooks.flip?.on() && this.app.workspace === 'draw';
+  }
+
   private toolsFor(ws: Workspace): [ToolKey, string, string][] {
+    if (this.flipOn) return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', '']];
     const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso']];
     if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     if (ws === 'time') return [['flip', 'Flipbook', 'flipbook'], ['onion', 'Onion', 'onion'], ['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
@@ -129,9 +147,11 @@ export class Bubbles {
     const cur = this.current();
     const sel = !!a.spatialSelection;
     const xp = a.transformParams;
-    const sig = [this.level, ws, cur, a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
-    for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws));
-    this.modeName.textContent = { draw: 'Draw', time: 'Animate', motion: 'Move', board: 'Story' }[ws];
+    const flip = this.flipOn;
+    const sig = [this.level, ws, flip, cur, a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
+    for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
+    this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
+    this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Animate', motion: 'Move', board: 'Story' }[ws];
     if (sig === this.sig) return;
     this.sig = sig;
 
@@ -161,6 +181,8 @@ export class Bubbles {
         this.chip('✓ Apply', 'Keep it (Enter)', false, () => a.applyTransform()),
         this.chip('✕ Cancel', 'Put it back (Esc)', false, () => a.cancelTransform()),
       );
+    } else if (flip) {
+      if (cur === 'brush' || cur === 'eraser') add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)));
     } else if ((ws === 'draw' || ws === 'time') && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
       add(
         this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)),

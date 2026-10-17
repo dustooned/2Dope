@@ -19,6 +19,7 @@ import { MotionPanel } from './ui/motion';
 import { Splitter } from './ui/splitter';
 import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
+import { FlipMode } from './ui/flipmode';
 import { Bubbles } from './ui/bubbles';
 import { TracksSheet } from './ui/sheet';
 import { Strip } from './ui/strip';
@@ -514,20 +515,27 @@ app.onFrameChange = chain(app.onFrameChange, () => {
   if (app.workspace === 'motion') motion.update();
 });
 app.onToolChange = chain(app.onToolChange, () => quick.update());
+// Flip: the beginner mode (draw frame after frame; a row of drawing bubbles; nudge to the timeline later).
+const flipMode = new FlipMode(app, $('#stage'), () => {
+  app.setWorkspace('time');
+  if (sheet.current === 'peek') sheet.set('half');
+});
 // Bubbles: mode and tool bubbles plus a context bar; the level button steps clean / simple / full.
 const bubbles = new Bubbles(app, $('#stage'), {
+  flip: { on: () => flipMode.on, set: (on) => flipMode.set(on) },
   brushLibrary: (anchor) => brushLib.toggle(anchor),
   colorPanel: (anchor) => colorPanel.toggle(anchor),
   layers: (anchor) => layersPop.toggle(anchor),
   fit: () => app.fit(),
 });
 app.onToolChange = chain(app.onToolChange, () => bubbles.update());
-app.onFrameChange = chain(app.onFrameChange, () => bubbles.update());
+app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); });
+flipMode.onChange = () => { bubbles.update(); setTimeout(() => app.fit(), 60); };
 app.onColorChange = chain(app.onColorChange, () => bubbles.update());
-app.onWorkspaceChange = chain(app.onWorkspaceChange, () => bubbles.update());
+app.onWorkspaceChange = chain(app.onWorkspaceChange, () => { if (app.workspace !== 'draw' && flipMode.on) flipMode.set(false); bubbles.update(); flipMode.update(); });
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
-app.onThumbs = () => strip.update();
+app.onThumbs = () => { strip.update(); flipMode.update(); };
 // Inside a precomp: the toolbar shows where you are, and ☰ has a way back out.
 const crumbBtn = $<HTMLButtonElement>('#crumb');
 const backOut = $<HTMLButtonElement>('[data-menu="backout"]');
