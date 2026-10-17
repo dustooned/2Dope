@@ -4132,3 +4132,30 @@ body.quick .flip-row, body.quick .flip-nudge, body.ui-full .flip-row, body.ui-fu
 .bub-chip.icon { width: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .bub-chip.icon .lbl { display: none; }
 .bub-chip.icon .ico { width: 22px; height: 22px; }
+
+/* Layer cards (Draw, simple screen): Procreate-style list with thumbnails */
+.layercards { position: fixed; z-index: 150; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 16px; background: rgba(38, 38, 45, 0.98); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55); overflow: hidden; }
+.layercards[hidden] { display: none; }
+.lc-head { display: flex; align-items: center; gap: 6px; }
+.lc-title { flex: 1; font-weight: 600; padding-left: 4px; }
+.lc-icon { width: 40px; height: 40px; min-height: 40px; padding: 0; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; }
+.lc-icon .lbl { display: none; }
+.lc-icon[data-state="fade"] { opacity: 0.6; }
+.lc-icon[data-state="hide"] { opacity: 0.35; }
+.lc-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; touch-action: pan-y; padding: 2px; }
+.lc-card { display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 6px; border-radius: 12px; background: var(--panel-2); border: 2px solid transparent; cursor: pointer; user-select: none; transition: transform 0.05s; }
+.lc-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--panel-2)); }
+.lc-card.off .lc-thumb, .lc-card.off .lc-info { opacity: 0.45; }
+.lc-card.linked { box-shadow: inset 4px 0 0 #ffd24a; }
+.lc-card.lifting { position: relative; z-index: 2; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); opacity: 0.95; }
+.lc-thumb { width: 72px; height: 48px; border-radius: 6px; flex: 0 0 auto; }
+.lc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-tags { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-eye { width: 40px; height: 40px; min-height: 40px; padding: 0; border-radius: 12px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
+.lc-eye .lbl { display: none; }
+.lc-eye[aria-pressed="false"] { opacity: 0.4; }
+.lc-options { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 2px 8px 10px; }
+.lc-opt { min-height: 40px; padding: 0 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; }
+.lc-opt.danger { color: #ff8a9a; }
+body.ui-simple #stats, body.ui-clean #stats { display: none !important; }

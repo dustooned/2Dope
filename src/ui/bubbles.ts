@@ -19,6 +19,8 @@ export interface BubbleHooks {
   colorPanel(anchor: HTMLElement): void;
   layers(anchor: HTMLElement): void;
   fit(): void;
+  /** Layer cards with thumbnails (Draw); without it, Layers shows the linked layers as chips. */
+  layerCards?: (anchor: HTMLElement) => void;
   /** Flip: the beginner drawing-only mode (a sub-mode of Draw). */
   flip?: { on(): boolean; set(on: boolean): void };
 }
@@ -137,7 +139,11 @@ export class Bubbles {
         a.setFillMode('lasso');
         break;
       case 'color': this.hooks.colorPanel(b); break;
-      case 'layers': this.layersOpen = !this.layersOpen; break;
+      case 'layers':
+        // anchored to the tool bar itself: the bubble is rebuilt when tools change
+        if (!this.flipOn && this.hooks.layerCards) this.hooks.layerCards(this.tools);
+        else this.layersOpen = !this.layersOpen;
+        break;
       case 'flip': a.flipToBlank(); break;
       case 'onion': a.toggleOnion(); break;
     }

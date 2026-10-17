@@ -19,6 +19,7 @@ import { MotionPanel } from './ui/motion';
 import { Splitter } from './ui/splitter';
 import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
+import { LayerCards } from './ui/layercards';
 import { FlipMode } from './ui/flipmode';
 import { Bubbles } from './ui/bubbles';
 import { TracksSheet } from './ui/sheet';
@@ -551,7 +552,9 @@ const flipMode = new FlipMode(app, $('#stage'), () => {
   if (sheet.current === 'peek') sheet.set('half');
 });
 // Bubbles: mode and tool bubbles plus a context bar; the level button steps clean / simple / full.
+const layerCards = new LayerCards(app);
 const bubbles = new Bubbles(app, $('#stage'), {
+  layerCards: (anchor) => layerCards.toggle(anchor),
   flip: { on: () => flipMode.on, set: (on) => flipMode.set(on) },
   brushLibrary: (anchor) => brushLib.toggle(anchor),
   colorPanel: (anchor) => colorPanel.toggle(anchor),
@@ -559,13 +562,14 @@ const bubbles = new Bubbles(app, $('#stage'), {
   fit: () => app.fit(),
 });
 app.onToolChange = chain(app.onToolChange, () => bubbles.update());
-app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); });
+app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
+app.history.onChange = chain(app.history.onChange, () => layerCards.update());
 flipMode.onChange = () => { bubbles.update(); setTimeout(() => app.fit(), 60); };
 app.onColorChange = chain(app.onColorChange, () => bubbles.update());
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => { if (app.workspace !== 'draw' && flipMode.on) flipMode.set(false); bubbles.update(); flipMode.update(); });
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
-app.onThumbs = () => { strip.update(); flipMode.update(); };
+app.onThumbs = () => { strip.update(); flipMode.update(); layerCards.update(); };
 // Inside a precomp: the toolbar shows where you are, and ☰ has a way back out.
 const crumbBtn = $<HTMLButtonElement>('#crumb');
 const backOut = $<HTMLButtonElement>('[data-menu="backout"]');
