@@ -203,3 +203,62 @@ export function scaleWidthAt<T extends Pt & { w?: number }>(points: T[], anchors
   }
   return out;
 }
+
+/** A curved point's two Bezier handles, as offsets from the point. */
+export interface Handles {
+  inx: number;
+  iny: number;
+  outx: number;
+  outy: number;
+}
+
+/** Handles that describe the line as drawn around anchor `k` (a third of the way along each side). */
+export function defaultHandles(points: Pt[], anchors: number[], k: number): Handles {
+  const ai = anchors[k]!;
+  const a = points[ai]!;
+  const prev = anchors[k - 1], next = anchors[k + 1];
+  const back = prev === undefined ? a : points[Math.round(ai - (ai - prev) / 3)]!;
+  const fwd = next === undefined ? a : points[Math.round(ai + (next - ai) / 3)]!;
+  return { inx: back.x - a.x, iny: back.y - a.y, outx: fwd.x - a.x, outy: fwd.y - a.y };
+}
+
+/** Re-lay the points strictly between `i0` and `i1` on the cubic Bezier with control points `c1`, `c2`. */
+export function cubicSpan<T extends Pt>(points: T[], i0: number, i1: number, c1: Pt, c2: Pt): T[] {
+  if (i1 - i0 < 2) return points;
+  const out = points.map((p) => ({ ...p }));
+  const p0 = points[i0]!, p3 = points[i1]!;
+  for (let i = i0 + 1; i < i1; i++) {
+    const t = (i - i0) / (i1 - i0), u = 1 - t;
+    out[i]!.x = u * u * u * p0.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * p3.x;
+    out[i]!.y = u * u * u * p0.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * p3.y;
+  }
+  return out;
+}
+
+/** Which section (span between anchors k and k + 1) the line point nearest (x, y) belongs to; -1 for none. */
+export function sectionAt(points: Pt[], anchors: number[], x: number, y: number): number {
+  if (anchors.length < 2) return -1;
+  let best = 0, bestD = Infinity;
+  points.forEach((p, i) => {
+    const d = Math.hypot(p.x - x, p.y - y);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  for (let k = 0; k < anchors.length - 1; k++) if (best >= anchors[k]! && best <= anchors[k + 1]!) return k;
+  return anchors.length - 2;
+}
+
+/** Thicker or thinner over whole sections (k = span from anchor k to k + 1), from the starting multipliers. */
+export function scaleSections<T extends Pt & { w?: number }>(points: T[], anchors: number[], sections: number[], f: number): T[] {
+  const out = points.map((p) => ({ ...p }));
+  const done = new Set<number>();
+  for (const k of sections) {
+    const a = anchors[k], b = anchors[k + 1];
+    if (a === undefined || b === undefined) continue;
+    for (let i = a; i <= b; i++) {
+      if (done.has(i)) continue;
+      done.add(i);
+      out[i]!.w = Math.max(0.05, Math.min(20, (points[i]!.w ?? 1) * f));
+    }
+  }
+  return out;
+}

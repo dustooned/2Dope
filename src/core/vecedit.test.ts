@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allStraight, anchorsOf, isClosed, joinStrokes, moveAnchor, movePoint, nearestStroke, scaleWidthAt, setPointMode, snapTarget } from './vecedit';
+import { allStraight, anchorsOf, cubicSpan, defaultHandles, isClosed, joinStrokes, moveAnchor, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget } from './vecedit';
 
 const line = (pts: [number, number][], step = 1) => {
   const out: { x: number; y: number; pressure: number }[] = [];
@@ -107,5 +107,31 @@ describe('width at a point', () => {
     expect(out[50]!.w).toBeLessThan(2);
     expect(out[250]!.w).toBeUndefined();
     expect(pts[100]!.w).toBeUndefined();
+  });
+});
+
+describe('bezier handles and sections', () => {
+  it('default handles point along the line a third of the way to each neighbour', () => {
+    const pts = line([[0, 0], [90, 0], [180, 0]]);
+    const h = defaultHandles(pts, [0, 90, 180], 1);
+    expect(h).toEqual({ inx: -30, iny: 0, outx: 30, outy: 0 });
+  });
+
+  it('a cubic span keeps its ends and bows towards its control points', () => {
+    const pts = line([[0, 0], [100, 0]]);
+    const out = cubicSpan(pts, 0, 100, { x: 33, y: 60 }, { x: 66, y: 60 });
+    expect(out[0]).toMatchObject({ x: 0, y: 0 });
+    expect(out[100]).toMatchObject({ x: 100, y: 0 });
+    expect(out[50]!.y).toBeCloseTo(45);
+  });
+
+  it('finds the section under a tap and thickens only chosen sections', () => {
+    const pts: { x: number; y: number; pressure: number; w?: number }[] = line([[0, 0], [100, 0], [200, 0], [300, 0]]);
+    const anchors = [0, 100, 200, 300];
+    expect(sectionAt(pts, anchors, 150, 4)).toBe(1);
+    const out = scaleSections(pts, anchors, [0, 2], 2);
+    expect(out[50]!.w).toBe(2);
+    expect(out[150]!.w).toBeUndefined();
+    expect(out[250]!.w).toBe(2);
   });
 });

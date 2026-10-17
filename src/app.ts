@@ -1,4 +1,4 @@
-import { allStraight, anchorsOf, joinStrokes, movePoint, nearestStroke, scaleWidthAt, setPointMode, snapTarget, type PointMode } from './core/vecedit';
+import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
 import { History } from './core/history';
@@ -321,7 +321,7 @@ export class App {
 
   /** True while a stroke is being drawn (autosave waits for it to end). */
   get strokeActive(): boolean {
-    return this.live !== null || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag;
+    return this.live !== null || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag;
   }
 
   get viewW(): number {
@@ -580,6 +580,10 @@ export class App {
   /** Vector point editing: one vector line of this drawing, its anchor points draggable, its width adjustable. */
   private ve: {
     d: Drawing; id: string; sel: number | null;
+    /** Chosen sections (span k runs from anchor k to anchor k + 1), for section thickness. */
+    sections: Set<number>;
+    /** Dragging one of a curved point's Bezier handles. */
+    hdrag: { id: number; k: number; which: 'in' | 'out'; anchors: number[]; base: StrokeRecord; before: StrokeRecord[]; h: Handles } | null;
     drag: {
       id: number; k: number; x: number; y: number; anchors: number[]; base: StrokeRecord; before: StrokeRecord[]; moved: boolean; timer: number;
       /** Points of this drawing's vector lines a dragged point can snap onto. */
@@ -588,6 +592,25 @@ export class App {
   } | null = null;
   /** Straight or curved, per line and anchor point index (unset = the default below). */
   private pointModes = new Map<string, Map<number, PointMode>>();
+  /** Bezier handles a curved point was given (unset = as drawn). */
+  private pointHandles = new Map<string, Map<number, Handles>>();
+  /** A line's anchors, found once and kept while its point count stays the same, so editing never adds or drops points. */
+  private anchorCache = new Map<string, { n: number; anchors: number[] }>();
+
+  private anchorsFor(rec: StrokeRecord): number[] {
+    const c = this.anchorCache.get(rec.id);
+    if (c && c.n === rec.points.length) return c.anchors;
+    const anchors = anchorsOf(rec.points);
+    this.anchorCache.set(rec.id, { n: rec.points.length, anchors });
+    return anchors;
+  }
+
+  /** Handles of anchor k: the ones set, or the line as drawn; a straight point has none. */
+  private handlesOf(rec: StrokeRecord, anchors: number[], k: number): Handles {
+    const pi = anchors[k]!;
+    if (this.modeOf(rec.id, pi) === 'straight') return { inx: 0, iny: 0, outx: 0, outy: 0 };
+    return this.pointHandles.get(rec.id)?.get(pi) ?? defaultHandles(rec.points, anchors, k);
+  }
   /** New points start straight (sharp corners) instead of curved. */
   straightDefault = loadJSON<boolean>('2dope.points.straight') ?? false;
   /** Dragged points snap onto other points of this drawing's vector lines. */
@@ -637,7 +660,7 @@ export class App {
     const ve = this.ve;
     const rec = this.pointStroke;
     if (!ve || !rec) return;
-    const anchors = anchorsOf(rec.points);
+    const anchors = this.anchorsFor(rec);
     const k = anchors.indexOf(pointIndex);
     if (k < 0) return;
     const mode: PointMode = this.modeOf(rec.id, pointIndex) === 'straight' ? 'curve' : 'straight';
@@ -656,9 +679,10 @@ export class App {
     const ve = this.ve;
     const rec = this.pointStroke;
     if (!ve || !rec) return;
-    const anchors = anchorsOf(rec.points);
+    const anchors = this.anchorsFor(rec);
     const before = ve.d.vectors;
     this.pointModes.set(rec.id, new Map(anchors.map((i) => [i, 'straight' as PointMode])));
+    this.pointHandles.delete(rec.id);
     this.replaceStroke({ ...rec, points: allStraight(rec.points, anchors) });
     this.pushVectors('Straight lines', ve.d, before);
     this.onToolChange();
@@ -695,7 +719,7 @@ export class App {
       this.onNotice?.('Draw a line with the Vector pen first, then edit its points.');
       return false;
     }
-    this.ve = { d, id: rec.id, sel: null, drag: null };
+    this.ve = { d, id: rec.id, sel: null, drag: null, sections: new Set(), hdrag: null };
     this.requestRender();
     this.onToolChange();
     return true;
@@ -731,12 +755,18 @@ export class App {
   }
 
   /** Width changes the whole line, or only around the chosen point. Remembered per device. */
-  pointWidthScope: 'all' | 'point' = loadJSON<'all' | 'point'>('2dope.points.widthScope') === 'point' ? 'point' : 'all';
+  pointWidthScope: 'all' | 'point' | 'section' = ((v) => (v === 'point' || v === 'section' ? v : 'all'))(loadJSON<string>('2dope.points.widthScope'));
 
-  setPointWidthScope(s: 'all' | 'point'): void {
+  setPointWidthScope(s: 'all' | 'point' | 'section'): void {
     this.pointWidthScope = s;
     saveJSON('2dope.points.widthScope', s);
     this.onToolChange();
+  }
+
+  /** Changes when the chosen point or sections change (not while a width is being pulled). */
+  get pointChoiceSig(): string {
+    const ve = this.ve;
+    return ve ? `${ve.sel}|${[...ve.sections].join(',')}` : '';
   }
 
   /** What the width readout shows: the line's size, or the chosen point's multiplier. */
@@ -744,6 +774,10 @@ export class App {
     const rec = this.pointStroke;
     if (!rec) return '';
     const sel = this.ve?.sel ?? null;
+    if (this.pointWidthScope === 'section') {
+      const n = this.ve?.sections.size ?? 0;
+      return n ? `${n} section${n === 1 ? '' : 's'}` : 'tap the line';
+    }
     if (this.pointWidthScope === 'point') return sel === null ? 'tap a point' : `\u00d7${(Math.round((rec.points[sel]?.w ?? 1) * 100) / 100).toString()}`;
     return `${Math.round(rec.brush.size * 10) / 10} px`;
   }
@@ -758,12 +792,18 @@ export class App {
       this.onNotice?.('Tap a point first, then make it thicker or thinner.');
       return;
     }
+    if (this.pointWidthScope === 'section' && !ve.sections.size) {
+      this.onNotice?.('Tap the line between two points to choose a section (tap more for several).');
+      return;
+    }
     if (!this.wBase) this.wBase = { before: ve.d.vectors, rec };
     const b = this.wBase.rec;
     if (this.pointWidthScope === 'point' && sel !== null) {
-      const anchors = anchorsOf(b.points);
+      const anchors = this.anchorsFor(b);
       const k = anchors.indexOf(sel);
       if (k >= 0) this.replaceStroke({ ...b, points: scaleWidthAt(b.points, anchors, k, f) });
+    } else if (this.pointWidthScope === 'section') {
+      this.replaceStroke({ ...b, points: scaleSections(b.points, this.anchorsFor(b), [...ve.sections], f) });
     } else this.replaceStroke({ ...b, brush: { ...b.brush, size: Math.max(0.5, Math.min(400, b.brush.size * f)) } });
     this.onToolChange();
   }
@@ -772,7 +812,7 @@ export class App {
     const w = this.wBase;
     const ve = this.ve;
     this.wBase = null;
-    if (w && ve) this.pushVectors(this.pointWidthScope === 'point' ? 'Point width' : 'Line width', ve.d, w.before);
+    if (w && ve) this.pushVectors(this.pointWidthScope === 'point' ? 'Point width' : this.pointWidthScope === 'section' ? 'Section width' : 'Line width', ve.d, w.before);
   }
 
   /** One step thinner or thicker. */
@@ -786,13 +826,47 @@ export class App {
     const rec = this.pointStroke;
     if (!rec || !rec.points.length) return;
     const z = this.view.zoom;
-    const anchors = this.ve?.drag?.anchors ?? anchorsOf(rec.points);
+    const anchors = this.ve?.drag?.anchors ?? this.anchorsFor(rec);
     g.save();
     g.lineWidth = 1.5 / z;
     g.strokeStyle = '#4aa3ff';
     g.beginPath();
     rec.points.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
     g.stroke();
+    // chosen sections glow
+    const ve = this.ve;
+    if (ve?.sections.size) {
+      g.save();
+      g.lineWidth = 10 / z;
+      g.lineCap = 'round';
+      g.strokeStyle = 'rgba(255, 210, 74, 0.55)';
+      for (const k of ve.sections) {
+        const a0 = anchors[k], a1 = anchors[k + 1];
+        if (a0 === undefined || a1 === undefined) continue;
+        g.beginPath();
+        for (let i = a0; i <= a1; i++) (i === a0 ? g.moveTo : g.lineTo).call(g, rec.points[i]!.x, rec.points[i]!.y);
+        g.stroke();
+      }
+      g.restore();
+    }
+    // a chosen curved point shows its Bezier handles
+    const sk = ve && ve.sel !== null ? anchors.indexOf(ve.sel) : -1;
+    if (ve && sk >= 0 && this.modeOf(rec.id, ve.sel!) === 'curve') {
+      const a = rec.points[ve.sel!]!;
+      const h = ve.hdrag?.h ?? this.handlesOf(rec, anchors, sk);
+      for (const w of ['in', 'out'] as const) {
+        if ((w === 'in' && sk === 0) || (w === 'out' && sk === anchors.length - 1)) continue;
+        const hx = a.x + (w === 'in' ? h.inx : h.outx), hy = a.y + (w === 'in' ? h.iny : h.outy);
+        g.beginPath();
+        g.moveTo(a.x, a.y);
+        g.lineTo(hx, hy);
+        g.stroke();
+        g.beginPath();
+        g.arc(hx, hy, 7 / z, 0, Math.PI * 2);
+        g.fillStyle = '#4aa3ff';
+        g.fill();
+      }
+    }
     anchors.forEach((i, k) => {
       const p = rec.points[i]!;
       g.beginPath();
@@ -2716,13 +2790,13 @@ export class App {
     // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
-      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id)) this.onUp(e, cancelled);
+      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
     window.addEventListener('pointercancel', (e) => lifted(e, true));
     c.addEventListener('lostpointercapture', (e) => {
       // a pen that is no longer pressed has lifted
-      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id))) this.onUp(e, false);
+      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id))) this.onUp(e, false);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -2751,8 +2825,23 @@ export class App {
       const p = this.toPoint(e, e.timeStamp);
       const rec = this.pointStroke;
       if (rec) {
-        const anchors = anchorsOf(rec.points);
+        const anchors = this.anchorsFor(rec);
         const r = 24 / this.view.zoom;
+        // a curved point's handles come first (they sit close to it)
+        const sk = ve.sel === null ? -1 : anchors.indexOf(ve.sel);
+        if (sk >= 0 && this.modeOf(rec.id, ve.sel!) === 'curve') {
+          const a = rec.points[ve.sel!]!;
+          const h = this.handlesOf(rec, anchors, sk);
+          const grab = (['in', 'out'] as const).find((w) => {
+            if ((w === 'in' && sk === 0) || (w === 'out' && sk === anchors.length - 1)) return false;
+            const hx = a.x + (w === 'in' ? h.inx : h.outx), hy = a.y + (w === 'in' ? h.iny : h.outy);
+            return Math.hypot(hx - p.x, hy - p.y) <= 20 / this.view.zoom;
+          });
+          if (grab) {
+            ve.hdrag = { id: e.pointerId, k: sk, which: grab, anchors, base: rec, before: ve.d.vectors, h: { ...h } };
+            return;
+          }
+        }
         let k = -1, best = r;
         anchors.forEach((i, j) => {
           const q = rec.points[i]!;
@@ -2773,7 +2862,7 @@ export class App {
           const cands: SnapPoint[] = [];
           for (const v of ve.d.vectors) {
             if (v.tool !== 'pen' || !v.points.length) continue;
-            const an = v.id === rec.id ? anchors : anchorsOf(v.points);
+            const an = v.id === rec.id ? anchors : this.anchorsFor(v);
             an.forEach((pi, j) => {
               if (v.id === rec.id && Math.abs(j - k) <= 1) return;
               const q = v.points[pi]!;
@@ -2788,7 +2877,21 @@ export class App {
       }
       const pens = ve.d.vectors.filter((v) => v.tool === 'pen');
       const hit = nearestStroke(pens, p.x, p.y, 20 / this.view.zoom);
-      if (hit >= 0) { ve.id = pens[hit]!.id; this.requestRender(); this.onToolChange(); }
+      if (hit >= 0 && rec && pens[hit]!.id === rec.id) {
+        // a tap on this line picks (or drops) the section under it, for section thickness
+        const k = sectionAt(rec.points, this.anchorsFor(rec), p.x, p.y);
+        if (k >= 0) {
+          if (ve.sections.has(k)) ve.sections.delete(k);
+          else ve.sections.add(k);
+          if (ve.sections.size && this.pointWidthScope !== 'section') this.setPointWidthScope('section');
+        }
+      } else if (hit >= 0) {
+        ve.id = pens[hit]!.id;
+        ve.sel = null;
+        ve.sections.clear();
+      }
+      this.requestRender();
+      this.onToolChange();
       return;
     }
     if (this.xf) {
@@ -3051,6 +3154,37 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    const hd = this.ve?.hdrag;
+    if (hd && e.pointerId === hd.id) {
+      const p = this.toPoint(e, e.timeStamp);
+      const b = hd.base, A = hd.anchors, k = hd.k;
+      const a = b.points[A[k]!]!;
+      const vx = p.x - a.x, vy = p.y - a.y;
+      const len = Math.hypot(vx, vy) || 1;
+      const h = hd.h;
+      // a curved point stays smooth: the other handle turns to stay opposite, keeping its length
+      if (hd.which === 'out') {
+        const l = Math.hypot(h.inx, h.iny);
+        Object.assign(h, { outx: vx, outy: vy, inx: (-vx / len) * l, iny: (-vy / len) * l });
+      } else {
+        const l = Math.hypot(h.outx, h.outy);
+        Object.assign(h, { inx: vx, iny: vy, outx: (-vx / len) * l, outy: (-vy / len) * l });
+      }
+      let pts = b.points;
+      const next = A[k + 1], prev = A[k - 1];
+      if (next !== undefined) {
+        const hn = this.handlesOf(b, A, k + 1);
+        const q = b.points[next]!;
+        pts = cubicSpan(pts, A[k]!, next, { x: a.x + h.outx, y: a.y + h.outy }, { x: q.x + hn.inx, y: q.y + hn.iny });
+      }
+      if (prev !== undefined) {
+        const hp = this.handlesOf(b, A, k - 1);
+        const q = b.points[prev]!;
+        pts = cubicSpan(pts, prev, A[k]!, { x: q.x + hp.outx, y: q.y + hp.outy }, { x: a.x + h.inx, y: a.y + h.iny });
+      }
+      this.replaceStroke({ ...b, points: pts });
+      return;
+    }
     const vd = this.ve?.drag;
     if (vd && e.pointerId === vd.id) {
       const p = this.toPoint(e, e.timeStamp);
@@ -3130,6 +3264,18 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    const hd = this.ve?.hdrag;
+    if (hd && e.pointerId === hd.id && this.ve) {
+      const ve = this.ve;
+      ve.hdrag = null;
+      if (cancelled) { ve.d.vectors = hd.before; this.touch(ve.d); this.requestRender(); return; }
+      let m = this.pointHandles.get(hd.base.id);
+      if (!m) this.pointHandles.set(hd.base.id, (m = new Map()));
+      m.set(hd.anchors[hd.k]!, hd.h);
+      this.pushVectors('Curve handle', ve.d, hd.before);
+      this.requestRender();
+      return;
+    }
     const vd = this.ve?.drag;
     if (vd && e.pointerId === vd.id && this.ve) {
       const ve = this.ve;
@@ -3148,7 +3294,10 @@ export class App {
         ve.d.vectors = ve.d.vectors.filter((v) => v.id !== other.id).map((v) => (v.id === mine.id ? joined : v));
         this.pointModes.delete(mine.id);
         this.pointModes.delete(other.id);
+        this.pointHandles.delete(mine.id);
+        this.pointHandles.delete(other.id);
         ve.sel = null;
+        ve.sections.clear();
         this.touch(ve.d);
         this.pushVectors('Join lines', ve.d, vd.before);
         this.onToolChange();
