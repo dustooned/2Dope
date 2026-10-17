@@ -19,6 +19,8 @@ export interface BubbleHooks {
   colorPanel(anchor: HTMLElement): void;
   layers(anchor: HTMLElement): void;
   fit(): void;
+  /** The QuickShape Edit shape menu (shown in the context bar right after a snap). */
+  editShape?: (anchor: HTMLElement) => void;
   /** Layer cards with thumbnails (Draw); without it, Layers shows the linked layers as chips. */
   layerCards?: (anchor: HTMLElement) => void;
   /** Flip: the beginner drawing-only mode (a sub-mode of Draw). */
@@ -86,6 +88,7 @@ export class Bubbles {
       try { localStorage.setItem(LEVEL_KEY, l); } catch { /* optional */ }
     }
     this.sig = '';
+    this.app.onToolChange(); // labels that depend on the level (the paint target) refresh too
     this.update();
     setTimeout(() => this.hooks.fit(), 60);
   }
@@ -226,7 +229,8 @@ export class Bubbles {
     const flip = this.flipOn;
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
-    const sig = [this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
+    const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
+    const sig = [shape, a.lastShape?.choice ?? '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
     this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Animate', motion: 'Move', board: 'Story' }[ws];
@@ -247,6 +251,8 @@ export class Bubbles {
     // context: only what the chosen tool needs
     this.ctx.replaceChildren();
     const add = (...c: HTMLElement[]) => this.ctx.append(...c);
+    // right after a snap: change the shape from here (no floating button on the simple screen)
+    if (shape) add(this.chip('Edit shape', 'Change what the stroke snapped to, or keep your own stroke', false, (b) => this.hooks.editShape!(b), 'editpoints'));
     if (editing) {
       add(...this.widthControls());
     } else if (this.layersOpen && (ws === 'draw' || ws === 'time') && !xp) {
@@ -260,14 +266,14 @@ export class Bubbles {
     } else if (xp) {
       const step = (label: string, title: string, patch: () => Partial<XParams>) => this.chip(label, title, false, () => a.setTransform(patch()));
       add(
-        step('− Size', 'Smaller', () => ({ scale: xp.scale / 1.1 })),
-        step('+ Size', 'Bigger', () => ({ scale: xp.scale * 1.1 })),
-        step('⟲ 15°', 'Rotate left', () => ({ rotate: xp.rotate - 15 })),
-        step('⟳ 15°', 'Rotate right', () => ({ rotate: xp.rotate + 15 })),
-        this.chip('Flip ↔', 'Mirror left to right', xp.flipH, () => a.flipTransform('h')),
-        this.chip('Flip ↕', 'Mirror top to bottom', xp.flipV, () => a.flipTransform('v')),
-        this.chip('✓ Apply', 'Keep it (Enter)', false, () => a.applyTransform()),
-        this.chip('✕ Cancel', 'Put it back (Esc)', false, () => a.cancelTransform()),
+        step('\u2212', 'Smaller', () => ({ scale: xp.scale / 1.1 })),
+        step('+', 'Bigger', () => ({ scale: xp.scale * 1.1 })),
+        step('\u27f2', 'Rotate left 15\u00b0', () => ({ rotate: xp.rotate - 15 })),
+        step('\u27f3', 'Rotate right 15\u00b0', () => ({ rotate: xp.rotate + 15 })),
+        this.chip('\u2194', 'Mirror left to right', xp.flipH, () => a.flipTransform('h')),
+        this.chip('\u2195', 'Mirror top to bottom', xp.flipV, () => a.flipTransform('v')),
+        this.chip('Apply', 'Keep it (Enter)', false, () => a.applyTransform(), 'check'),
+        this.chip('Cancel', 'Put it back (Esc)', false, () => a.cancelTransform(), 'close'),
       );
     } else if (flip) {
       if (cur === 'brush' || cur === 'eraser') add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)));

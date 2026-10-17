@@ -4159,3 +4159,13 @@ body.quick .flip-row, body.quick .flip-nudge, body.ui-full .flip-row, body.ui-fu
 .lc-opt { min-height: 40px; padding: 0 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; }
 .lc-opt.danger { color: #ff8a9a; }
 body.ui-simple #stats, body.ui-clean #stats { display: none !important; }
+/* simple screen: the timeline row keeps the drawing essentials as icons; More shows the rest */
+.strip-more { display: none; }
+body.ui-simple .strip-more { display: inline-flex; }
+body.ui-simple .strip-bar:not(.show-extra) [data-extra] { display: none !important; }
+body.ui-simple .strip-bar button.has-ico .lbl { display: none; }
+body.ui-simple .strip-bar button.has-ico { min-width: 40px; padding: 0 8px; }
+body.ui-simple .shape-pop, body.ui-clean .shape-pop { display: none !important; }
+/* context bars stay one row: extra chips scroll sideways instead of wrapping */
+.bub-ctx { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
+.bub-ctx::-webkit-scrollbar { display: none; }

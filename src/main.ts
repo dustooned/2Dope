@@ -70,9 +70,12 @@ const syncTools = () => {
   const drawing = app.blankPage ? 'Blank page' : `Drawing ${app.drawing.num}`;
   const target = selection ? 'Area selection' : plane === 'fill' ? 'Fill' : 'Line';
   const warning = layer.locked ? ' · Locked' : !layer.visible || !app.partVisible(plane) ? ' · Hidden' : '';
+  // the simple screen says only where you paint (the comp path only inside a group)
+  const simple = !document.body.classList.contains('ui-full');
+  const inGroup = app.editor.crumbs().length > 1;
   paintTarget.textContent = app.project.isPlaceholder
-    ? `${path} › New layer on paint · ${target}`
-    : `${path} › ${layer.name} · ${drawing} · ${target}${warning}`;
+    ? simple ? `New layer · ${target}` : `${path} › New layer on paint · ${target}`
+    : simple ? `${inGroup ? `${path} › ` : ''}${layer.name} · ${target}${warning}` : `${path} › ${layer.name} · ${drawing} · ${target}${warning}`;
   paintTarget.title = `${paintTarget.textContent}. Open Layers to choose where you draw.`;
   paintTarget.setAttribute('aria-label', `Paint target: ${paintTarget.textContent}`);
   paintTarget.classList.toggle('fill-target', !selection && plane === 'fill');
@@ -80,7 +83,7 @@ const syncTools = () => {
 const paintTarget = document.createElement('button');
 paintTarget.type = 'button';
 paintTarget.className = 'paint-target';
-paintTarget.addEventListener('click', () => layersPop.toggle(paintTarget));
+paintTarget.addEventListener('click', () => (document.body.classList.contains('ui-full') ? layersPop.toggle(paintTarget) : layerCards.toggle(paintTarget)));
 document.querySelector('#stage')?.append(paintTarget);
 
 // QuickShape: after a snap, an Edit shape button (Procreate style) to switch the shape or keep the stroke
@@ -103,10 +106,10 @@ const syncShape = () => {
   shapeTimer = window.setTimeout(() => (shapeBtn.hidden = true), 8000);
 };
 app.onShapeChange = syncShape;
-shapeBtn.addEventListener('click', () => {
+const openShapeMenu = (anchor: HTMLElement) => {
   if (!app.shapeEditable) return syncShape();
   clearTimeout(shapeTimer);
-  const r = shapeBtn.getBoundingClientRect();
+  const r = anchor.getBoundingClientRect();
   const cur = app.lastShape?.choice;
   showContextMenu(r.left, r.bottom + 4, [
     ...SHAPE_CHOICES.map((c) => ({ label: c.label, checked: cur === c.id, run: () => app.swapShape(c.id) })),
@@ -114,7 +117,8 @@ shapeBtn.addEventListener('click', () => {
     { label: '✎ Keep my stroke', checked: cur === 'stroke', run: () => app.swapShape('stroke') },
     ...(app.lastShape?.rec.tool === 'pen' ? [{ sep: true } as const, { label: '◇ Edit points', run: () => { const id = app.lastShape?.rec.id; app.enterPointEdit(id); } }, { label: 'Points after hold', checked: app.pointsAfterHold, run: () => app.setPointsAfterHold(!app.pointsAfterHold) }, { label: 'New points straight', checked: app.straightDefault, run: () => app.setStraightDefault(!app.straightDefault) }] : []),
   ]);
-});
+};
+shapeBtn.addEventListener('click', () => openShapeMenu(shapeBtn));
 for (const b of partButtons) b.addEventListener('click', () => app.togglePart(b.dataset.partEye === 'fill' ? 'fill' : 'line'));
 for (const b of planeButtons) b.addEventListener('click', () => app.setPlane(b.dataset.plane === 'fill' ? 'fill' : 'line'));
 // tapping the tool you already use opens the brush library (Procreate style)
@@ -555,6 +559,7 @@ const flipMode = new FlipMode(app, $('#stage'), () => {
 const layerCards = new LayerCards(app);
 const bubbles = new Bubbles(app, $('#stage'), {
   layerCards: (anchor) => layerCards.toggle(anchor),
+  editShape: (anchor) => openShapeMenu(anchor),
   flip: { on: () => flipMode.on, set: (on) => flipMode.set(on) },
   brushLibrary: (anchor) => brushLib.toggle(anchor),
   colorPanel: (anchor) => colorPanel.toggle(anchor),
@@ -562,6 +567,7 @@ const bubbles = new Bubbles(app, $('#stage'), {
   fit: () => app.fit(),
 });
 app.onToolChange = chain(app.onToolChange, () => bubbles.update());
+app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
 flipMode.onChange = () => { bubbles.update(); setTimeout(() => app.fit(), 60); };

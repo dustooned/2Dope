@@ -230,6 +230,23 @@ export class Strip {
     this.layerChip = btn('Layer', 'The layer you draw on. Tap for all layers.', () => app.openLayers?.(this.layerChip), 'layerchip');
     decorate(this.layerChip, 'layers');
     rowA.append(this.layerChip, nav, this.frameLabel, this.fpsSel, edit, flip, zoom);
+    // On the simple screen the row keeps what you use while drawing (previous / next frame, new,
+    // duplicate, delete, flipbook, onion) as icons; the rest waits behind More.
+    const extra = (e: Element | null | undefined) => e?.setAttribute('data-extra', '');
+    extra(this.layerChip);
+    extra(nav.firstElementChild);
+    extra(nav.lastElementChild);
+    extra(this.frameLabel);
+    extra(this.fpsSel);
+    for (const b of edit.querySelectorAll('button')) if (/^(Split|Select)/.test(b.textContent?.trim() ?? '')) extra(b);
+    extra(this.lockBtn);
+    extra(this.playBtn); // Play lives on the tracks bar
+    extra(zoom);
+    const more = btn('More \u22ef', 'More timeline tools: layer, frame count, fps, split, select, scrub lock, zoom', () => {
+      bar.classList.toggle('show-extra');
+      more.setAttribute('aria-pressed', String(bar.classList.contains('show-extra')));
+    }, 'strip-more');
+    rowA.append(more);
     bar.append(rowA);
 
     // Timing tools live in the Time workspace (mounted into the X-sheet by main.ts): holds,
