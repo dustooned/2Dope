@@ -19,7 +19,7 @@ import { valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { guardTouchContextMenus } from './ui/touchcontext';
 import { CompEditor } from './compedit';
-import { drawComp, drawLayersAround } from './view/composite';
+import { clipGroups, drawClipGroup, drawComp, drawLayerAround, drawLayersAround } from './view/composite';
 import { drawMotionOverlay } from './view/overlay';
 import {
   addAfter,
@@ -265,6 +265,8 @@ export class App {
   private dpr = 1;
   private fitted = false;
   private needsRender = true;
+  /** Scratch for Alpha Lock's live preview. */
+  private lockScratch: HTMLCanvasElement | null = null;
   /** Last marching-ants redraw (the selection outline crawls). */
   private antsAt = 0;
   private live: LiveStroke | null = null;
@@ -2817,6 +2819,15 @@ export class App {
       );
     } else {
       const c = this.raster.commit(post > 0);
+      if (c && rec.tool !== 'eraser' && this.project.layer.kind === 'drawings' && this.project.layer.alphaLock) {
+        // Alpha Lock: the stroke changes colour only where there was paint; coverage stays as it was
+        const b = c.before.data, a = c.after.data;
+        for (let i = 0; i < a.length; i += 4) {
+          if (b[i + 3] === 0) { a[i] = b[i]!; a[i + 1] = b[i + 1]!; a[i + 2] = b[i + 2]!; a[i + 3] = 0; }
+          else a[i + 3] = b[i + 3]!;
+        }
+        putPixels(live.canvas, c.rect, c.after);
+      }
       // the eraser on the Line plane also cuts vector lines (up to their crossings, or whole)
       const vBefore = d.vectors;
       const vAfter = rec.tool === 'eraser' && live.plane === 'line' ? eraseVectors(d.vectors, rec.points, rec.brush.size / 2, this.vectorErase) : null;
@@ -3856,9 +3867,14 @@ export class App {
     const activeId = this.project.layer.id;
     const others = this.showLayers ? this.otherAlpha : 0;
     const around = others > 0 || this.boardAlpha > 0;
-    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha);
+    // a clipping group the layer you draw on belongs to is drawn as one unit, live
+    const idx = comp.layers.findIndex((l) => l.id === activeId);
+    let group: { base: number; members: number[] } | null = null;
+    for (const [b, ms] of clipGroups(comp.layers)) if (b === idx || ms.includes(idx)) group = { base: b, members: ms };
+    const exclude = group ? new Set([group.base, ...group.members].map((i) => comp.layers[i]!.id)) : undefined;
+    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha, exclude);
     this.drawOnion(g);
-    if (this.blankPage && !this.live) {
+    if (this.blankPage && !this.live && !group) {
       if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha);
       return;
     }
@@ -3870,38 +3886,75 @@ export class App {
       for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
       return;
     }
-    const rasterLive = live && live.record.tool !== 'pen' ? live : null;
-    const fillSrc = rasterLive && rasterLive.plane === 'fill' ? this.raster.displaySource() : d.fill;
-    const lineSrc = rasterLive && rasterLive.plane === 'line' ? this.raster.displaySource() : d.line;
-    // the layer's Line / Fill parts: hidden or faded here too (a hidden part being drawn on shows faintly)
-    const fillA = this.partAlpha('fill');
-    const lineA = this.partAlpha('line');
-    g.globalAlpha = fillA;
-    if (fillSrc && fillA > 0) g.drawImage(fillSrc, 0, 0);
-    g.globalAlpha = lineA;
-    if (lineA > 0) g.drawImage(lineSrc, 0, 0);
-    g.globalAlpha = 1;
+    const base = g.getTransform();
+    const paintActive = (x: CanvasRenderingContext2D, partScale = 1) => {
+      if (this.blankPage && !live) return;
+      x.setTransform(base);
+      const rasterLive = live && live.record.tool !== 'pen' ? live : null;
+      // Alpha Lock: the stroke being drawn shows only over paint already there (the plane before the stroke is the mask)
+      const locked = !!rasterLive && rasterLive.record.tool !== 'eraser' && this.project.layer.kind === 'drawings' && this.project.layer.alphaLock === true;
+      const liveSrc = (plane: Plane, under: HTMLCanvasElement | null) => {
+        const src = this.raster.displaySource();
+        if (!locked || !under) return src;
+        const t = this.lockScratch ??= document.createElement('canvas');
+        if (t.width !== src.width || t.height !== src.height) { t.width = src.width; t.height = src.height; }
+        const tg = t.getContext('2d')!;
+        tg.setTransform(1, 0, 0, 1, 0, 0);
+        tg.globalCompositeOperation = 'source-over';
+        tg.clearRect(0, 0, t.width, t.height);
+        tg.drawImage(src, 0, 0);
+        tg.globalCompositeOperation = 'destination-in';
+        tg.drawImage(under, 0, 0);
+        tg.globalCompositeOperation = 'source-over';
+        void plane;
+        return t;
+      };
+      const fillSrc = rasterLive && rasterLive.plane === 'fill' ? liveSrc('fill', d.fill) : d.fill;
+      const lineSrc = rasterLive && rasterLive.plane === 'line' ? liveSrc('line', d.line) : d.line;
+      // the layer's Line / Fill parts: hidden or faded here too (a hidden part being drawn on shows faintly)
+      const fillA = this.partAlpha('fill') * partScale;
+      const lineA = this.partAlpha('line') * partScale;
+      x.globalAlpha = fillA;
+      if (fillSrc && fillA > 0) x.drawImage(fillSrc, 0, 0);
+      x.globalAlpha = lineA;
+      if (lineA > 0) x.drawImage(lineSrc, 0, 0);
+      x.globalAlpha = 1;
 
-    // Predicted input: drawn ahead of the real stroke this frame only (lower perceived latency).
-    if (live && live.predicted.length && live.record.brush.smoothing < 0.15) {
-      if (live.record.tool === 'pen') {
-        // drawn with the live pen stroke below
-      } else {
+      // Predicted input: drawn ahead of the real stroke this frame only (lower perceived latency).
+      if (live && live.predicted.length && live.record.brush.smoothing < 0.15 && live.record.tool !== 'pen' && !locked) {
         const w = live.walker.clone();
         const ghost = live.predicted.flatMap((p) => w.push(p));
-        this.raster.drawGhost(g, ghost);
+        this.raster.drawGhost(x, ghost);
       }
-    }
 
-    g.globalAlpha = lineA;
-    if (lineA > 0) for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
-    g.globalAlpha = 1;
-    if (live && live.record.tool === 'pen') {
-      const extra = live.record.brush.smoothing < 0.15 ? live.predicted : [];
-      drawVectorStroke(g, { ...live.record, points: [...live.record.points, ...extra] });
-    }
+      x.globalAlpha = lineA;
+      if (lineA > 0) for (const v of d.vectors) drawVectorStroke(x, v, this.lengthOf(v));
+      x.globalAlpha = 1;
+      if (live && live.record.tool === 'pen') {
+        const extra = live.record.brush.smoothing < 0.15 ? live.predicted : [];
+        drawVectorStroke(x, { ...live.record, points: [...live.record.points, ...extra] });
+      }
+    };
 
-    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha);
+    if (group) {
+      const layerAt = (i: number) => comp.layers[i]!;
+      const draw = (i: number, alpha: number) => (x: CanvasRenderingContext2D) => {
+        if (i === idx) paintActive(x, alpha);
+        else drawLayerAround(x, this.project, comp, this.frame, activeId, layerAt(i).blend === 'normal' ? layerAt(i) : ({ ...layerAt(i), blend: 'normal' } as typeof comp.layers[number]), alpha, base);
+      };
+      const shown = (i: number) => i === idx || (others > 0 && layerAt(i).visible);
+      drawClipGroup(
+        g,
+        draw(group.base, 1),
+        group.base === idx ? 1 : others,
+        layerAt(group.base).blend,
+        group.members.filter(shown).map((j) => ({ draw: draw(j, j === idx ? 1 : others), blend: layerAt(j).blend })),
+        'draw',
+      );
+      g.setTransform(base);
+    } else paintActive(g);
+
+    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude);
     this.drawFillPath(g);
     this.drawPointEdit(g);
     if (this.view.zoom >= 8) this.drawPixelGrid(g);

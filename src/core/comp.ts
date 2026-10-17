@@ -50,6 +50,10 @@ interface LayerBase {
   cel?: string;
   /** A still layer (background, object): one drawing held for the whole shot, like a Procreate layer. */
   still?: boolean;
+  /** Clipping mask: shows only where the first unclipped layer below has paint (Procreate's clipping mask). */
+  clip?: boolean;
+  /** Alpha Lock: brushes change only pixels that already have paint. */
+  alphaLock?: boolean;
 }
 
 /** Is this layer left out of a final render? */

@@ -74,6 +74,84 @@ function scratchFor(tag: string, w: number, h: number): HTMLCanvasElement {
   return c;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Clipping masks
+
+/** Can this layer clip to the one below? (drawings only; a storyboard guide never does). */
+export const clips = (l: Layer): boolean => l.kind === 'drawings' && l.clip === true && !l.guide;
+
+/** Clipping groups: each base layer's index -> the indices of the clipped layers stacked on it (layers[0] is the top). */
+export function clipGroups(layers: Layer[]): Map<number, number[]> {
+  const out = new Map<number, number[]>();
+  for (let i = layers.length - 1; i >= 0; i--) {
+    if (clips(layers[i]!)) continue;
+    const members: number[] = [];
+    for (let j = i - 1; j >= 0 && clips(layers[j]!); j--) members.push(j);
+    if (members.length) out.set(i, members);
+  }
+  return out;
+}
+
+function fresh(tag: string, w: number, h: number): CanvasRenderingContext2D {
+  const c = scratchFor(tag, w, h);
+  const x = c.getContext('2d')!;
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  x.globalAlpha = 1;
+  x.globalCompositeOperation = 'source-over';
+  x.clearRect(0, 0, w, h);
+  return x;
+}
+
+/**
+ * Draw a clipping group onto `g`: the base, then each clipped layer only where the base has paint.
+ * `drawMask` draws the base at full strength (its pixels are the mask); the base itself shows at
+ * `baseAlpha` (0 = mask only). Members draw at their own opacity and composite with their blend
+ * mode; the whole group composites with the base's blend mode. Callbacks set their own transforms
+ * (absolute, as on `g`): every scratch canvas has `g`'s size.
+ */
+export function drawClipGroup(
+  g: CanvasRenderingContext2D,
+  drawMask: (x: CanvasRenderingContext2D) => void,
+  baseAlpha: number,
+  baseBlend: BlendMode,
+  members: { draw: (x: CanvasRenderingContext2D) => void; blend: BlendMode }[],
+  key: string,
+): void {
+  const w = g.canvas.width, h = g.canvas.height;
+  const t = g.getTransform();
+  const mask = fresh(`clipm${key}`, w, h);
+  mask.setTransform(t);
+  drawMask(mask);
+  const out = fresh(`clipo${key}`, w, h);
+  if (baseAlpha > 0) {
+    out.globalAlpha = baseAlpha;
+    out.drawImage(mask.canvas, 0, 0);
+    out.globalAlpha = 1;
+  }
+  for (const m of members) {
+    const tmp = fresh(`clipt${key}`, w, h);
+    tmp.setTransform(t);
+    m.draw(tmp);
+    tmp.setTransform(1, 0, 0, 1, 0, 0);
+    tmp.globalAlpha = 1;
+    tmp.globalCompositeOperation = 'destination-in';
+    tmp.drawImage(mask.canvas, 0, 0);
+    tmp.globalCompositeOperation = 'source-over';
+    out.globalCompositeOperation = BLEND[m.blend];
+    out.drawImage(tmp.canvas, 0, 0);
+    out.globalCompositeOperation = 'source-over';
+  }
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = BLEND[baseBlend];
+  g.drawImage(out.canvas, 0, 0);
+  g.restore();
+}
+
+/** A layer's own look with the blend mode left to the caller (used inside clipping groups). */
+const plain = (l: Layer): Layer => (l.blend === 'normal' ? l : ({ ...l, blend: 'normal' } as Layer));
+
 /** Free the compositor's scratch canvases (after an export). */
 export function releaseScratch(): void {
   for (const c of scratch.values()) {
@@ -151,15 +229,33 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     g.fillRect(0, 0, c.width, c.height);
   }
   const view = depth === 0 && opt.camera === false ? ([1, 0, 0, 1, 0, 0] as Mat) : viewMatrix(c, frame, comps);
+  const groups = clipGroups(c.layers);
+  const shows = (l: Layer) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps) || (depth === 0 && opt.skip === l.id) || (opt.export && skippedInExport(l)));
+  const alphaOf = (l: Layer) => opacityAt(l, frame) * (depth === 0 ? (opt.alpha ?? 1) : 1);
+  const matOf = (l: Layer) => base.multiply(toDom(mul(view, worldMatrix(c, l, frame))));
   for (let i = c.layers.length - 1; i >= 0; i--) {
     const l = c.layers[i]!;
-    if (l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps)) continue;
-    if (depth === 0 && opt.skip === l.id) continue;
-    if (opt.export && skippedInExport(l)) continue;
-    const alpha = opacityAt(l, frame) * (depth === 0 ? (opt.alpha ?? 1) : 1);
+    // a clipped layer draws with its base (a clipped layer with nothing to clip to shows nothing)
+    if (clips(l)) continue;
+    if (!shows(l)) continue;
+    const members = groups.get(i);
+    if (members) {
+      drawClipGroup(
+        g,
+        (x) => drawLayer(x, project, c, plain(l), frame, matOf(l), 1, planes, opt, depth),
+        alphaOf(l),
+        l.blend,
+        members.filter((j) => shows(c.layers[j]!) && alphaOf(c.layers[j]!) > 0).map((j) => {
+          const cl = c.layers[j]!;
+          return { draw: (x) => drawLayer(x, project, c, plain(cl), frame, matOf(cl), alphaOf(cl), planes, opt, depth), blend: cl.blend };
+        }),
+        `${depth}`,
+      );
+      continue;
+    }
+    const alpha = alphaOf(l);
     if (alpha <= 0) continue;
-    const m = base.multiply(toDom(mul(view, worldMatrix(c, l, frame))));
-    drawLayer(g, project, c, l, frame, m, alpha, planes, opt, depth);
+    drawLayer(g, project, c, l, frame, matOf(l), alpha, planes, opt, depth);
   }
   g.setTransform(base);
   g.globalAlpha = 1;
@@ -204,22 +300,53 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
  * frame, placed relative to it (the drawn-on layer's page is the view's space). Cameras and nulls
  * are not drawn. `alpha` fades them (a light-table look); hidden layers stay hidden.
  */
-export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, side: 'below' | 'above', alpha = 1, guideAlpha = 1): void {
+export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, side: 'below' | 'above', alpha = 1, guideAlpha = 1, exclude?: Set<string>): void {
   const comps = project.comps;
   const idx = c.layers.findIndex((l) => l.id === activeId);
-  const active = idx >= 0 ? c.layers[idx]! : null;
-  const rel = active ? invert(worldMatrix(c, active, frame)) : IDENTITY;
   const base = g.getTransform();
+  const groups = clipGroups(c.layers);
   for (let i = c.layers.length - 1; i >= 0; i--) {
     const l = c.layers[i]!;
-    if (i === idx || l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps)) continue;
+    if (i === idx || exclude?.has(l.id) || clips(l)) continue;
     // layers[0] is the top; a layer not yet in the comp (a placeholder) goes to the bottom
     const above = idx < 0 || i < idx;
     if ((side === 'above') !== above) continue;
-    const a = opacityAt(l, frame) * (l.guide ? guideAlpha : alpha);
+    if (!showsAround(l, frame, comps)) continue;
+    const members = groups.get(i)?.filter((j) => j !== idx && showsAround(c.layers[j]!, frame, comps));
+    if (members?.length) {
+      drawClipGroup(
+        g,
+        (x) => drawLayerAround(x, project, c, frame, activeId, plain(l), 1, base),
+        aroundAlpha(l, frame, alpha, guideAlpha),
+        l.blend,
+        members.map((j) => {
+          const cl = c.layers[j]!;
+          return { draw: (x) => drawLayerAround(x, project, c, frame, activeId, plain(cl), aroundAlpha(cl, frame, alpha, guideAlpha), base), blend: cl.blend };
+        }),
+        'around',
+      );
+      continue;
+    }
+    const a = aroundAlpha(l, frame, alpha, guideAlpha);
     if (a <= 0) continue;
-    drawLayer(g, project, c, l, frame, base.multiply(toDom(mul(rel, worldMatrix(c, l, frame)))), a, 'all', {}, 0);
+    drawLayerAround(g, project, c, frame, activeId, l, a, base);
   }
+  g.setTransform(base);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+}
+
+const showsAround = (l: Layer, frame: number, comps: ReadonlyMap<string, Comp>) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps));
+const aroundAlpha = (l: Layer, frame: number, alpha: number, guideAlpha: number) => opacityAt(l, frame) * (l.guide ? guideAlpha : alpha);
+
+/**
+ * One layer of the Draw view, placed relative to the layer being drawn on (its page is the view's
+ * space). `base` is the view transform the Draw view started from.
+ */
+export function drawLayerAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, l: Layer, alpha: number, base: DOMMatrix): void {
+  const active = c.layers.find((x) => x.id === activeId);
+  const rel = active ? invert(worldMatrix(c, active, frame)) : IDENTITY;
+  drawLayer(g, project, c, l, frame, base.multiply(toDom(mul(rel, worldMatrix(c, l, frame)))), alpha, 'all', {}, 0);
   g.setTransform(base);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';

@@ -118,7 +118,7 @@ export class LayerCards {
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -167,6 +167,7 @@ export class LayerCards {
       if (l.kind === 'drawings' && l.guide) tags.push('board');
       if (linked) tags.push('linked');
       if (l.kind === 'drawings' && l.still) tags.push('still');
+      if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
       if (l.blend !== 'normal') tags.push(l.blend);
       const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
       if (op < 100) tags.push(`${op}%`);
@@ -178,6 +179,7 @@ export class LayerCards {
       eye.addEventListener('pointerdown', (e) => e.stopPropagation());
       eye.addEventListener('click', (e) => { e.stopPropagation(); app.editor.setFlag(l.id, 'visible', !l.visible); this.update(); });
       if (linked) card.classList.add('linked');
+      if (l.kind === 'drawings' && l.clip) card.classList.add('clipped');
       card.append(this.thumb(l), info, eye);
       this.bindCard(card, l, on);
       list.append(card);
@@ -274,6 +276,20 @@ export class LayerCards {
     if (l.kind === 'drawings' && !l.guide) {
       opt(app.plane === 'line' ? 'Paint Fill' : 'Paint Line', app.plane === 'line' ? 'fillplane' : 'lineplane', 'Switch what brushes paint on: LINE (ink, on top) or FILL (colour, under)', () => { app.setPlane(app.plane === 'line' ? 'fill' : 'line'); this.sig = ''; this.update(); });
       opt('Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => { app.addCelLayer(); this.menuFor = null; this.sig = ''; this.update(); });
+    }
+    if (l.kind === 'drawings' && !l.guide) {
+      const flag = (label: string, title: string, key: 'clip' | 'alphaLock') => {
+        const on = l[key] === true;
+        const b = el('button', { type: 'button', class: `lc-opt${on ? ' on' : ''}`, title, 'aria-pressed': String(on) }, label);
+        b.addEventListener('click', () => {
+          app.editor.edit(on ? `${label} off` : label, (c) => { const x = c.layers.find((y) => y.id === l.id); if (x && x.kind === 'drawings') { if (on) delete x[key]; else x[key] = true; } });
+          this.sig = '';
+          this.update();
+        });
+        box.append(b);
+      };
+      flag('Clipping mask', 'Show this layer only where the layer below has paint', 'clip');
+      flag('Alpha Lock', 'Brushes change only pixels that already have paint', 'alphaLock');
     }
     opt('Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', async () => { await app.duplicateLayer(l.id); this.menuFor = null; this.sig = ''; this.update(); });
     opt('Rename', 'draw', 'Rename this layer', async () => {

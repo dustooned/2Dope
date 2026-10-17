@@ -4175,3 +4175,6 @@ body.ui-simple .board-bar, body.ui-clean .board-bar { display: none; }
 .lc-row input[type=range] { flex: 1; }
 .lc-row select { flex: 1; min-height: 36px; }
 .lc-row output { min-width: 40px; text-align: right; }
+.lc-card.clipped { margin-left: 22px; position: relative; }
+.lc-card.clipped::before { content: '\21B3'; position: absolute; left: -18px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; }
+.lc-opt.on { background: var(--accent); color: #fff; border-color: var(--accent); }
