@@ -788,14 +788,7 @@ export class App {
     const ve = this.ve;
     if (!rec || !ve) return;
     const sel = ve.sel;
-    if (this.pointWidthScope === 'point' && sel === null) {
-      this.onNotice?.('Tap a point first, then make it thicker or thinner.');
-      return;
-    }
-    if (this.pointWidthScope === 'section' && !ve.sections.size) {
-      this.onNotice?.('Tap the line between two points to choose a section (tap more for several).');
-      return;
-    }
+    if (!this.pointWidthReady(false)) return;
     if (!this.wBase) this.wBase = { before: ve.d.vectors, rec };
     const b = this.wBase.rec;
     if (this.pointWidthScope === 'point' && sel !== null) {
@@ -808,6 +801,21 @@ export class App {
     this.onToolChange();
   }
 
+  /** Is there something to make thicker or thinner? `tell` explains what to tap (once per gesture). */
+  pointWidthReady(tell = true): boolean {
+    const ve = this.ve;
+    if (!ve || !this.pointStroke) return false;
+    if (this.pointWidthScope === 'point' && ve.sel === null) {
+      if (tell) this.onNotice?.('Tap a point first, then make it thicker or thinner.');
+      return false;
+    }
+    if (this.pointWidthScope === 'section' && !ve.sections.size) {
+      if (tell) this.onNotice?.('Tap the line between two points to choose a section (tap more for several).');
+      return false;
+    }
+    return true;
+  }
+
   commitPointWidth(): void {
     const w = this.wBase;
     const ve = this.ve;
@@ -817,6 +825,7 @@ export class App {
 
   /** One step thinner or thicker. */
   nudgePointWidth(f: number): void {
+    if (!this.pointWidthReady()) return;
     this.setPointWidthLive(f);
     this.commitPointWidth();
   }
@@ -2889,10 +2898,15 @@ export class App {
         ve.id = pens[hit]!.id;
         ve.sel = null;
         ve.sections.clear();
+      } else {
+        // empty canvas: leave point editing and draw as usual
+        this.exitPointEdit();
       }
-      this.requestRender();
-      this.onToolChange();
-      return;
+      if (this.ve) {
+        this.requestRender();
+        this.onToolChange();
+        return;
+      }
     }
     if (this.xf) {
       // dragging the canvas moves the selection being transformed

@@ -175,7 +175,18 @@ app.onColorChange = chain(app.onColorChange, () => {
   syncColor();
   colorPanel.sync();
 });
-app.onNotice = (m) => files?.toast(m, [], 4000);
+{
+  // the same message at most once every few seconds, so a gesture can never flood the screen
+  let last = '';
+  let lastAt = 0;
+  app.onNotice = (m) => {
+    const now = Date.now();
+    if (m === last && now - lastAt < 4000) return;
+    last = m;
+    lastAt = now;
+    files?.toast(m, [], 4000);
+  };
+}
 const layersPop = new LayersPopover(app);
 const layersBtn = $<HTMLButtonElement>('#layers-btn');
 layersBtn.addEventListener('click', () => layersPop.toggle(layersBtn));

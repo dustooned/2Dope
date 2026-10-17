@@ -94,8 +94,9 @@ export class Bubbles {
     return b;
   }
 
-  private chip(label: string, title: string, on: boolean, fn: (b: HTMLButtonElement) => void): HTMLButtonElement {
-    const b = el('button', { type: 'button', class: `bub-chip${on ? ' on' : ''}`, title, 'aria-pressed': String(on) }, label);
+  private chip(label: string, title: string, on: boolean, fn: (b: HTMLButtonElement) => void, icon?: string): HTMLButtonElement {
+    const b = el('button', { type: 'button', class: `bub-chip${on ? ' on' : ''}${icon ? ' icon' : ''}`, title, 'aria-pressed': String(on), 'aria-label': label }, label);
+    if (icon) decorate(b, icon);
     b.addEventListener('click', () => fn(b));
     return b;
   }
@@ -159,6 +160,7 @@ export class Bubbles {
     meter.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!a.pointWidthReady()) return;
       try { meter.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
       y0 = e.clientY;
       meter.classList.add('active');
@@ -182,9 +184,9 @@ export class Bubbles {
     });
     const sel = a.pointSelMode;
     return [
-      this.chip(sel === 'straight' ? '\u25a1 Straight point' : '\u25cb Curved point', sel ? 'Switch this point between straight and curved (or hold the point)' : 'Tap a point first; hold a point to switch it', sel === 'straight', () => a.togglePoint()),
-      this.chip('All straight', 'Make every point straight: clean lines between the corners', false, () => a.straightenAllPoints()),
-      this.chip('\u2699', 'Point settings: straight by default, snapping, joining, points after hold', this.pointSettings, () => { this.pointSettings = !this.pointSettings; this.sig = ''; this.update(); }),
+      this.chip(sel === 'straight' ? 'Straight point' : 'Curved point', sel ? 'Switch this point between straight and curved (or hold the point)' : 'Tap a point first; hold a point to switch it', sel === 'straight', () => a.togglePoint(), sel === 'straight' ? 'straightpt' : 'curvept'),
+      this.chip('All straight', 'Make every point straight: clean lines between the corners', false, () => a.straightenAllPoints(), 'allstraight'),
+      this.chip('Point settings', 'Point settings: straight by default, snapping, joining, points after hold', this.pointSettings, () => { this.pointSettings = !this.pointSettings; this.sig = ''; this.update(); }, 'gear'),
       ...(this.pointSettings
         ? [
             this.chip('New points straight', 'Points start straight instead of curved', a.straightDefault, () => a.setStraightDefault(!a.straightDefault)),
@@ -195,15 +197,16 @@ export class Bubbles {
         : []),
       this.chip(
         a.pointWidthScope === 'point' ? 'Width: this point' : a.pointWidthScope === 'section' ? 'Width: sections' : 'Width: whole line',
-        'Tap to switch: the whole line, around the chosen point, or the sections you tap on the line',
+        `Width for ${a.pointWidthScope === 'point' ? 'the chosen point' : a.pointWidthScope === 'section' ? 'the sections you tap' : 'the whole line'}. Tap to switch: whole line, point, sections`,
         a.pointWidthScope !== 'all',
         () => a.setPointWidthScope(a.pointWidthScope === 'all' ? 'point' : a.pointWidthScope === 'point' ? 'section' : 'all'),
+        a.pointWidthScope === 'point' ? 'wpoint' : a.pointWidthScope === 'section' ? 'wsection' : 'wline',
       ),
-      this.chip('\u2212 Thinner', 'A step thinner', false, () => { a.nudgePointWidth(1 / 1.15); show(); }),
+      this.chip('Thinner', 'A step thinner', false, () => { a.nudgePointWidth(1 / 1.15); show(); }, 'thinner'),
       meter,
-      this.chip('+ Thicker', 'A step thicker', false, () => { a.nudgePointWidth(1.15); show(); }),
+      this.chip('Thicker', 'A step thicker', false, () => { a.nudgePointWidth(1.15); show(); }, 'thicker'),
       readout,
-      this.chip('\u2713 Done', 'Finish editing points (Enter)', false, () => a.exitPointEdit()),
+      this.chip('Done', 'Finish editing points (Enter, or tap empty canvas)', false, () => a.exitPointEdit(), 'check'),
     ];
   }
 

@@ -6,6 +6,17 @@
  */
 
 const P: Record<string, string> = {
+  editpoints: '<path d="M4 18C8 6 16 6 20 18"/><rect x="2.5" y="16.5" width="3" height="3"/><circle cx="12" cy="9" r="1.8"/><rect x="18.5" y="16.5" width="3" height="3"/>',
+  curvept: '<path d="M3 17C7 7 17 7 21 17"/><circle cx="12" cy="9.5" r="2.6"/>',
+  straightpt: '<path d="M3 17l9-8 9 8"/><rect x="9.4" y="6.4" width="5.2" height="5.2"/>',
+  allstraight: '<path d="M3 18l5-9 5 6 4-8 4 4"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  wline: '<path d="M3 12h18" stroke-width="4"/>',
+  wpoint: '<path d="M3 12h18"/><circle cx="12" cy="12" r="3.5"/>',
+  wsection: '<path d="M3 12h4M17 12h4"/><path d="M8 12h8" stroke-width="5"/>',
+  thinner: '<path d="M3 8h18" stroke-width="1.2"/><path d="M8 16h8"/>',
+  thicker: '<path d="M3 8h18" stroke-width="4"/><path d="M8 16h8M12 12v8"/>',
+  check: '<path d="M4.5 12.5l5 5 10-11"/>',
   select: '<rect x="4" y="4" width="13" height="13" rx="1.5" stroke-dasharray="3 2.4"/><path d="M13 13l7 3-3 1-1 3z"/>',
   expandall: '<path d="M6 5l6 6 6-6"/><path d="M6 13l6 6 6-6"/>',
   collapseall: '<path d="M6 11l6-6 6 6"/><path d="M6 19l6-6 6 6"/>',
