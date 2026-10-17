@@ -108,6 +108,16 @@ export class BoardPanel {
     this.update();
   }
 
+  /** The board view shown now (the bubbles light the matching chip). */
+  get currentView(): 'panels' | 'timeline' | 'split' {
+    return this.view;
+  }
+
+  /** Open the image picker: each image becomes a panel. */
+  pickImages(): void {
+    this.fileIn.click();
+  }
+
   setView(v: 'panels' | 'timeline' | 'split'): void {
     this.view = v;
     try {

@@ -559,6 +559,13 @@ const flipMode = new FlipMode(app, $('#stage'), () => {
 const layerCards = new LayerCards(app);
 const bubbles = new Bubbles(app, $('#stage'), {
   layerCards: (anchor) => layerCards.toggle(anchor),
+  story: {
+    view: () => board.currentView,
+    setView: (v) => board.setView(v),
+    images: () => { if (!app.board) app.createBoard(); board.pickImages(); },
+    exportBoard: () => openBoardExport(app, (m) => app.onNotice?.(m)),
+  },
+  motion: { group: () => motion.group(), split: () => motion.split() },
   editShape: (anchor) => openShapeMenu(anchor),
   flip: { on: () => flipMode.on, set: (on) => flipMode.set(on) },
   brushLibrary: (anchor) => brushLib.toggle(anchor),

@@ -341,6 +341,20 @@ export class MotionPanel {
     } else this.editShiftEl.remove();
   }
 
+  /** Group the selected layers into a comp (the bubbles' Group). */
+  group(): void {
+    if (!this.ed.selected.length) {
+      this.app.onNotice?.('Select the layers to group first (tap Select, then the layers).');
+      return;
+    }
+    void this.groupSelected();
+  }
+
+  /** Split the selected layers at the playhead (the bubbles' Split). */
+  split(): void {
+    this.splitAt();
+  }
+
   private async groupSelected(): Promise<void> {
     const ed = this.ed;
     if (!ed.selected.length) return;

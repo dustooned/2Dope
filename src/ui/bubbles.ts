@@ -1,3 +1,4 @@
+import { EASINGS } from '../core/anim';
 import type { App, Workspace } from '../app';
 import type { Tool } from '../core/stroke';
 import type { XParams } from '../core/selxform';
@@ -23,11 +24,16 @@ export interface BubbleHooks {
   editShape?: (anchor: HTMLElement) => void;
   /** Layer cards with thumbnails (Draw); without it, Layers shows the linked layers as chips. */
   layerCards?: (anchor: HTMLElement) => void;
+  /** Story (Board) actions the bubbles reach. */
+  story?: { view(): 'panels' | 'timeline' | 'split'; setView(v: 'panels' | 'timeline' | 'split'): void; images(): void; exportBoard(): void };
+  /** Motion actions the bubbles reach. */
+  motion?: { group(): void; split(): void };
   /** Flip: the beginner drawing-only mode (a sub-mode of Draw). */
   flip?: { on(): boolean; set(on: boolean): void };
 }
 
-type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'flip' | 'onion' | 'layers';
+type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'flip' | 'onion' | 'layers'
+  | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
 /**
  * Bubbles: a simpler way around the app. Mode bubbles (Draw, Animate, Move, Story) at the top left,
@@ -49,15 +55,24 @@ export class Bubbles {
   private pointSettings = false;
 
   constructor(private readonly app: App, stage: HTMLElement, private readonly hooks: BubbleHooks) {
-    if (hooks.flip) {
-      const flip = this.bubble('Flip', 'flipbook', 'Flip: just draw frame after frame, no timing yet');
-      flip.dataset.mode = 'flip';
-      flip.addEventListener('click', () => hooks.flip!.set(true));
-      this.modes.append(flip);
-    }
-    const modes: [Workspace, string, string][] = [['draw', 'Draw', 'draw'], ['time', 'Animate', 'time'], ['motion', 'Move', 'motion'], ['board', 'Story', 'board']];
-    for (const [ws, label, icon] of modes) {
-      const b = this.bubble(label, icon, `${label}`);
+    // the order of a shot: plan it (Story), sketch it (Flip), draw it, time it, move it
+    const modes: [Workspace | 'flip', string, string, string][] = [
+      ['board', 'Story', 'board', 'Story: panels, captions and the animatic'],
+      ['flip', 'Flip', 'flipbook', 'Flip: just draw frame after frame, no timing yet'],
+      ['draw', 'Draw', 'draw', 'Draw: your art, layer by layer'],
+      ['time', 'Timing', 'time', 'Timing: holds, marks and the exposure sheet'],
+      ['motion', 'Motion', 'motion', 'Motion: move layers, keyframes and the camera'],
+    ];
+    for (const [ws, label, icon, title] of modes) {
+      if (ws === 'flip') {
+        if (!hooks.flip) continue;
+        const flip = this.bubble(label, icon, title);
+        flip.dataset.mode = 'flip';
+        flip.addEventListener('click', () => hooks.flip!.set(true));
+        this.modes.append(flip);
+        continue;
+      }
+      const b = this.bubble(label, icon, title);
       b.dataset.ws = ws;
       b.addEventListener('click', () => {
         hooks.flip?.set(false);
@@ -122,6 +137,8 @@ export class Bubbles {
     const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso']];
     if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     if (ws === 'time') return [['flip', 'Flipbook', 'flipbook'], ['onion', 'Onion', 'onion'], ['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
+    if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard', 'export']];
+    if (ws === 'motion') return [['addlayer', 'New drawing layer', 'plus'], ['camera', 'Add a camera', 'camera'], ['group', 'Group the selected layers', 'layers'], ['split', 'Split at the playhead', 'scissors'], ['autokey', 'Auto-key: every change writes a keyframe', 'key'], ['look', 'Look through the camera', 'eye']];
     return [];
   }
 
@@ -149,6 +166,18 @@ export class Bubbles {
         break;
       case 'flip': a.flipToBlank(); break;
       case 'onion': a.toggleOnion(); break;
+      case 'panel': if (!a.board) a.createBoard(); else a.addPanel(); break;
+      case 'images': this.hooks.story?.images(); break;
+      case 'dup': void a.duplicateSelection(); break;
+      case 'del': a.deleteFrame(); break;
+      case 'play': a.togglePlay(); break;
+      case 'export': this.hooks.story?.exportBoard(); break;
+      case 'addlayer': a.editor.addLayer('drawings'); break;
+      case 'camera': a.editor.addLayer('camera'); break;
+      case 'group': this.hooks.motion?.group(); break;
+      case 'split': this.hooks.motion?.split(); break;
+      case 'autokey': a.editor.autoKey = !a.editor.autoKey; a.editor.onChange(); break;
+      case 'look': a.editor.throughCamera = !a.editor.throughCamera; a.requestRender(); a.editor.onChange(); break;
     }
     this.sig = '';
     this.update();
@@ -230,10 +259,10 @@ export class Bubbles {
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
     const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
-    const sig = [shape, a.lastShape?.choice ?? '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
+    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
-    this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Animate', motion: 'Move', board: 'Story' }[ws];
+    this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
     if (sig === this.sig) return;
     this.sig = sig;
 
@@ -242,7 +271,11 @@ export class Bubbles {
     for (const [k, label, icon] of this.toolsFor(ws)) {
       const b = icon ? this.bubble(label, icon, label) : el('button', { type: 'button', class: 'bub bub-color', title: 'Colour', 'aria-label': 'Colour' });
       if (k === 'color') b.style.setProperty('--chip', a.color);
-      const on = k === 'layers' ? this.layersOpen : k === cur || (k === 'onion' && a.onion.enabled) || (k === 'flip' && a.blankPage);
+      const on = k === 'layers' ? this.layersOpen
+        : k === 'autokey' ? a.editor.autoKey
+        : k === 'look' ? a.editor.throughCamera
+        : k === 'play' ? a.playing
+        : k === cur || (k === 'onion' && a.onion.enabled) || (k === 'flip' && a.blankPage);
       b.setAttribute('aria-pressed', String(on));
       b.addEventListener('click', () => this.pickTool(k, b));
       this.tools.append(b);
@@ -299,6 +332,18 @@ export class Bubbles {
           this.chip('Clear', 'Drop the selection', false, () => a.clearSpatialSelection()),
         );
       } else add(el('span', { class: 'bub-hint' }, 'Draw a loop around what you want'));
+    } else if (ws === 'board') {
+      const st = this.hooks.story;
+      if (st) {
+        for (const [v, label] of [['panels', 'Panels'], ['timeline', 'Timeline'], ['split', 'Split']] as const) add(this.chip(label, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
+      }
+      add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));
+    } else if (ws === 'motion') {
+      // easing for the keys you selected, and how new keys start
+      for (const e of EASINGS) add(this.chip(e.label, `Easing of the selected keys: ${e.label}`, false, () => a.editor.setEasing(e.id)));
+      add(this.chip('Key at start', 'The first key also keeps the old value at frame 0, so motion begins at once', a.editor.keyAtStart, () => { a.editor.keyAtStart = !a.editor.keyAtStart; a.editor.onChange(); }));
+      add(this.chip('Reverse', 'Play the selected keys backwards', false, () => a.editor.reverse()));
+      add(this.chip('Delete key', 'Delete the selected keys', false, () => a.editor.deleteKeys(), 'trash'));
     } else if (ws === 'time') {
       add(
         this.chip('New page', 'A fresh blank page after the last drawing', a.blankPage, () => a.flipToBlank()),

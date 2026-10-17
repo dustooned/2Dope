@@ -18,6 +18,7 @@ const P: Record<string, string> = {
   thicker: '<path d="M3 8h18" stroke-width="4"/><path d="M8 16h8M12 12v8"/>',
   check: '<path d="M4.5 12.5l5 5 10-11"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  key: '<path d="M12 3.5l8.5 8.5-8.5 8.5L3.5 12z"/>',
   select: '<rect x="4" y="4" width="13" height="13" rx="1.5" stroke-dasharray="3 2.4"/><path d="M13 13l7 3-3 1-1 3z"/>',
   expandall: '<path d="M6 5l6 6 6-6"/><path d="M6 13l6 6 6-6"/>',
   collapseall: '<path d="M6 11l6-6 6 6"/><path d="M6 19l6-6 6 6"/>',
