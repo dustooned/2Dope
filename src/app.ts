@@ -1,4 +1,4 @@
-import { allStraight, anchorsOf, joinStrokes, movePoint, nearestStroke, setPointMode, snapTarget, type PointMode } from './core/vecedit';
+import { allStraight, anchorsOf, joinStrokes, movePoint, nearestStroke, scaleWidthAt, setPointMode, snapTarget, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
 import { History } from './core/history';
@@ -730,14 +730,41 @@ export class App {
     this.onDocChanged();
   }
 
+  /** Width changes the whole line, or only around the chosen point. Remembered per device. */
+  pointWidthScope: 'all' | 'point' = loadJSON<'all' | 'point'>('2dope.points.widthScope') === 'point' ? 'point' : 'all';
+
+  setPointWidthScope(s: 'all' | 'point'): void {
+    this.pointWidthScope = s;
+    saveJSON('2dope.points.widthScope', s);
+    this.onToolChange();
+  }
+
+  /** What the width readout shows: the line's size, or the chosen point's multiplier. */
+  get pointWidthLabel(): string {
+    const rec = this.pointStroke;
+    if (!rec) return '';
+    const sel = this.ve?.sel ?? null;
+    if (this.pointWidthScope === 'point') return sel === null ? 'tap a point' : `\u00d7${(Math.round((rec.points[sel]?.w ?? 1) * 100) / 100).toString()}`;
+    return `${Math.round(rec.brush.size * 10) / 10} px`;
+  }
+
   /** Thickness, live (from the meter): `f` times the width the gesture started with. */
   setPointWidthLive(f: number): void {
     const rec = this.pointStroke;
     const ve = this.ve;
     if (!rec || !ve) return;
+    const sel = ve.sel;
+    if (this.pointWidthScope === 'point' && sel === null) {
+      this.onNotice?.('Tap a point first, then make it thicker or thinner.');
+      return;
+    }
     if (!this.wBase) this.wBase = { before: ve.d.vectors, rec };
     const b = this.wBase.rec;
-    this.replaceStroke({ ...b, brush: { ...b.brush, size: Math.max(0.5, Math.min(400, b.brush.size * f)) } });
+    if (this.pointWidthScope === 'point' && sel !== null) {
+      const anchors = anchorsOf(b.points);
+      const k = anchors.indexOf(sel);
+      if (k >= 0) this.replaceStroke({ ...b, points: scaleWidthAt(b.points, anchors, k, f) });
+    } else this.replaceStroke({ ...b, brush: { ...b.brush, size: Math.max(0.5, Math.min(400, b.brush.size * f)) } });
     this.onToolChange();
   }
 
@@ -745,7 +772,7 @@ export class App {
     const w = this.wBase;
     const ve = this.ve;
     this.wBase = null;
-    if (w && ve) this.pushVectors('Line width', ve.d, w.before);
+    if (w && ve) this.pushVectors(this.pointWidthScope === 'point' ? 'Point width' : 'Line width', ve.d, w.before);
   }
 
   /** One step thinner or thicker. */

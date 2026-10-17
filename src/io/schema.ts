@@ -205,7 +205,7 @@ function str(v: unknown, what: string, max = 200): string {
 
 function point(v: unknown): StrokePoint {
   if (!isObj(v)) throw new SchemaError('a stroke point is not an object');
-  return {
+  const out: StrokePoint = {
     x: num(v.x, 'point x', -1e6, 1e6),
     y: num(v.y, 'point y', -1e6, 1e6),
     pressure: num(v.pressure, 'point pressure', 0, 1),
@@ -213,6 +213,9 @@ function point(v: unknown): StrokePoint {
     tiltY: num(v.tiltY ?? 0, 'point tiltY', -90, 90),
     t: num(v.t ?? 0, 'point time', 0, 1e9),
   };
+  // per-point width from point editing (optional; older files have none)
+  if (v.w !== undefined) out.w = num(v.w, 'point width', 0.05, 20);
+  return out;
 }
 
 /** Brush settings from a file: unknown or missing fields fall back to the default brush. */

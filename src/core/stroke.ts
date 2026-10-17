@@ -11,6 +11,8 @@ export interface StrokePoint {
   tiltY: number;
   /** Milliseconds since the stroke started. */
   t: number;
+  /** Width multiplier set by point editing (missing = 1). */
+  w?: number;
 }
 
 export type Tool = 'brush' | 'eraser' | 'pen' | 'fill';

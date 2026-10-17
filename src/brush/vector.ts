@@ -17,7 +17,7 @@ export function vectorWidths(rec: StrokeRecord, totalLength: number): number[] {
       dist += Math.hypot(p.x - q.x, p.y - q.y);
     }
     const s = { pressure: p.pressure, tilt: tiltAmount(p), speed: 0 };
-    let w = (b.size / 2) * evalDynamic(b.sizeDyn, s, hash01(rec.seed, i, 1));
+    let w = (b.size / 2) * evalDynamic(b.sizeDyn, s, hash01(rec.seed, i, 1)) * (p.w ?? 1);
     let f = 1;
     if (b.taperStart > 0) f = Math.min(f, Math.sqrt(Math.min(1, dist / b.taperStart)));
     if (b.taperEnd > 0 && Number.isFinite(totalLength)) {

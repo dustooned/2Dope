@@ -151,7 +151,7 @@ export class Bubbles {
   private widthControls(): HTMLElement[] {
     const a = this.app;
     const readout = el('span', { class: 'bub-hint' });
-    const show = () => { readout.textContent = `${Math.round((a.pointStroke?.brush.size ?? 0) * 10) / 10} px`; };
+    const show = () => { readout.textContent = a.pointWidthLabel; };
     show();
     const meter = el('div', { class: 'bub-meter', role: 'slider', tabindex: '0', 'aria-label': 'Line thickness: pull up for thicker, down for thinner', title: 'Pull up: thicker. Pull down: thinner.' });
     meter.append(el('span', { class: 'bub-meter-fill' }));
@@ -193,6 +193,7 @@ export class Bubbles {
             this.chip('Points after hold', 'Show a vector line\u2019s points right after a hold snaps it', a.pointsAfterHold, () => a.setPointsAfterHold(!a.pointsAfterHold)),
           ]
         : []),
+      this.chip(a.pointWidthScope === 'point' ? 'Width: this point' : 'Width: whole line', 'Tap to switch: thickness for the whole line, or only around the chosen point', a.pointWidthScope === 'point', () => a.setPointWidthScope(a.pointWidthScope === 'point' ? 'all' : 'point')),
       this.chip('\u2212 Thinner', 'A step thinner', false, () => { a.nudgePointWidth(1 / 1.15); show(); }),
       meter,
       this.chip('+ Thicker', 'A step thicker', false, () => { a.nudgePointWidth(1.15); show(); }),
@@ -211,7 +212,7 @@ export class Bubbles {
     const flip = this.flipOn;
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
-    const sig = [this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
+    const sig = [this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
     this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Animate', motion: 'Move', board: 'Story' }[ws];

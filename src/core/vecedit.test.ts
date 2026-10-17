@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allStraight, anchorsOf, isClosed, joinStrokes, moveAnchor, movePoint, nearestStroke, setPointMode, snapTarget } from './vecedit';
+import { allStraight, anchorsOf, isClosed, joinStrokes, moveAnchor, movePoint, nearestStroke, scaleWidthAt, setPointMode, snapTarget } from './vecedit';
 
 const line = (pts: [number, number][], step = 1) => {
   const out: { x: number; y: number; pressure: number }[] = [];
@@ -93,5 +93,19 @@ describe('snapping and joining points', () => {
     expect(joinStrokes(a, 'end', b, 'end').map((p) => p.x)).toEqual([0, 5, 10, 15, 20]);
     const c = [{ x: 0, y: 0 }, { x: -5, y: 0 }, { x: -10, y: 0 }];
     expect(joinStrokes(a, 'start', c, 'start').map((p) => p.x)).toEqual([10, 5, 0, -5, -10]);
+  });
+});
+
+describe('width at a point', () => {
+  it('thickens only around the chosen point, fading to nothing at its neighbours', () => {
+    const pts: { x: number; y: number; pressure: number; w?: number }[] = line([[0, 0], [100, 0], [200, 0], [300, 0]]);
+    const out = scaleWidthAt(pts, [0, 100, 200, 300], 1, 2);
+    expect(out[100]!.w).toBe(2);
+    expect(out[0]!.w).toBe(1);
+    expect(out[200]!.w).toBe(1);
+    expect(out[50]!.w).toBeGreaterThan(1);
+    expect(out[50]!.w).toBeLessThan(2);
+    expect(out[250]!.w).toBeUndefined();
+    expect(pts[100]!.w).toBeUndefined();
   });
 });

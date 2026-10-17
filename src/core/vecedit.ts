@@ -184,3 +184,22 @@ export function joinStrokes<T extends Pt>(a: T[], aEnd: 'start' | 'end', b: T[],
   const second = bEnd === 'start' ? b : [...b].reverse();
   return [...first, ...second.slice(1)].map((p) => ({ ...p }));
 }
+
+/**
+ * Thicker or thinner around one anchor only: the width multiplier of the points between its
+ * neighbouring anchors is scaled by `f` with a smooth falloff (fully at the anchor, not at all at
+ * the neighbours). `base` holds the starting multipliers so a live gesture never compounds.
+ */
+export function scaleWidthAt<T extends Pt & { w?: number }>(points: T[], anchors: number[], k: number, f: number): T[] {
+  const ai = anchors[k];
+  if (ai === undefined) return points;
+  const from = anchors[k - 1] ?? ai, to = anchors[k + 1] ?? ai;
+  const out = points.map((p) => ({ ...p }));
+  for (let i = from; i <= to; i++) {
+    const span = i < ai ? ai - from : to - ai;
+    const t = span ? 1 - Math.abs(i - ai) / span : 1;
+    const g = 1 + (f - 1) * smooth(Math.max(0, Math.min(1, t)));
+    out[i]!.w = Math.max(0.05, Math.min(20, (points[i]!.w ?? 1) * g));
+  }
+  return out;
+}
