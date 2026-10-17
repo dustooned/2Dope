@@ -515,6 +515,24 @@ app.onFrameChange = chain(app.onFrameChange, () => {
   if (app.workspace === 'motion') motion.update();
 });
 app.onToolChange = chain(app.onToolChange, () => quick.update());
+// The app zooms its own canvas; if Safari ever zooms the whole page (a double-tap that slipped
+// through), snap it back: re-applying the viewport tag resets the page scale on iOS.
+{
+  const vv = window.visualViewport;
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+  if (vv && meta) {
+    const base = meta.content;
+    let timer = 0;
+    vv.addEventListener('resize', () => {
+      if (vv.scale <= 1.01) return;
+      clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        meta.content = `${base}, minimum-scale=1`;
+        setTimeout(() => (meta.content = base), 60);
+      }, 120);
+    });
+  }
+}
 // Flip: the beginner mode (draw frame after frame; a row of drawing bubbles; nudge to the timeline later).
 const flipMode = new FlipMode(app, $('#stage'), () => {
   app.setWorkspace('time');

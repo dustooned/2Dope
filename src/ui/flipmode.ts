@@ -90,7 +90,9 @@ export class FlipMode {
     const add = el('button', { type: 'button', class: `flip-cel flip-add${app.blankPage ? ' on' : ''}`, title: 'A fresh page for the next drawing', 'aria-label': 'New page' }, '+');
     add.addEventListener('click', () => app.flipToBlank());
     list.append(add);
-    this.row.append(play, list);
+    const fit = el('button', { type: 'button', class: 'flip-btn flip-fit', title: 'Fit the page to the screen', 'aria-label': 'Fit to screen' }, '⤢');
+    fit.addEventListener('click', () => app.fit());
+    this.row.append(play, list, fit);
     // keep the current bubble in view
     setTimeout(() => (list.querySelector('.on') as HTMLElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }), 0);
 

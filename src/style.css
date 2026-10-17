@@ -4122,3 +4122,7 @@ body.ui-simple .paint-target, body.ui-clean .paint-target { top: 66px; left: 56p
 .flip-nudge[hidden] { display: none; }
 body.flipmode .tracks-handle, body.flipmode #strip, body.flipmode .audio-tracks, body.flipmode #splitter, body.flipmode .paint-target, body.flipmode #stats { display: none !important; }
 body.quick .flip-row, body.quick .flip-nudge, body.ui-full .flip-row, body.ui-full .flip-nudge { display: none !important; }
+/* scroll containers reset touch-action: never let Safari zoom the page from inside them */
+.flip-list { touch-action: pan-x; }
+.flip-row, .flip-nudge, .bub-modes, .bub-tools, .bub-ctx { touch-action: manipulation; }
+.audio-card { touch-action: pan-y; }
