@@ -1747,6 +1747,64 @@ export class App {
     this.onFrameChange();
   }
 
+  /**
+   * A still layer for backgrounds and objects: one drawing that shows for the whole shot (it loops a
+   * single frame, so it keeps covering the shot as it grows). A background goes to the bottom of the
+   * stack; an object goes above the layer you draw on. Draw on it.
+   */
+  addStillLayer(kind: 'background' | 'object'): void {
+    if (this.strokeActive) return;
+    const p = this.project;
+    const id = p.newId('L');
+    const above = p.isPlaceholder ? null : p.activeLayer;
+    const count = p.comp.layers.filter((l) => l.kind === 'drawings' && l.still).length;
+    this.editor.edit(kind === 'background' ? 'Add background layer' : 'Add object layer', (cc) => {
+      const made = drawingsLayer(id, kind === 'background' ? 'Background' : `Object ${count + 1}`, [{ drawing: p.newDrawing().id, length: 1 }], p.width, p.height, cc.width, cc.height);
+      made.still = true;
+      made.play = 'loop';
+      made.start = 0;
+      made.in = 0;
+      made.out = null;
+      const at = kind === 'background' ? cc.layers.length : Math.max(0, cc.layers.findIndex((l) => l.id === above));
+      cc.layers.splice(at, 0, made);
+    });
+    this.focusLayer(id);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** A copy of a drawings layer above it, with its own copies of every drawing (editing it never changes the original). */
+  async duplicateLayer(id: string): Promise<void> {
+    if (this.strokeActive) return;
+    const src = this.project.comp.layers.find((l) => l.id === id);
+    if (!src) return;
+    if (src.kind !== 'drawings') return this.editor.duplicate(id);
+    const ids = src.exposures.map((e) => e.drawing);
+    const copies = await this.copyDrawings(ids);
+    if (!copies) {
+      this.onNotice?.('Could not copy this layer: its drawings are still loading. Try again in a moment.');
+      return;
+    }
+    const map = new Map(ids.map((d, i) => [d, copies[i]!]));
+    const newId = this.project.newId('L');
+    this.editor.edit('Duplicate layer', (cc) => {
+      const at = cc.layers.findIndex((l) => l.id === id);
+      const l = cc.layers[at];
+      if (!l || l.kind !== 'drawings') return;
+      const copy = structuredClone(l);
+      copy.id = newId;
+      copy.name = `${l.name} copy`;
+      delete copy.cel; // a copy is its own layer, not linked
+      copy.exposures = l.exposures.map((e) => ({ ...e, drawing: map.get(e.drawing) ?? e.drawing }));
+      cc.layers.splice(at, 0, copy);
+    });
+    this.focusLayer(newId);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
   /** A new drawings layer above the one being drawn on, starting at the playhead; draw on it. */
   addDrawLayer(): void {
     if (this.live) return;

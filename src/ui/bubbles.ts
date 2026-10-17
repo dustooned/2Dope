@@ -163,7 +163,7 @@ export class Bubbles {
       case 'color': this.hooks.colorPanel(b); break;
       case 'layers':
         // anchored to the tool bar itself: the bubble is rebuilt when tools change
-        if (!this.flipOn && this.hooks.layerCards) this.hooks.layerCards(this.tools);
+        if (this.hooks.layerCards) this.hooks.layerCards(this.tools);
         else this.layersOpen = !this.layersOpen;
         break;
       case 'flip': a.flipToBlank(); break;

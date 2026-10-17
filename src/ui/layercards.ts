@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import type { Layer } from '../core/comp';
+import { BLEND_MODES, type BlendMode, type Layer } from '../core/comp';
 import { drawingAt } from '../core/timeline';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
@@ -27,6 +27,8 @@ export class LayerCards {
   private anchor: HTMLElement | null = null;
   private sig = '';
   private menuFor: string | null = null;
+  /** The + menu: animation, background or object layer. */
+  private addOpen = false;
   private drag: { id: string; y0: number; card: HTMLElement; ready: boolean; timer: number; pointer: number; moved: boolean } | null = null;
 
   constructor(private readonly app: App) {
@@ -71,7 +73,18 @@ export class LayerCards {
     this.root.style.maxHeight = `${Math.max(160, window.innerHeight - (r.bottom + 8) - 12)}px`;
   }
 
-  private thumb(l: Layer): HTMLCanvasElement {
+  /** The drawing a layer shows at the playhead (a still layer always shows its one drawing). */
+  private shownDrawing(l: Layer): string | null {
+    if (l.kind !== 'drawings') return null;
+    const f = this.app.frame - l.start;
+    if (l.still || l.play === 'loop') {
+      const total = l.exposures.reduce((n, e) => n + e.length, 0) || 1;
+      return drawingAt(l.exposures, ((f % total) + total) % total);
+    }
+    return drawingAt(l.exposures, f);
+  }
+
+    private thumb(l: Layer): HTMLCanvasElement {
     const c = el('canvas', { width: String(THUMB_W * 2), height: String(THUMB_H * 2), class: 'lc-thumb' });
     const g = c.getContext('2d');
     if (!g) return c;
@@ -82,7 +95,7 @@ export class LayerCards {
       g.fillRect(x, y, s, s);
     }
     if (l.kind !== 'drawings') return c;
-    const id = drawingAt(l.exposures, this.app.frame - l.start);
+    const id = this.shownDrawing(l);
     const d = id ? this.app.project.drawings.get(id) : undefined;
     const t = d?.thumb;
     if (t) {
@@ -102,10 +115,10 @@ export class LayerCards {
     if (this.menuFor && this.menuFor !== active) this.menuFor = null;
     const thumbs = layers.map((l) => {
       if (l.kind !== 'drawings') return '';
-      const id = drawingAt(l.exposures, app.frame - l.start);
+      const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.kind === 'drawings' ? l.cel ?? '' : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -122,11 +135,24 @@ export class LayerCards {
       else app.setShowLayers(false, app.otherAlpha);
       this.update();
     });
-    const add = el('button', { type: 'button', class: 'lc-icon', title: 'New layer above the one you draw on', 'aria-label': 'New layer' }, 'Add');
+    const add = el('button', { type: 'button', class: 'lc-icon', title: 'New layer: animation, background or object', 'aria-label': 'New layer', 'aria-expanded': String(this.addOpen) }, 'Add');
     decorate(add, 'plus');
-    add.addEventListener('click', () => { app.addDrawLayer(); this.update(); });
+    add.addEventListener('click', () => { this.addOpen = !this.addOpen; this.sig = ''; this.update(); });
     head.append(others, add);
     this.root.append(head);
+    if (this.addOpen) {
+      const menu = el('div', { class: 'lc-options lc-add', role: 'group', 'aria-label': 'New layer' });
+      const choice = (label: string, icon: string, title: string, fn: () => void) => {
+        const b = el('button', { type: 'button', class: 'lc-opt', title }, label);
+        decorate(b, icon);
+        b.addEventListener('click', () => { fn(); this.addOpen = false; this.sig = ''; this.update(); });
+        menu.append(b);
+      };
+      choice('Animation', 'flipbook', 'A layer you animate frame by frame', () => app.addDrawLayer());
+      choice('Background', 'gallery', 'One drawing behind everything, for the whole shot', () => app.addStillLayer('background'));
+      choice('Object', 'draw', 'One drawing above this layer, for the whole shot (a prop, a sign, a set piece)', () => app.addStillLayer('object'));
+      this.root.append(menu);
+    }
 
     const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': 'Layers' });
     for (const l of layers) {
@@ -140,6 +166,10 @@ export class LayerCards {
       if (l.kind === 'comp') tags.push('group');
       if (l.kind === 'drawings' && l.guide) tags.push('board');
       if (linked) tags.push('linked');
+      if (l.kind === 'drawings' && l.still) tags.push('still');
+      if (l.blend !== 'normal') tags.push(l.blend);
+      const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
+      if (op < 100) tags.push(`${op}%`);
       if (l.locked) tags.push('locked');
       if (on && l.kind === 'drawings') tags.push(app.plane === 'fill' ? 'painting Fill' : 'painting Line');
       if (tags.length) info.append(el('span', { class: 'lc-tags' }, tags.join(' · ')));
@@ -220,6 +250,21 @@ export class LayerCards {
   private options(l: Layer): HTMLElement {
     const app = this.app;
     const box = el('div', { class: 'lc-options', role: 'group', 'aria-label': `${l.name} options` });
+    // opacity (applied when you let go: one undo step) and blend mode, like Procreate's layer N menu
+    const opRow = el('label', { class: 'lc-row' });
+    const op = el('input', { type: 'range', min: '0', max: '100', step: '1', 'aria-label': 'Layer opacity' });
+    op.value = String(Math.round(Number(app.editor.valueNow(l, 'opacity'))));
+    const opOut = el('output', {}, `${op.value}%`);
+    op.addEventListener('input', () => { opOut.textContent = `${op.value}%`; });
+    op.addEventListener('change', () => { app.editor.setValue(l.id, 'opacity', Number(op.value), 'Layer opacity'); this.sig = ''; this.update(); });
+    opRow.append(el('span', {}, 'Opacity'), op, opOut);
+    const blRow = el('label', { class: 'lc-row' });
+    const bl = el('select', { 'aria-label': 'Blend mode' });
+    for (const m of BLEND_MODES) bl.append(el('option', { value: m }, m[0]!.toUpperCase() + m.slice(1)));
+    bl.value = l.blend;
+    bl.addEventListener('change', () => { app.editor.edit('Blend mode', (c) => { const x = c.layers.find((y) => y.id === l.id); if (x) x.blend = bl.value as BlendMode; }); this.sig = ''; this.update(); });
+    blRow.append(el('span', {}, 'Blend'), bl);
+    box.append(opRow, blRow);
     const opt = (label: string, icon: string, title: string, fn: () => void | Promise<void>, danger = false) => {
       const b = el('button', { type: 'button', class: `lc-opt${danger ? ' danger' : ''}`, title }, label);
       decorate(b, icon);
@@ -230,6 +275,7 @@ export class LayerCards {
       opt(app.plane === 'line' ? 'Paint Fill' : 'Paint Line', app.plane === 'line' ? 'fillplane' : 'lineplane', 'Switch what brushes paint on: LINE (ink, on top) or FILL (colour, under)', () => { app.setPlane(app.plane === 'line' ? 'fill' : 'line'); this.sig = ''; this.update(); });
       opt('Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => { app.addCelLayer(); this.menuFor = null; this.sig = ''; this.update(); });
     }
+    opt('Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', async () => { await app.duplicateLayer(l.id); this.menuFor = null; this.sig = ''; this.update(); });
     opt('Rename', 'draw', 'Rename this layer', async () => {
       const n = await askText('Layer name', l.name, 'Rename');
       if (n !== null) app.editor.rename(l.id, n);

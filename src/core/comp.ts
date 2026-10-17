@@ -48,6 +48,8 @@ interface LayerBase {
   guideExport?: boolean;
   /** Linked art layers: drawings layers sharing a `cel` group keep the same cels and timing. */
   cel?: string;
+  /** A still layer (background, object): one drawing held for the whole shot, like a Procreate layer. */
+  still?: boolean;
 }
 
 /** Is this layer left out of a final render? */

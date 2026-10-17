@@ -4171,3 +4171,7 @@ body.ui-simple .shape-pop, body.ui-clean .shape-pop { display: none !important; 
 .bub-ctx::-webkit-scrollbar { display: none; }
 /* simple screen: the Story bubbles replace the board button bar */
 body.ui-simple .board-bar, body.ui-clean .board-bar { display: none; }
+.lc-row { display: flex; align-items: center; gap: 8px; width: 100%; font-size: 13px; }
+.lc-row input[type=range] { flex: 1; }
+.lc-row select { flex: 1; min-height: 36px; }
+.lc-row output { min-width: 40px; text-align: right; }
