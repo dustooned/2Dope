@@ -4188,3 +4188,5 @@ body.eyedropping #canvas { cursor: crosshair; }
 /* X-sheet: room for the drawing column, headers never run into each other */
 .xs-head, .xs-row { grid-template-columns: 56px 80px 1fr; }
 .xs-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail.more { background: transparent; }
+.rail.more .rail-more { color: var(--muted); font-size: 12px; }

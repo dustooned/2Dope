@@ -62,7 +62,14 @@ export class RailState {
 /** Both layer views fold the same hierarchy; this is view state, never document history. */
 export const drawRailState = new RailState();
 
-type Row = { kind: 'layer'; layer: Layer; depth: number; active: boolean; offset: number; foldable: boolean } | { kind: 'part'; layer: Layer; part: 'line' | 'fill'; offset: number; active: boolean };
+type Row =
+  | { kind: 'layer'; layer: Layer; depth: number; active: boolean; offset: number; foldable: boolean }
+  | { kind: 'part'; layer: Layer; part: 'line' | 'fill'; offset: number; active: boolean }
+  /** The folded rest of the layers (or, when open, the row that folds them away again). */
+  | { kind: 'more'; count: number; open: boolean };
+
+/** RailState key: every layer shows (otherwise only the layer you draw on, its linked layers and the board). */
+export const ALL_ROWS = '#all';
 
 /** Every key that can fold open in this comp (for Expand all). */
 export function foldKeys(app: App): string[] {
@@ -102,7 +109,22 @@ function rowsOf(app: App, state: RailState): Row[] {
   walk(app.project.comp, 0, 0);
   // a brand-new comp with nothing yet: the strip's placeholder row
   if (!rows.some((r) => r.kind === 'layer' && r.active)) rows.unshift({ kind: 'layer', layer: app.project.layer, depth: 0, active: true, offset: 0, foldable: false });
-  return rows;
+  // Focus: the layer you draw on, its linked art layers and the board; the rest folds into one row
+  const me = app.project.isPlaceholder ? null : app.project.layer;
+  const cel = me && me.kind === 'drawings' ? me.cel : undefined;
+  const keep = (l: Layer) => l.id === me?.id || (!!cel && l.kind === 'drawings' && l.cel === cel) || (l.kind === 'drawings' && !!l.guide);
+  const top = rows.filter((r) => r.kind === 'layer' && r.depth === 0) as Extract<Row, { kind: 'layer' }>[];
+  const hidden = top.filter((r) => !keep(r.layer)).length;
+  if (!hidden) return rows;
+  if (state.open.has(ALL_ROWS)) return [...rows, { kind: 'more', count: hidden, open: true }];
+  // a kept layer brings its own Line / Fill and group children along
+  let keeping = false;
+  const out: Row[] = [];
+  for (const r of rows) {
+    if (r.kind === 'layer' && r.depth === 0) keeping = keep(r.layer);
+    if (keeping) out.push(r);
+  }
+  return [...out, { kind: 'more', count: hidden, open: false }];
 }
 
 export interface RailsOut {
@@ -126,6 +148,24 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
   let activeTop = top;
   const ed = app.editor;
   for (const r of rows) {
+    if (r.kind === 'more') {
+      // one quiet row: how many layers are folded away, tap to show or fold them
+      const row = el('div', { class: 'rail more' });
+      row.style.top = `${y}px`;
+      row.style.height = `${RAIL_H}px`;
+      row.style.width = `${width}px`;
+      const b = el('button', { type: 'button', class: 'rail-name rail-more', 'aria-expanded': String(r.open), title: r.open ? 'Show only the layer you draw on, its linked layers and the board' : 'Show every layer of the shot' }, r.open ? '▾ Fewer layers' : `▸ ${r.count} more layer${r.count === 1 ? '' : 's'}`);
+      b.addEventListener('click', () => {
+        state.toggle(ALL_ROWS);
+        changed();
+      });
+      const tag = el('div', { class: 'rail-tag' });
+      tag.append(b);
+      row.append(tag);
+      nodes.push(row);
+      y += RAIL_H;
+      continue;
+    }
     const l = r.layer;
     const h = r.kind === 'part' ? PART_H : r.active ? ACTIVE_H : RAIL_H;
     const row = el('div', { class: `rail${r.active ? ' active' : ''}${r.kind === 'part' ? ' part' : ''}${l.visible ? '' : ' off'}` });
