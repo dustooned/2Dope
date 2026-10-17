@@ -925,6 +925,51 @@ export class App {
     return this.xf ? { ...this.xf.params } : null;
   }
 
+  /** Eyedropper armed: the next tap on the canvas picks the colour you see there. */
+  eyedropArmed = false;
+  onEyedrop: () => void = () => {};
+
+  armEyedropper(on = !this.eyedropArmed): void {
+    this.eyedropArmed = on;
+    this.onEyedrop();
+  }
+
+  /** The colour on screen at a client point (what you see: every layer shown). */
+  private sampleScreen(cx: number, cy: number): string | null {
+    const r = this.canvas.getBoundingClientRect();
+    // the same mapping the renderer uses: CSS pixels from the canvas corner, times the device ratio
+    const sx = Math.round((cx - r.left) * this.dpr);
+    const sy = Math.round((cy - r.top) * this.dpr);
+    if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) return null;
+    this.render();
+    const d = this.ctx.getImageData(sx, sy, 1, 1).data;
+    const hex = (n: number) => n.toString(16).padStart(2, '0');
+    return `#${hex(d[0]!)}${hex(d[1]!)}${hex(d[2]!)}`;
+  }
+
+  /**
+   * ColorDrop (Procreate): the colour dragged onto the canvas and let go fills the area there, on
+   * this drawing's Fill (inside a selection, if there is one). One undo step.
+   */
+  colorDropAt(cx: number, cy: number): boolean {
+    if (this.strokeActive || this.playing || this.project.layer.locked || this.blankPage) return false;
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return false;
+    const r = this.canvas.getBoundingClientRect();
+    const p = this.view.screenToDoc(cx - r.left, cy - r.top);
+    const x = Math.floor(p.x), y = Math.floor(p.y);
+    if (x < 0 || y < 0 || x >= this.docW || y >= this.docH) return false;
+    const before = planeCanvas(d, 'fill').getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
+    const res = fillFrom(this.fillMapFor(d), x, y, false, this.spatialSelection?.mask);
+    if (!res) return false;
+    this.paintMask(d, res.mask, res, this.rgbOf(this.color));
+    this.touchFill(d);
+    this.pushFill('ColorDrop', [this.fillEntry(d, before, res)]);
+    this.residency.updateThumb(d);
+    this.requestRender();
+    return true;
+  }
+
   /** The Select tool (not Fill > Select area): a finished loop goes straight into transform, like Procreate. */
   selectMoves = false;
 
@@ -2930,6 +2975,13 @@ export class App {
     } catch {
       // Capture can fail for pointers the browser no longer tracks; drawing still works.
     }
+    if (this.eyedropArmed) {
+      // the eyedropper: this tap picks a colour and draws nothing
+      const c = this.sampleScreen(e.clientX, e.clientY);
+      if (c) this.setColor(c);
+      this.armEyedropper(false);
+      return;
+    }
     this.veValid();
     if (this.ve && !this.ve.drag) {
       // point editing: grab an anchor; a tap on another vector line switches to it
@@ -3701,6 +3753,9 @@ export class App {
       }
       case 'KeyO':
         this.toggleOnion();
+        break;
+      case 'KeyI':
+        this.armEyedropper();
         break;
       case 'KeyL':
         this.toggleLock();

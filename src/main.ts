@@ -161,6 +161,12 @@ app.history.onChange = chain(app.history.onChange, () => {
 // Icons on every button that asks for one, the brush sidebar, and the colour circle
 applyIcons();
 const sidebar = new Sidebar(app, $('#sidebar'));
+const eyedropBtn = $<HTMLButtonElement>('#eyedrop');
+eyedropBtn.addEventListener('click', () => app.armEyedropper());
+app.onEyedrop = () => {
+  eyedropBtn.setAttribute('aria-pressed', String(app.eyedropArmed));
+  document.body.classList.toggle('eyedropping', app.eyedropArmed);
+};
 app.onBrushChange = chain(app.onBrushChange, () => sidebar.update());
 const colorChip = $<HTMLInputElement>('#color-chip');
 const syncColor = () => {

@@ -4178,3 +4178,8 @@ body.ui-simple .board-bar, body.ui-clean .board-bar { display: none; }
 .lc-card.clipped { margin-left: 22px; position: relative; }
 .lc-card.clipped::before { content: '\21B3'; position: absolute; left: -18px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; }
 .lc-opt.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sidebar .eyedrop { width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; }
+.sidebar .eyedrop .lbl { display: none; }
+.sidebar .eyedrop[aria-pressed="true"] { background: var(--accent); color: #fff; }
+body.eyedropping #canvas { cursor: crosshair; }
+.colordrop-dot { position: fixed; z-index: 200; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.5); pointer-events: none; }

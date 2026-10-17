@@ -250,6 +250,41 @@ export class Bubbles {
     ];
   }
 
+  /** Drag the colour bubble onto the canvas and let go: ColorDrop fills the area there. A tap still opens the colour panel. */
+  private bindColorDrop(b: HTMLButtonElement): void {
+    let start: { id: number; x: number; y: number } | null = null;
+    let dot: HTMLElement | null = null;
+    let dragged = false;
+    b.addEventListener('pointerdown', (e) => {
+      start = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      dragged = false;
+      try { b.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+    });
+    b.addEventListener('pointermove', (e) => {
+      if (!start || start.id !== e.pointerId) return;
+      if (!dragged && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 12) return;
+      dragged = true;
+      if (!dot) {
+        dot = el('div', { class: 'colordrop-dot' });
+        dot.style.background = this.app.color;
+        document.body.append(dot);
+      }
+      dot.style.left = `${e.clientX}px`;
+      dot.style.top = `${e.clientY}px`;
+    });
+    const end = (e: PointerEvent, cancel: boolean) => {
+      if (!start || start.id !== e.pointerId) return;
+      start = null;
+      dot?.remove();
+      dot = null;
+      if (dragged && !cancel && !this.app.colorDropAt(e.clientX, e.clientY)) this.app.onNotice?.('Drop the colour inside an area of the drawing to fill it.');
+    };
+    b.addEventListener('pointerup', (e) => end(e, false));
+    b.addEventListener('pointercancel', (e) => end(e, true));
+    // a drag is not a tap: keep the colour panel shut
+    b.addEventListener('click', (e) => { if (dragged) { e.stopImmediatePropagation(); dragged = false; } }, true);
+  }
+
   /** Refresh after any tool, frame, selection or workspace change (cheap when nothing changed). */
   update(): void {
     const a = this.app;
@@ -272,7 +307,10 @@ export class Bubbles {
     this.tools.replaceChildren();
     for (const [k, label, icon] of this.toolsFor(ws)) {
       const b = icon ? this.bubble(label, icon, label) : el('button', { type: 'button', class: 'bub bub-color', title: 'Colour', 'aria-label': 'Colour' });
-      if (k === 'color') b.style.setProperty('--chip', a.color);
+      if (k === 'color') {
+        b.style.setProperty('--chip', a.color);
+        this.bindColorDrop(b);
+      }
       const on = k === 'layers' ? this.layersOpen
         : k === 'autokey' ? a.editor.autoKey
         : k === 'look' ? a.editor.throughCamera
