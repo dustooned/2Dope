@@ -1676,6 +1676,18 @@ export class App {
     this.onFrameChange();
   }
 
+  /**
+   * The drawing a linked layer gets for a new cel: a copy of its partner when the new cel is a
+   * duplicate (and that partner's pixels are at hand), otherwise a blank one.
+   */
+  partnerDrawing(src: string, partnerOf: (id: string) => string | undefined): string {
+    const from = this.project.copiedFrom.get(src);
+    const partner = from ? partnerOf(from) : undefined;
+    const d = partner ? this.project.drawings.get(partner) : undefined;
+    if (d && !d.parked) return this.project.cloneDrawing(d).id;
+    return this.project.newDrawing().id;
+  }
+
   /** The layers linked to the one you draw on (itself included), front first. */
   get celLayers(): DrawingsLayer[] {
     if (this.project.isPlaceholder) return [];
@@ -2208,7 +2220,7 @@ export class App {
     const linked = celMembers(this.project.comp, layerId).map((m) => ({
       id: m.id,
       before: m.exposures,
-      after: syncExposures(beforeEx, r.ex, m.exposures, () => this.project.newDrawing().id),
+      after: syncExposures(beforeEx, r.ex, m.exposures, (src, partnerOf) => this.partnerDrawing(src, partnerOf)),
     }));
     if (rip && linked.length)
       rip.after = rip.after.map((l) => {

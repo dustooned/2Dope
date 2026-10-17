@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sameCels, syncExposures } from './cellink';
+import { sameCels, syncCelGroups, syncExposures } from './cellink';
+import { drawingsLayer } from './comp';
 import type { Exposure } from './timeline';
 
 const ex = (...pairs: [string, number][]): Exposure[] => pairs.map(([drawing, length]) => ({ drawing, length }));
@@ -32,5 +33,35 @@ describe('linked art layers', () => {
   it('sameCels compares timing only', () => {
     expect(sameCels(ink, colour)).toBe(true);
     expect(sameCels(ink, ex(['x', 2], ['y', 3], ['z', 1]))).toBe(false);
+  });
+});
+
+describe('cel groups after any layer edit', () => {
+  const layer = (id: string, ex: Exposure[], start = 0) => {
+    const l = drawingsLayer(id, id, ex, 100, 100, 100, 100);
+    l.start = start; l.in = start; l.cel = 'g';
+    return l;
+  };
+
+  it('a member moved or trimmed in Motion brings the others along', () => {
+    const a = layer('A', ex(['a', 2], ['b', 2]));
+    const b = layer('B', ex(['x', 2], ['y', 2]));
+    const moved = { ...a, start: 10, in: 10, exposures: ex(['a', 2], ['b', 5]) };
+    const fixed = syncCelGroups([a, b], [moved, b], () => 'new')!;
+    const fb = fixed[1] as typeof b;
+    expect(fb.start).toBe(10);
+    expect(fb.exposures).toEqual(ex(['x', 2], ['y', 5]));
+  });
+
+  it('nothing to do when the group already matches', () => {
+    const a = layer('A', ex(['a', 2]));
+    const b = layer('B', ex(['x', 2]));
+    expect(syncCelGroups([a, b], [a, b], () => 'new')).toBeNull();
+  });
+
+  it('a duplicated cel can copy its partner instead of leaving it blank', () => {
+    const before = ex(['a', 2]);
+    const out = syncExposures(before, ex(['a', 2], ['a2', 2]), ex(['x', 2]), (src, partnerOf) => (src === 'a2' ? `copy-of-${partnerOf('a')}` : 'blank'));
+    expect(out).toEqual(ex(['x', 2], ['copy-of-x', 2]));
   });
 });

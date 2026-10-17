@@ -243,10 +243,14 @@ export class Project {
     return d;
   }
 
+  /** Which drawing each copy was made from (this session only): linked art layers copy their partners too. */
+  readonly copiedFrom = new Map<string, string>();
+
   /** Copy a drawing. `src` must be resident. */
   cloneDrawing(src: Drawing): Drawing {
     if (src.parked) throw new Error('cannot copy a drawing whose pixels are packed away');
     const d = this.newDrawing();
+    this.copiedFrom.set(d.id, src.id);
     d.line.getContext('2d')?.drawImage(src.line, 0, 0);
     if (src.fill) planeCanvas(d, 'fill').getContext('2d')?.drawImage(src.fill, 0, 0);
     d.vectors = [...src.vectors];

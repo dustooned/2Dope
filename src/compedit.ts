@@ -1,3 +1,4 @@
+import { syncCelGroups } from './core/cellink';
 import { easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentEasing, valueAt, type Easing, type Prop, type Vec2 } from './core/anim';
 import {
   apply,
@@ -649,6 +650,13 @@ export class CompEditor {
   }
 
   private push(label: string, compId: string, before: Layer[], after: Layer[]): void {
+    // linked art layers stay in step whatever edited them (Motion trims, moves, ripples)
+    const synced = syncCelGroups(before, after, (src, partnerOf) => this.app.partnerDrawing(src, partnerOf));
+    if (synced) {
+      after = structuredClone(synced);
+      const live = this.app.project.comps.get(compId);
+      if (live) live.layers = structuredClone(synced);
+    }
     const set = (layers: Layer[]) => {
       const c = this.app.project.comps.get(compId);
       if (!c) return;

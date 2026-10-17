@@ -18,7 +18,7 @@ Built 2026-10-16 (Claude, one long session), newest last:
 
 File format: two optional fields only (`cel` on layers, `w` on points); older files open unchanged, older builds ignore them.
 
-Known gaps: retiming linked layers from **Motion** does not sync them (only Draw / Time / Flip edits do); duplicating a cel gives its linked partners a blank drawing; GIF transparency is 1-bit; nothing verified on iPad. Still not built: clipping masks, effect stacks, brush tips and `.abr`/`.brushset` import, warp, free-arrangement timeline, general media/video import, Rust desktop.
+Linked layers stay in step for every edit: Draw / Time / Flip via `App.editTimeline`, everything else (Motion trims and moves, ripples) via `syncCelGroups` in `CompEditor.push`. A duplicated cel copies its partners' drawings (`Project.copiedFrom`, session only; a parked partner falls back to blank). Known gaps: GIF transparency is 1-bit; nothing verified on iPad. Still not built: clipping masks, effect stacks, brush tips and `.abr`/`.brushset` import, warp, free-arrangement timeline, general media/video import, Rust desktop.
 
 **Design studies (evidence and proposals, not features):** [layers/masks/UI](docs/LAYERS-MASKS-AND-UI-STUDY.md), [selection/transform](docs/SELECTION-TRANSFORM-MANUAL-STUDY.md), [manuals vs source](docs/MANUAL-TO-SOURCE-COMPARISON.md), [timeline/media/UI direction](docs/TIMELINE-AND-MEDIA-DIRECTION.md), [art effects and clipping](docs/ART-EFFECTS-DIRECTION.md), [brush import](docs/NATIVE-BRUSH-IMPORT-DIRECTION.md). The free-timeline request needs concrete changes confirmed before structural work; do not treat the standalone timeline mockup as a spec.
 
