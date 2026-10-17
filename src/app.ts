@@ -1,3 +1,4 @@
+import { loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
@@ -299,6 +300,7 @@ export class App {
     this.clampOnion();
     // Merge over the default so brushes saved by older builds gain new fields.
     this.brush = { ...cloneBrush(PRESETS[0]!), ...(loadJSON<Partial<BrushSettings>>(BRUSH_KEY) ?? {}) };
+    if (this.brush.tipImage) void loadTip(this.brush.tipImage);
     this.color = loadJSON<string>(COLOR_KEY) ?? '#1d1d24';
     this.bindEvents();
     this.resize();
@@ -1629,6 +1631,7 @@ export class App {
 
   setBrush(b: BrushSettings): void {
     this.brush = b;
+    if (b.tipImage) void loadTip(b.tipImage);
     saveJSON(BRUSH_KEY, b);
     this.onBrushChange();
   }

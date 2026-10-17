@@ -286,6 +286,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-17', title: 'Image brush tips', items: ['Brush Studio > Tip: Import image uses a picture as the brush tip (like Procreate’s shape source); white or opaque parts paint, black or see-through parts do not. Round goes back to the round tip. Save the brush to My brushes to keep it. Brush files (.abr, .brushset) come next.'] },
   { date: '2026-10-17', title: 'Smudge', items: ['The Smudge bubble (next to Brush) drags the paint under your stroke along, on Line or Fill, at the brush size. Softer and Stronger set how much paint it carries. Each smudge is one undo step.'] },
   { date: '2026-10-17', title: 'Merge Down, swipe for quick actions', items: ['Layer options gain Merge down: the layer flattens into the one below, frame by frame (Line onto Line, Fill onto Fill, with its opacity and blend; vector lines come along). It needs both layers to have the same frames and placement, like two still layers or linked art layers. Swipe a layer card left for Lock, Duplicate and Delete.'] },
   { date: '2026-10-17', title: 'Eyedropper and ColorDrop', items: ['The dropper button in the left sidebar (or I) picks the next colour you tap on the canvas, as you see it. ColorDrop: drag the colour bubble onto an area of the drawing and let go to fill it (on Fill, inside a selection if there is one). A tap on the colour bubble still opens the colour panel.'] },

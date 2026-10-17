@@ -39,6 +39,11 @@ export interface TiltShade {
 
 export interface BrushSettings {
   name: string;
+  /**
+   * An image tip (Procreate's shape source): a small PNG as a data URL. White (or opaque) paints,
+   * black (or transparent) does not. Missing = the round tip. Raster brushes only.
+   */
+  tipImage?: string;
   /** Diameter in document pixels. */
   size: number;
   /** Edge hardness 0 (soft) .. 1 (hard). */

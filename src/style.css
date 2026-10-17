@@ -4183,3 +4183,5 @@ body.ui-simple .board-bar, body.ui-clean .board-bar { display: none; }
 .sidebar .eyedrop[aria-pressed="true"] { background: var(--accent); color: #fff; }
 body.eyedropping #canvas { cursor: crosshair; }
 .colordrop-dot { position: fixed; z-index: 200; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.5); pointer-events: none; }
+.tip-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tip-preview { width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--line); }

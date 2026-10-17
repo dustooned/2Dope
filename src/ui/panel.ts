@@ -1,3 +1,4 @@
+import { imageTipSprite, loadTip } from '../brush/raster';
 import type { App } from '../app';
 import { cloneBrush, PRESETS, type BrushSettings, type Control, type Dynamic, type TiltShade } from '../core/brush';
 import type { StrokePoint, StrokeRecord } from '../core/stroke';
@@ -155,6 +156,67 @@ export function buildPanel(app: App, root: HTMLElement): void {
     }
     for (const key of section.dyn ?? []) fs.append(dynamicEditor(app, key, refreshers));
     if (section.tilt) fs.append(tiltEditor(app, refreshers));
+    body.append(fs);
+  }
+
+  // the tip: round, or a picture (Procreate's shape source)
+  {
+    const fs = el('fieldset');
+    fs.append(el('legend', {}, 'Tip'));
+    const preview = el('canvas', { width: '64', height: '64', class: 'tip-preview' });
+    const status = el('span', { class: 'hint' });
+    const file = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: '' });
+    const pick = el('button', { type: 'button', title: 'Use a picture as the brush tip: white (or opaque) paints' }, 'Import image\u2026');
+    const round = el('button', { type: 'button', title: 'Back to the round tip' }, 'Round');
+    const draw = () => {
+      const g = preview.getContext('2d')!;
+      g.clearRect(0, 0, 64, 64);
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, 64, 64);
+      const url = app.brush.tipImage;
+      status.textContent = url ? 'Image tip' : 'Round tip';
+      if (!url) {
+        g.fillStyle = '#222';
+        g.beginPath();
+        g.arc(32, 32, 24, 0, Math.PI * 2);
+        g.fill();
+        return;
+      }
+      void loadTip(url).then(() => {
+        const s = imageTipSprite(url, '#222222');
+        if (s) g.drawImage(s, 4, 4, 56, 56);
+      });
+    };
+    pick.addEventListener('click', () => file.click());
+    file.addEventListener('change', async () => {
+      const f = file.files?.[0];
+      file.value = '';
+      if (!f) return;
+      try {
+        // downscale to a small square tip so brushes stay light
+        const bmp = await createImageBitmap(f);
+        const c = document.createElement('canvas');
+        const k = Math.min(1, 256 / Math.max(bmp.width, bmp.height));
+        c.width = Math.max(1, Math.round(bmp.width * k));
+        c.height = Math.max(1, Math.round(bmp.height * k));
+        c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+        app.brush.tipImage = c.toDataURL('image/png');
+        await loadTip(app.brush.tipImage);
+        app.brushChanged();
+        draw();
+      } catch {
+        status.textContent = 'That image could not be read.';
+      }
+    });
+    round.addEventListener('click', () => {
+      delete app.brush.tipImage;
+      app.brushChanged();
+      draw();
+    });
+    const row = el('div', { class: 'row tip-row' });
+    row.append(preview, pick, round, status, file);
+    fs.append(row, el('p', { class: 'hint' }, 'White or opaque parts of the picture paint; black or see-through parts do not. Save it to My brushes to keep it.'));
+    refreshers.push(draw);
     body.append(fs);
   }
 

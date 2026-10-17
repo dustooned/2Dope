@@ -65,6 +65,62 @@ export function tipSprite(hardness: number, color: string): HTMLCanvasElement {
   return c;
 }
 
+// Image tips: a picture as the dab (white or opaque paints). Decoded once into an alpha mask, then
+// coloured per stroke colour. Decoding is asynchronous, so a tip is loaded before it is drawn with;
+// until then the round tip stands in.
+const tipMasks = new Map<string, HTMLCanvasElement | 'loading' | 'failed'>();
+const tipColored = new Map<string, HTMLCanvasElement>();
+
+/** Decode an image tip (cached). Resolves when it can be drawn with. */
+export function loadTip(url: string): Promise<void> {
+  const have = tipMasks.get(url);
+  if (have && have !== 'loading') return Promise.resolve();
+  tipMasks.set(url, 'loading');
+  return new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = makeCanvas(TIP, TIP);
+      const g = ctx2d(c);
+      const s = Math.min(TIP / img.width, TIP / img.height);
+      g.drawImage(img, (TIP - img.width * s) / 2, (TIP - img.height * s) / 2, img.width * s, img.height * s);
+      const d = g.getImageData(0, 0, TIP, TIP);
+      // no transparency in the picture: brightness is the paint (white paints, black does not)
+      let opaque = true;
+      for (let i = 3; i < d.data.length; i += 4) if (d.data[i]! < 250) { opaque = false; break; }
+      for (let i = 0; i < d.data.length; i += 4) {
+        const a = opaque ? (d.data[i]! * 0.3 + d.data[i + 1]! * 0.59 + d.data[i + 2]! * 0.11) : d.data[i + 3]!;
+        d.data[i] = d.data[i + 1] = d.data[i + 2] = 255;
+        d.data[i + 3] = a;
+      }
+      g.putImageData(d, 0, 0);
+      tipMasks.set(url, c);
+      resolve();
+    };
+    img.onerror = () => { tipMasks.set(url, 'failed'); resolve(); };
+    img.src = url;
+  });
+}
+
+/** The image tip in a colour, or null while it is not loaded (the round tip is used then). */
+export function imageTipSprite(url: string, color: string): HTMLCanvasElement | null {
+  const mask = tipMasks.get(url);
+  if (!mask || mask === 'loading' || mask === 'failed') {
+    if (!mask) void loadTip(url);
+    return null;
+  }
+  const key = `${url.length}:${url.slice(-48)}|${color}`;
+  const hit = tipColored.get(key);
+  if (hit) return hit;
+  const c = makeCanvas(TIP, TIP);
+  const g = ctx2d(c);
+  g.drawImage(mask, 0, 0);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = color;
+  g.fillRect(0, 0, TIP, TIP);
+  tipColored.set(key, c);
+  return c;
+}
+
 function withAlpha(hex: string, a: number): string {
   const n = parseInt(hex.replace('#', ''), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a.toFixed(3)})`;
@@ -207,7 +263,7 @@ export class RasterEngine {
   begin(record: StrokeRecord): void {
     this.record = record;
     const color = record.tool === 'eraser' ? '#000000' : record.color;
-    this.tip = tipSprite(record.brush.hardness, color);
+    this.tip = (record.brush.tipImage ? imageTipSprite(record.brush.tipImage, color) : null) ?? tipSprite(record.brush.hardness, color);
     this.shadeTip = tipSprite(record.brush.tiltShade.hardness, color);
     this.hasShade = false;
     this.bbox = null;
