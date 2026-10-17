@@ -79,7 +79,7 @@ export class Quick {
 
     this.planeBtn = btn('Line', 'Switch Line / Fill (X): Line selects Pen; Fill selects Bucket (Tap / drag).', () => app.togglePlane());
     this.lockBtn = btn('Lock', 'Scrub lock (L)', () => app.toggleLock());
-    this.flipBtn = btn('Flipbook', 'Flipbook: step past the last frame for a blank page; drawing on it adds the frame', () => app.setFlipbook(!app.flipbook));
+    this.flipBtn = btn('Flipbook', 'Flipbook: a fresh blank page after the last drawing. Draw on it to add the frame, tap again for the next.', () => app.flipToBlank());
 
     const moreBtn = btn('More ⋯', 'More tools', () => this.more.classList.toggle('open'));
     this.more = el('div', { class: 'quick-more' });
@@ -168,6 +168,6 @@ export class Quick {
     this.planeBtn.setAttribute('aria-pressed', String(app.plane === 'fill'));
     setLabel(this.lockBtn, app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`);
     this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));
-    this.flipBtn.setAttribute('aria-pressed', String(app.flipbook));
+    this.flipBtn.setAttribute('aria-pressed', String(app.blankPage));
   }
 }

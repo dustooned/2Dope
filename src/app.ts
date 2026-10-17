@@ -1481,6 +1481,13 @@ export class App {
     this.onFrameChange();
   }
 
+  /** The Flipbook button: a fresh blank page right now (after the last drawing). Draw on it to add the frame; tap again for the next. */
+  flipToBlank(): void {
+    if (this.workspace !== 'draw' && this.workspace !== 'time') this.setWorkspace('draw');
+    if (!this.flipbook) this.setFlipbook(true);
+    this.goBlankPage();
+  }
+
   private leaveBlankPage(): void {
     if (!this.blankPage) return;
     this.blankPage = false;

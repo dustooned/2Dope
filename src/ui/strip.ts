@@ -120,7 +120,7 @@ export class Strip {
       btn('Delete', 'Delete the selected drawings, or this one (Delete)', () => app.deleteFrame()),
       btn('Split', 'Split the hold at the playhead: the rest gets a copy of the drawing to redraw', () => void app.splitHold()),
       (this.selBtn = btn('Select', 'Select several: tap frames to add or remove them (Shift+click on a computer)', () => app.setMultiSelect(!app.multiSelect))),
-      (this.flipBtn = btn('Flipbook', 'Flipbook: a blank page waits after the last drawing; drawing on it adds the frame', () => app.setFlipbook(!app.flipbook))),
+      (this.flipBtn = btn('Flipbook', 'Flipbook: a fresh blank page after the last drawing. Draw on it to add the frame, tap again for the next.', () => app.flipToBlank())),
     );
 
     // Exposure: how many frames each selected drawing is held (on ones, twos, threes...).
@@ -525,7 +525,7 @@ export class Strip {
     this.fpsSel.value = String(p.fps);
     this.playhead.style.width = `${cell}px`;
     this.playhead.style.transform = `translateX(${(app.blankPage ? p.length : app.lf) * cell}px)`;
-    this.flipBtn.setAttribute('aria-pressed', String(app.flipbook));
+    this.flipBtn.setAttribute('aria-pressed', String(app.blankPage));
     this.selBtn.setAttribute('aria-pressed', String(app.multiSelect));
     this.blank.style.display = '';
     this.blank.style.left = `${p.length * cell}px`;
