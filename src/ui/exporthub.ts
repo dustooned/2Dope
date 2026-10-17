@@ -21,7 +21,13 @@ export function openExportHub(app: App, actions: { video(): void; sequence(): vo
   button('Video · MP4 / WebM with audio', launch(actions.video));
   button('Looping GIF · silent animation', () => {
     d.replaceChildren(); add('h2', 'Looping GIF');
-    add('p', 'Whole main shot · white background · simplified 256 colours · no audio. Up to 15 seconds, 12 fps and ' + (app.device.lite ? '320' : '480') + ' px on the longest side. Use PNG for full colour and transparency.');
+    add('p', 'Whole main shot · simplified 256 colours · no audio. Up to 15 seconds, 12 fps and ' + (app.device.lite ? '320' : '480') + ' px on the longest side. Use PNG for full colour and soft transparency.');
+    const alphaRow = document.createElement('label'); alphaRow.className = 'row toggle';
+    const alpha = document.createElement('input'); alpha.type = 'checkbox';
+    try { alpha.checked = localStorage.getItem('2dope.gif.alpha') === '1'; } catch { /* default */ }
+    alpha.addEventListener('change', () => { try { localStorage.setItem('2dope.gif.alpha', alpha.checked ? '1' : '0'); } catch { /* optional */ } });
+    const alphaText = document.createElement('span'); alphaText.textContent = 'Transparent background (GIF edges are hard: no soft edges)';
+    alphaRow.append(alpha, alphaText); d.append(alphaRow);
     const status = add('p', ''); status.setAttribute('role', 'status');
     const go = button('Make GIF', () => void run());
     const cancel = button('Close', close);
@@ -31,7 +37,7 @@ export function openExportHub(app: App, actions: { video(): void; sequence(): vo
       if (abort) return;
       const controller = new AbortController(); abort = controller; go.disabled = true; cancel.textContent = 'Cancel';
       try {
-        const blob = await exportGif(app.project, app.device.lite, controller.signal, app.residency, (n, total) => { status.textContent = `Making GIF: ${n} of ${total}`; });
+        const blob = await exportGif(app.project, app.device.lite, controller.signal, app.residency, (n, total) => { status.textContent = `Making GIF: ${n} of ${total}`; }, alpha.checked);
         if (controller.signal.aborted || !d.open) return;
         url = URL.createObjectURL(blob);
         d.replaceChildren(); add('h2', 'GIF ready');

@@ -12,7 +12,14 @@ export function gifHeader(width: number, height: number): Uint8Array {
   return bytes;
 }
 
-export function gifFrame(rgba: Uint8ClampedArray, width: number, height: number, delay: number): Uint8Array {
+/** Palette index used for see-through pixels in a transparent GIF (pure magenta, rarely drawn). */
+export const GIF_CLEAR = 0b11100011;
+
+/**
+ * One frame. With `transparent`, pixels under half opacity become see-through (GIF has only on/off
+ * transparency) and each frame clears the last, so moving art leaves no trail.
+ */
+export function gifFrame(rgba: Uint8ClampedArray, width: number, height: number, delay: number, transparent = false): Uint8Array {
   if (![width, height].every(n => Number.isInteger(n) && n > 0 && n <= 480) || rgba.length !== width * height * 4 || !Number.isInteger(delay) || delay < 1 || delay > 65535) throw new Error('Invalid GIF frame.');
   const pixels = width * height;
   // A clear before each 250 literals prevents the decoder dictionary reaching 512 entries.
@@ -28,11 +35,17 @@ export function gifFrame(rgba: Uint8ClampedArray, width: number, height: number,
   for (let i = 0; i < pixels; i++) {
     if (i % 250 === 0) write(256);
     const p = i * 4;
-    write((Math.round(rgba[p]! * 7 / 255) << 5) | (Math.round(rgba[p + 1]! * 7 / 255) << 2) | Math.round(rgba[p + 2]! * 3 / 255));
+    let index = (Math.round(rgba[p]! * 7 / 255) << 5) | (Math.round(rgba[p + 1]! * 7 / 255) << 2) | Math.round(rgba[p + 2]! * 3 / 255);
+    if (transparent) {
+      if (rgba[p + 3]! < 128) index = GIF_CLEAR;
+      else if (index === GIF_CLEAR) index = GIF_CLEAR - 1; // real magenta stays visible, one shade bluer
+    }
+    write(index);
   }
   write(257);
   const out = new Uint8Array(19 + packed.length + Math.ceil(packed.length / 255) + 1);
-  out.set([0x21, 0xf9, 4, 4, delay & 255, delay >> 8, 0, 0, 0x2c, 0, 0, 0, 0, width & 255, width >> 8, height & 255, height >> 8, 0, 8]);
+  // Graphic control: disposal 1 (keep) when opaque; disposal 2 (clear) plus the see-through index when transparent
+  out.set([0x21, 0xf9, 4, transparent ? 0b1001 : 4, delay & 255, delay >> 8, transparent ? GIF_CLEAR : 0, 0, 0x2c, 0, 0, 0, 0, width & 255, width >> 8, height & 255, height >> 8, 0, 8]);
   let offset = 19;
   for (let i = 0; i < packed.length; i += 255) {
     const chunk = packed.subarray(i, i + 255);

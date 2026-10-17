@@ -21,7 +21,7 @@ export function planGif(project: Pick<Project, 'comp' | 'comps' | 'main'>, lite:
 
 /** Main shot and shared compositor; no editor clock changes, one pinned frame at a time. */
 export async function exportGif(project: Project, lite: boolean, signal: AbortSignal,
-  hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void }, progress: (done: number, total: number) => void): Promise<Blob> {
+  hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void }, progress: (done: number, total: number) => void, transparent = false): Promise<Blob> {
   const p = planGif(project, lite);
   const check = () => { if (signal.aborted) throw new DOMException('GIF export cancelled', 'AbortError'); };
   check();
@@ -44,11 +44,13 @@ export async function exportGif(project: Project, lite: boolean, signal: AbortSi
           pinned.push(d); await hold.pin(d);
         }
         check();
-        g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#ffffff'; g.fillRect(0, 0, p.width, p.height);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        if (transparent) g.clearRect(0, 0, p.width, p.height);
+        else { g.fillStyle = '#ffffff'; g.fillRect(0, 0, p.width, p.height); }
         g.setTransform(p.width / comp.width, 0, 0, p.height / comp.height, 0, 0);
         drawComp(g, project, p.comp, frame, { backgrounds: true, export: true });
         const delay = Math.round((i + 1) * p.duration * 100 / p.samples) - Math.round(i * p.duration * 100 / p.samples);
-        const data = gifFrame(g.getImageData(0, 0, p.width, p.height).data, p.width, p.height, delay);
+        const data = gifFrame(g.getImageData(0, 0, p.width, p.height).data, p.width, p.height, delay, transparent);
         bytes += data.length;
         if (bytes > p.maxBytes) throw new Error('GIF exceeded the device limit. Use video instead.');
         parts.push(data as BlobPart);

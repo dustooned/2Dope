@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gifFrame, gifHeader } from './gif';
+import { GIF_CLEAR, gifFrame, gifHeader } from './gif';
 import { planGif } from './exportgif';
 import { drawingsLayer, newComp } from '../core/comp';
 
@@ -37,6 +37,15 @@ describe('GIF encoding and budgets', () => {
     const frame = gifFrame(rgba, width, count / width, 8);
     expect(decode(frame)).toEqual(expected);
     expect([...frame.slice(0, 8)]).toEqual([0x21, 0xf9, 4, 4, 8, 0, 0, 0]);
+  });
+  it('a transparent frame marks see-through pixels, keeps real magenta visible, and clears between frames', () => {
+    const rgba = new Uint8ClampedArray(3 * 4);
+    rgba.set([0, 0, 0, 0], 0); // see-through
+    rgba.set([255, 0, 255, 255], 4); // drawn magenta
+    rgba.set([255, 255, 255, 255], 8); // white
+    const frame = gifFrame(rgba, 3, 1, 5, true);
+    expect([...frame.slice(0, 8)]).toEqual([0x21, 0xf9, 4, 0b1001, 5, 0, GIF_CLEAR, 0]);
+    expect(decode(frame)).toEqual([GIF_CLEAR, GIF_CLEAR - 1, 255]);
   });
   it('writes GIF89a with a full palette and infinite loop extension', () => {
     const header = gifHeader(320, 180);
