@@ -33,7 +33,7 @@ export interface BubbleHooks {
 }
 
 type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'flip' | 'onion' | 'layers'
-  | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
+  | 'smudge' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
 /**
  * Bubbles: a simpler way around the app. Mode bubbles (Draw, Animate, Move, Story) at the top left,
@@ -125,6 +125,7 @@ export class Bubbles {
   private current(): ToolKey {
     const a = this.app;
     if (a.tool === 'fill') return a.fillMode === 'lasso' ? 'select' : 'fill';
+    if (a.tool === 'brush' && a.smudging) return 'smudge';
     return a.tool as ToolKey;
   }
 
@@ -134,7 +135,7 @@ export class Bubbles {
 
   private toolsFor(ws: Workspace): [ToolKey, string, string][] {
     if (this.flipOn) return [['brush', 'Brush', 'brush'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
-    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso']];
+    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso']];
     if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     if (ws === 'time') return [['flip', 'Flipbook', 'flipbook'], ['onion', 'Onion', 'onion'], ['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard', 'export']];
@@ -147,9 +148,10 @@ export class Bubbles {
     if (a.transforming && k !== 'select') a.cancelTransform();
     switch (k) {
       case 'brush': case 'pen': case 'eraser':
-        if (a.tool === k) this.hooks.brushLibrary(b);
-        else a.setTool(k as Tool);
+        if (a.tool === k && !(k === 'brush' && a.smudging)) this.hooks.brushLibrary(b);
+        else { a.setTool(k as Tool); if (k === 'brush') a.setSmudging(false); }
         break;
+      case 'smudge': a.setSmudging(true); break;
       case 'fill':
         a.selectMoves = false;
         a.setTool('fill');
@@ -347,6 +349,15 @@ export class Bubbles {
         this.chip('\u2195', 'Mirror top to bottom', xp.flipV, () => a.flipTransform('v')),
         this.chip('Apply', 'Keep it (Enter)', false, () => a.applyTransform(), 'check'),
         this.chip('Cancel', 'Put it back (Esc)', false, () => a.cancelTransform(), 'close'),
+      );
+    } else if (cur === 'smudge') {
+      const lbl = el('span', { class: 'bub-hint' }, `Strength ${Math.round(a.smudgeStrength * 100)}%`);
+      add(
+        this.chip('Line', 'Smudge the LINE', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }),
+        this.chip('Fill', 'Smudge the FILL', a.plane === 'fill', () => { a.setPlane('fill'); a.setSmudging(true); }),
+        this.chip('Softer', 'Carry less paint', false, () => { a.smudgeStrength = Math.max(0.1, a.smudgeStrength - 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thinner'),
+        lbl,
+        this.chip('Stronger', 'Carry more paint', false, () => { a.smudgeStrength = Math.min(1, a.smudgeStrength + 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thicker'),
       );
     } else if (flip) {
       if (cur === 'brush' || cur === 'eraser') add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)));

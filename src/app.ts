@@ -323,7 +323,7 @@ export class App {
 
   /** True while a stroke is being drawn (autosave waits for it to end). */
   get strokeActive(): boolean {
-    return this.live !== null || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag;
+    return this.live !== null || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null;
   }
 
   get viewW(): number {
@@ -340,6 +340,7 @@ export class App {
 
   setTool(t: Tool): void {
     if (this.fillG) this.endFill(true);
+    if (t !== 'brush') this.smudging = false;
     if (t !== 'pen') this.exitPointEdit();
     this.tool = t;
     this.onToolChange();
@@ -923,6 +924,105 @@ export class App {
 
   get transformParams(): XParams | null {
     return this.xf ? { ...this.xf.params } : null;
+  }
+
+  /** Smudge (with the Brush tool): strokes drag the paint under them along instead of adding paint. */
+  smudging = false;
+  /** How much paint each smudge dab carries, 0..1. */
+  smudgeStrength = 0.7;
+  private smudge: { id: number; d: Drawing; canvas: HTMLCanvasElement; before: ImageData; last: { x: number; y: number }; box: { x0: number; y0: number; x1: number; y1: number }; dab: HTMLCanvasElement } | null = null;
+
+  setSmudging(on: boolean): void {
+    this.smudging = on;
+    if (on && this.tool !== 'brush') this.setTool('brush');
+    this.onToolChange();
+  }
+
+  private beginSmudge(e: PointerEvent): void {
+    if (this.blankPage) return;
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    const canvas = planeCanvas(d, this.plane);
+    const p = this.toPoint(e, e.timeStamp);
+    const dab = this.smudge?.dab ?? document.createElement('canvas');
+    this.smudge = { id: e.pointerId, d, canvas, before: canvas.getContext('2d')!.getImageData(0, 0, this.docW, this.docH), last: { x: p.x, y: p.y }, box: { x0: p.x, y0: p.y, x1: p.x, y1: p.y }, dab };
+    this.onStrokeState(true);
+  }
+
+  /** One smudge dab: the paint under the last spot, carried (softly, round) to this spot. */
+  private smudgeDab(x: number, y: number, pressure: number): void {
+    const s = this.smudge!;
+    const r = Math.max(2, (this.brush.size / 2) * (0.5 + 0.5 * pressure));
+    const size = Math.ceil(r * 2);
+    const dab = s.dab;
+    if (dab.width !== size || dab.height !== size) { dab.width = size; dab.height = size; }
+    const dg = dab.getContext('2d')!;
+    dg.globalCompositeOperation = 'source-over';
+    dg.clearRect(0, 0, size, size);
+    dg.drawImage(s.canvas, s.last.x - r, s.last.y - r, size, size, 0, 0, size, size);
+    // a soft round edge, so smudges blend in
+    dg.globalCompositeOperation = 'destination-in';
+    const grad = dg.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, 'rgba(0,0,0,1)');
+    grad.addColorStop(0.6, 'rgba(0,0,0,0.85)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    dg.fillStyle = grad;
+    dg.fillRect(0, 0, size, size);
+    const g = s.canvas.getContext('2d')!;
+    g.globalAlpha = this.smudgeStrength;
+    g.drawImage(dab, x - r, y - r);
+    g.globalAlpha = 1;
+    s.last = { x, y };
+    s.box = { x0: Math.min(s.box.x0, x - r), y0: Math.min(s.box.y0, y - r), x1: Math.max(s.box.x1, x + r), y1: Math.max(s.box.y1, y + r) };
+  }
+
+  private moveSmudge(e: PointerEvent): void {
+    const s = this.smudge;
+    if (!s) return;
+    const events = e.getCoalescedEvents?.() ?? [];
+    for (const ev of events.length ? events : [e]) {
+      const p = this.toPoint(ev, ev.timeStamp);
+      const step = Math.max(1, this.brush.size / 8);
+      const n = Math.max(1, Math.ceil(Math.hypot(p.x - s.last.x, p.y - s.last.y) / step));
+      const from = { ...s.last };
+      for (let k = 1; k <= n; k++) this.smudgeDab(from.x + ((p.x - from.x) * k) / n, from.y + ((p.y - from.y) * k) / n, p.pressure || 0.5);
+    }
+    this.touch(s.d);
+    this.requestRender();
+  }
+
+  private endSmudge(cancel: boolean): void {
+    const s = this.smudge;
+    if (!s) return;
+    this.smudge = null;
+    this.onStrokeState(false);
+    const g = s.canvas.getContext('2d')!;
+    if (cancel) {
+      g.putImageData(s.before, 0, 0);
+      this.touch(s.d);
+      this.requestRender();
+      return;
+    }
+    const x = Math.max(0, Math.floor(s.box.x0)), y = Math.max(0, Math.floor(s.box.y0));
+    const w = Math.min(this.docW, Math.ceil(s.box.x1)) - x, h = Math.min(this.docH, Math.ceil(s.box.y1)) - y;
+    if (w <= 0 || h <= 0) return;
+    const rect = { x, y, w, h };
+    const before = new ImageData(w, h);
+    for (let row = 0; row < h; row++) {
+      const from = ((y + row) * this.docW + x) * 4;
+      before.data.set(s.before.data.subarray(from, from + w * 4), row * w * 4);
+    }
+    const after = g.getImageData(x, y, w, h);
+    const d = s.d, canvas = s.canvas;
+    this.history.push({
+      label: 'Smudge',
+      drawings: [d],
+      do: () => { putPixels(canvas, rect, after); this.touch(d); },
+      undo: () => { putPixels(canvas, rect, before); this.touch(d); },
+    });
+    this.touch(d);
+    this.residency.updateThumb(d);
+    this.requestRender();
   }
 
   /** Eyedropper armed: the next tap on the canvas picks the colour you see there. */
@@ -2837,6 +2937,10 @@ export class App {
       if (!this.blankPage) this.beginFill(e);
       return;
     }
+    if (this.tool === 'brush' && this.smudging) {
+      this.beginSmudge(e);
+      return;
+    }
     const tool = this.tool;
     if (this.blankPage) {
       if (tool === 'eraser') return; // nothing to erase on a blank page
@@ -3026,13 +3130,13 @@ export class App {
     // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
-      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id)) this.onUp(e, cancelled);
+      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
     window.addEventListener('pointercancel', (e) => lifted(e, true));
     c.addEventListener('lostpointercapture', (e) => {
       // a pen that is no longer pressed has lifted
-      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id))) this.onUp(e, false);
+      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id))) this.onUp(e, false);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -3404,6 +3508,7 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    if (this.smudge && e.pointerId === this.smudge.id) return this.moveSmudge(e);
     const hd = this.ve?.hdrag;
     if (hd && e.pointerId === hd.id) {
       const p = this.toPoint(e, e.timeStamp);
@@ -3514,6 +3619,7 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (this.smudge && e.pointerId === this.smudge.id) return this.endSmudge(cancelled);
     const hd = this.ve?.hdrag;
     if (hd && e.pointerId === hd.id && this.ve) {
       const ve = this.ve;

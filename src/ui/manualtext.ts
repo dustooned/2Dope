@@ -286,6 +286,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-17', title: 'Smudge', items: ['The Smudge bubble (next to Brush) drags the paint under your stroke along, on Line or Fill, at the brush size. Softer and Stronger set how much paint it carries. Each smudge is one undo step.'] },
   { date: '2026-10-17', title: 'Merge Down, swipe for quick actions', items: ['Layer options gain Merge down: the layer flattens into the one below, frame by frame (Line onto Line, Fill onto Fill, with its opacity and blend; vector lines come along). It needs both layers to have the same frames and placement, like two still layers or linked art layers. Swipe a layer card left for Lock, Duplicate and Delete.'] },
   { date: '2026-10-17', title: 'Eyedropper and ColorDrop', items: ['The dropper button in the left sidebar (or I) picks the next colour you tap on the canvas, as you see it. ColorDrop: drag the colour bubble onto an area of the drawing and let go to fill it (on Fill, inside a selection if there is one). A tap on the colour bubble still opens the colour panel.'] },
   { date: '2026-10-17', title: 'Clipping mask and Alpha Lock', items: ['In a layer’s options: Clipping mask shows that layer only where the first unclipped layer below has paint (it sits indented with an arrow), so shading and texture stay inside the art. It works live while you draw, in every view and in exports. Alpha Lock lets brushes change only pixels that already have paint; the eraser still erases.'] },
