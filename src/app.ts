@@ -1,4 +1,4 @@
-import { anchorsOf, moveAnchor, nearestStroke } from './core/vecedit';
+import { allStraight, anchorsOf, joinStrokes, movePoint, nearestStroke, setPointMode, snapTarget, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
 import { History } from './core/history';
@@ -58,6 +58,9 @@ const BRUSH_KEY = '2dope.m0.brush';
 const COLOR_KEY = '2dope.m0.color';
 const ONION_KEY = '2dope.m1.onion';
 const FILL_KEY = '2dope.m1.fill';
+/** A point a dragged vector point can snap onto (an end of its line, or a point inside it). */
+type SnapPoint = { x: number; y: number; id: string; end: 'start' | 'end' | null };
+
 const FLIPBOOK_KEY = '2dope.flipbook';
 const FILL_MODE_KEY = '2dope.fill.mode';
 const LAYERS_KEY = '2dope.draw.layers';
@@ -575,7 +578,91 @@ export class App {
   }
 
   /** Vector point editing: one vector line of this drawing, its anchor points draggable, its width adjustable. */
-  private ve: { d: Drawing; id: string; drag: { id: number; k: number; x: number; y: number; anchors: number[]; base: StrokeRecord; before: StrokeRecord[] } | null } | null = null;
+  private ve: {
+    d: Drawing; id: string; sel: number | null;
+    drag: {
+      id: number; k: number; x: number; y: number; anchors: number[]; base: StrokeRecord; before: StrokeRecord[]; moved: boolean; timer: number;
+      /** Points of this drawing's vector lines a dragged point can snap onto. */
+      cands: SnapPoint[]; snapped: SnapPoint | null;
+    } | null;
+  } | null = null;
+  /** Straight or curved, per line and anchor point index (unset = the default below). */
+  private pointModes = new Map<string, Map<number, PointMode>>();
+  /** New points start straight (sharp corners) instead of curved. */
+  straightDefault = loadJSON<boolean>('2dope.points.straight') ?? false;
+  /** Dragged points snap onto other points of this drawing's vector lines. */
+  snapPoints = loadJSON<boolean>('2dope.points.snap') ?? true;
+  /** Dropping a line's end onto another line's end joins them into one line. */
+  mergeOnSnap = loadJSON<boolean>('2dope.points.merge') ?? true;
+
+  setSnapPoints(on: boolean): void {
+    this.snapPoints = on;
+    saveJSON('2dope.points.snap', on);
+    this.onToolChange();
+  }
+
+  setMergeOnSnap(on: boolean): void {
+    this.mergeOnSnap = on;
+    saveJSON('2dope.points.merge', on);
+    this.onToolChange();
+  }
+
+  /** Show a vector line's points right after a hold snaps it (QuickShape). */
+  pointsAfterHold = loadJSON<boolean>('2dope.points.afterHold') ?? true;
+
+  setStraightDefault(on: boolean): void {
+    this.straightDefault = on;
+    saveJSON('2dope.points.straight', on);
+    this.onToolChange();
+  }
+
+  setPointsAfterHold(on: boolean): void {
+    this.pointsAfterHold = on;
+    saveJSON('2dope.points.afterHold', on);
+    this.onToolChange();
+  }
+
+  private modeOf(id: string, pointIndex: number): PointMode {
+    return this.pointModes.get(id)?.get(pointIndex) ?? (this.straightDefault ? 'straight' : 'curve');
+  }
+
+  /** The chosen point's mode (the last one touched), or null when none is chosen. */
+  get pointSelMode(): PointMode | null {
+    const ve = this.ve;
+    return ve && ve.sel !== null ? this.modeOf(ve.id, ve.sel) : null;
+  }
+
+  /** Switch a point between straight and curved (hold it, or use the chip). */
+  togglePoint(pointIndex = this.ve?.sel ?? -1): void {
+    const ve = this.ve;
+    const rec = this.pointStroke;
+    if (!ve || !rec) return;
+    const anchors = anchorsOf(rec.points);
+    const k = anchors.indexOf(pointIndex);
+    if (k < 0) return;
+    const mode: PointMode = this.modeOf(rec.id, pointIndex) === 'straight' ? 'curve' : 'straight';
+    const before = ve.d.vectors;
+    let modes = this.pointModes.get(rec.id);
+    if (!modes) this.pointModes.set(rec.id, (modes = new Map()));
+    modes.set(pointIndex, mode);
+    ve.sel = pointIndex;
+    this.replaceStroke({ ...rec, points: setPointMode(rec.points, anchors, k, mode) });
+    this.pushVectors(mode === 'straight' ? 'Straight point' : 'Curved point', ve.d, before);
+    this.onToolChange();
+  }
+
+  /** Every point of the line straight: a clean polyline through its corners. */
+  straightenAllPoints(): void {
+    const ve = this.ve;
+    const rec = this.pointStroke;
+    if (!ve || !rec) return;
+    const anchors = anchorsOf(rec.points);
+    const before = ve.d.vectors;
+    this.pointModes.set(rec.id, new Map(anchors.map((i) => [i, 'straight' as PointMode])));
+    this.replaceStroke({ ...rec, points: allStraight(rec.points, anchors) });
+    this.pushVectors('Straight lines', ve.d, before);
+    this.onToolChange();
+  }
   private wBase: { before: StrokeRecord[]; rec: StrokeRecord } | null = null;
 
   get pointEditing(): boolean {
@@ -608,7 +695,7 @@ export class App {
       this.onNotice?.('Draw a line with the Vector pen first, then edit its points.');
       return false;
     }
-    this.ve = { d, id: rec.id, drag: null };
+    this.ve = { d, id: rec.id, sel: null, drag: null };
     this.requestRender();
     this.onToolChange();
     return true;
@@ -683,10 +770,26 @@ export class App {
       const p = rec.points[i]!;
       g.beginPath();
       g.arc(p.x, p.y, 9 / z, 0, Math.PI * 2);
-      g.fillStyle = this.ve?.drag?.k === k ? '#4aa3ff' : '#fff';
+      const straight = this.modeOf(rec.id, i) === 'straight';
+      g.fillStyle = this.ve?.drag?.k === k || this.ve?.sel === i ? '#4aa3ff' : '#fff';
+      if (straight) {
+        // straight points are squares, curved ones circles
+        g.beginPath();
+        const h = 8 / z;
+        g.rect(p.x - h, p.y - h, h * 2, h * 2);
+      }
       g.fill();
       g.stroke();
     });
+    // the point it will snap onto
+    const s = this.ve?.drag?.snapped;
+    if (s) {
+      g.beginPath();
+      g.arc(s.x, s.y, 14 / z, 0, Math.PI * 2);
+      g.lineWidth = 2.5 / z;
+      g.strokeStyle = s.end && this.mergeOnSnap ? '#4ade80' : '#ffd24a';
+      g.stroke();
+    }
     g.restore();
   }
 
@@ -2537,6 +2640,8 @@ export class App {
     // a snapped shape can be changed from the Edit shape button until something else happens
     this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo() } : null;
     this.onShapeChange();
+    // a vector line snapped by holding: show its points straight away (can be turned off)
+    if (live.shape && rec.tool === 'pen' && this.pointsAfterHold) this.enterPointEdit(rec.id);
     this.residency.updateThumb(d);
     this.requestRender();
   }
@@ -2628,8 +2733,29 @@ export class App {
           if (dd <= best) { best = dd; k = j; }
         });
         if (k >= 0) {
-          ve.drag = { id: e.pointerId, k, x: p.x, y: p.y, anchors, base: rec, before: ve.d.vectors };
+          const pointer = e.pointerId;
+          ve.sel = anchors[k]!;
+          // holding still on a point switches it between straight and curved
+          const timer = window.setTimeout(() => {
+            const dr = this.ve?.drag;
+            if (!dr || dr.id !== pointer || dr.moved) return;
+            this.ve!.drag = null;
+            this.togglePoint(anchors[k]!);
+          }, 450);
+          // what this point may snap onto: every vector line's points here, except itself and its neighbours
+          const cands: SnapPoint[] = [];
+          for (const v of ve.d.vectors) {
+            if (v.tool !== 'pen' || !v.points.length) continue;
+            const an = v.id === rec.id ? anchors : anchorsOf(v.points);
+            an.forEach((pi, j) => {
+              if (v.id === rec.id && Math.abs(j - k) <= 1) return;
+              const q = v.points[pi]!;
+              cands.push({ x: q.x, y: q.y, id: v.id, end: pi === 0 ? 'start' : pi === v.points.length - 1 ? 'end' : null });
+            });
+          }
+          ve.drag = { id: pointer, k, x: p.x, y: p.y, anchors, base: rec, before: ve.d.vectors, moved: false, timer, cands, snapped: null };
           this.requestRender();
+          this.onToolChange();
           return;
         }
       }
@@ -2901,7 +3027,15 @@ export class App {
     const vd = this.ve?.drag;
     if (vd && e.pointerId === vd.id) {
       const p = this.toPoint(e, e.timeStamp);
-      this.replaceStroke({ ...vd.base, points: moveAnchor(vd.base.points, vd.anchors, vd.k, p.x - vd.x, p.y - vd.y) });
+      if (!vd.moved && Math.hypot(p.x - vd.x, p.y - vd.y) < 6 / this.view.zoom) return;
+      vd.moved = true;
+      clearTimeout(vd.timer);
+      const mode = this.modeOf(vd.base.id, vd.anchors[vd.k]!);
+      const at = vd.base.points[vd.anchors[vd.k]!]!;
+      let dx = p.x - vd.x, dy = p.y - vd.y;
+      vd.snapped = this.snapPoints ? snapTarget(vd.cands, at.x + dx, at.y + dy, 14 / this.view.zoom) : null;
+      if (vd.snapped) { dx = vd.snapped.x - at.x; dy = vd.snapped.y - at.y; }
+      this.replaceStroke({ ...vd.base, points: movePoint(vd.base.points, vd.anchors, vd.k, dx, dy, mode) });
       return;
     }
     const xd = this.xf?.drag;
@@ -2973,8 +3107,25 @@ export class App {
     if (vd && e.pointerId === vd.id && this.ve) {
       const ve = this.ve;
       ve.drag = null;
-      if (cancelled) { ve.d.vectors = vd.before; this.touch(ve.d); this.requestRender(); }
-      else this.pushVectors('Move point', ve.d, vd.before);
+      clearTimeout(vd.timer);
+      if (!vd.moved) { this.requestRender(); return; }
+      if (cancelled) { ve.d.vectors = vd.before; this.touch(ve.d); this.requestRender(); return; }
+      const pi = vd.anchors[vd.k]!;
+      const myEnd = pi === 0 ? 'start' : pi === vd.base.points.length - 1 ? 'end' : null;
+      const s = vd.snapped;
+      const other = s && s.end && myEnd && s.id !== vd.base.id && this.mergeOnSnap ? ve.d.vectors.find((v) => v.id === s.id) : undefined;
+      const mine = this.pointStroke;
+      if (other && mine && s?.end && myEnd) {
+        // the two ends touch: one line from here on
+        const joined: StrokeRecord = { ...mine, points: joinStrokes(mine.points, myEnd, other.points, s.end) };
+        ve.d.vectors = ve.d.vectors.filter((v) => v.id !== other.id).map((v) => (v.id === mine.id ? joined : v));
+        this.pointModes.delete(mine.id);
+        this.pointModes.delete(other.id);
+        ve.sel = null;
+        this.touch(ve.d);
+        this.pushVectors('Join lines', ve.d, vd.before);
+        this.onToolChange();
+      } else this.pushVectors('Move point', ve.d, vd.before);
       this.requestRender();
       return;
     }

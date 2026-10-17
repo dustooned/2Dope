@@ -41,6 +41,8 @@ export class Bubbles {
   private sig = '';
   /** The Layers bubble shows this cel's linked layers in the context bar. */
   private layersOpen = false;
+  /** Point editing's on/off settings, folded behind one chip. */
+  private pointSettings = false;
 
   constructor(private readonly app: App, stage: HTMLElement, private readonly hooks: BubbleHooks) {
     if (hooks.flip) {
@@ -178,7 +180,19 @@ export class Bubbles {
     meter.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); a.nudgePointWidth(e.key === 'ArrowUp' ? 1.15 : 1 / 1.15); show(); }
     });
+    const sel = a.pointSelMode;
     return [
+      this.chip(sel === 'straight' ? '\u25a1 Straight point' : '\u25cb Curved point', sel ? 'Switch this point between straight and curved (or hold the point)' : 'Tap a point first; hold a point to switch it', sel === 'straight', () => a.togglePoint()),
+      this.chip('All straight', 'Make every point straight: clean lines between the corners', false, () => a.straightenAllPoints()),
+      this.chip('\u2699', 'Point settings: straight by default, snapping, joining, points after hold', this.pointSettings, () => { this.pointSettings = !this.pointSettings; this.sig = ''; this.update(); }),
+      ...(this.pointSettings
+        ? [
+            this.chip('New points straight', 'Points start straight instead of curved', a.straightDefault, () => a.setStraightDefault(!a.straightDefault)),
+            this.chip('Snap points', 'A dragged point snaps onto other points of the lines here', a.snapPoints, () => a.setSnapPoints(!a.snapPoints)),
+            this.chip('Merge on snap', 'Drop a line\u2019s end on another line\u2019s end to join them into one', a.mergeOnSnap, () => a.setMergeOnSnap(!a.mergeOnSnap)),
+            this.chip('Points after hold', 'Show a vector line\u2019s points right after a hold snaps it', a.pointsAfterHold, () => a.setPointsAfterHold(!a.pointsAfterHold)),
+          ]
+        : []),
       this.chip('\u2212 Thinner', 'A step thinner', false, () => { a.nudgePointWidth(1 / 1.15); show(); }),
       meter,
       this.chip('+ Thicker', 'A step thicker', false, () => { a.nudgePointWidth(1.15); show(); }),
@@ -197,7 +211,7 @@ export class Bubbles {
     const flip = this.flipOn;
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
-    const sig = [this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
+    const sig = [this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
     this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Animate', motion: 'Move', board: 'Story' }[ws];

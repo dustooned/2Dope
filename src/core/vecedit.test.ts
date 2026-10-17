@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anchorsOf, isClosed, moveAnchor, nearestStroke } from './vecedit';
+import { allStraight, anchorsOf, isClosed, joinStrokes, moveAnchor, movePoint, nearestStroke, setPointMode, snapTarget } from './vecedit';
 
 const line = (pts: [number, number][], step = 1) => {
   const out: { x: number; y: number; pressure: number }[] = [];
@@ -51,5 +51,47 @@ describe('vector point editing', () => {
     const b = { points: line([[0, 50], [100, 50]]) };
     expect(nearestStroke([a, b], 40, 46, 10)).toBe(1);
     expect(nearestStroke([a, b], 40, 25, 10)).toBe(-1);
+  });
+});
+
+describe('straight and curved points', () => {
+  it('a straight point lays straight lines to its neighbours, even after moving', () => {
+    const pts = line([[0, 0], [100, 0], [200, 0]]);
+    const m = movePoint(pts, [0, 100, 200], 1, 0, 50, 'straight');
+    expect(m[100]!.y).toBe(50);
+    expect(m[50]!.y).toBeCloseTo(25);
+    expect(m[150]!.y).toBeCloseTo(25);
+  });
+
+  it('a curved point bends smoothly instead', () => {
+    const pts = line([[0, 0], [100, 0], [200, 0]]);
+    const m = movePoint(pts, [0, 100, 200], 1, 0, 50, 'curve');
+    expect(m[75]!.y).toBeGreaterThan(37.5); // nearer the point, the bend sits above the straight line
+  });
+
+  it('switching a corner to curved rounds its spans, and all straight makes a polyline', () => {
+    const pts = line([[0, 0], [100, 0], [100, 100]]);
+    const anchors = [0, 100, 200];
+    const curved = setPointMode(pts, anchors, 1, 'curve');
+    expect(curved[150]!.x).toBeGreaterThan(100); // the second span bows out past the corner
+    const back = allStraight(curved, anchors);
+    expect(back[150]!.x).toBeCloseTo(100);
+    expect(back[150]!.y).toBeCloseTo(50);
+  });
+});
+
+describe('snapping and joining points', () => {
+  it('snaps to the nearest point in reach, and not beyond it', () => {
+    const c = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+    expect(snapTarget(c, 9, 1, 5)).toEqual({ x: 10, y: 0 });
+    expect(snapTarget(c, 30, 0, 5)).toBeNull();
+  });
+
+  it('joins two lines at the touching ends, whichever way they were drawn', () => {
+    const a = [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 10, y: 0 }];
+    const b = [{ x: 20, y: 0 }, { x: 15, y: 0 }, { x: 10, y: 0 }];
+    expect(joinStrokes(a, 'end', b, 'end').map((p) => p.x)).toEqual([0, 5, 10, 15, 20]);
+    const c = [{ x: 0, y: 0 }, { x: -5, y: 0 }, { x: -10, y: 0 }];
+    expect(joinStrokes(a, 'start', c, 'start').map((p) => p.x)).toEqual([10, 5, 0, -5, -10]);
   });
 });

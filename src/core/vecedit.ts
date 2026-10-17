@@ -105,3 +105,82 @@ export function nearestStroke(strokes: { points: Pt[] }[], x: number, y: number,
   });
   return best;
 }
+
+/** Re-lay the points strictly between `i0` and `i1` on the straight line joining them (spacing kept by index). */
+export function straightenSpan<T extends Pt>(points: T[], i0: number, i1: number): T[] {
+  if (i1 - i0 < 2) return points;
+  const out = points.map((p) => ({ ...p }));
+  const a = points[i0]!, b = points[i1]!;
+  for (let i = i0 + 1; i < i1; i++) {
+    const t = (i - i0) / (i1 - i0);
+    out[i]!.x = a.x + (b.x - a.x) * t;
+    out[i]!.y = a.y + (b.y - a.y) * t;
+  }
+  return out;
+}
+
+/** Re-lay the points between `i0` and `i1` on a smooth Catmull-Rom curve through the neighbouring anchors. */
+export function curveSpan<T extends Pt>(points: T[], before: number, i0: number, i1: number, after: number): T[] {
+  if (i1 - i0 < 2) return points;
+  const out = points.map((p) => ({ ...p }));
+  const p0 = points[before]!, p1 = points[i0]!, p2 = points[i1]!, p3 = points[after]!;
+  for (let i = i0 + 1; i < i1; i++) {
+    const t = (i - i0) / (i1 - i0), t2 = t * t, t3 = t2 * t;
+    const f = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+    out[i]!.x = f(p0.x, p1.x, p2.x, p3.x);
+    out[i]!.y = f(p0.y, p1.y, p2.y, p3.y);
+  }
+  return out;
+}
+
+export type PointMode = 'curve' | 'straight';
+
+/** Make anchor `k` sharp (straight lines to its neighbours) or smooth (curves through them). */
+export function setPointMode<T extends Pt>(points: T[], anchors: number[], k: number, mode: PointMode): T[] {
+  const ai = anchors[k];
+  if (ai === undefined) return points;
+  const prev = anchors[k - 1], next = anchors[k + 1];
+  let out = points;
+  if (mode === 'straight') {
+    if (prev !== undefined) out = straightenSpan(out, prev, ai);
+    if (next !== undefined) out = straightenSpan(out, ai, next);
+    return out;
+  }
+  const at = (j: number) => anchors[Math.max(0, Math.min(anchors.length - 1, j))]!;
+  if (prev !== undefined) out = curveSpan(out, at(k - 2), prev, ai, at(k + 1));
+  if (next !== undefined) out = curveSpan(out, at(k - 1), ai, next, at(k + 2));
+  return out;
+}
+
+/** Move anchor `k`; a straight point keeps straight lines to its neighbours, a curved one bends them smoothly. */
+export function movePoint<T extends Pt>(points: T[], anchors: number[], k: number, dx: number, dy: number, mode: PointMode): T[] {
+  const moved = moveAnchor(points, anchors, k, dx, dy);
+  return mode === 'straight' ? setPointMode(moved, anchors, k, 'straight') : moved;
+}
+
+/** Every point straight: the line becomes a clean polyline through its anchors. */
+export function allStraight<T extends Pt>(points: T[], anchors: number[]): T[] {
+  let out = points;
+  for (let k = 1; k < anchors.length; k++) out = straightenSpan(out, anchors[k - 1]!, anchors[k]!);
+  return out;
+}
+
+/** The nearest candidate within `r` of (x, y), or null. */
+export function snapTarget<C extends Pt>(candidates: C[], x: number, y: number, r: number): C | null {
+  let best: C | null = null, bestD = r;
+  for (const c of candidates) {
+    const d = Math.hypot(c.x - x, c.y - y);
+    if (d <= bestD) { bestD = d; best = c; }
+  }
+  return best;
+}
+
+/**
+ * Join two lines at the ends that touch: `aEnd` of line a meets `bEnd` of line b. The result runs
+ * through a and on into b, with the shared point once.
+ */
+export function joinStrokes<T extends Pt>(a: T[], aEnd: 'start' | 'end', b: T[], bEnd: 'start' | 'end'): T[] {
+  const first = aEnd === 'end' ? a : [...a].reverse();
+  const second = bEnd === 'start' ? b : [...b].reverse();
+  return [...first, ...second.slice(1)].map((p) => ({ ...p }));
+}
