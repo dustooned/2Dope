@@ -1,16 +1,28 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-10-16)
+## Current state (2026-10-17)
 
-`main` at `542be38` is pushed. Everything Codex built is merged: spatial selection and fill, paint-target cues and shared layer folding, Line selects Pen / Fill selects Bucket, QuickShape precision, audio waveforms, per-workspace Tools/Timeline folding, the Export and finish hub with GIF export. Claude added optional **hear-while-scrubbing** (box in the Audio lane, off by default). The per-feature Codex branches and worktrees were deleted; their reports stay in `docs/CLAUDE-*-HANDOFF.md` as history.
+`main` at `8f505f5` is pushed (GitHub Pages deploys on push). 309 tests and the production build pass. Everything below was checked by script (and screenshots) in desktop Chromium only: **none of it has been tried on an iPad / Apple Pencil yet**, which is the next real test.
 
-- Checked after the merge: 276 tests and the production build. In desktop Chromium: audio scrub (slices only while scrubbing, none after release), `.2dope` export and re-import (clip, sound and drawings kept), MP4 export with audio decoded.
-- Still not checked: iPad/Apple Pencil/Safari, memory pressure on weak devices, Blender import. An unattributed `MutationObserver.observe` error appears in some QA logs.
-- **Not built yet:** selection transform and warp, clipping masks, effect stacks, brush tips and `.abr`/`.brushset` import, a free-arrangement timeline with cross-rail moves, general media/video import, Rust desktop.
+Built 2026-10-16 (Claude, one long session), newest last:
+
+- **Audio scrub** (`audio.ts` `audition`): optional, off by default, Audio lane / sound card checkbox.
+- **Selection transform** (`core/selxform.ts`, `App.beginTransform/applyTransform`): Fill > Select area, then Transform; drag to move, corner handles scale, knob rotates (15° snap), flips; Line + Fill pixels and whole vector strokes inside; one undo step that also restores the selection. Lasso has marching ants.
+- **Tracks sheet** (`ui/sheet.ts`, Draw and Time): one handle bar (Play, time, + Audio) above the timeline; tap steps closed / half / full, drag resizes, swipe down closes; sounds are rows under the layers (`AudioTracks.railRows`) with a floating settings card. Board and Motion keep the old splitter and Audio lane.
+- **Bubbles** (`ui/bubbles.ts`): mode bubbles (Flip, Draw, Animate = Time, Move = Motion, Story = Board), tool bubbles for the mode, a one-row context bar per tool, and a level button (clean / simple / full; simple is the default, full = the classic layout). Simple hides the top bar and focus bar; the timeline row keeps essentials as icons with More (`data-extra` in `ui/strip.ts`).
+- **Flip** (`ui/flipmode.ts`): beginner mode; drawing bubbles row, + for a fresh page (`App.flipToBlank`, also the Flipbook button), Play, Fit; nudge to the timeline after six drawings.
+- **Linked art layers** (`core/cellink.ts`, layer field `cel`): drawings layers in one cel group keep the same cels and timing; `editTimeline` syncs them in one undo step. Layers bubble: chips in Flip, **layer cards** in Draw (`ui/layercards.ts`, Procreate style: thumbnails, tap / tap again for options, hold-drag to reorder).
+- **Vector point editing** (`core/vecedit.ts`, `App.enterPointEdit`): anchors found once (`anchorsFor` cache), drag with smooth falloff or straight spans, hold a point to toggle straight / curved, Bezier handles on curved points, snap onto other lines' points and join ends (toggles), width for whole line / this point / chosen sections (per-point `w` multiplier on `StrokePoint`, saved optionally). Points appear after a QuickShape hold (toggle).
+- **Transparent GIF** option (`io/gif.ts` `GIF_CLEAR`, disposal 2).
+- **Fixes:** Flip Pause (no per-frame rebuild), Safari page zoom from scroll containers (`touch-action`, viewport snap-back in `main.ts`), notices deduplicated.
+
+File format: two optional fields only (`cel` on layers, `w` on points); older files open unchanged, older builds ignore them.
+
+Known gaps: retiming linked layers from **Motion** does not sync them (only Draw / Time / Flip edits do); duplicating a cel gives its linked partners a blank drawing; GIF transparency is 1-bit; nothing verified on iPad. Still not built: clipping masks, effect stacks, brush tips and `.abr`/`.brushset` import, warp, free-arrangement timeline, general media/video import, Rust desktop.
 
 **Design studies (evidence and proposals, not features):** [layers/masks/UI](docs/LAYERS-MASKS-AND-UI-STUDY.md), [selection/transform](docs/SELECTION-TRANSFORM-MANUAL-STUDY.md), [manuals vs source](docs/MANUAL-TO-SOURCE-COMPARISON.md), [timeline/media/UI direction](docs/TIMELINE-AND-MEDIA-DIRECTION.md), [art effects and clipping](docs/ART-EFFECTS-DIRECTION.md), [brush import](docs/NATIVE-BRUSH-IMPORT-DIRECTION.md). The free-timeline request needs concrete changes confirmed before structural work; do not treat the standalone timeline mockup as a spec.
 
-Prepared 2026-10-14; updated 2026-10-16 so another assistant can continue without a previous chat.
+Prepared 2026-10-14; updated 2026-10-17 so another assistant can continue without a previous chat.
 
 ## Start here
 

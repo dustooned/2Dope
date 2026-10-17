@@ -35,6 +35,12 @@ Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framew
 | Other `io/` modules | PNG sequence plans/rendering, ZIP/PDF, storyboard/CSV export, Blender manifest/packages. |
 | `io/videoplan.ts`, `io/exportvideo.ts`, `ui/videoexport.ts` | Main-shot video sizing/timing/budgets, offline MP4/WebM encoding, capability checks, modal preview/download. |
 | `blender/2dope_import.py` | Blender importer, bundled as raw source by `io/blenderpack.ts`. |
+| `core/selxform.ts` | Selection transform maths and pixels (affine about the selection centre, bilinear lift-and-place, whole vector strokes inside); the session lives in `App` (`beginTransform` / `applyTransform`). |
+| `core/cellink.ts` | Linked art layers: layers sharing a `cel` group keep identical cels; `syncExposures` maps a timing edit onto each member (used by `App.editTimeline`). |
+| `core/vecedit.ts` | Vector point editing maths: anchors (RDP), falloff / straight / curved moves, Bezier spans, snapping and joining, per-point and per-section width. The session (`App.ve`) and its anchor cache live in `App`. |
+| `ui/bubbles.ts` | Simple-screen navigation: mode bubbles, tool bubbles, the one-row context bar, the clean / simple / full level button (body classes `ui-clean` / `ui-simple` / `ui-full`). |
+| `ui/flipmode.ts`, `ui/layercards.ts`, `ui/sheet.ts` | Flip beginner mode (drawing bubbles row), Procreate-style layer cards for Draw, the tracks sheet handle bar (Draw / Time). |
+| `io/gif.ts`, `io/exportgif.ts`, `ui/exporthub.ts` | Bounded looping GIF writer (fixed palette, optional 1-bit transparency) and the Export and finish hub. |
 
 ## Document and clocks
 
