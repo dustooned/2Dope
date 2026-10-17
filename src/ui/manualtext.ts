@@ -286,6 +286,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-16', title: 'Bubbles and a simpler screen', items: ['Mode bubbles at the top left (Draw, Animate, Move, Story) and only that mode tools at the top right; a small bar under them shows just what the chosen tool needs. The round button at the top right steps the screen between clean, simple and full (the classic layout with every button). Flipbook now opens a fresh blank page straight away.'] },
   { date: '2026-10-16', title: 'Tracks sheet in Draw and Time', items: ['One touch-friendly bar above the timeline: tap to step closed / half / full, drag, or swipe down to close; Play and the time stay visible when closed. Sounds are rows under the layers, and their settings open in a card you can close with a tap outside or a swipe.'] },
   { date: '2026-10-16', title: 'Transform a selection', items: ['After Select area, tap Transform to move, scale, rotate or flip what is inside the selection on this drawing. Apply keeps it as one undo step; Cancel puts it back.'] },
   { date: '2026-10-16', title: 'Hear audio while scrubbing', items: ['A new box in the Audio lane plays a short slice of sound at each frame you scrub to. Off by default; it stops when you let go.'] },

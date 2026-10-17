@@ -19,6 +19,7 @@ import { MotionPanel } from './ui/motion';
 import { Splitter } from './ui/splitter';
 import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
+import { Bubbles } from './ui/bubbles';
 import { TracksSheet } from './ui/sheet';
 import { Strip } from './ui/strip';
 import { XSheet } from './ui/xsheet';
@@ -513,6 +514,17 @@ app.onFrameChange = chain(app.onFrameChange, () => {
   if (app.workspace === 'motion') motion.update();
 });
 app.onToolChange = chain(app.onToolChange, () => quick.update());
+// Bubbles: mode and tool bubbles plus a context bar; the level button steps clean / simple / full.
+const bubbles = new Bubbles(app, $('#stage'), {
+  brushLibrary: (anchor) => brushLib.toggle(anchor),
+  colorPanel: (anchor) => colorPanel.toggle(anchor),
+  layers: (anchor) => layersPop.toggle(anchor),
+  fit: () => app.fit(),
+});
+app.onToolChange = chain(app.onToolChange, () => bubbles.update());
+app.onFrameChange = chain(app.onFrameChange, () => bubbles.update());
+app.onColorChange = chain(app.onColorChange, () => bubbles.update());
+app.onWorkspaceChange = chain(app.onWorkspaceChange, () => bubbles.update());
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
 app.onThumbs = () => strip.update();
