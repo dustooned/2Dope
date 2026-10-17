@@ -201,7 +201,7 @@ app.onColorChange = chain(app.onColorChange, () => {
 const layersPop = new LayersPopover(app);
 const layersBtn = $<HTMLButtonElement>('#layers-btn');
 layersBtn.addEventListener('click', () => layersPop.toggle(layersBtn));
-app.openLayers = (anchor) => layersPop.toggle(anchor);
+app.openLayers = (anchor) => (document.body.classList.contains('ui-full') ? layersPop.toggle(anchor) : layerCards.toggle(anchor));
 app.onToolChange = chain(app.onToolChange, () => layersPop.update());
 syncColor();
 

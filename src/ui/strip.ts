@@ -579,17 +579,19 @@ export class Strip {
     if (sig === this.togglesSig) return;
     this.togglesSig = sig;
     const row = this.togglesRow;
+    // one compact line, however many layers there are: the layer cards hold every eye
     row.replaceChildren(el('span', { class: 'name' }, 'Show'));
-    for (const l of layers) {
-      const b = el(
-        'button',
-        { type: 'button', class: `lchip${l.id === active ? ' on' : ''}`, 'aria-pressed': String(l.visible), title: `${l.visible ? 'Hide' : 'Show'} ${l.name}. Long-press the name in Draw to rename.` },
-        l.name,
-      );
-      decorate(b, 'eye');
-      b.addEventListener('click', () => app.editor.setFlag(l.id, 'visible', !l.visible));
-      row.append(b);
+    const shown = layers.filter((l) => l.visible).length;
+    const open = el('button', { type: 'button', class: 'lchip', title: 'Every layer, with its eye: the layer cards' }, `Layers ${shown}/${layers.length}`);
+    decorate(open, 'layers');
+    open.addEventListener('click', () => app.openLayers?.(open));
+    row.append(open);
+    if (shown < layers.length) {
+      const all = el('button', { type: 'button', title: 'Show every layer again' }, 'Show all');
+      all.addEventListener('click', () => app.editor.edit('Show all layers', (c) => { for (const l of c.layers) if (l.kind === 'drawings') l.visible = true; }));
+      row.append(all);
     }
+    void active;
     if (cur) {
       row.append(el('span', { class: 'name' }, `${cur.name}:`));
       for (const part of ['line', 'fill'] as const) {
