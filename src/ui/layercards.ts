@@ -27,9 +27,11 @@ export class LayerCards {
   private anchor: HTMLElement | null = null;
   private sig = '';
   private menuFor: string | null = null;
+  /** The card swiped left: its quick actions show. */
+  private swiped: string | null = null;
   /** The + menu: animation, background or object layer. */
   private addOpen = false;
-  private drag: { id: string; y0: number; card: HTMLElement; ready: boolean; timer: number; pointer: number; moved: boolean } | null = null;
+  private drag: { id: string; y0: number; x0: number; card: HTMLElement; ready: boolean; timer: number; pointer: number; moved: boolean } | null = null;
 
   constructor(private readonly app: App) {
     document.body.append(this.root);
@@ -118,7 +120,7 @@ export class LayerCards {
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -183,6 +185,7 @@ export class LayerCards {
       card.append(this.thumb(l), info, eye);
       this.bindCard(card, l, on);
       list.append(card);
+      if (this.swiped === l.id) list.append(this.quick(l));
       if (this.menuFor === l.id) list.append(this.options(l));
     }
     if (!layers.length) list.append(el('p', { class: 'hint' }, 'No layers yet. Draw, or tap +.'));
@@ -202,14 +205,24 @@ export class LayerCards {
           try { card.setPointerCapture(pointer); } catch { /* synthetic */ }
         }
       }, HOLD_MS);
-      this.drag = { id: l.id, y0: e.clientY, card, ready: false, timer, pointer, moved: false };
+      this.drag = { id: l.id, y0: e.clientY, x0: e.clientX, card, ready: false, timer, pointer, moved: false };
     });
     card.addEventListener('pointermove', (e) => {
       const d = this.drag;
       if (!d || d.pointer !== e.pointerId) return;
       const dy = e.clientY - d.y0;
+      const dx = e.clientX - d.x0;
       if (!d.ready) {
-        // moving before the hold is a scroll of the list, not a drag
+        // a swipe left shows the quick actions (Procreate); moving up or down is a scroll of the list
+        if (dx < -36 && Math.abs(dy) < 24 && !d.moved) {
+          clearTimeout(d.timer);
+          this.drag = null; // the swipe is done: let the list redraw with the actions showing
+          this.swiped = this.swiped === l.id ? null : l.id;
+          this.menuFor = null;
+          this.sig = '';
+          this.update();
+          return;
+        }
         if (Math.abs(dy) > 8) { d.moved = true; clearTimeout(d.timer); }
         return;
       }
@@ -246,6 +259,24 @@ export class LayerCards {
     };
     card.addEventListener('pointerup', (e) => end(e, false));
     card.addEventListener('pointercancel', (e) => end(e, true));
+  }
+
+  /** Quick actions after a swipe left: Lock, Duplicate, Delete. */
+  private quick(l: Layer): HTMLElement {
+    const app = this.app;
+    const box = el('div', { class: 'lc-options lc-quick', role: 'group', 'aria-label': `${l.name} quick actions` });
+    const act = (label: string, icon: string, fn: () => void | Promise<void>, danger = false) => {
+      const b = el('button', { type: 'button', class: `lc-opt${danger ? ' danger' : ''}`, title: label }, label);
+      decorate(b, icon);
+      b.addEventListener('click', () => void (async () => { await fn(); this.swiped = null; this.sig = ''; this.update(); })());
+      box.append(b);
+    };
+    act(l.locked ? 'Unlock' : 'Lock', 'lock', () => app.editor.setFlag(l.id, 'locked', !l.locked));
+    act('Duplicate', 'copy', () => app.duplicateLayer(l.id));
+    act('Delete', 'trash', async () => {
+      if (await confirmBox(`Delete \u201c${l.name}\u201d?`, 'You can undo this.', 'Delete', true)) app.editor.deleteLayers([l.id]);
+    }, true);
+    return box;
   }
 
   /** The options of the layer you draw on. */
@@ -291,6 +322,7 @@ export class LayerCards {
       flag('Clipping mask', 'Show this layer only where the layer below has paint', 'clip');
       flag('Alpha Lock', 'Brushes change only pixels that already have paint', 'alphaLock');
     }
+    if (l.kind === 'drawings' && !l.guide) opt('Merge down', 'collapseall', 'Flatten this layer into the one below (same frames and placement)', async () => { if (await app.mergeDown(l.id)) { this.menuFor = null; } this.sig = ''; this.update(); });
     opt('Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', async () => { await app.duplicateLayer(l.id); this.menuFor = null; this.sig = ''; this.update(); });
     opt('Rename', 'draw', 'Rename this layer', async () => {
       const n = await askText('Layer name', l.name, 'Rename');

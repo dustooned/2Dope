@@ -1821,6 +1821,85 @@ export class App {
     this.onFrameChange();
   }
 
+  /**
+   * Merge Down (Procreate): flatten a drawings layer into the one below, cel by cel: Line onto Line,
+   * Fill onto Fill (with the upper layer's opacity and blend), vector lines carried over. The lower
+   * layer gets new copies of its drawings, so one undo brings both layers back as they were. Only
+   * for layers that line up: the same cels and timing (a still layer onto a still layer, or linked
+   * layers), and the same placement.
+   */
+  async mergeDown(id: string): Promise<boolean> {
+    if (this.strokeActive) return false;
+    const c = this.project.comp;
+    const i = c.layers.findIndex((l) => l.id === id);
+    const up = c.layers[i];
+    const down = c.layers[i + 1];
+    if (!up || up.kind !== 'drawings' || up.guide) return false;
+    if (!down || down.kind !== 'drawings' || down.guide) {
+      this.onNotice?.('There is no drawing layer below to merge into.');
+      return false;
+    }
+    const sameCels = up.exposures.length === down.exposures.length && up.exposures.every((e, k) => e.length === down.exposures[k]!.length) && up.start === down.start;
+    if (!sameCels) {
+      this.onNotice?.('Merge Down needs the two layers to have the same frames and timing (link them as art layers, or merge two still layers).');
+      return false;
+    }
+    if (JSON.stringify(up.transform) !== JSON.stringify(down.transform) || up.parent !== down.parent) {
+      this.onNotice?.('Merge Down needs both layers in the same place (same position, scale and rotation).');
+      return false;
+    }
+    const ups = up.exposures.map((e) => this.project.drawing(e.drawing));
+    try {
+      await Promise.all(ups.map((d) => this.residency.pin(d)));
+      const copies = await this.copyDrawings(down.exposures.map((e) => e.drawing));
+      if (!copies) throw new Error('loading');
+      const op = Math.max(0, Math.min(1, Number(this.editor.valueNow(up, 'opacity')) / 100));
+      const blend: GlobalCompositeOperation = up.blend === 'normal' ? 'source-over' : up.blend === 'add' ? 'lighter' : (up.blend as GlobalCompositeOperation);
+      const done = new Set<string>();
+      down.exposures.forEach((_, k) => {
+        const target = this.project.drawing(copies[k]!);
+        if (done.has(target.id)) return;
+        done.add(target.id);
+        const src = ups[k]!;
+        const lineVis = partOf(up, 'line').visible, fillVis = partOf(up, 'fill').visible;
+        if (fillVis && src.fill) {
+          const g = planeCanvas(target, 'fill').getContext('2d')!;
+          g.globalAlpha = op * Number(valueAt(partOf(up, 'fill').opacity, 0)) / 100;
+          g.globalCompositeOperation = blend;
+          g.drawImage(src.fill, 0, 0);
+          g.globalAlpha = 1;
+          g.globalCompositeOperation = 'source-over';
+        }
+        if (lineVis) {
+          const g = target.line.getContext('2d')!;
+          g.globalAlpha = op * Number(valueAt(partOf(up, 'line').opacity, 0)) / 100;
+          g.globalCompositeOperation = blend;
+          g.drawImage(src.line, 0, 0);
+          g.globalAlpha = 1;
+          g.globalCompositeOperation = 'source-over';
+          target.vectors = [...target.vectors, ...src.vectors];
+        }
+        this.touch(target);
+        this.residency.updateThumb(target);
+      });
+      this.editor.edit('Merge down', (cc) => {
+        const lo = cc.layers.find((l) => l.id === down.id);
+        if (lo && lo.kind === 'drawings') lo.exposures = lo.exposures.map((e, k) => ({ ...e, drawing: copies[k]! }));
+        cc.layers = cc.layers.filter((l) => l.id !== up.id);
+      });
+      this.focusLayer(down.id);
+      this.onCompChanged();
+      this.requestRender();
+      this.onFrameChange();
+      return true;
+    } catch {
+      this.onNotice?.('Could not merge yet: the drawings are still loading. Try again in a moment.');
+      return false;
+    } finally {
+      for (const d of ups) this.residency.unpin(d);
+    }
+  }
+
   /** A copy of a drawings layer above it, with its own copies of every drawing (editing it never changes the original). */
   async duplicateLayer(id: string): Promise<void> {
     if (this.strokeActive) return;
