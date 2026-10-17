@@ -111,6 +111,7 @@ shapeBtn.addEventListener('click', () => {
     ...SHAPE_CHOICES.map((c) => ({ label: c.label, checked: cur === c.id, run: () => app.swapShape(c.id) })),
     { sep: true },
     { label: '✎ Keep my stroke', checked: cur === 'stroke', run: () => app.swapShape('stroke') },
+    ...(app.lastShape?.rec.tool === 'pen' ? [{ sep: true } as const, { label: '◇ Edit points', run: () => { const id = app.lastShape?.rec.id; app.enterPointEdit(id); } }] : []),
   ]);
 });
 for (const b of partButtons) b.addEventListener('click', () => app.togglePart(b.dataset.partEye === 'fill' ? 'fill' : 'line'));

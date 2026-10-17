@@ -1,3 +1,4 @@
+import { anchorsOf, moveAnchor, nearestStroke } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
 import { History } from './core/history';
@@ -261,6 +262,8 @@ export class App {
   private dpr = 1;
   private fitted = false;
   private needsRender = true;
+  /** Last marching-ants redraw (the selection outline crawls). */
+  private antsAt = 0;
   private live: LiveStroke | null = null;
   private readonly touches = new Map<number, TouchInfo>();
   private pinch: PinchState | null = null;
@@ -299,6 +302,10 @@ export class App {
     this.residency.setProject(this.project);
     const loop = (now: number) => {
       if (this.playing) this.tickPlayback(now);
+      if (!this.needsRender && !this.live && !this.playing && this.spatial && now - this.antsAt > 90) {
+        this.antsAt = now;
+        if (this.spatialSelection) this.needsRender = true;
+      }
       if (this.needsRender) this.render();
       if (this.thumbsChanged) {
         this.thumbsChanged = false;
@@ -311,7 +318,7 @@ export class App {
 
   /** True while a stroke is being drawn (autosave waits for it to end). */
   get strokeActive(): boolean {
-    return this.live !== null || this.fillG !== null || this.fillBusy || this.xf !== null;
+    return this.live !== null || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag;
   }
 
   get viewW(): number {
@@ -328,6 +335,7 @@ export class App {
 
   setTool(t: Tool): void {
     if (this.fillG) this.endFill(true);
+    if (t !== 'pen') this.exitPointEdit();
     this.tool = t;
     this.onToolChange();
   }
@@ -566,11 +574,127 @@ export class App {
     this.onToolChange();
   }
 
+  /** Vector point editing: one vector line of this drawing, its anchor points draggable, its width adjustable. */
+  private ve: { d: Drawing; id: string; drag: { id: number; k: number; x: number; y: number; anchors: number[]; base: StrokeRecord; before: StrokeRecord[] } | null } | null = null;
+  private wBase: { before: StrokeRecord[]; rec: StrokeRecord } | null = null;
+
+  get pointEditing(): boolean {
+    this.veValid();
+    return this.ve !== null;
+  }
+
+  /** The line being edited, if any. */
+  get pointStroke(): StrokeRecord | null {
+    const ve = this.ve;
+    return ve ? ve.d.vectors.find((v) => v.id === ve.id) ?? null : null;
+  }
+
+  private veValid(): void {
+    const ve = this.ve;
+    if (ve && (ve.d !== this.drawing || this.blankPage || !ve.d.vectors.some((v) => v.id === ve.id))) {
+      this.ve = null;
+      this.wBase = null;
+    }
+  }
+
+  /** Edit the points of a vector line on this drawing (the given one, or the last drawn). */
+  enterPointEdit(strokeId?: string): boolean {
+    if (this.live || this.xf || this.playing || this.project.layer.locked) return false;
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return false;
+    const pens = d.vectors.filter((v) => v.tool === 'pen');
+    const rec = (strokeId ? pens.find((v) => v.id === strokeId) : null) ?? pens[pens.length - 1];
+    if (!rec) {
+      this.onNotice?.('Draw a line with the Vector pen first, then edit its points.');
+      return false;
+    }
+    this.ve = { d, id: rec.id, drag: null };
+    this.requestRender();
+    this.onToolChange();
+    return true;
+  }
+
+  exitPointEdit(): void {
+    if (!this.ve) return;
+    this.commitPointWidth();
+    this.ve = null;
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  private replaceStroke(rec: StrokeRecord): void {
+    const ve = this.ve;
+    if (!ve) return;
+    ve.d.vectors = ve.d.vectors.map((v) => (v.id === rec.id ? rec : v));
+    this.touch(ve.d);
+    this.requestRender();
+  }
+
+  private pushVectors(label: string, d: Drawing, before: StrokeRecord[]): void {
+    const after = d.vectors;
+    if (after === before) return;
+    this.history.push({
+      label,
+      drawings: [d],
+      do: () => { d.vectors = after; this.touch(d); this.requestRender(); this.onToolChange(); },
+      undo: () => { d.vectors = before; this.touch(d); this.requestRender(); this.onToolChange(); },
+    });
+    this.residency.updateThumb(d);
+    this.onDocChanged();
+  }
+
+  /** Thickness, live (from the meter): `f` times the width the gesture started with. */
+  setPointWidthLive(f: number): void {
+    const rec = this.pointStroke;
+    const ve = this.ve;
+    if (!rec || !ve) return;
+    if (!this.wBase) this.wBase = { before: ve.d.vectors, rec };
+    const b = this.wBase.rec;
+    this.replaceStroke({ ...b, brush: { ...b.brush, size: Math.max(0.5, Math.min(400, b.brush.size * f)) } });
+    this.onToolChange();
+  }
+
+  commitPointWidth(): void {
+    const w = this.wBase;
+    const ve = this.ve;
+    this.wBase = null;
+    if (w && ve) this.pushVectors('Line width', ve.d, w.before);
+  }
+
+  /** One step thinner or thicker. */
+  nudgePointWidth(f: number): void {
+    this.setPointWidthLive(f);
+    this.commitPointWidth();
+  }
+
+  private drawPointEdit(g: CanvasRenderingContext2D): void {
+    this.veValid();
+    const rec = this.pointStroke;
+    if (!rec || !rec.points.length) return;
+    const z = this.view.zoom;
+    const anchors = this.ve?.drag?.anchors ?? anchorsOf(rec.points);
+    g.save();
+    g.lineWidth = 1.5 / z;
+    g.strokeStyle = '#4aa3ff';
+    g.beginPath();
+    rec.points.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+    g.stroke();
+    anchors.forEach((i, k) => {
+      const p = rec.points[i]!;
+      g.beginPath();
+      g.arc(p.x, p.y, 9 / z, 0, Math.PI * 2);
+      g.fillStyle = this.ve?.drag?.k === k ? '#4aa3ff' : '#fff';
+      g.fill();
+      g.stroke();
+    });
+    g.restore();
+  }
+
   /** A live selection transform: the selected pixels (and whole vector strokes inside) are previewed on the canvases, one undo step on Apply. */
   private xf: {
     d: Drawing; area: Area; points: [number, number][]; pivot: [number, number]; params: XParams;
     baseLine: ImageData; baseFill: ImageData | null; vectors: StrokeRecord[]; region: Rect | null;
-    drag: { id: number; x: number; y: number; dx: number; dy: number } | null;
+    drag: { id: number; kind: 'move' | 'scale' | 'rotate'; x: number; y: number; dx: number; dy: number; scale: number; rotate: number; d0: number; a0: number } | null;
   } | null = null;
 
   get transforming(): boolean {
@@ -632,6 +756,60 @@ export class App {
     x.d.vectors = transformVectors(x.vectors, a.mask, W, H, m, x.params.scale).vectors;
     this.touch(x.d);
     this.requestRender();
+  }
+
+  /** Corners of the transformed selection box, its centre, and the rotate knob (document space). */
+  private transformFrame(): { corners: [number, number][]; centre: [number, number]; knob: [number, number] } | null {
+    const x = this.xf;
+    if (!x) return null;
+    const m = matrixFor(x.params, x.pivot[0], x.pivot[1]);
+    const a = x.area;
+    const corners = ([[a.x0, a.y0], [a.x1 + 1, a.y0], [a.x1 + 1, a.y1 + 1], [a.x0, a.y1 + 1]] as const).map(([px, py]) => applyPoint(m, px, py));
+    const centre = applyPoint(m, x.pivot[0], x.pivot[1]);
+    // the knob sits beyond the middle of the top edge, away from the centre
+    const top: [number, number] = [(corners[0]![0] + corners[1]![0]) / 2, (corners[0]![1] + corners[1]![1]) / 2];
+    const len = Math.hypot(top[0] - centre[0], top[1] - centre[1]) || 1;
+    const reach = 34 / this.view.zoom;
+    const knob: [number, number] = [top[0] + ((top[0] - centre[0]) / len) * reach, top[1] + ((top[1] - centre[1]) / len) * reach];
+    return { corners, centre, knob };
+  }
+
+  private drawTransformHandles(g: CanvasRenderingContext2D): void {
+    const f = this.transformFrame();
+    if (!f) return;
+    const z = this.view.zoom;
+    g.save();
+    g.lineWidth = 1.5 / z;
+    g.strokeStyle = '#4aa3ff';
+    g.beginPath();
+    f.corners.forEach((c, i) => (i ? g.lineTo(c[0], c[1]) : g.moveTo(c[0], c[1])));
+    g.closePath();
+    g.stroke();
+    const top: [number, number] = [(f.corners[0]![0] + f.corners[1]![0]) / 2, (f.corners[0]![1] + f.corners[1]![1]) / 2];
+    g.beginPath();
+    g.moveTo(top[0], top[1]);
+    g.lineTo(f.knob[0], f.knob[1]);
+    g.stroke();
+    const dot = (p: [number, number], r: number) => {
+      g.beginPath();
+      g.arc(p[0], p[1], r / z, 0, Math.PI * 2);
+      g.fillStyle = '#fff';
+      g.fill();
+      g.stroke();
+    };
+    for (const c of f.corners) dot(c, 9);
+    dot(f.knob, 11);
+    g.restore();
+  }
+
+  /** What a touch at document point (x, y) grabs while transforming: a corner scales, the knob rotates, anywhere else moves. */
+  private transformGrab(x: number, y: number): 'scale' | 'rotate' | 'move' {
+    const f = this.transformFrame();
+    if (!f) return 'move';
+    const r = 26 / this.view.zoom;
+    if (Math.hypot(x - f.knob[0], y - f.knob[1]) <= r) return 'rotate';
+    if (f.corners.some((c) => Math.hypot(x - c[0], y - c[1]) <= r)) return 'scale';
+    return 'move';
   }
 
   /** The selection outline where the transform would leave it. */
@@ -1039,6 +1217,23 @@ export class App {
       g.closePath();
       g.fillStyle = 'rgba(255, 90, 138, 0.12)';
       g.fill();
+      if (!this.fillG) {
+        // marching ants: dark and light dashes crawling round the selection
+        const z = this.view.zoom;
+        const dash = 6 / z;
+        const off = ((performance.now() / 60) % 12) / z;
+        g.lineWidth = 1.5 / z;
+        g.setLineDash([dash, dash]);
+        g.lineDashOffset = -off;
+        g.strokeStyle = '#111';
+        g.stroke();
+        g.lineDashOffset = -off - dash;
+        g.strokeStyle = '#fff';
+        g.stroke();
+        g.restore();
+        this.drawTransformHandles(g);
+        return;
+      }
       g.setLineDash([6 / this.view.zoom, 4 / this.view.zoom]);
       g.lineWidth = 1.5 / this.view.zoom;
       g.strokeStyle = '#ff5a8a';
@@ -1140,6 +1335,8 @@ export class App {
   /** Replace the whole project (open, restore, new). Clears undo and per-project view state. */
   loadProject(p: Project): void {
     this.cancelTransform();
+    this.ve = null;
+    this.wBase = null;
     if (this.fillG) this.endFill(true);
     this.spatial = null;
     if (this.live) this.endStroke(true);
@@ -2387,13 +2584,13 @@ export class App {
     // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
-      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id)) this.onUp(e, cancelled);
+      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
     window.addEventListener('pointercancel', (e) => lifted(e, true));
     c.addEventListener('lostpointercapture', (e) => {
       // a pen that is no longer pressed has lifted
-      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id))) this.onUp(e, false);
+      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id))) this.onUp(e, false);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -2415,11 +2612,42 @@ export class App {
     } catch {
       // Capture can fail for pointers the browser no longer tracks; drawing still works.
     }
+    this.veValid();
+    if (this.ve && !this.ve.drag) {
+      // point editing: grab an anchor; a tap on another vector line switches to it
+      const ve = this.ve;
+      const p = this.toPoint(e, e.timeStamp);
+      const rec = this.pointStroke;
+      if (rec) {
+        const anchors = anchorsOf(rec.points);
+        const r = 24 / this.view.zoom;
+        let k = -1, best = r;
+        anchors.forEach((i, j) => {
+          const q = rec.points[i]!;
+          const dd = Math.hypot(q.x - p.x, q.y - p.y);
+          if (dd <= best) { best = dd; k = j; }
+        });
+        if (k >= 0) {
+          ve.drag = { id: e.pointerId, k, x: p.x, y: p.y, anchors, base: rec, before: ve.d.vectors };
+          this.requestRender();
+          return;
+        }
+      }
+      const pens = ve.d.vectors.filter((v) => v.tool === 'pen');
+      const hit = nearestStroke(pens, p.x, p.y, 20 / this.view.zoom);
+      if (hit >= 0) { ve.id = pens[hit]!.id; this.requestRender(); this.onToolChange(); }
+      return;
+    }
     if (this.xf) {
       // dragging the canvas moves the selection being transformed
       if (!this.xf.drag) {
         const p = this.toPoint(e, e.timeStamp);
-        this.xf.drag = { id: e.pointerId, x: p.x, y: p.y, dx: this.xf.params.dx, dy: this.xf.params.dy };
+        const x = this.xf;
+        const c = this.transformFrame()?.centre ?? [p.x, p.y];
+        x.drag = {
+          id: e.pointerId, kind: this.transformGrab(p.x, p.y), x: p.x, y: p.y, dx: x.params.dx, dy: x.params.dy, scale: x.params.scale, rotate: x.params.rotate,
+          d0: Math.max(1, Math.hypot(p.x - c[0], p.y - c[1])), a0: Math.atan2(p.y - c[1], p.x - c[0]),
+        };
       }
       return;
     }
@@ -2670,10 +2898,28 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    const vd = this.ve?.drag;
+    if (vd && e.pointerId === vd.id) {
+      const p = this.toPoint(e, e.timeStamp);
+      this.replaceStroke({ ...vd.base, points: moveAnchor(vd.base.points, vd.anchors, vd.k, p.x - vd.x, p.y - vd.y) });
+      return;
+    }
     const xd = this.xf?.drag;
     if (xd && e.pointerId === xd.id) {
       const p = this.toPoint(e, e.timeStamp);
-      this.setTransform({ dx: xd.dx + (p.x - xd.x), dy: xd.dy + (p.y - xd.y) });
+      if (xd.kind === 'move') this.setTransform({ dx: xd.dx + (p.x - xd.x), dy: xd.dy + (p.y - xd.y) });
+      else {
+        const x = this.xf!;
+        const c: [number, number] = [x.pivot[0] + x.params.dx, x.pivot[1] + x.params.dy];
+        if (xd.kind === 'scale') this.setTransform({ scale: xd.scale * (Math.hypot(p.x - c[0], p.y - c[1]) / xd.d0) });
+        else {
+          let deg = xd.rotate + ((Math.atan2(p.y - c[1], p.x - c[0]) - xd.a0) * 180) / Math.PI;
+          // a gentle snap to every 15 degrees
+          const snap = Math.round(deg / 15) * 15;
+          if (Math.abs(deg - snap) < 3) deg = snap;
+          this.setTransform({ rotate: deg });
+        }
+      }
       return;
     }
     if (this.fillG && e.pointerId === this.fillG.pointerId) return this.fillMove(e);
@@ -2723,6 +2969,15 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    const vd = this.ve?.drag;
+    if (vd && e.pointerId === vd.id && this.ve) {
+      const ve = this.ve;
+      ve.drag = null;
+      if (cancelled) { ve.d.vectors = vd.before; this.touch(ve.d); this.requestRender(); }
+      else this.pushVectors('Move point', ve.d, vd.before);
+      this.requestRender();
+      return;
+    }
     if (this.xf?.drag && e.pointerId === this.xf.drag.id) {
       this.xf.drag = null;
       return;
@@ -2947,6 +3202,10 @@ export class App {
       return;
     }
     if (mod) return;
+    if (this.ve && (e.code === 'Escape' || e.code === 'Enter')) {
+      this.exitPointEdit();
+      return;
+    }
     if (this.xf && (e.code === 'Escape' || e.code === 'Enter')) {
       if (e.code === 'Enter') this.applyTransform();
       else this.cancelTransform();
@@ -3209,6 +3468,7 @@ export class App {
 
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha);
     this.drawFillPath(g);
+    this.drawPointEdit(g);
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
   }
 

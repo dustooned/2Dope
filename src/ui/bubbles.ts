@@ -142,6 +142,51 @@ export class Bubbles {
     this.update();
   }
 
+  /**
+   * Point editing: thinner / thicker steps, and a meter you pull up (thicker) or down (thinner).
+   * The meter is never rebuilt during a pull, so the gesture is not lost.
+   */
+  private widthControls(): HTMLElement[] {
+    const a = this.app;
+    const readout = el('span', { class: 'bub-hint' });
+    const show = () => { readout.textContent = `${Math.round((a.pointStroke?.brush.size ?? 0) * 10) / 10} px`; };
+    show();
+    const meter = el('div', { class: 'bub-meter', role: 'slider', tabindex: '0', 'aria-label': 'Line thickness: pull up for thicker, down for thinner', title: 'Pull up: thicker. Pull down: thinner.' });
+    meter.append(el('span', { class: 'bub-meter-fill' }));
+    let y0: number | null = null;
+    meter.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { meter.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+      y0 = e.clientY;
+      meter.classList.add('active');
+    });
+    meter.addEventListener('pointermove', (e) => {
+      if (y0 === null) return;
+      a.setPointWidthLive(Math.exp(-(e.clientY - y0) / 90));
+      show();
+    });
+    const end = () => {
+      if (y0 === null) return;
+      y0 = null;
+      meter.classList.remove('active');
+      a.commitPointWidth();
+      show();
+    };
+    meter.addEventListener('pointerup', end);
+    meter.addEventListener('pointercancel', end);
+    meter.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); a.nudgePointWidth(e.key === 'ArrowUp' ? 1.15 : 1 / 1.15); show(); }
+    });
+    return [
+      this.chip('\u2212 Thinner', 'A step thinner', false, () => { a.nudgePointWidth(1 / 1.15); show(); }),
+      meter,
+      this.chip('+ Thicker', 'A step thicker', false, () => { a.nudgePointWidth(1.15); show(); }),
+      readout,
+      this.chip('\u2713 Done', 'Finish editing points (Enter)', false, () => a.exitPointEdit()),
+    ];
+  }
+
   /** Refresh after any tool, frame, selection or workspace change (cheap when nothing changed). */
   update(): void {
     const a = this.app;
@@ -151,7 +196,8 @@ export class Bubbles {
     const xp = a.transformParams;
     const flip = this.flipOn;
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
-    const sig = [this.level, ws, flip, cur, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
+    const editing = a.pointEditing;
+    const sig = [this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
     this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Animate', motion: 'Move', board: 'Story' }[ws];
@@ -172,7 +218,9 @@ export class Bubbles {
     // context: only what the chosen tool needs
     this.ctx.replaceChildren();
     const add = (...c: HTMLElement[]) => this.ctx.append(...c);
-    if (this.layersOpen && (ws === 'draw' || ws === 'time') && !xp) {
+    if (editing) {
+      add(...this.widthControls());
+    } else if (this.layersOpen && (ws === 'draw' || ws === 'time') && !xp) {
       // tight layer control: only this cel's linked layers, front first; tap one to draw on it
       const me = a.project.isPlaceholder ? '' : a.project.activeLayer;
       cels.forEach((l) => {
@@ -194,12 +242,14 @@ export class Bubbles {
       );
     } else if (flip) {
       if (cur === 'brush' || cur === 'eraser') add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)));
+      if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
     } else if ((ws === 'draw' || ws === 'time') && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
       add(
         this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)),
         this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')),
         this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')),
       );
+      if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
     } else if (cur === 'fill') {
       add(
         this.chip('Tap / drag', 'Fill the areas you tap or drag across', a.fillMode === 'tap', () => a.setFillMode('tap')),
