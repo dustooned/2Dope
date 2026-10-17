@@ -25,8 +25,18 @@ export class FlipMode {
   on = false;
   private sig = '';
   onChange: () => void = () => {};
+  // Play, the list and Fit stay the same elements while playing (only the list's bubbles are
+  // rebuilt, and only when the drawings change), so a tap on Pause is never lost to a rebuild.
+  private readonly play = el('button', { type: 'button', class: 'flip-btn' }, 'Play');
+  private readonly list = el('div', { class: 'flip-list' });
+  private readonly fit = el('button', { type: 'button', class: 'flip-btn flip-fit', title: 'Fit the page to the screen', 'aria-label': 'Fit to screen' }, '\u2922');
+  private playing: boolean | null = null;
+  private nudgeCount = -1;
 
   constructor(private readonly app: App, stage: HTMLElement, private readonly openTimeline: () => void) {
+    this.play.addEventListener('click', () => this.app.togglePlay());
+    this.fit.addEventListener('click', () => this.app.fit());
+    this.row.append(this.play, this.list, this.fit);
     stage.append(this.row, this.nudge);
     try { this.on = localStorage.getItem(KEY) === '1'; } catch { /* default */ }
     this.apply();
@@ -65,18 +75,37 @@ export class FlipMode {
     // every linked art layer of these cels, drawn back to front into each bubble
     const stack = [...app.celLayers].reverse();
     if (!stack.length) stack.push(p.layer as never);
-    const sig = `${p.layer.id}|${cur}|${app.blankPage}|${app.playing}|` + stack.map((l) => l.exposures.map((e) => `${e.drawing}:${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
-    if (sig === this.sig) return;
+    if (this.playing !== app.playing) {
+      this.playing = app.playing;
+      this.play.textContent = app.playing ? 'Pause' : 'Play';
+      decorate(this.play, app.playing ? 'pause' : 'play');
+      this.play.title = app.playing ? 'Pause' : 'Play your drawings';
+      this.play.setAttribute('aria-label', this.play.title);
+      this.play.setAttribute('aria-pressed', String(app.playing));
+    }
+    // the current bubble moves every frame while playing: only its highlight changes
+    const mark = () => {
+      const cels = this.list.querySelectorAll<HTMLElement>('.flip-cel');
+      cels.forEach((b, i) => {
+        const on = i === cels.length - 1 ? app.blankPage : i === cur;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      });
+      if (!app.playing) (this.list.querySelector('.on') as HTMLElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    };
+    const sig = `${p.layer.id}|` + stack.map((l) => l.exposures.map((e) => `${e.drawing}:${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
+    if (sig === this.sig) {
+      mark();
+      this.nudgeCheck(ex.length);
+      return;
+    }
     this.sig = sig;
 
-    this.row.replaceChildren();
-    const play = el('button', { type: 'button', class: 'flip-btn', title: app.playing ? 'Pause' : 'Play your drawings', 'aria-label': app.playing ? 'Pause' : 'Play' }, app.playing ? 'Pause' : 'Play');
-    decorate(play, app.playing ? 'pause' : 'play');
-    play.addEventListener('click', () => app.togglePlay());
-    const list = el('div', { class: 'flip-list' });
+    const list = this.list;
+    list.replaceChildren();
     let start = 0;
     ex.forEach((e, i) => {
-      const b = el('button', { type: 'button', class: `flip-cel${i === cur ? ' on' : ''}`, title: `Drawing ${i + 1}`, 'aria-label': `Drawing ${i + 1}`, 'aria-pressed': String(i === cur) });
+      const b = el('button', { type: 'button', class: 'flip-cel', title: `Drawing ${i + 1}`, 'aria-label': `Drawing ${i + 1}` });
       const c = el('canvas', { width: '96', height: '72' });
       const g = c.getContext('2d');
       if (g) {
@@ -95,18 +124,22 @@ export class FlipMode {
       list.append(b);
       start += e.length;
     });
-    const add = el('button', { type: 'button', class: `flip-cel flip-add${app.blankPage ? ' on' : ''}`, title: 'A fresh page for the next drawing', 'aria-label': 'New page' }, '+');
+    const add = el('button', { type: 'button', class: 'flip-cel flip-add', title: 'A fresh page for the next drawing', 'aria-label': 'New page' }, '+');
     add.addEventListener('click', () => app.flipToBlank());
     list.append(add);
-    const fit = el('button', { type: 'button', class: 'flip-btn flip-fit', title: 'Fit the page to the screen', 'aria-label': 'Fit to screen' }, '⤢');
-    fit.addEventListener('click', () => app.fit());
-    this.row.append(play, list, fit);
-    // keep the current bubble in view
-    setTimeout(() => (list.querySelector('.on') as HTMLElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }), 0);
+    setTimeout(mark, 0);
+    this.nudgeCheck(ex.length);
+  }
 
+  private nudgeCheck(count: number): void {
+    const app = this.app;
+    const ex = { length: count };
     let nudged = false;
     try { nudged = localStorage.getItem(NUDGED) === '1'; } catch { /* show */ }
     if (!nudged && ex.length >= NUDGE_AT && !app.playing) {
+      // rebuild only when the count changes, so its buttons are never swapped under a tap
+      if (!this.nudge.hidden && this.nudgeCount === count) return;
+      this.nudgeCount = count;
       this.nudge.replaceChildren(el('span', {}, `${ex.length} drawings! Ready to time them?`));
       const go = el('button', { type: 'button', class: 'bub-chip on' }, 'Open the timeline');
       go.addEventListener('click', () => { this.dismiss(); this.set(false); this.openTimeline(); });
