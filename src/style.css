@@ -4169,3 +4169,5 @@ body.ui-simple .shape-pop, body.ui-clean .shape-pop { display: none !important; 
 /* context bars stay one row: extra chips scroll sideways instead of wrapping */
 .bub-ctx { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
 .bub-ctx::-webkit-scrollbar { display: none; }
+/* simple screen: the Story bubbles replace the board button bar */
+body.ui-simple .board-bar, body.ui-clean .board-bar { display: none; }

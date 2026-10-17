@@ -337,6 +337,7 @@ export class Bubbles {
       if (st) {
         for (const [v, label] of [['panels', 'Panels'], ['timeline', 'Timeline'], ['split', 'Split']] as const) add(this.chip(label, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
       }
+      add(this.chip('Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later', 'Move the selected panels later', false, () => a.moveSelection(1)));
       add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));
     } else if (ws === 'motion') {
       // easing for the keys you selected, and how new keys start
