@@ -498,6 +498,11 @@ export class App {
     this.residency.updateThumb(d);
     this.requestRender();
     this.onShapeChange();
+    // a new shape is a new line: keep editing its points instead of dropping out
+    if (rec.tool === 'pen' && (this.ve || this.pointsAfterHold)) {
+      this.ve = null;
+      this.enterPointEdit(rec.id);
+    }
   }
 
   /** Re-render the snapped stroke for the current pen position (resize/turn) and constrain state. */
@@ -918,6 +923,20 @@ export class App {
     return this.xf ? { ...this.xf.params } : null;
   }
 
+  /** The Select tool (not Fill > Select area): a finished loop goes straight into transform, like Procreate. */
+  selectMoves = false;
+
+  /** Select the whole drawing and start transforming it (move / scale / rotate everything). */
+  moveAll(): void {
+    if (this.strokeActive || this.playing || this.project.layer.locked || this.blankPage) return;
+    const W = this.docW, H = this.docH;
+    const points: [number, number][] = [[0, 0], [W, 0], [W, H], [0, H]];
+    const area = polygonMask(points, W, H);
+    if (!area) return;
+    this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: this.drawing, frame: this.frame, area, points };
+    this.beginTransform();
+  }
+
   /** Start moving / scaling / rotating / flipping the selection. */
   beginTransform(): boolean {
     const s = this.spatial;
@@ -1143,6 +1162,8 @@ export class App {
 
   setFillMode(m: FillMode): void {
     if (this.fillG) this.endFill(true);
+    // Fill's own modes never auto-transform; the Select bubble turns that on after choosing
+    this.selectMoves = false;
     this.fillMode = m;
     saveJSON(FILL_MODE_KEY, m);
     this.onToolChange();
@@ -1297,6 +1318,7 @@ export class App {
       }
       this.requestRender();
       this.onToolChange();
+      if (!cancel && this.selectMoves && this.spatial) this.beginTransform();
       return;
     }
     const target = planeCanvas(d, 'fill');
@@ -2847,7 +2869,9 @@ export class App {
       const rec = this.pointStroke;
       if (rec) {
         const anchors = this.anchorsFor(rec);
-        const r = 24 / this.view.zoom;
+        // fingers are bigger than pens: a wider reach for touch
+        const reach = e.pointerType === 'touch' ? 40 : 30;
+        const r = reach / this.view.zoom;
         // a curved point's handles come first (they sit close to it)
         const sk = ve.sel === null ? -1 : anchors.indexOf(ve.sel);
         if (sk >= 0 && this.modeOf(rec.id, ve.sel!) === 'curve') {
@@ -2856,7 +2880,7 @@ export class App {
           const grab = (['in', 'out'] as const).find((w) => {
             if ((w === 'in' && sk === 0) || (w === 'out' && sk === anchors.length - 1)) return false;
             const hx = a.x + (w === 'in' ? h.inx : h.outx), hy = a.y + (w === 'in' ? h.iny : h.outy);
-            return Math.hypot(hx - p.x, hy - p.y) <= 20 / this.view.zoom;
+            return Math.hypot(hx - p.x, hy - p.y) <= (reach - 4) / this.view.zoom;
           });
           if (grab) {
             ve.hdrag = { id: e.pointerId, k: sk, which: grab, anchors, base: rec, before: ve.d.vectors, h: { ...h } };
@@ -2897,7 +2921,7 @@ export class App {
         }
       }
       const pens = ve.d.vectors.filter((v) => v.tool === 'pen');
-      const hit = nearestStroke(pens, p.x, p.y, 20 / this.view.zoom);
+      const hit = nearestStroke(pens, p.x, p.y, (e.pointerType === 'touch' ? 32 : 24) / this.view.zoom);
       if (hit >= 0 && rec && pens[hit]!.id === rec.id) {
         // a tap on this line picks (or drops) the section under it, for section thickness
         const k = sectionAt(rec.points, this.anchorsFor(rec), p.x, p.y);
@@ -2911,14 +2935,14 @@ export class App {
         ve.sel = null;
         ve.sections.clear();
       } else {
-        // empty canvas: leave point editing and draw as usual
+        // empty canvas: leave point editing. This tap only leaves; it never starts a stroke, so a
+        // near miss cannot scribble on the drawing
         this.exitPointEdit();
-      }
-      if (this.ve) {
-        this.requestRender();
-        this.onToolChange();
         return;
       }
+      this.requestRender();
+      this.onToolChange();
+      return;
     }
     if (this.xf) {
       // dragging the canvas moves the selection being transformed

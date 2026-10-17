@@ -151,12 +151,14 @@ export class Bubbles {
         else a.setTool(k as Tool);
         break;
       case 'fill':
+        a.selectMoves = false;
         a.setTool('fill');
         if (a.fillMode === 'lasso') a.setFillMode('tap');
         break;
       case 'select':
         a.setTool('fill');
         a.setFillMode('lasso');
+        a.selectMoves = true;
         break;
       case 'color': this.hooks.colorPanel(b); break;
       case 'layers':
@@ -331,7 +333,8 @@ export class Bubbles {
           this.chip('Fill', 'Colour everything inside the selection', false, () => a.fillSelectedArea()),
           this.chip('Clear', 'Drop the selection', false, () => a.clearSpatialSelection()),
         );
-      } else add(el('span', { class: 'bub-hint' }, 'Draw a loop around what you want'));
+      } else add(el('span', { class: 'bub-hint' }, 'Draw a loop to move it, or'));
+      add(this.chip('Move all', 'Move, size or rotate the whole drawing', false, () => a.moveAll(), 'motion'));
     } else if (ws === 'board') {
       const st = this.hooks.story;
       if (st) {
