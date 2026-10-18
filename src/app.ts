@@ -1,3 +1,4 @@
+import { adjustHex, applyBlur, applyHSB, isNoHSB, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
 import { loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
@@ -77,6 +78,7 @@ const SHAPE_HOLD_MS = 450;
 const SHAPE_SLOP = 5;
 const FILL_ACROSS_KEY = '2dope.fill.across';
 const FILL_REFER_KEY = '2dope.fill.refer';
+const SYMMETRY_KEY = '2dope.symmetry';
 
 /** Fill tool: region fill, temporary lasso selection, or leftover cleanup. */
 export type FillMode = 'tap' | 'lasso' | 'leftover';
@@ -341,6 +343,7 @@ export class App {
   }
 
   setTool(t: Tool): void {
+    if (this.adjusting) this.applyAdjust();
     if (this.fillG) this.endFill(true);
     if (t !== 'brush') this.smudging = false;
     if (t !== 'pen') this.exitPointEdit();
@@ -459,16 +462,18 @@ export class App {
     const label = choice === 'stroke' ? 'Keep my stroke' : (SHAPE_CHOICES.find((c) => c.id === choice)?.label ?? choice).replace(/^\S+\s/, '');
     if (rec.tool === 'pen') {
       const id = rec.id;
+      const copies = this.symmetryVectors(rec);
+      const ids = new Set([id, ...copies.map((c) => c.id)]);
       this.history.push(
         {
           label: `Vector ${label.toLowerCase()}`,
           drawings: [d],
           do: () => {
-            d.vectors = [...d.vectors, rec];
+            d.vectors = [...d.vectors, rec, ...copies];
             this.touch(d);
           },
           undo: () => {
-            d.vectors = d.vectors.filter((v) => v.id !== id);
+            d.vectors = d.vectors.filter((v) => !ids.has(v.id));
             this.touch(d);
           },
         },
@@ -1297,16 +1302,202 @@ export class App {
 
   /** The other layers' drawings whose lines a fill at comp frame `f` reads (with fillRefer on). */
   private referDrawings(f: number): Drawing[] {
-    if (!this.fillRefer) return [];
     const self = this.project.layer.id;
+    // a Reference layer (Procreate) wins: its lines are the edges, even while it is hidden
+    const refs = this.project.comp.layers.some((l) => l.kind === 'drawings' && l.reference && l.id !== self);
+    if (!refs && !this.fillRefer) return [];
     const out: Drawing[] = [];
     for (const l of this.project.comp.layers) {
-      if (l.kind !== 'drawings' || l.id === self || l.guide || !l.visible) continue;
+      if (l.kind !== 'drawings' || l.id === self || l.guide) continue;
+      if (refs ? !l.reference : !l.visible) continue;
       const id = drawingAt(l.exposures, f - l.start);
       const d = id ? this.project.drawings.get(id) : undefined;
+      if (d?.parked) void this.residency.ensure(d).then(() => this.requestRender());
       if (d && !d.parked && d.line.width === this.docW && d.line.height === this.docH) out.push(d);
     }
     return out;
+  }
+
+  /** Make a layer the Reference layer (one per shot), or turn it off. One undo step. */
+  setReference(id: string, on: boolean): void {
+    this.editor.edit(on ? 'Reference layer' : 'Reference off', (c) => {
+      for (const l of c.layers) {
+        if (l.kind !== 'drawings') continue;
+        if (on && l.id === id) l.reference = true;
+        else delete l.reference;
+      }
+    });
+    this.fillMapCache = null;
+    this.onToolChange();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Adjustments (Procreate): Hue / Saturation / Brightness and Gaussian Blur on the current
+  // drawing (Line and Fill; Hue / Saturation / Brightness recolours vector lines too). Previewed
+  // live from a kept copy of the drawn area; Apply is one undo step.
+
+  adjusting: { kind: 'hsb' | 'blur'; d: Drawing; rect: Rect | null; planes: { c: HTMLCanvasElement; before: ImageData }[]; vectors: StrokeRecord[]; hsb: HSB; blur: number } | null = null;
+  private adjustTimer = 0;
+  /** Largest blur radius (px); the kept area is padded so the blur can spread. */
+  static readonly BLUR_MAX = 40;
+
+  beginAdjust(kind: 'hsb' | 'blur'): void {
+    if (this.strokeActive) return;
+    if (this.adjusting) {
+      if (this.adjusting.kind === kind) return;
+      this.applyAdjust();
+    }
+    if (this.blankPage) {
+      this.onNotice?.('Draw something first, then adjust it.');
+      return;
+    }
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) {
+      this.onNotice?.('This drawing is still loading. Try again in a moment.');
+      return;
+    }
+    // the drawn area (both planes), padded for the blur's spread
+    const pad = kind === 'blur' ? Math.ceil(App.BLUR_MAX * 1.8) : 0;
+    let box: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    for (const c of [d.line, d.fill]) {
+      if (!c) continue;
+      const px = c.getContext('2d')!.getImageData(0, 0, this.docW, this.docH).data;
+      for (let y = 0; y < this.docH; y++)
+        for (let x = 0; x < this.docW; x++) {
+          if (!px[(y * this.docW + x) * 4 + 3]) continue;
+          if (!box) box = { x0: x, y0: y, x1: x, y1: y };
+          else {
+            if (x < box.x0) box.x0 = x;
+            if (x > box.x1) box.x1 = x;
+            if (y < box.y0) box.y0 = y;
+            if (y > box.y1) box.y1 = y;
+          }
+        }
+    }
+    const rect: Rect | null = box ? { x: Math.max(0, box.x0 - pad), y: Math.max(0, box.y0 - pad), w: 0, h: 0 } : null;
+    if (rect && box) {
+      rect.w = Math.min(this.docW, box.x1 + 1 + pad) - rect.x;
+      rect.h = Math.min(this.docH, box.y1 + 1 + pad) - rect.y;
+    }
+    if (!rect && !(kind === 'hsb' && d.vectors.length)) {
+      this.onNotice?.('Draw something first, then adjust it.');
+      return;
+    }
+    void this.residency.pin(d);
+    const planes = rect ? [d.line, d.fill].filter((c): c is HTMLCanvasElement => !!c).map((c) => ({ c, before: c.getContext('2d')!.getImageData(rect.x, rect.y, rect.w, rect.h) })) : [];
+    this.adjusting = { kind, d, rect, planes, vectors: d.vectors, hsb: { ...NO_HSB }, blur: 0 };
+    this.onToolChange();
+  }
+
+  /** Change the adjustment; the preview follows (coalesced). */
+  setAdjust(patch: Partial<HSB> & { blur?: number }): void {
+    const a = this.adjusting;
+    if (!a) return;
+    const { blur, ...hsb } = patch;
+    a.hsb = { ...a.hsb, ...hsb };
+    if (blur !== undefined) a.blur = Math.max(0, Math.min(App.BLUR_MAX, blur));
+    clearTimeout(this.adjustTimer);
+    // setTimeout, not rAF: it must also run in a background tab
+    this.adjustTimer = window.setTimeout(() => this.previewAdjust(), 0);
+  }
+
+  private previewAdjust(): void {
+    const a = this.adjusting;
+    if (!a) return;
+    for (const p of a.planes) {
+      const out = new ImageData(p.before.width, p.before.height);
+      if (a.kind === 'hsb') applyHSB(p.before.data, out.data, a.hsb);
+      else applyBlur(p.before.data, out.data, p.before.width, p.before.height, a.blur);
+      p.c.getContext('2d')!.putImageData(out, a.rect!.x, a.rect!.y);
+    }
+    if (a.kind === 'hsb') a.d.vectors = isNoHSB(a.hsb) ? a.vectors : a.vectors.map((v) => ({ ...v, color: adjustHex(v.color, a.hsb) }));
+    a.d.rev += 1;
+    this.residency.touch(a.d);
+    this.requestRender();
+  }
+
+  /** Keep the adjustment (one undo step). */
+  applyAdjust(): void {
+    const a = this.adjusting;
+    if (!a) return;
+    clearTimeout(this.adjustTimer);
+    this.previewAdjust();
+    this.adjusting = null;
+    this.residency.unpin(a.d);
+    const unchanged = a.kind === 'hsb' ? isNoHSB(a.hsb) : a.blur < 1;
+    if (unchanged) {
+      this.onToolChange();
+      return;
+    }
+    const d = a.d;
+    const rect = a.rect;
+    const steps = a.planes.map((p) => ({ c: p.c, before: p.before, after: p.c.getContext('2d')!.getImageData(rect!.x, rect!.y, rect!.w, rect!.h) }));
+    const vBefore = a.vectors;
+    const vAfter = d.vectors;
+    this.history.push({
+      label: a.kind === 'hsb' ? 'Hue, saturation, brightness' : 'Gaussian blur',
+      drawings: [d],
+      do: () => { for (const s of steps) putPixels(s.c, rect!, s.after); d.vectors = vAfter; this.touch(d); },
+      undo: () => { for (const s of steps) putPixels(s.c, rect!, s.before); d.vectors = vBefore; this.touch(d); },
+    });
+    this.touch(d);
+    this.onToolChange();
+  }
+
+  /** Put the drawing back as it was. */
+  cancelAdjust(): void {
+    const a = this.adjusting;
+    if (!a) return;
+    clearTimeout(this.adjustTimer);
+    this.adjusting = null;
+    for (const p of a.planes) p.c.getContext('2d')!.putImageData(p.before, a.rect!.x, a.rect!.y);
+    a.d.vectors = a.vectors;
+    a.d.rev += 1;
+    this.residency.touch(a.d);
+    this.residency.unpin(a.d);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Drawing Guide: symmetry (Procreate). Brushes and the eraser mirror live; vector lines get
+  // mirrored copies when they are finished.
+
+  symmetry: SymmetryMode = loadJSON<SymmetryMode>(SYMMETRY_KEY) ?? 'off';
+
+  setSymmetry(m: SymmetryMode): void {
+    this.symmetry = m;
+    saveJSON(SYMMETRY_KEY, m);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** A vector line's symmetry copies (its own lines), none without symmetry. */
+  private symmetryVectors(rec: StrokeRecord): StrokeRecord[] {
+    const sym = rec.sym;
+    if (!sym || sym.mode === 'off') return [];
+    const n = symmetryCopies(sym.mode, sym.cx, sym.cy, 0, 0, 0).length;
+    const out: StrokeRecord[] = [];
+    for (let k = 1; k < n; k++) out.push({ ...rec, id: newStrokeId(), sym: undefined, points: rec.points.map((p) => { const c = symmetryCopies(sym.mode, sym.cx, sym.cy, p.x, p.y, 0)[k]!; return { ...p, x: c.x, y: c.y }; }) });
+    return out;
+  }
+
+  /** The symmetry guide lines (document space). */
+  private drawSymmetryGuide(g: CanvasRenderingContext2D): void {
+    if (this.symmetry === 'off' || this.workspace === 'motion' || this.workspace === 'board') return;
+    const cx = this.docW / 2, cy = this.docH / 2;
+    const R = Math.hypot(this.docW, this.docH);
+    g.save();
+    g.lineWidth = 1.5 / this.view.zoom;
+    g.setLineDash([8 / this.view.zoom, 6 / this.view.zoom]);
+    g.strokeStyle = 'rgba(74, 163, 255, 0.8)';
+    g.beginPath();
+    const ray = (t: number) => { g.moveTo(cx, cy); g.lineTo(cx + Math.cos(t) * R, cy + Math.sin(t) * R); };
+    if (this.symmetry === 'vertical' || this.symmetry === 'quadrant') { g.moveTo(cx, 0); g.lineTo(cx, this.docH); }
+    if (this.symmetry === 'horizontal' || this.symmetry === 'quadrant') { g.moveTo(0, cy); g.lineTo(this.docW, cy); }
+    if (this.symmetry === 'radial') for (let k = 0; k < RADIAL_COPIES; k++) ray(-Math.PI / 2 + (k * 2 * Math.PI) / RADIAL_COPIES);
+    g.stroke();
+    g.restore();
   }
 
   setFillMode(m: FillMode): void {
@@ -2368,6 +2559,7 @@ export class App {
   }
 
   setFrame(f: number): void {
+    if (this.adjusting) this.applyAdjust();
     if (this.strokeActive) return;
     this.leaveBlankPage();
     const len = this.compEnd;
@@ -2967,7 +3159,23 @@ export class App {
 
   fit(): void {
     this.view.fit(this.docW, this.docH, this.viewW, this.viewH);
+    this.fitSig = this.viewSig();
     this.requestRender();
+  }
+
+  /** The view as last fitted ('' before the first fit). */
+  private fitSig = '';
+  private viewSig(): string {
+    const v = this.view;
+    return `${v.x.toFixed(1)},${v.y.toFixed(1)},${v.zoom.toFixed(4)},${v.rot},${v.flipped}`;
+  }
+
+  /**
+   * After a layout change (panels, timeline, level, workspace): fit again only while the view is
+   * still fitted. A canvas you zoomed, panned or turned stays exactly as you left it.
+   */
+  refit(): void {
+    if (!this.fitSig || this.viewSig() === this.fitSig) this.fit();
   }
 
   actualSize(): void {
@@ -3071,6 +3279,7 @@ export class App {
       color: this.color,
       seed: newSeed(),
       points: [],
+      ...(this.symmetry !== 'off' ? { sym: { mode: this.symmetry, cx: this.docW / 2, cy: this.docH / 2 } } : {}),
     };
     const t0 = e.timeStamp;
     const first = this.toPoint(e, t0);
@@ -3136,16 +3345,18 @@ export class App {
     const d = live.drawing;
     if (rec.tool === 'pen') {
       const id = rec.id;
+      const copies = this.symmetryVectors(rec);
+      const ids = new Set([id, ...copies.map((c) => c.id)]);
       this.history.push(
         {
           label: live.shape ? `Vector ${SHAPE_NAMES[live.shape.base.kind].toLowerCase()}` : 'Vector stroke',
           drawings: [d],
           do: () => {
-            d.vectors = [...d.vectors, rec];
+            d.vectors = [...d.vectors, rec, ...copies];
             this.touch(d);
           },
           undo: () => {
-            d.vectors = d.vectors.filter((v) => v.id !== id);
+            d.vectors = d.vectors.filter((v) => !ids.has(v.id));
             this.touch(d);
           },
         },
@@ -4172,7 +4383,7 @@ export class App {
     // Fit once the stage has a real size (it can be 0 before first layout).
     if (!this.fitted && this.viewW > 100 && this.viewH > 100) {
       this.fitted = true;
-      this.view.fit(this.docW, this.docH, this.viewW, this.viewH);
+      this.fit();
     }
     this.requestRender();
   }
@@ -4278,7 +4489,13 @@ export class App {
       x.globalAlpha = 1;
       if (live && live.record.tool === 'pen') {
         const extra = live.record.brush.smoothing < 0.15 ? live.predicted : [];
-        drawVectorStroke(x, { ...live.record, points: [...live.record.points, ...extra] });
+        const pts = [...live.record.points, ...extra];
+        drawVectorStroke(x, { ...live.record, points: pts });
+        const sym = live.record.sym;
+        if (sym && sym.mode !== 'off') {
+          const n = symmetryCopies(sym.mode, sym.cx, sym.cy, 0, 0, 0).length;
+          for (let k = 1; k < n; k++) drawVectorStroke(x, { ...live.record, points: pts.map((p) => { const c = symmetryCopies(sym.mode, sym.cx, sym.cy, p.x, p.y, 0)[k]!; return { ...p, x: c.x, y: c.y }; }) });
+        }
       }
     };
 
@@ -4302,6 +4519,7 @@ export class App {
 
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude);
     this.drawFillPath(g);
+    this.drawSymmetryGuide(g);
     this.drawPointEdit(g);
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
   }

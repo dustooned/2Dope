@@ -1,3 +1,4 @@
+import type { SymmetryMode } from './adjust';
 import type { BrushSettings } from './brush';
 
 /** One input sample in document space. */
@@ -29,6 +30,8 @@ export interface StrokeRecord {
   color: string;
   seed: number;
   points: StrokePoint[];
+  /** Drawing Guide symmetry while it was drawn (raster brushes mirror their dabs). */
+  sym?: { mode: SymmetryMode; cx: number; cy: number };
 }
 
 /** 0 upright .. 1 flat. */

@@ -87,6 +87,11 @@ export class Strip {
   /** The flipbook's blank page after the last drawing (tap it, then draw). */
   private readonly blank = el('div', { class: 'blankpage', title: 'Add a frame at the end' }, '+');
 
+  /** The frame buttons row (previous / next, new, duplicate, delete, onion, More). The shell may move it into the tracks bar. */
+  navRow!: HTMLElement;
+  /** Where the frame buttons row lives on the full screen. */
+  stripBar!: HTMLElement;
+
   constructor(
     private readonly app: App,
     root: HTMLElement,
@@ -225,7 +230,10 @@ export class Strip {
     );
     zoom.append(fold);
 
-    const rowA = el('div', { class: 'strip-row' });
+    const rowA = el('div', { class: 'strip-row nav-row' });
+    this.navRow = rowA;
+    // on the simple screen this row sits in the tracks bar: a tap on it is not a drag of the bar
+    rowA.addEventListener('pointerdown', (e) => { if (rowA.parentElement !== bar) e.stopPropagation(); });
     // which layer the strip shows (and you draw on); tap for the layer list
     this.layerChip = btn('Layer', 'The layer you draw on. Tap for all layers.', () => app.openLayers?.(this.layerChip), 'layerchip');
     decorate(this.layerChip, 'layers');
@@ -243,11 +251,12 @@ export class Strip {
     extra(this.playBtn); // Play lives on the tracks bar
     extra(zoom);
     const more = btn('More \u22ef', 'More timeline tools: layer, frame count, fps, split, select, scrub lock, zoom', () => {
-      bar.classList.toggle('show-extra');
-      more.setAttribute('aria-pressed', String(bar.classList.contains('show-extra')));
+      rowA.classList.toggle('show-extra');
+      more.setAttribute('aria-pressed', String(rowA.classList.contains('show-extra')));
     }, 'strip-more');
     rowA.append(more);
     bar.append(rowA);
+    this.stripBar = bar;
 
     // Timing tools live in the Time workspace (mounted into the X-sheet by main.ts): holds,
     // marks, onion settings, and quick on/off toggles for layers and their Line / Fill parts.

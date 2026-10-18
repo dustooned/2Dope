@@ -1,3 +1,4 @@
+import type { SymmetryMode } from '../core/adjust';
 import { EASINGS } from '../core/anim';
 import type { App, Workspace } from '../app';
 import type { Tool } from '../core/stroke';
@@ -33,7 +34,7 @@ export interface BubbleHooks {
 }
 
 type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'flip' | 'onion' | 'layers'
-  | 'smudge' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
+  | 'smudge' | 'adjust' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
 /**
  * Bubbles: a simpler way around the app. Mode bubbles (Draw, Animate, Move, Story) at the top left,
@@ -121,10 +122,53 @@ export class Bubbles {
     return b;
   }
 
+  /** Drawing Guide: one button that steps through the symmetries. */
+  private symmetryChip(): HTMLButtonElement {
+    const a = this.app;
+    const order: SymmetryMode[] = ['off', 'vertical', 'horizontal', 'quadrant', 'radial'];
+    const names: Record<SymmetryMode, string> = { off: 'Symmetry', vertical: 'Mirror \u2194', horizontal: 'Mirror \u2195', quadrant: 'Quadrant', radial: 'Radial' };
+    const next = order[(order.indexOf(a.symmetry) + 1) % order.length]!;
+    return this.chip(names[a.symmetry], `Symmetry: ${a.symmetry}. Tap for ${next}.`, a.symmetry !== 'off', () => a.setSymmetry(next), 'symmetry');
+  }
+
+  /** Adjustments: Colour (hue, saturation, brightness) or Blur, live sliders, Apply / Cancel. */
+  private adjustControls(): HTMLElement[] {
+    const a = this.app;
+    const adj = a.adjusting!;
+    const slider = (label: string, min: number, max: number, value: number, set: (n: number) => void) => {
+      const wrap = el('label', { class: 'bub-slider' });
+      const name = el('span', {}, label);
+      const r = el('input', { type: 'range', min: String(min), max: String(max), step: '1', 'aria-label': label });
+      r.value = String(value);
+      const num = el('span', { class: 'bub-num' }, String(value));
+      r.addEventListener('input', () => { num.textContent = r.value; set(Number(r.value)); });
+      // double-tap the name to reset it
+      wrap.addEventListener('dblclick', () => { r.value = '0'; num.textContent = '0'; set(0); });
+      wrap.append(name, r, num);
+      return wrap;
+    };
+    // Apply / Cancel first, so they stay in view when the sliders run past the edge
+    const out: HTMLElement[] = [
+      this.chip('Apply', 'Keep the change', false, () => a.applyAdjust(), 'check'),
+      this.chip('Cancel', 'Put it back', false, () => a.cancelAdjust(), 'close'),
+      this.chip('Colour', 'Hue, saturation and brightness', adj.kind === 'hsb', () => a.beginAdjust('hsb')),
+      this.chip('Blur', 'Gaussian blur', adj.kind === 'blur', () => a.beginAdjust('blur')),
+    ];
+    if (adj.kind === 'hsb') {
+      out.push(
+        slider('Hue', -180, 180, adj.hsb.hue, (n) => a.setAdjust({ hue: n })),
+        slider('Sat', -100, 100, adj.hsb.sat, (n) => a.setAdjust({ sat: n })),
+        slider('Bright', -100, 100, adj.hsb.bright, (n) => a.setAdjust({ bright: n })),
+      );
+    } else out.push(slider('Radius', 0, 40, adj.blur, (n) => a.setAdjust({ blur: n })));
+    return out;
+  }
+
   /** Which tool bubble is lit. */
   private current(): ToolKey {
     const a = this.app;
     if (a.tool === 'fill') return a.fillMode === 'lasso' ? 'select' : 'fill';
+    if (a.adjusting) return 'adjust';
     if (a.tool === 'brush' && a.smudging) return 'smudge';
     return a.tool as ToolKey;
   }
@@ -135,7 +179,7 @@ export class Bubbles {
 
   private toolsFor(ws: Workspace): [ToolKey, string, string][] {
     if (this.flipOn) return [['brush', 'Brush', 'brush'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
-    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso']];
+    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso'], ['adjust', 'Adjust: hue, saturation, brightness, blur', 'adjust']];
     if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     if (ws === 'time') return [['flip', 'Flipbook', 'flipbook'], ['onion', 'Onion', 'onion'], ['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard', 'export']];
@@ -146,7 +190,9 @@ export class Bubbles {
   private pickTool(k: ToolKey, b: HTMLButtonElement): void {
     const a = this.app;
     if (a.transforming && k !== 'select') a.cancelTransform();
+    if (a.adjusting && k !== 'adjust' && k !== 'color' && k !== 'layers') a.applyAdjust();
     switch (k) {
+      case 'adjust': if (!a.adjusting) a.beginAdjust('hsb'); break;
       case 'brush': case 'pen': case 'eraser':
         if (a.tool === k && !(k === 'brush' && a.smudging)) this.hooks.brushLibrary(b);
         else { a.setTool(k as Tool); if (k === 'brush') a.setSmudging(false); }
@@ -298,7 +344,7 @@ export class Bubbles {
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
     const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
-    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden].join('|');
+    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry].join('|');
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
     this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
@@ -350,6 +396,8 @@ export class Bubbles {
         this.chip('Apply', 'Keep it (Enter)', false, () => a.applyTransform(), 'check'),
         this.chip('Cancel', 'Put it back (Esc)', false, () => a.cancelTransform(), 'close'),
       );
+    } else if (cur === 'adjust' && a.adjusting) {
+      add(...this.adjustControls());
     } else if (cur === 'smudge') {
       const lbl = el('span', { class: 'bub-hint' }, `Strength ${Math.round(a.smudgeStrength * 100)}%`);
       add(
@@ -367,6 +415,7 @@ export class Bubbles {
         this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)),
         this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')),
         this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')),
+        this.symmetryChip(),
       );
       if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
     } else if (cur === 'fill') {

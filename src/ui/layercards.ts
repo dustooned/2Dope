@@ -120,7 +120,7 @@ export class LayerCards {
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -171,6 +171,7 @@ export class LayerCards {
       if (linked) tags.push('linked');
       if (l.kind === 'drawings' && l.still) tags.push('still');
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
+      if (l.kind === 'drawings' && l.reference) tags.push('reference');
       if (l.blend !== 'normal') tags.push(l.blend);
       const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
       if (op < 100) tags.push(`${op}%`);
@@ -322,6 +323,10 @@ export class LayerCards {
       };
       flag('Clipping mask', 'Show this layer only where the layer below has paint', 'clip');
       flag('Alpha Lock', 'Brushes change only pixels that already have paint', 'alphaLock');
+      const ref = l.reference === true;
+      const rb = el('button', { type: 'button', class: `lc-opt${ref ? ' on' : ''}`, title: 'Fill and ColorDrop on any layer use this layer\u2019s lines as their edges (one Reference layer per shot)', 'aria-pressed': String(ref) }, 'Reference');
+      rb.addEventListener('click', () => { app.setReference(l.id, !ref); this.sig = ''; this.update(); });
+      box.append(rb);
     }
     if (l.kind === 'drawings' && !l.guide) opt('Merge down', 'collapseall', 'Flatten this layer into the one below (same frames and placement)', async () => { if (await app.mergeDown(l.id)) { this.menuFor = null; } this.sig = ''; this.update(); });
     opt('Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', async () => { await app.duplicateLayer(l.id); this.menuFor = null; this.sig = ''; this.update(); });

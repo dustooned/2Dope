@@ -19,6 +19,8 @@ const P: Record<string, string> = {
   check: '<path d="M4.5 12.5l5 5 10-11"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   key: '<path d="M12 3.5l8.5 8.5-8.5 8.5L3.5 12z"/>',
+  adjust: '<path d="M4 20L15 9"/><path d="M14 4v3M19 9h-3M17.5 5.5l-2 2M12 2.5v0M21.5 12v0"/><path d="M18 13l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>',
+  symmetry: '<path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7C5 8 4 12 6 16l3-1z"/><path d="M15 7c4 1 5 5 3 9l-3-1z"/>',
   smudge: '<path d="M9 21v-6.5a2 2 0 014 0V11a2 2 0 014 0v3"/><path d="M13 11V6a2 2 0 00-4 0v8"/><path d="M17 14v-1a2 2 0 014 0v3a7 7 0 01-7 7h-1"/><path d="M3 7c2-1 3 1 5 0"/>',
   eyedrop: '<path d="M14.5 4.5l5 5"/><path d="M17 2.5a2.1 2.1 0 013 3L17.5 8 16 6.5z"/><path d="M15 7.5l-9.5 9.5L4 20l3-1.5L16.5 9"/>',
   select: '<rect x="4" y="4" width="13" height="13" rx="1.5" stroke-dasharray="3 2.4"/><path d="M13 13l7 3-3 1-1 3z"/>',

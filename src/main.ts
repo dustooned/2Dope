@@ -277,9 +277,10 @@ try {
 
 // Narrow screens: the side panel is an overlay opened from the Panel button; tapping the canvas closes it.
 const setPanel = (open: boolean) => {
+  if (document.body.classList.contains('panel-open') === open) return;
   document.body.classList.toggle('panel-open', open);
   $('#panel-toggle').setAttribute('aria-expanded', String(open));
-  setTimeout(() => app.fit(), 60);
+  setTimeout(() => app.refit(), 60);
 };
 const brushLib = new BrushLibrary(app, () => {
   setPanel(true);
@@ -290,7 +291,7 @@ $('#stage').addEventListener('pointerdown', () => app.workspace !== 'time' && se
 
 const strip = new Strip(app, $('#strip'));
 // Draw and Time: a touch-first handle bar on the timeline (closed / half / full, drag or swipe).
-const sheet = new TracksSheet(app, $('.stage-col'), $('#strip'), () => setTimeout(() => app.fit(), 60));
+const sheet = new TracksSheet(app, $('.stage-col'), $('#strip'), () => setTimeout(() => app.refit(), 60));
 drawRailState.onChange = () => { layersPop.update(); strip.update(); };
 // Timing tools (holds, marks, onion settings, layer toggles) belong to the Time workspace
 $('#tab-xsheet').prepend(strip.timingBar);
@@ -302,6 +303,18 @@ const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 strip.audio = { active: () => sheet.active, sig: () => audioTracks.railSig(), rows: (t, x, c, w) => audioTracks.railRows(t, x, c, w) };
 // Motion lists sounds as rows too (drag to move or trim), so the old audio lane is Board's only
 motion.audio = { sig: () => audioTracks.railSig(), rows: (c, end) => audioTracks.motionRows(c, end) };
+// Simple screen: the frame buttons join the tracks bar, so the timeline has one row of controls
+{
+  const placeNav = () => {
+    const simple = !document.body.classList.contains('ui-full');
+    const want = simple && sheet.active ? sheet.bar : strip.stripBar;
+    if (strip.navRow.parentElement === want) return;
+    if (want === sheet.bar) sheet.bar.insertBefore(strip.navRow, sheet.bar.querySelector('.spacer'));
+    else strip.stripBar.prepend(strip.navRow);
+  };
+  new MutationObserver(placeNav).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  placeNav();
+}
 // Media (Procreate Dreams style): pictures, movies and sounds each become a track from frame 1
 app.pickMedia = mediaPicker(app, audioTracks);
 {
@@ -366,7 +379,7 @@ for (const part of ['tools', 'timeline'] as const) {
     $(`#focus-${part}`).setAttribute('aria-expanded', String(!folded));
     if (part === 'tools' && folded) setPanel(false);
     try { localStorage.setItem(`2dope.focus.${app.workspace}`, JSON.stringify({ tools: !document.body.classList.contains('tools-folded'), timeline: !document.body.classList.contains('timeline-folded') })); } catch { /* optional */ }
-    setTimeout(() => app.fit(), 60);
+    setTimeout(() => app.refit(), 60);
   });
 }
 syncFocus();
@@ -400,7 +413,7 @@ const applyWorkspace = () => {
   } catch {
     // not remembered
   }
-  setTimeout(() => app.fit(), 60);
+  setTimeout(() => app.refit(), 60);
 };
 app.onWorkspaceChange = applyWorkspace;
 for (const b of wsButtons)
@@ -458,7 +471,7 @@ const setBar = (collapsed: boolean) => {
   } catch {
     // not persisted: fine
   }
-  setTimeout(() => app.fit(), 80);
+  setTimeout(() => app.refit(), 80);
 };
 const toggleBar = () => setBar(!document.body.classList.contains('bar-collapsed'));
 $('#bar-collapse').addEventListener('click', toggleBar);
@@ -582,13 +595,13 @@ const bubbles = new Bubbles(app, $('#stage'), {
   brushLibrary: (anchor) => brushLib.toggle(anchor),
   colorPanel: (anchor) => colorPanel.toggle(anchor),
   layers: (anchor) => layersPop.toggle(anchor),
-  fit: () => app.fit(),
+  fit: () => app.refit(),
 });
 app.onToolChange = chain(app.onToolChange, () => bubbles.update());
 app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
-flipMode.onChange = () => { bubbles.update(); setTimeout(() => app.fit(), 60); };
+flipMode.onChange = () => { bubbles.update(); setTimeout(() => app.refit(), 60); };
 app.onColorChange = chain(app.onColorChange, () => bubbles.update());
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => { if (app.workspace !== 'draw' && flipMode.on) flipMode.set(false); bubbles.update(); flipMode.update(); });
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());

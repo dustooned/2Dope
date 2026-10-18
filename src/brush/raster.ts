@@ -1,3 +1,4 @@
+import { symmetryCopies } from '../core/adjust';
 import type { StrokeRecord } from '../core/stroke';
 import { hash01 } from '../core/rng';
 import { strokeLength } from '../core/stroke';
@@ -119,6 +120,15 @@ export function imageTipSprite(url: string, color: string): HTMLCanvasElement | 
   g.fillRect(0, 0, TIP, TIP);
   tipColored.set(key, c);
   return c;
+}
+
+/** The dabs and their symmetry copies (Drawing Guide), or the dabs as they are. */
+function mirrored(dabs: Dab[], record: StrokeRecord | null): Dab[] {
+  const sym = record?.sym;
+  if (!sym || sym.mode === 'off') return dabs;
+  const out: Dab[] = [];
+  for (const d of dabs) for (const c of symmetryCopies(sym.mode, sym.cx, sym.cy, d.x, d.y, d.angle)) out.push({ ...d, x: c.x, y: c.y, angle: c.angle });
+  return out;
 }
 
 function withAlpha(hex: string, a: number): string {
@@ -273,7 +283,7 @@ export class RasterEngine {
 
   addDabs(dabs: Dab[]): void {
     if (!this.tip || !this.shadeTip) return;
-    for (const d of dabs) {
+    for (const d of mirrored(dabs, this.record)) {
       if (d.shade < 1) drawDab(this.bctx, d, this.tip, 1 - d.shade);
       if (d.shade > 0) {
         drawDab(this.sctx, d, this.shadeTip, d.shade);
@@ -288,7 +298,7 @@ export class RasterEngine {
   /** Draw extra, temporary dabs (predicted input) straight onto a display context. */
   drawGhost(ctx: CanvasRenderingContext2D, dabs: Dab[]): void {
     if (!this.tip || !this.shadeTip || !this.record || this.record.tool === 'eraser') return;
-    for (const d of dabs) drawDab(ctx, d, d.shade > 0.5 ? this.shadeTip : this.tip, this.record.brush.opacity);
+    for (const d of mirrored(dabs, this.record)) drawDab(ctx, d, d.shade > 0.5 ? this.shadeTip : this.tip, this.record.brush.opacity);
     ctx.globalAlpha = 1;
   }
 

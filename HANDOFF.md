@@ -16,6 +16,8 @@ Built 2026-10-16 (Claude, one long session), newest last:
 - **Transparent GIF** option (`io/gif.ts` `GIF_CLEAR`, disposal 2).
 - **Fixes:** Flip Pause (no per-frame rebuild), Safari page zoom from scroll containers (`touch-action`, viewport snap-back in `main.ts`), notices deduplicated.
 
+Built 2026-10-17 (later): media as tracks (`ui/media.ts`, `App.importPicture/importMovie`: pictures = still object layers, movies = one drawing per frame up to 12 s plus their sound; all from frame 1), sound clips drag / trim on the timeline and in Motion (`AudioTracks.clipBlock`), Adjust (`core/adjust.ts`: HSB and Gaussian blur on the current drawing, `App.beginAdjust/applyAdjust`), Symmetry (`StrokeRecord.sym`, mirrored dabs in `brush/raster.ts`, vector copies), Reference layer (layer field `reference`), `App.refit()` (layout changes keep a zoomed / turned view), one-row timeline bar on the simple screen (`Strip.navRow` moved into the tracks bar).
+
 File format: two optional fields only (`cel` on layers, `w` on points); older files open unchanged, older builds ignore them.
 
 Linked layers stay in step for every edit: Draw / Time / Flip via `App.editTimeline`, everything else (Motion trims and moves, ripples) via `syncCelGroups` in `CompEditor.push`. A duplicated cel copies its partners' drawings (`Project.copiedFrom`, session only; a parked partner falls back to blank). Known gaps: GIF transparency is 1-bit; nothing verified on iPad. Still not built: clipping masks, effect stacks, brush tips and `.abr`/`.brushset` import, warp, free-arrangement timeline, general media/video import, Rust desktop.

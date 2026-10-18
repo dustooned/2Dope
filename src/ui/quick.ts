@@ -148,7 +148,7 @@ export class Quick {
       // not persisted: fine
     }
     // the stage changes size; refit once the layout has settled
-    setTimeout(() => this.app.fit(), 80);
+    setTimeout(() => this.app.refit(), 80);
     this.update();
   }
 

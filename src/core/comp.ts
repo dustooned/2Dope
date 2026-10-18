@@ -54,6 +54,8 @@ interface LayerBase {
   clip?: boolean;
   /** Alpha Lock: brushes change only pixels that already have paint. */
   alphaLock?: boolean;
+  /** Reference (Procreate): Fill and ColorDrop on any layer use this layer's lines as edges. */
+  reference?: boolean;
 }
 
 /** Is this layer left out of a final render? */
