@@ -18,8 +18,8 @@ import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareF
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
-import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type Comp, type DrawingsLayer, type Layer, type PartName } from './core/comp';
-import { valueAt } from './core/anim';
+import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type BlendMode, type Comp, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { staticProp, valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { guardTouchContextMenus } from './ui/touchcontext';
 import { CompEditor } from './compedit';
@@ -2848,12 +2848,12 @@ export class App {
   }
 
   /** A new layer above the one you draw on, holding these drawings from frame 1 (one undo step). */
-  private addMediaLayer(name: string, frames: Drawing[], still: boolean): void {
+  private addMediaLayer(name: string, frames: Drawing[], still: boolean, holds?: number[], label?: string): void {
     const p = this.project;
     const id = p.newId('L');
     const above = p.isPlaceholder ? null : p.activeLayer;
-    this.editor.edit(still ? 'Import picture' : 'Import movie', (cc) => {
-      const made = drawingsLayer(id, name.slice(0, 60), frames.map((d) => ({ drawing: d.id, length: 1 })), p.width, p.height, cc.width, cc.height);
+    this.editor.edit(label ?? (still ? 'Import picture' : 'Import movie'), (cc) => {
+      const made = drawingsLayer(id, name.slice(0, 60), frames.map((d, i) => ({ drawing: d.id, length: Math.max(1, holds?.[i] ?? 1) })), p.width, p.height, cc.width, cc.height);
       if (still) {
         made.still = true;
         made.play = 'loop';
@@ -2864,6 +2864,66 @@ export class App {
       cc.layers.splice(Math.max(0, cc.layers.findIndex((l) => l.id === above)), 0, made);
     });
     this.focusLayer(id);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+    this.onDocChanged();
+  }
+
+  /**
+   * An animation from another program (an animated GIF): one drawing per frame, each held as long
+   * as it was (`holds`, in frames at the shot's fps), from frame 1.
+   */
+  importAnimation(name: string, frames: CanvasImageSource[], w: number, h: number, holds: number[]): void {
+    if (this.strokeActive || !frames.length || w <= 0 || h <= 0) return;
+    if (this.playing) this.togglePlay();
+    const made = frames.map((src) => {
+      const d = this.project.newDrawing();
+      this.paintMedia(d, src, w, h);
+      return d;
+    });
+    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), made, false, holds, 'Import animation');
+  }
+
+  /**
+   * A layered picture from another program (PSD, OpenRaster) as a paint stack: one still paint
+   * layer per layer, bottom first, linked like a background's paint layers, keeping each layer's
+   * name, opacity, blend, visibility and clipping. Every layer is a page-size picture (`w` × `h`)
+   * so they stay lined up. One undo step.
+   */
+  importLayered(name: string, w: number, h: number, layers: { name: string; src: CanvasImageSource; opacity: number; visible: boolean; blend: BlendMode; clip: boolean }[], background: boolean): void {
+    if (this.strokeActive || !layers.length || w <= 0 || h <= 0) return;
+    const p = this.project;
+    const above = p.isPlaceholder ? null : p.activeLayer;
+    const ids = layers.map(() => p.newId('L'));
+    const group = ids[0]!;
+    const drawings = layers.map((l) => {
+      const d = p.newDrawing();
+      this.paintMedia(d, l.src, w, h);
+      return d;
+    });
+    const base = name.replace(/\.[a-z0-9]+$/i, '').slice(0, 40);
+    this.editor.edit(`Import ${base}`, (cc) => {
+      const made = layers.map((l, i) => {
+        const x = drawingsLayer(ids[i]!, i === 0 ? base : l.name.slice(0, 60), [{ drawing: drawings[i]!.id, length: 1 }], p.width, p.height, cc.width, cc.height);
+        x.still = true;
+        x.play = 'loop';
+        x.start = 0;
+        x.in = 0;
+        x.out = null;
+        x.cel = group;
+        x.visible = l.visible;
+        x.blend = l.blend;
+        if (l.clip && i > 0) x.clip = true;
+        x.transform.opacity = staticProp(Math.round(Math.max(0, Math.min(1, l.opacity)) * 100));
+        return x;
+      });
+      // the stack goes in top first; a background goes to the very bottom of the shot
+      const stack = made.reverse();
+      const at = background ? cc.layers.length : Math.max(0, cc.layers.findIndex((l) => l.id === above));
+      cc.layers.splice(at, 0, ...stack);
+    });
+    this.focusLayer(ids[ids.length - 1]!);
     this.onCompChanged();
     this.requestRender();
     this.onFrameChange();
