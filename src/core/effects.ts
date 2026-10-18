@@ -148,3 +148,47 @@ export function effectsKey(l: { id: string; effects?: LayerEffect[] }, frame: nu
   const fx = activeEffects(l);
   return fx.length ? fx.map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}`).join(',') : '';
 }
+
+// ---------------------------------------------------------------------------------------------
+// The stack (the Effects card): reorder, duplicate, merge
+
+/** The list with the effect at `from` moved to `to` (both clamped). */
+export function moveEffect(list: LayerEffect[], from: number, to: number): LayerEffect[] {
+  if (from < 0 || from >= list.length) return list;
+  const t = Math.max(0, Math.min(list.length - 1, to));
+  if (t === from) return list;
+  const next = [...list];
+  const [e] = next.splice(from, 1);
+  next.splice(t, 0, e!);
+  return next;
+}
+
+/** Two effects merge when they are the same kind aimed at the same part. */
+export function canMerge(a: LayerEffect | undefined, b: LayerEffect | undefined): boolean {
+  return !!a && !!b && a.type === b.type && a.target === b.target;
+}
+
+/**
+ * Merge down: the effect at `index` and the one under it become one. The amounts add up (to the
+ * kind's limit); the rest of the settings are the lower one's. Different kinds do not merge.
+ */
+export function mergeDown(list: LayerEffect[], index: number): LayerEffect[] | null {
+  const a = list[index], b = list[index + 1];
+  if (!a || !b || !canMerge(a, b)) return null;
+  const hi = effectDef(b.type).amountRange[1];
+  const merged: LayerEffect = { ...b, on: a.on || b.on, amount: Math.min(hi, Math.round((a.amount + b.amount) * 10) / 10) };
+  return [...list.slice(0, index), merged, ...list.slice(index + 2)];
+}
+
+/** A copy of the effect right under it, with a new id. */
+export function duplicateEffect(list: LayerEffect[], index: number, id: string): LayerEffect[] {
+  const e = list[index];
+  if (!e) return list;
+  return [...list.slice(0, index + 1), { ...structuredClone(e), id }, ...list.slice(index + 1)];
+}
+
+/** The effect back to its kind's starting values (keeps id, seed, on, target and look). */
+export function resetEffect(e: LayerEffect): LayerEffect {
+  const d = effectDef(e.type);
+  return { ...e, amount: d.amount, size: d.size, hold: d.hold };
+}

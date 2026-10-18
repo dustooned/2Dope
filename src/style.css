@@ -4407,3 +4407,35 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 .flip-playhead { position: absolute; top: 0; bottom: 0; width: 44px; margin-left: 0; pointer-events: none; z-index: 1; background: color-mix(in srgb, var(--accent) 14%, transparent); border-left: 2px solid var(--accent); }
 @media (max-width: 700px) { .flip-btn .lbl, .flip-btn:not(.flip-done) { font-size: 0; gap: 0; } .flip-btn:not(.flip-done) svg { margin: 0; } }
 .flip-icon { width: 40px; padding: 0; justify-content: center; }
+/* the Effects card: a stack like Procreate's layers */
+.fxpanel { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.fx-head { flex-wrap: nowrap; }
+.fx-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-mode { flex: 0 0 auto; }
+.fx-mode button { flex: 0 0 auto; padding: 0 10px; }
+.fx-order { margin: 0; font-size: 11px; }
+.fx-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; flex: 1 1 auto; max-height: calc(100vh - 330px); overscroll-behavior: contain; padding-right: 2px; }
+.fx-card { flex: 0 0 auto; gap: 0; padding: 4px; transition: transform .12s; }
+.fx-card.dragging { transition: none; z-index: 2; position: relative; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); outline: 2px solid var(--accent); }
+.fx-card.off .fx-name { text-decoration: line-through; opacity: .7; }
+.fx-card.off { opacity: .75; }
+.fx-top { touch-action: pan-y; gap: 4px; }
+.fx-grip { flex: 0 0 32px; width: 32px; min-height: 40px; padding: 0; border-radius: 8px; background: transparent; cursor: grab; touch-action: none; opacity: .7; font-size: 16px; }
+.fx-title { flex: 1; min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border-radius: 8px; background: transparent; text-align: left; }
+.fx-chev { width: 12px; opacity: .7; }
+.fx-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.fx-badge { flex: 0 0 auto; font-size: 10px; padding: 2px 6px; border-radius: 8px; background: var(--panel); color: var(--muted); }
+.fx-switch { flex: 0 0 auto; min-height: 40px; padding: 0 4px; background: transparent; }
+.fx-switch.on .lc-switch-knob { background: #ff5a8a; }
+.fx-switch.on .lc-switch-knob::after { transform: translateX(16px); }
+.fx-more { flex: 0 0 32px; width: 32px; min-height: 40px; padding: 0; border-radius: 8px; background: transparent; font-size: 18px; }
+.fx-actions { display: flex; gap: 4px; padding: 4px 2px 2px; }
+.fx-actions button { flex: 1; min-height: 34px; border-radius: 10px; font-size: 12px; padding: 0 4px; }
+.fx-actions button.danger { background: #b3263f; color: #fff; }
+.fx-actions button.danger .lbl { display: none; }
+.fx-actions button:disabled { opacity: .4; }
+.fx-body { display: flex; flex-direction: column; gap: 6px; padding: 6px 4px 4px; border-top: 1px solid var(--line); margin-top: 2px; }
+.fx-add { flex: 0 0 auto; }
+.fx-switch { flex: 0 0 48px; width: 48px; display: inline-flex; align-items: center; justify-content: center; }
+.fx-switch .lc-switch-knob { display: inline-block; }
+.fx-badge { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
