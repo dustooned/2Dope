@@ -156,18 +156,34 @@ export class Bubbles {
   private measure(): void {
     const s = this.stage.getBoundingClientRect();
     const bottomOf = (e: HTMLElement) => (e.offsetParent && !e.hidden ? e.getBoundingClientRect().bottom - s.top : 0);
-    const tools = Math.max(bottomOf(this.modes), bottomOf(this.tools));
-    if (!tools) return;
     const narrow = window.innerWidth <= 700;
-    // on a phone the context row sits under the tools, and the layer label under that; on a tall
-    // screen (portrait) there is room to keep the page clear of the context row too
-    const tall = s.height > s.width * 1.1;
-    const clear = Math.round(narrow ? tools + 58 : tall ? Math.max(tools + 8, bottomOf(this.ctx) + 6) : tools + 8);
+    // the mode and tool rows side by side need the stage's width; when they do not fit (a tablet
+    // upright, a split screen) the tools go under the modes, as on a phone
+    const mw = this.modes.offsetParent ? this.modes.offsetWidth : 0, tw = this.tools.offsetParent && !this.tools.hidden ? this.tools.offsetWidth : 0;
+    const stack = !narrow && mw > 0 && tw > 0 && mw + tw + 56 + 56 + 12 > s.width;
+    if (stack !== this.stage.classList.contains('bub-stack')) this.stage.classList.toggle('bub-stack', stack);
+    const tools = Math.max(bottomOf(this.modes), bottomOf(this.tools));
+    if (!tools) {
+      // Full level with its top bar: only the options row floats over the stage
+      const ctx = bottomOf(this.ctx);
+      const clear = ctx ? Math.round(ctx + 6) : 0;
+      if (clear === this.topClear) return;
+      this.topClear = clear;
+      this.stage.style.setProperty('--top-clear', `${clear}px`);
+      this.stage.style.setProperty('--fit-top', `${clear}px`);
+      this.hooks.fit();
+      return;
+    }
+    // on a phone the context row sits under the tools, and the layer label under that; elsewhere
+    // the page is kept clear of the context row too (Timing's and Fill's rows reach the middle)
+    const clear = Math.round(narrow ? tools + 58 : Math.max(tools + 8, bottomOf(this.ctx) + 6));
+    const label = 0; // the layer label is kept clear by the fit itself
     this.stage.style.setProperty('--tools-bottom', `${Math.round(tools + 6)}px`);
     this.stage.style.setProperty('--side-top', `${clear + (narrow ? 40 : 0)}px`);
-    if (clear === this.topClear) return;
-    this.topClear = clear;
+    if (clear + label === this.topClear) return;
+    this.topClear = clear + label;
     this.stage.style.setProperty('--top-clear', `${clear}px`);
+    this.stage.style.setProperty('--fit-top', `${clear + label}px`);
     this.hooks.fit();
   }
 

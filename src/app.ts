@@ -3917,8 +3917,19 @@ export class App {
     const bubbles = !b.contains('ui-full') || b.contains('bar-collapsed') || b.contains('tools-folded');
     // Flip's drawing row floats over the bottom
     const flip = document.body.classList.contains('flipmode');
-    const clear = parseFloat(this.stage.style.getPropertyValue('--top-clear')) || 64;
-    this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, bubbles ? clear - 16 : 0, flip ? 76 : 0);
+    const set = parseFloat(this.stage.style.getPropertyValue('--fit-top'));
+    const clear = Number.isFinite(set) ? set : 64;
+    // the extra top inset beyond the margin: the bubble rows, or Full's floating options row
+    const top = bubbles ? clear - 16 : Math.max(0, clear - 40);
+    this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top, flip ? 76 : 0);
+    // the layer label floats under the bubble rows: when the page would reach under it (an upright
+    // tablet, a phone), fit again a little lower
+    const label = this.stage.querySelector<HTMLElement>('.paint-target');
+    if (label?.offsetParent && label.offsetWidth) {
+      const s = this.stage.getBoundingClientRect(), r = label.getBoundingClientRect();
+      const bottom = r.bottom - s.top + 6, right = r.right - s.left;
+      if (this.view.x < right && this.view.y < bottom) this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top + (bottom - this.view.y), flip ? 76 : 0);
+    }
     this.fitSig = this.viewSig();
     this.requestRender();
   }

@@ -4247,7 +4247,7 @@ body.ui-simple .motion [data-dup], body.ui-clean .motion [data-dup] { display: n
 .mmore-btn { color: var(--muted); font-size: 12px; min-height: 30px; }
 
 /* simple screen: the canvas sidebar sits below the bubble row (the menu button is above it) */
-body:not(.ui-full) .sidebar { top: var(--side-top, 72px); transform: none; max-height: calc(100% - var(--side-top, 72px) - 10px); }
+body:not(.ui-full) .sidebar, body.ui-full.bar-collapsed .sidebar, body.ui-full.tools-folded .sidebar { top: var(--side-top, 72px); transform: none; max-height: calc(100% - var(--side-top, 72px) - 10px); }
 
 /* small phones: Draw's tools fit one row */
 @media (max-width: 480px) { .bub-tools, .bub-modes { gap: 3px; } .bub-tools .bub, .bub-modes .bub { width: 36px; height: 36px; min-height: 36px; } .bub-tools .bub .ico, .bub-modes .bub .ico { width: 20px; height: 20px; } .bub-modes { left: 52px; } }
@@ -4380,3 +4380,8 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 
 .fx-row[hidden], .fx-reseed[hidden] { display: none !important; }
 .fx-row select { flex: 1; min-width: 0; min-height: 34px; background: var(--panel-2); color: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; }
+/* the mode and tool rows stacked when they do not fit side by side (a tablet upright) */
+#stage.bub-stack .bub-tools { top: 62px; right: 8px; left: auto; max-width: calc(100% - 16px); }
+#stage.bub-stack .bub-ctx { top: var(--tools-bottom, 116px); right: 8px; max-width: calc(100% - 16px); }
+/* phone, Full level: the layer label goes under the floating options row */
+@media (max-width: 700px) { body.ui-full:not(.bar-collapsed):not(.tools-folded) .paint-target { top: calc(var(--top-clear, 56px) + 4px); left: 64px; transform: none; max-width: calc(100% - 72px); } }
