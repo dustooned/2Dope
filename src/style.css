@@ -4247,3 +4247,21 @@ body:not(.ui-full) .sidebar { top: var(--side-top, 72px); transform: none; max-h
 /* the canvas hint starts right of the sidebar */
 .stats { left: 70px; }
 .timing-controls button { white-space: nowrap; }
+
+/* layer cards: groups, the way back out, Line / Fill rows */
+.lc-back { display: block; width: 100%; margin: 0 0 6px; padding: 8px 10px; border-radius: 10px; border: 0; background: var(--panel-2); color: inherit; text-align: left; font: inherit; font-weight: 600; }
+.lc-back-in { font-weight: 400; opacity: .65; }
+.lc-card.group { border-style: dashed; }
+.lc-fold { flex: 0 0 auto; width: 14px; text-align: center; opacity: .8; }
+.lc-more { flex: 0 0 auto; min-width: 32px; min-height: 32px; padding: 0; border-radius: 50%; border: 0; background: transparent; color: inherit; font-size: 18px; }
+.lc-card.child { margin-left: 22px; min-height: 44px; opacity: .92; }
+.lc-card.child .lc-thumb { width: 54px; height: 36px; }
+.lc-part { display: flex; align-items: center; gap: 8px; padding: 2px 4px; }
+.lc-part-name { min-width: 52px; min-height: 34px; border-radius: 17px; border: 0; background: var(--panel-2); color: inherit; font: inherit; }
+.lc-part.paint .lc-part-name { background: #ff5a8a; color: #fff; }
+.lc-part-eye { min-width: 34px; min-height: 34px; padding: 0; border-radius: 50%; border: 0; background: transparent; color: inherit; }
+.lc-part-eye[aria-pressed="false"] { opacity: .4; }
+.lc-part input[type=range] { flex: 1; min-width: 60px; accent-color: #ff5a8a; }
+.lc-part output { min-width: 36px; text-align: right; font-size: 12px; opacity: .8; }
+.lc-part-eye .lbl { display: none; }
+.lc-part-eye, .lc-part-eye[aria-pressed="true"] { background: transparent !important; color: inherit !important; border: 0 !important; }

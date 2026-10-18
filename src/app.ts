@@ -1091,6 +1091,45 @@ export class App {
     this.beginTransform();
   }
 
+  /** Select (Procreate): exactly what the current drawing has (Line, Fill, vector lines), ready to move. */
+  selectContents(): boolean {
+    if (this.strokeActive || this.playing || this.project.layer.locked || this.blankPage) return false;
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return false;
+    const W = this.docW, H = this.docH;
+    const scratch = makeCanvas(W, H);
+    const sg = scratch.getContext('2d')!;
+    sg.drawImage(d.line, 0, 0);
+    if (d.fill) sg.drawImage(d.fill, 0, 0);
+    for (const v of d.vectors) drawVectorStroke(sg, v, this.lengthOf(v));
+    const px = sg.getImageData(0, 0, W, H).data;
+    const mask = new Uint8Array(W * H);
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        if (!px[(y * W + x) * 4 + 3]) continue;
+        mask[y * W + x] = 1;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    if (x1 < 0) {
+      this.onNotice?.('Nothing on this drawing to select.');
+      return false;
+    }
+    // the box around it marks the selection on screen; the mask is exact
+    const points: [number, number][] = [[x0, y0], [x1 + 1, y0], [x1 + 1, y1 + 1], [x0, y1 + 1]];
+    this.setTool('fill');
+    this.setFillMode('lasso');
+    this.selectMoves = true;
+    this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: d, frame: this.frame, area: { mask, x0, y0, x1, y1 }, points };
+    this.beginTransform();
+    this.onToolChange();
+    this.requestRender();
+    return true;
+  }
+
   /** Start moving / scaling / rotating / flipping the selection. */
   beginTransform(): boolean {
     const s = this.spatial;
@@ -4479,10 +4518,22 @@ export class App {
     let group: { base: number; members: number[] } | null = null;
     for (const [b, ms] of clipGroups(comp.layers)) if (b === idx || ms.includes(idx)) group = { base: b, members: ms };
     const exclude = group ? new Set([group.base, ...group.members].map((i) => comp.layers[i]!.id)) : undefined;
+    // drawing inside a group: the rest of the shot shows around it, as in Procreate
+    const outer = (side: 'below' | 'above') => {
+      const ctx = around ? this.editor.context() : null;
+      if (!ctx) return;
+      g.save();
+      const m = invert(worldMatrix(ctx.parent, ctx.layer, ctx.frame));
+      g.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      drawLayersAround(g, this.project, ctx.parent, ctx.frame, ctx.layer.id, side, others, this.boardAlpha);
+      g.restore();
+    };
+    outer('below');
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha, exclude);
     this.drawOnion(g);
     if (this.blankPage && !this.live && !group) {
       if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha);
+      outer('above');
       return;
     }
     const live = this.live;
@@ -4568,6 +4619,7 @@ export class App {
     } else paintActive(g);
 
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude);
+    outer('above');
     this.drawFillPath(g);
     this.drawSymmetryGuide(g);
     this.drawPointEdit(g);
@@ -4623,11 +4675,19 @@ export class App {
       return [...out];
     }
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
-    if (this.showLayers || this.boardAlpha > 0)
+    if (this.showLayers || this.boardAlpha > 0) {
       for (const id of frameContent(p.comps, p.comp.id, this.frame).drawings) {
         const d = p.drawings.get(id);
         if (d) out.add(d);
       }
+      // inside a group: the shot around it
+      const ctx = this.editor.context();
+      if (ctx)
+        for (const id of frameContent(p.comps, ctx.parent, ctx.frame).drawings) {
+          const d = p.drawings.get(id);
+          if (d) out.add(d);
+        }
+    }
     const o = this.onion;
     if (o.enabled) {
       const n = this.onionNeighbors();

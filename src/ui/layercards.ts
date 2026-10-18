@@ -1,5 +1,6 @@
 import type { App } from '../app';
-import { BLEND_MODES, type BlendMode, type Layer } from '../core/comp';
+import { BLEND_MODES, partOf, type BlendMode, type Layer, type PartName } from '../core/comp';
+import type { PropKey } from '../compedit';
 import { drawingAt } from '../core/timeline';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
@@ -32,6 +33,10 @@ export class LayerCards {
   /** The + menu: animation, background or object layer. */
   private addOpen = false;
   private drag: { id: string; y0: number; x0: number; card: HTMLElement; ready: boolean; timer: number; pointer: number; moved: boolean } | null = null;
+  /** Groups folded open in the list (view state only). */
+  private openGroups = new Set<string>();
+  /** A two-finger tap on this card (Procreate: the layer's opacity and options). */
+  private twoTap: string | null = null;
 
   constructor(private readonly app: App) {
     document.body.append(this.root);
@@ -76,9 +81,9 @@ export class LayerCards {
   }
 
   /** The drawing a layer shows at the playhead (a still layer always shows its one drawing). */
-  private shownDrawing(l: Layer): string | null {
+  private shownDrawing(l: Layer, offset = 0): string | null {
     if (l.kind !== 'drawings') return null;
-    const f = this.app.frame - l.start;
+    const f = this.app.frame - offset - l.start;
     if (l.still || l.play === 'loop') {
       const total = l.exposures.reduce((n, e) => n + e.length, 0) || 1;
       return drawingAt(l.exposures, ((f % total) + total) % total);
@@ -86,7 +91,7 @@ export class LayerCards {
     return drawingAt(l.exposures, f);
   }
 
-    private thumb(l: Layer): HTMLCanvasElement {
+  private thumb(l: Layer, offset = 0): HTMLCanvasElement {
     const c = el('canvas', { width: String(THUMB_W * 2), height: String(THUMB_H * 2), class: 'lc-thumb' });
     const g = c.getContext('2d');
     if (!g) return c;
@@ -96,8 +101,15 @@ export class LayerCards {
       g.fillStyle = ((x + y) / s) % 2 ? '#e9e9ee' : '#ffffff';
       g.fillRect(x, y, s, s);
     }
+    if (l.kind === 'comp') {
+      // a group: its front-most drawing layer stands for it (on the group's clock)
+      const inner = this.app.project.comps.get(l.comp)?.layers.find((x) => x.kind === 'drawings');
+      if (!inner) return c;
+      offset += l.start;
+      l = inner;
+    }
     if (l.kind !== 'drawings') return c;
-    const id = this.shownDrawing(l);
+    const id = this.shownDrawing(l, offset);
     const d = id ? this.app.project.drawings.get(id) : undefined;
     const t = d?.thumb;
     if (t) {
@@ -114,13 +126,16 @@ export class LayerCards {
     const layers = app.project.comp.layers.filter((l) => l.kind === 'drawings' || l.kind === 'comp');
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // options belong to the layer you draw on; picking another closes them
-    if (this.menuFor && this.menuFor !== active) this.menuFor = null;
+    if (this.menuFor && this.menuFor !== active && !layers.some((l) => l.id === this.menuFor && l.kind === 'comp')) this.menuFor = null;
+    const me = layers.find((l) => l.id === active);
+    const parts = me && me.kind === 'drawings' ? ['line', 'fill'].map((pt) => { const q = partOf(me, pt as PartName); return `${q.visible}:${app.editor.valueNow(me, `${pt}.opacity` as PropKey)}`; }).join('/') : '';
+    const groupSig = [...this.openGroups].map((g) => { const gl = layers.find((l) => l.id === g); const inner = gl && gl.kind === 'comp' ? app.project.comps.get(gl.comp) : undefined; return inner ? inner.layers.map((x) => `${x.id}:${x.name}:${x.visible}:${x.kind === 'drawings' ? this.shownDrawing(x, gl!.start) : ''}`).join(';') : ''; }).join('|');
     const thumbs = layers.map((l) => {
       if (l.kind !== 'drawings') return '';
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -142,6 +157,13 @@ export class LayerCards {
     add.addEventListener('click', () => { this.addOpen = !this.addOpen; this.sig = ''; this.update(); });
     head.append(others, add);
     this.root.append(head);
+    const crumbs = app.editor.crumbs();
+    if (crumbs.length > 1) {
+      const back = el('button', { type: 'button', class: 'lc-back', title: 'Back out of this group' }, `\u2039 ${crumbs[crumbs.length - 2]!.comp.name}`);
+      back.append(el('span', { class: 'lc-back-in' }, ` \u00b7 in ${crumbs[crumbs.length - 1]!.comp.name}`));
+      back.addEventListener('click', () => { if (!app.strokeActive) { app.editor.exit(); this.menuFor = null; this.sig = ''; this.update(); } });
+      this.root.append(back);
+    }
     if (this.addOpen) {
       const menu = el('div', { class: 'lc-options lc-add', role: 'group', 'aria-label': 'New layer' });
       const choice = (label: string, icon: string, title: string, fn: () => void) => {
@@ -166,7 +188,7 @@ export class LayerCards {
       const info = el('div', { class: 'lc-info' });
       info.append(el('span', { class: 'lc-name' }, l.name));
       const tags: string[] = [];
-      if (l.kind === 'comp') tags.push('group');
+      if (l.kind === 'comp') tags.push(`group \u00b7 ${app.project.comps.get(l.comp)?.layers.length ?? 0} layers`);
       if (l.kind === 'drawings' && l.guide) tags.push('board');
       if (linked) tags.push('linked');
       if (l.kind === 'drawings' && l.still) tags.push('still');
@@ -184,11 +206,21 @@ export class LayerCards {
       eye.addEventListener('click', (e) => { e.stopPropagation(); app.editor.setFlag(l.id, 'visible', !l.visible); this.update(); });
       if (linked) card.classList.add('linked');
       if (l.kind === 'drawings' && l.clip) card.classList.add('clipped');
-      card.append(this.thumb(l), info, eye);
+      if (l.kind === 'comp') {
+        // a group folds open in place; its options are behind the dots
+        card.classList.add('group');
+        const open = this.openGroups.has(l.id);
+        const fold = el('span', { class: 'lc-fold', 'aria-hidden': 'true' }, open ? '\u25be' : '\u25b8');
+        const more = el('button', { type: 'button', class: 'lc-more', title: 'Group options', 'aria-label': `${l.name} options` }, '\u22ef');
+        more.addEventListener('pointerdown', (e) => e.stopPropagation());
+        more.addEventListener('click', (e) => { e.stopPropagation(); this.menuFor = this.menuFor === l.id ? null : l.id; this.sig = ''; this.update(); });
+        card.append(fold, this.thumb(l), info, more, eye);
+      } else card.append(this.thumb(l), info, eye);
       this.bindCard(card, l, on);
       list.append(card);
       if (this.swiped === l.id) list.append(this.quick(l));
       if (this.menuFor === l.id) list.append(this.options(l));
+      if (l.kind === 'comp' && this.openGroups.has(l.id)) list.append(...this.children(l));
     }
     if (!layers.length) list.append(el('p', { class: 'hint' }, 'No layers yet. Draw, or tap +.'));
     this.root.append(list);
@@ -199,6 +231,12 @@ export class LayerCards {
   private bindCard(card: HTMLElement, l: Layer, on: boolean): void {
     card.addEventListener('pointerdown', (e) => {
       if (this.app.strokeActive) return;
+      // a second finger on the same card: the two-finger tap (layer options, opacity first)
+      if (this.drag && this.drag.id === l.id && this.drag.pointer !== e.pointerId) {
+        clearTimeout(this.drag.timer);
+        this.twoTap = l.id;
+        return;
+      }
       const pointer = e.pointerId;
       const timer = window.setTimeout(() => {
         if (this.drag && this.drag.pointer === pointer && !this.drag.moved) {
@@ -249,9 +287,20 @@ export class LayerCards {
         return;
       }
       if (d.moved) return;
+      if (this.twoTap === l.id) {
+        this.twoTap = null;
+        if (l.kind === 'drawings' && !on) this.app.pickLayer(l.id);
+        this.menuFor = l.id;
+        this.sig = '';
+        this.update();
+        this.root.querySelector<HTMLInputElement>('.lc-options input[type=range]')?.focus();
+        return;
+      }
       if (l.kind === 'comp') {
-        this.close();
-        this.app.editor.enter(l.id);
+        if (this.openGroups.has(l.id)) this.openGroups.delete(l.id);
+        else this.openGroups.add(l.id);
+        this.sig = '';
+        this.update();
         return;
       }
       if (on) this.menuFor = this.menuFor === l.id ? null : l.id;
@@ -261,6 +310,28 @@ export class LayerCards {
     };
     card.addEventListener('pointerup', (e) => end(e, false));
     card.addEventListener('pointercancel', (e) => end(e, true));
+  }
+
+  /** A folded-open group's layers: tap one to draw on it (inside the group). */
+  private children(g: Extract<Layer, { kind: 'comp' }>): HTMLElement[] {
+    const app = this.app;
+    const inner = app.project.comps.get(g.comp);
+    if (!inner) return [];
+    return inner.layers.filter((x) => x.kind === 'drawings' || x.kind === 'comp').map((x) => {
+      const card = el('div', { class: `lc-card child${x.visible ? '' : ' off'}`, role: 'option', 'aria-selected': 'false', tabindex: '0', title: `Draw on ${x.name} (inside ${g.name})` });
+      const info = el('div', { class: 'lc-info' });
+      info.append(el('span', { class: 'lc-name' }, x.name));
+      if (x.kind === 'comp') info.append(el('span', { class: 'lc-tags' }, 'group'));
+      card.append(this.thumb(x, g.start), info);
+      card.addEventListener('click', () => {
+        if (app.strokeActive || !app.editor.enter(g.id)) return;
+        if (x.kind === 'drawings') app.pickLayer(x.id);
+        this.menuFor = null;
+        this.sig = '';
+        this.update();
+      });
+      return card;
+    });
   }
 
   /** Quick actions after a swipe left: Lock, Duplicate, Delete. */
@@ -279,6 +350,21 @@ export class LayerCards {
       if (await confirmBox(`Delete \u201c${l.name}\u201d?`, 'You can undo this.', 'Delete', true)) app.editor.deleteLayers([l.id]);
     }, true);
     return box;
+  }
+
+  /** Group a layer with the one below it (linked art layers come along, so they stay in step). */
+  private groupWithBelow(l: Layer): void {
+    const app = this.app;
+    const layers = app.project.comp.layers;
+    const at = layers.findIndex((x) => x.id === l.id);
+    const below = layers.slice(at + 1).find((x) => (x.kind === 'drawings' && !x.guide) || x.kind === 'comp');
+    const withCel = (x: Layer) => (x.kind === 'drawings' && x.cel ? layers.filter((y) => y.kind === 'drawings' && y.cel === x.cel).map((y) => y.id) : [x.id]);
+    const ids = [...new Set([...withCel(l), ...(below ? withCel(below) : [])])];
+    const made = app.editor.group(ids, 'Group');
+    if (!made) return;
+    this.openGroups.add(made);
+    // keep drawing on the same layer: step into the group
+    if (app.editor.enter(made)) app.pickLayer(l.id);
   }
 
   /** The options of the layer you draw on. */
@@ -301,6 +387,25 @@ export class LayerCards {
     blRow.append(el('span', {}, 'Blend'), bl);
     box.append(opRow, blRow);
     const drawn = l.kind === 'drawings' && !l.guide;
+    if (l.kind === 'drawings' && drawn) {
+      // strokes and fills: which one brushes paint on, whether it shows, how strong
+      for (const pt of ['line', 'fill'] as const) {
+        const q = partOf(l, pt);
+        const row = el('div', { class: `lc-part${app.plane === pt ? ' paint' : ''}` });
+        const name = el('button', { type: 'button', class: 'lc-part-name', 'aria-pressed': String(app.plane === pt), title: pt === 'line' ? 'Paint on LINE: your strokes, on top' : 'Paint on FILL: colour under the strokes' }, pt === 'line' ? 'Line' : 'Fill');
+        name.addEventListener('click', () => { app.setPlane(pt); this.sig = ''; this.update(); });
+        const eye = el('button', { type: 'button', class: 'lc-part-eye', 'aria-pressed': String(q.visible), title: q.visible ? `Hide ${pt === 'line' ? 'Line' : 'Fill'}` : `Show ${pt === 'line' ? 'Line' : 'Fill'}` }, q.visible ? 'Hide' : 'Show');
+        decorate(eye, 'eye');
+        eye.addEventListener('click', () => { app.editor.setPart(l.id, pt, { visible: !q.visible }); this.sig = ''; this.update(); });
+        const r = el('input', { type: 'range', min: '0', max: '100', step: '1', 'aria-label': `${pt === 'line' ? 'Line' : 'Fill'} opacity` });
+        r.value = String(Math.round(Number(app.editor.valueNow(l, `${pt}.opacity` as PropKey))));
+        const out = el('output', {}, `${r.value}%`);
+        r.addEventListener('input', () => { out.textContent = `${r.value}%`; });
+        r.addEventListener('change', () => { app.editor.setValue(l.id, `${pt}.opacity` as PropKey, Number(r.value), `${pt === 'line' ? 'Line' : 'Fill'} opacity`); this.sig = ''; this.update(); });
+        row.append(name, eye, r, out);
+        box.append(row);
+      }
+    }
     if (drawn) {
       // what the layer does: switches, so on and off read at a glance
       const sw = (label: string, title: string, on: boolean, fn: () => void) => {
@@ -327,9 +432,12 @@ export class LayerCards {
       tile('Clear', 'eraser', 'Clear this drawing: Line, Fill and vector lines (you can undo)', () => app.clearFrame());
       tile('Flip \u2194', 'fliph', 'Mirror this drawing left to right', () => app.flipDrawing('h'));
       tile('Flip \u2195', 'flipv', 'Mirror this drawing top to bottom', () => app.flipDrawing('v'));
+      tile('Select', 'lasso', 'Select what this drawing has, ready to move, scale or fill inside', () => { this.close(); app.selectContents(); });
+      tile('Group', 'layers', 'Group this layer with the one below (a folder; tap it to fold open)', () => this.groupWithBelow(l), false, true);
       tile('Merge', 'collapseall', 'Merge down: flatten this layer into the one below (same frames and placement)', () => app.mergeDown(l.id), false, true);
       tile('Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => app.addCelLayer(), false, true);
     }
+    if (l.kind === 'comp') tile('Ungroup', 'expandall', 'Put the group\u2019s layers back in place of the group', () => { app.editor.ungroup(l.id); this.openGroups.delete(l.id); }, false, true);
     tile('Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', () => app.duplicateLayer(l.id), false, true);
     tile('Rename', 'draw', 'Rename this layer', async () => {
       const n = await askText('Layer name', l.name, 'Rename');
