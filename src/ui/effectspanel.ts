@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
 import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
-import { EFFECT_TYPES, effectDef, effectPreview, newEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
+import { EFFECT_TYPES, effectDef, plainName, effectPreview, newEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { decorate } from './icons';
 
@@ -93,21 +93,22 @@ export class EffectsPanel {
     if (!list.length) r.append(el('p', { class: 'hint' }, 'No effects yet. Add one below: it shows in Motion, in Share and in every export; the layer you draw on stays clean while you draw.'));
     list.forEach((e, i) => {
       const def = effectDef(e.type);
+      const name = plainName(def);
       const card = el('div', { class: `fx-card${e.on ? '' : ' off'}` });
       const top = el('div', { class: 'fx-top' });
       const sw = el('button', { type: 'button', class: `lc-switch fx-on${e.on ? ' on' : ''}`, role: 'switch', 'aria-checked': String(e.on), title: e.on ? 'Turn this effect off' : 'Turn this effect on' });
       sw.append(el('span', { class: 'lc-switch-name' }, def.label), el('span', { class: 'lc-switch-knob', 'aria-hidden': 'true' }));
-      sw.addEventListener('click', () => this.patch(i, { on: !e.on }, e.on ? `${def.label} off` : `${def.label} on`));
+      sw.addEventListener('click', () => this.patch(i, { on: !e.on }, e.on ? `${name} off` : `${name} on`));
       const del = el('button', { type: 'button', class: 'fx-del', 'aria-label': `Delete ${def.label}`, title: 'Delete this effect' }, 'Delete');
       decorate(del, 'trash');
-      del.addEventListener('click', () => this.commit(`Delete ${def.label.toLowerCase()}`, list.filter((_, k) => k !== i)));
+      del.addEventListener('click', () => this.commit(`Delete ${name.toLowerCase()}`, list.filter((_, k) => k !== i)));
       top.append(sw, del);
       card.append(top);
       // what it works on
       const seg = el('div', { class: 'fx-seg', role: 'group', 'aria-label': 'Works on' });
       for (const t of ['line', 'fill', 'layer'] as EffectTarget[]) {
         const b = el('button', { type: 'button', 'aria-pressed': String(e.target === t) }, TARGET_NAMES[t]);
-        b.addEventListener('click', () => { if (e.target !== t) this.patch(i, { target: t }, `${def.label} on ${TARGET_NAMES[t].toLowerCase()}`); });
+        b.addEventListener('click', () => { if (e.target !== t) this.patch(i, { target: t }, `${name} on ${TARGET_NAMES[t].toLowerCase()}`); });
         seg.append(b);
       }
       card.append(seg);
@@ -123,7 +124,7 @@ export class EffectsPanel {
           effectPreview.set(this.layerId, list.map((f, k) => (k === i ? { ...f, [key]: v } : f)));
           this.app.requestRender();
         });
-        input.addEventListener('change', () => this.patch(i, { [key]: Number(input.value) }, `${def.label} ${label.toLowerCase()}`));
+        input.addEventListener('change', () => this.patch(i, { [key]: Number(input.value) }, `${name} ${label.toLowerCase()}`));
         row.append(el('span', {}, label), input, out);
         card.append(row);
       };
@@ -164,14 +165,14 @@ export class EffectsPanel {
       const holds = el('div', { class: 'fx-seg small' });
       for (const [n, t] of [[1, 'Every frame'], [2, 'On 2s'], [3, 'On 3s'], [4, 'On 4s']] as const) {
         const b = el('button', { type: 'button', 'aria-pressed': String(e.hold === n), title: n === 1 ? 'A new pattern every frame' : `A new pattern every ${n} frames (boils like hand-drawn on ${n}s)` }, t);
-        b.addEventListener('click', () => { if (e.hold !== n) this.patch(i, { hold: n }, `${def.label} on ${n}s`); });
+        b.addEventListener('click', () => { if (e.hold !== n) this.patch(i, { hold: n }, `${name} on ${n}s`); });
         holds.append(b);
       }
       hold.append(holds);
       card.append(hold);
       const reseed = el('button', { type: 'button', class: 'fx-reseed', title: 'A different random pattern' }, 'New pattern');
       if (e.type === 'texture' && (e.style ?? 'paper') !== 'paper') reseed.hidden = true;
-      reseed.addEventListener('click', () => this.patch(i, { seed: newSeed() }, `${def.label} new pattern`));
+      reseed.addEventListener('click', () => this.patch(i, { seed: newSeed() }, `${name} new pattern`));
       card.append(reseed);
       r.append(card);
     });
@@ -179,7 +180,7 @@ export class EffectsPanel {
     const add = el('div', { class: 'fx-add' });
     for (const t of EFFECT_TYPES) {
       const b = el('button', { type: 'button', title: t.hint }, `+ ${t.label}`);
-      b.addEventListener('click', () => this.commit(`Add ${t.label.toLowerCase()}`, [...list, newEffect(t.id, `fx${Date.now().toString(36)}${list.length}`, newSeed())]));
+      b.addEventListener('click', () => this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, newEffect(t.id, `fx${Date.now().toString(36)}${list.length}`, newSeed())]));
       add.append(b);
     }
     r.append(add);

@@ -150,12 +150,12 @@ export class MotionPanel {
       group(
         dup(btn('+ Drawing', 'A new drawings layer at the playhead', () => ed.addLayer('drawings'))),
         btn('+ Media', 'Bring in a picture, movie or sound: each becomes its own track from frame 1', () => app.pickMedia?.()),
-        btn('+ Null', 'An empty handle to parent other layers to', () => ed.addLayer('null')),
+        btn('+ Anchor', 'An invisible anchor other layers can follow (a \u201cnull\u201d): move it and they move with it', () => ed.addLayer('null')),
         dup(btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera'))),
       ),
       group(
-        btn('↑', 'Move the selected layer up', () => ed.primary && ed.reorder(ed.primary.id, -1)),
-        btn('↓', 'Move the selected layer down', () => ed.primary && ed.reorder(ed.primary.id, 1)),
+        btn('↑ Up', 'Move the selected layer up (in front)', () => ed.primary && ed.reorder(ed.primary.id, -1)),
+        btn('↓ Down', 'Move the selected layer down (behind)', () => ed.primary && ed.reorder(ed.primary.id, 1)),
         this.multiBtn,
         dup(this.groupBtn),
         dup(this.splitBtn),
@@ -167,7 +167,7 @@ export class MotionPanel {
       ed.autoKey = !ed.autoKey;
       this.update();
     });
-    this.startBtn = btn('Key at start', 'The first key after frame 0 also keeps the old value at the start, so motion begins at once', () => {
+    this.startBtn = btn('Move from start', 'On: your first key also keeps where things were at the first frame, so they move from the start. Off: they jump straight to the key.', () => {
       ed.keyAtStart = !ed.keyAtStart;
       this.update();
     });
@@ -940,7 +940,7 @@ export class MotionPanel {
     const add = (kind: 'drawings' | 'null' | 'camera', label: string) => ({ label, run: () => ed.addLayer(kind) });
     return [
       { title: 'Comp' },
-      { chips: [add('drawings', '+ Drawing'), add('null', '+ Null'), add('camera', '+ Camera')] },
+      { chips: [add('drawings', '+ Drawing'), add('null', '+ Anchor'), add('camera', '+ Camera')] },
       { label: 'Auto-key', checked: ed.autoKey, run: () => ((ed.autoKey = !ed.autoKey), ed.onChange()) },
       ...(ed.hasCamera() ? [{ label: 'Look through camera', checked: ed.throughCamera, run: () => ((ed.throughCamera = !ed.throughCamera), this.app.requestRender(), ed.onChange()) }] : []),
       ...(ed.crumbs().length > 1 ? [{ label: 'Back out of this comp', run: () => ed.exit(ed.crumbs().length - 2) }] : []),

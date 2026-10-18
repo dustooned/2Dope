@@ -4601,7 +4601,7 @@ export class App {
         { label: 'Show lines', checked: this.partVisible('line'), run: () => this.togglePart('line') },
         { label: 'Show colour (fills)', checked: this.partVisible('fill'), run: () => this.togglePart('fill') },
         { label: 'Onion skin', checked: this.onion.enabled, run: () => this.toggleOnion(), hint: 'O' },
-        { label: 'Flipbook blank page', checked: this.flipbook, run: () => this.setFlipbook(!this.flipbook) },
+        { label: 'New page after the last drawing', checked: this.flipbook, run: () => this.setFlipbook(!this.flipbook) },
         { label: 'Scrub lock here', checked: this.lockFrame !== null, run: () => this.toggleLock(), hint: 'L' },
         { sep: true },
         { label: 'Fit view', run: () => this.fit(), hint: 'F' },

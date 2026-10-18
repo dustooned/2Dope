@@ -63,16 +63,21 @@ export interface EffectDef {
 }
 
 export const EFFECT_TYPES: EffectDef[] = [
-  { id: 'boil', label: 'Line boil', hint: 'Lines wobble like hand-drawn boil', target: 'line', amount: 1.6, size: 22, hold: 2, amountRange: [0, 16], sizeRange: [4, 160], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
-  { id: 'turbulence', label: 'Turbulent displace', hint: 'Swirling, rippling distortion (heat haze, water, wobbly shapes)', target: 'layer', amount: 6, size: 90, hold: 2, amountRange: [0, 40], sizeRange: [8, 300], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
-  { id: 'grain', label: 'Noise', hint: 'Film grain: specks that eat into the paint and change every frame', target: 'layer', amount: 35, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Strength', sizeLabel: 'Speck', amountUnit: '%', sizeUnit: ' px', animated: true },
-  { id: 'texture', label: 'Texture', hint: 'Paper, hatching, dots or canvas weave in the paint (best on the Fill)', target: 'fill', amount: 60, size: 14, hold: 1, amountRange: [0, 100], sizeRange: [3, 80], amountLabel: 'Strength', sizeLabel: 'Scale', amountUnit: '%', sizeUnit: ' px', animated: false },
-  { id: 'dither', label: 'Dither', hint: 'Retro limited colours with ordered or error-diffusion dithering', target: 'layer', amount: 100, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Mix', sizeLabel: 'Pixel size', amountUnit: '%', sizeUnit: ' px', animated: false },
+  { id: 'boil', label: '\u3030\ufe0f Line boil', hint: 'Lines wiggle a little every few frames, like hand-drawn animation', target: 'line', amount: 1.6, size: 22, hold: 2, amountRange: [0, 16], sizeRange: [4, 160], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
+  { id: 'turbulence', label: '\ud83c\udf0a Ripple', hint: 'Swirling, rippling warp: heat haze, water, wobbly shapes (turbulent displace)', target: 'layer', amount: 6, size: 90, hold: 2, amountRange: [0, 40], sizeRange: [8, 300], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
+  { id: 'grain', label: '\ud83d\udcfa Film grain', hint: 'Tiny specks in the paint that change every frame, like old film (noise)', target: 'layer', amount: 35, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Strength', sizeLabel: 'Speck', amountUnit: '%', sizeUnit: ' px', animated: true },
+  { id: 'texture', label: '\ud83e\uddfb Texture', hint: 'Paper, hatching, dots or canvas weave in the paint (best on the Fill)', target: 'fill', amount: 60, size: 14, hold: 1, amountRange: [0, 100], sizeRange: [3, 80], amountLabel: 'Strength', sizeLabel: 'Scale', amountUnit: '%', sizeUnit: ' px', animated: false },
+  { id: 'dither', label: '\ud83d\udc7e Retro pixels', hint: 'Old-console look: chunky pixels and a few colours, mixed with a dot pattern (dither)', target: 'layer', amount: 100, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Mix', sizeLabel: 'Pixel size', amountUnit: '%', sizeUnit: ' px', animated: false },
 ];
 
 export const EFFECT_LIMITS = { hold: [1, 8] as const };
 
 export const TARGET_NAMES: Record<EffectTarget, string> = { line: 'Line', fill: 'Fill', layer: 'Whole layer' };
+
+/** An effect's name without its emoji (for undo steps and notices). */
+export function plainName(d: EffectDef): string {
+  return d.label.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+}
 
 export function effectDef(type: EffectType): EffectDef {
   return EFFECT_TYPES.find((t) => t.id === type) ?? EFFECT_TYPES[0]!;

@@ -700,7 +700,7 @@ export class CompEditor {
     this.edit(`Add ${kind === 'drawings' ? 'drawing' : kind} layer`, (cc) => {
       const id = p.newId('L');
       if (kind === 'camera') made = cameraLayer(id, cc);
-      else if (kind === 'null') made = nullLayer(id, 'Null', cc);
+      else if (kind === 'null') made = nullLayer(id, 'Anchor', cc);
       else {
         const d = p.newDrawing();
         made = drawingsLayer(id, `Drawing ${id.slice(1)}`, [{ drawing: d.id, length: Math.max(1, cc.fps) }], p.width, p.height, cc.width, cc.height);

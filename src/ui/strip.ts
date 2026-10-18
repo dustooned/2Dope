@@ -125,13 +125,13 @@ export class Strip {
       btn('Delete', 'Delete the selected drawings, or this one (Delete)', () => app.deleteFrame()),
       btn('Split', 'Split the hold at the playhead: the rest gets a copy of the drawing to redraw', () => void app.splitHold()),
       (this.selBtn = btn('Select', 'Select several: tap frames to add or remove them (Shift+click on a computer)', () => app.setMultiSelect(!app.multiSelect))),
-      (this.flipBtn = btn('Flipbook', 'Flipbook: a fresh blank page after the last drawing. Draw on it to add the frame, tap again for the next.', () => app.flipToBlank())),
+      (this.flipBtn = btn('New page', 'New page: a fresh blank page after the last drawing. Draw on it to add the frame, tap again for the next.', () => app.flipToBlank())),
     );
 
     // Exposure: how many frames each selected drawing is held (on ones, twos, threes...).
     const exposure = el('div', { class: 'group', role: 'group', 'aria-label': 'Exposure' });
-    exposure.append(el('span', { class: 'name' }, 'Hold'));
-    for (const n of [1, 2, 3, 4]) exposure.append(btn(`${n}s`, `Hold the selected drawings for ${n} frame${n > 1 ? 's' : ''} each (${n})`, () => app.setExposure(n)));
+    exposure.append(el('span', { class: 'name', title: 'How many frames each drawing stays on screen' }, '\u23f1 Hold'));
+    for (const n of [1, 2, 3, 4]) exposure.append(btn(`${n}`, `Show the selected drawings for ${n} frame${n > 1 ? 's' : ''} each (on ${['ones', 'twos', 'threes', 'fours'][n - 1]}; key ${n})`, () => app.setExposure(n)));
     this.expInput = el('input', { type: 'number', min: '1', max: '99', step: '1', 'aria-label': 'Exposure in frames', title: 'Type a number of frames and press Enter', class: 'exp-input' });
     this.expInput.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;

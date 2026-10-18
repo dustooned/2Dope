@@ -4385,3 +4385,4 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 #stage.bub-stack .bub-ctx { top: var(--tools-bottom, 116px); right: 8px; max-width: calc(100% - 16px); }
 /* phone, Full level: the layer label goes under the floating options row */
 @media (max-width: 700px) { body.ui-full:not(.bar-collapsed):not(.tools-folded) .paint-target { top: calc(var(--top-clear, 56px) + 4px); left: 64px; transform: none; max-width: calc(100% - 72px); } }
+.bub-hold { white-space: nowrap; }

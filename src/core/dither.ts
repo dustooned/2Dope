@@ -18,28 +18,28 @@ const levels = (n: number): [number, number, number][] => {
 };
 
 export const PALETTES: { id: PaletteId; label: string; colors: [number, number, number][] }[] = [
-  { id: 'bw', label: '1-bit black and white', colors: hex('000000 ffffff') },
-  { id: 'gameboy', label: 'Game Boy', colors: hex('0f380f 306230 8bac0f 9bbc0f') },
-  { id: 'cga', label: 'CGA', colors: hex('000000 55ffff ff55ff ffffff') },
-  { id: 'ega', label: 'EGA 16 colours', colors: hex('000000 0000aa 00aa00 00aaaa aa0000 aa00aa aa5500 aaaaaa 555555 5555ff 55ff55 55ffff ff5555 ff55ff ffff55 ffffff') },
-  { id: 'c64', label: 'Commodore 64', colors: hex('000000 ffffff 880000 aaffee cc44cc 00cc55 0000aa eeee77 dd8855 664400 ff7777 333333 777777 aaff66 0088ff bbbbbb') },
-  { id: 'zx', label: 'ZX Spectrum', colors: hex('000000 0000d7 d70000 d700d7 00d700 00d7d7 d7d700 d7d7d7 0000ff ff0000 ff00ff 00ff00 00ffff ffff00 ffffff') },
-  { id: 'pico8', label: 'PICO-8', colors: hex('000000 1d2b53 7e2553 008751 ab5236 5f574f c2c3c7 fff1e8 ff004d ffa300 ffec27 00e436 29adff 83769c ff77a8 ffccaa') },
-  { id: 'rgb2', label: '8 colours', colors: levels(2) },
-  { id: 'rgb4', label: '64 colours', colors: levels(4) },
+  { id: 'bw', label: '\u26ab Black and white (1-bit)', colors: hex('000000 ffffff') },
+  { id: 'gameboy', label: '\ud83c\udfae Game Boy green', colors: hex('0f380f 306230 8bac0f 9bbc0f') },
+  { id: 'cga', label: '\ud83d\udcbe CGA (4 colours)', colors: hex('000000 55ffff ff55ff ffffff') },
+  { id: 'ega', label: '\ud83d\udcbe EGA (16 colours)', colors: hex('000000 0000aa 00aa00 00aaaa aa0000 aa00aa aa5500 aaaaaa 555555 5555ff 55ff55 55ffff ff5555 ff55ff ffff55 ffffff') },
+  { id: 'c64', label: '\ud83d\udd79\ufe0f Commodore 64', colors: hex('000000 ffffff 880000 aaffee cc44cc 00cc55 0000aa eeee77 dd8855 664400 ff7777 333333 777777 aaff66 0088ff bbbbbb') },
+  { id: 'zx', label: '\ud83d\udd79\ufe0f ZX Spectrum', colors: hex('000000 0000d7 d70000 d700d7 00d700 00d7d7 d7d700 d7d7d7 0000ff ff0000 ff00ff 00ff00 00ffff ffff00 ffffff') },
+  { id: 'pico8', label: '\ud83d\udc7e PICO-8', colors: hex('000000 1d2b53 7e2553 008751 ab5236 5f574f c2c3c7 fff1e8 ff004d ffa300 ffec27 00e436 29adff 83769c ff77a8 ffccaa') },
+  { id: 'rgb2', label: '\ud83c\udf08 8 bright colours', colors: levels(2) },
+  { id: 'rgb4', label: '\ud83c\udf08 64 colours', colors: levels(4) },
 ];
 
 export const DITHER_METHODS: { id: DitherMethod; label: string }[] = [
-  { id: 'none', label: 'None (flat colours)' },
-  { id: 'bayer2', label: 'Ordered 2×2' },
-  { id: 'bayer4', label: 'Ordered 4×4' },
-  { id: 'bayer8', label: 'Ordered 8×8' },
-  { id: 'floyd', label: 'Floyd–Steinberg' },
-  { id: 'atkinson', label: 'Atkinson' },
-  { id: 'jjn', label: 'Jarvis–Judice–Ninke' },
-  { id: 'stucki', label: 'Stucki' },
-  { id: 'burkes', label: 'Burkes' },
-  { id: 'sierra', label: 'Sierra' },
+  { id: 'none', label: 'Flat colours (no dots)' },
+  { id: 'bayer2', label: 'Grid dots \u00b7 big (2\u00d72)' },
+  { id: 'bayer4', label: 'Grid dots (4\u00d74)' },
+  { id: 'bayer8', label: 'Grid dots \u00b7 fine (8\u00d78)' },
+  { id: 'floyd', label: 'Scattered \u00b7 smooth (Floyd\u2013Steinberg)' },
+  { id: 'atkinson', label: 'Scattered \u00b7 crisp (Atkinson)' },
+  { id: 'jjn', label: 'Scattered \u00b7 soft (Jarvis)' },
+  { id: 'stucki', label: 'Scattered \u00b7 soft (Stucki)' },
+  { id: 'burkes', label: 'Scattered (Burkes)' },
+  { id: 'sierra', label: 'Scattered (Sierra)' },
 ];
 
 export function paletteColors(id: PaletteId): [number, number, number][] {

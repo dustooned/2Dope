@@ -114,9 +114,9 @@ export class Quick {
         btn('+ Frame', 'New drawing after this one (N)', () => app.addFrame()),
       ),
       group(
-        btn('1s', 'Exposure on ones (1)', () => app.setExposure(1)),
-        btn('2s', 'Exposure on twos (2)', () => app.setExposure(2)),
-        btn('3s', 'Exposure on threes (3)', () => app.setExposure(3)),
+        btn('Hold 1', 'Each drawing stays 1 frame (on ones; key 1)', () => app.setExposure(1)),
+        btn('Hold 2', 'Each drawing stays 2 frames (on twos; key 2)', () => app.setExposure(2)),
+        btn('Hold 3', 'Each drawing stays 3 frames (on threes; key 3)', () => app.setExposure(3)),
         this.fps,
         this.onionBtn,
       ),

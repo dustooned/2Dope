@@ -499,14 +499,13 @@ export class Bubbles {
     } else if (ws === 'time' && !this.layersOpen) {
       // holds: how many frames the drawing stays (tap a number); marks; frame by frame
       const hold = a.currentHold;
-      for (const n of [1, 2, 3, 4]) add(this.chip(`${n}s`, `Hold the drawing for ${n} frame${n > 1 ? 's' : ''} (on ${['ones', 'twos', 'threes', 'fours'][n - 1]})`, hold === n, () => a.setExposure(n)));
+      add(el('span', { class: 'bub-hint' }, '\u23f1 Hold'));
+      for (const n of [1, 2, 3, 4]) add(this.chip(`${n}`, `Show this drawing for ${n} frame${n > 1 ? 's' : ''} (animators call it \u201con ${['ones', 'twos', 'threes', 'fours'][n - 1]}\u201d)`, hold === n, () => a.setExposure(n)));
       add(this.chip('\u2212', 'One frame shorter', false, () => a.changeHold(-1)));
-      add(el('span', { class: 'bub-hint bub-hold' }, hold === null ? 'mixed' : `${hold} f`));
+      add(el('span', { class: 'bub-hint bub-hold' }, hold === null ? 'mixed' : `${hold} frame${hold === 1 ? '' : 's'}`));
       add(this.chip('+', 'One frame longer', false, () => a.changeHold(1)));
       add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
-      for (const [r, label, title] of [['key', 'K', 'Mark as a key drawing'], ['breakdown', 'B', 'Mark as a breakdown'], ['inbetween', 'I', 'Mark as an inbetween']] as const) add(this.chip(label, title, a.currentRole === r, () => a.setRole(r)));
-      add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
-      add(this.chip('\u25c0', 'Previous frame', false, () => a.prevFrame()), this.chip('\u25b6', 'Next frame', false, () => a.nextFrame()));
+      for (const [r, label, title] of [['key', '\ud83d\udd11 Key', 'A key drawing: the main poses of the move'], ['breakdown', 'Breakdown', 'A breakdown: the drawing that shapes the move between two keys'], ['inbetween', 'In-between', 'An in-between: fills the gaps so the move is smooth']] as const) add(this.chip(label, title, a.currentRole === r, () => a.setRole(r)));
     } else if (this.layersOpen && (ws === 'draw' || ws === 'time') && !xp) {
       // tight layer control: only this cel's linked layers, front first; tap one to draw on it
       const me = a.project.isPlaceholder ? '' : a.project.activeLayer;
@@ -543,7 +542,7 @@ export class Bubbles {
       );
     } else if (ws === 'draw' && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
       add(
-        this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)),
+        this.chip('\ud83d\udd8c\ufe0f Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)),
         this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')),
         this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')),
         this.symmetryChip(),
@@ -614,9 +613,9 @@ export class Bubbles {
     } else if (ws === 'board') {
       const st = this.hooks.story;
       if (st) {
-        for (const [v, label] of [['panels', 'Panels'], ['timeline', 'Timeline'], ['split', 'Split']] as const) add(this.chip(label, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
+        for (const [v, label, show] of [['panels', 'Panels', '\ud83d\uddc2\ufe0f Panels'], ['timeline', 'Timeline', '\ud83c\udf9e\ufe0f Timeline'], ['split', 'Split', '\u25eb Both']] as const) add(this.chip(show, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
       }
-      add(this.chip('Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later', 'Move the selected panels later', false, () => a.moveSelection(1)));
+      add(this.chip('\u25c0 Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later \u25b6', 'Move the selected panels later', false, () => a.moveSelection(1)));
       add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));
     } else if (ws === 'motion') {
       // easing, reverse and delete only when keys are selected; otherwise just how new keys start
@@ -625,7 +624,7 @@ export class Bubbles {
         add(this.chip('Reverse', 'Play the selected keys backwards', false, () => a.editor.reverse()));
         add(this.chip('Delete key', 'Delete the selected keys', false, () => a.editor.deleteKeys(), 'trash'));
       }
-      add(this.chip('Key at start', 'The first key also keeps the old value at frame 0, so motion begins at once', a.editor.keyAtStart, () => { a.editor.keyAtStart = !a.editor.keyAtStart; a.editor.onChange(); }));
+      add(this.chip('Move from start', 'On: your first key also keeps where things were at the first frame, so they move from the start. Off: they jump straight to the key.', a.editor.keyAtStart, () => { a.editor.keyAtStart = !a.editor.keyAtStart; a.editor.onChange(); }));
     }
     this.ctx.hidden = !this.ctx.querySelector(':scope > :not(.scroll-arrow)');
   }
