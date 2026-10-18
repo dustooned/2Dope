@@ -37,6 +37,11 @@ export class LayerCards {
   private openGroups = new Set<string>();
   /** A two-finger tap on this card (Procreate: the layer's opacity and options). */
   private twoTap: string | null = null;
+  /**
+   * Layers picked with the one you draw on (Procreate: swipe a layer right to add it). Group, Merge,
+   * Hide, Duplicate and Delete then work on all of them; Motion sees the same selection.
+   */
+  private readonly picked = new Set<string>();
 
   constructor(private readonly app: App) {
     document.body.append(this.root);
@@ -67,6 +72,91 @@ export class LayerCards {
   close(): void {
     this.root.hidden = true;
     this.menuFor = null;
+  }
+
+  /** The selection: the layer you draw on first, then the picked ones (in stack order). */
+  private selection(): string[] {
+    const layers = this.app.project.comp.layers;
+    const active = this.app.project.isPlaceholder ? '' : this.app.project.activeLayer;
+    for (const id of [...this.picked]) if (!layers.some((l) => l.id === id) || id === active) this.picked.delete(id);
+    const ids = layers.filter((l) => l.id === active || this.picked.has(l.id)).map((l) => l.id);
+    return ids;
+  }
+
+  private togglePick(id: string): void {
+    const active = this.app.project.isPlaceholder ? '' : this.app.project.activeLayer;
+    if (id === active) return;
+    if (this.picked.has(id)) this.picked.delete(id);
+    else this.picked.add(id);
+    // Motion works on the same layers
+    const ed = this.app.editor;
+    // the one you draw on goes last: the editor's main layer is its last selected one
+    ed.select(null);
+    for (const x of this.picked) ed.select(x, true);
+    if (active) ed.select(active, true);
+    this.menuFor = null;
+    this.swiped = null;
+    this.sig = '';
+    this.update();
+  }
+
+  private clearPicks(): void {
+    this.picked.clear();
+    this.sig = '';
+    this.update();
+  }
+
+  /** Linked art layers come along with a layer, so cels stay in step. */
+  private withCels(ids: string[]): string[] {
+    const layers = this.app.project.comp.layers;
+    const out = new Set<string>();
+    for (const id of ids) {
+      const x = layers.find((l) => l.id === id);
+      if (x && x.kind === 'drawings' && x.cel) for (const y of layers) { if (y.kind === 'drawings' && y.cel === x.cel) out.add(y.id); }
+      else out.add(id);
+    }
+    return [...out];
+  }
+
+  /** The bar over the list while several layers are picked. */
+  private batchBar(ids: string[]): HTMLElement {
+    const app = this.app;
+    const bar = el('div', { class: 'lc-batch', role: 'toolbar', 'aria-label': 'Selected layers' });
+    const top = el('div', { class: 'lc-batch-top' });
+    top.append(el('span', { class: 'lc-batch-n' }, `${ids.length} selected`));
+    bar.append(top);
+    const act = (label: string, icon: string, title: string, fn: () => void | Promise<void>, danger = false) => {
+      const b = el('button', { type: 'button', class: `lc-opt${danger ? ' danger' : ''}`, title }, label);
+      decorate(b, icon);
+      b.addEventListener('click', () => void (async () => { await fn(); this.sig = ''; this.update(); })());
+      bar.append(b);
+    };
+    act('Group', 'layers', 'Put the selected layers in a group (a folder)', () => {
+      const made = app.editor.group(this.withCels(ids), 'Group');
+      if (made) { this.openGroups.add(made); this.picked.clear(); }
+    });
+    act('Merge', 'collapseall', 'Merge the selected layers into one (they must sit next to each other, with the same frames and placement)', async () => {
+      const layers = app.project.comp.layers;
+      const idx = ids.map((id) => layers.findIndex((l) => l.id === id)).sort((a, b) => a - b);
+      if (idx.some((v, k) => k > 0 && v !== idx[k - 1]! + 1)) { app.onNotice?.('Merge needs the selected layers next to each other. Drag them together first.'); return; }
+      const order = idx.map((i) => layers[i]!.id);
+      // top down: each merges into the one under it
+      for (const id of order.slice(0, -1)) if (!(await app.mergeDown(id))) return;
+      this.picked.clear();
+    });
+    const allShown = ids.every((id) => app.project.comp.layers.find((l) => l.id === id)?.visible);
+    act(allShown ? 'Hide' : 'Show', 'eye', allShown ? 'Hide the selected layers' : 'Show the selected layers', () => {
+      app.editor.edit(allShown ? 'Hide layers' : 'Show layers', (c) => { for (const l of c.layers) if (ids.includes(l.id)) l.visible = !allShown; });
+      app.requestRender();
+    });
+    act('Duplicate', 'copy', 'Duplicate the selected layers', async () => { for (const id of ids) await app.duplicateLayer(id); });
+    act('Delete', 'trash', 'Delete the selected layers', async () => {
+      if (await confirmBox(`Delete ${ids.length} layers?`, 'You can undo this.', 'Delete', true)) { app.editor.deleteLayers(ids); this.picked.clear(); }
+    }, true);
+    const done = el('button', { type: 'button', class: 'lc-icon lc-batch-x', title: 'Clear the selection', 'aria-label': 'Clear the selection' }, '\u2715');
+    done.addEventListener('click', () => this.clearPicks());
+    top.append(done);
+    return bar;
   }
 
   private place(): void {
@@ -135,7 +225,7 @@ export class LayerCards {
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -181,10 +271,14 @@ export class LayerCards {
       this.root.append(menu);
     }
 
-    const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': 'Layers' });
+    const sel = this.selection();
+    if (sel.length > 1) this.root.append(this.batchBar(sel));
+    else this.root.append(el('p', { class: 'hint lc-swipe-hint' }, 'Swipe a layer right to select more (then group or merge); left for quick actions; hold to drag.'));
+    const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': 'Layers', 'aria-multiselectable': 'true' });
     for (const l of layers) {
       const on = l.id === active;
-      const card = el('div', { class: `lc-card${on ? ' on' : ''}${l.visible ? '' : ' off'}`, role: 'option', 'aria-selected': String(on), tabindex: '0' });
+      const pick = this.picked.has(l.id);
+      const card = el('div', { class: `lc-card${on ? ' on' : ''}${pick ? ' picked' : ''}${l.visible ? '' : ' off'}`, role: 'option', 'aria-selected': String(on || pick), tabindex: '0' });
       card.dataset.id = l.id;
       const linked = l.kind === 'drawings' && !!l.cel;
       const info = el('div', { class: 'lc-info' });
@@ -197,7 +291,7 @@ export class LayerCards {
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
       if (l.kind === 'drawings' && l.reference) tags.push('reference');
       if (l.kind === 'drawings' && l.mask) tags.push(on && app.editingMask ? 'editing mask' : 'mask');
-      if (l.kind === 'drawings' && l.effects?.length) tags.push('fx');
+      if (l.kind === 'drawings' && l.effects?.length) tags.push('✨ effects');
       if (l.blend !== 'normal') tags.push(l.blend);
       const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
       if (op < 100) tags.push(`${op}%`);
@@ -258,6 +352,13 @@ export class LayerCards {
       const dx = e.clientX - d.x0;
       if (!d.ready) {
         // a swipe left shows the quick actions (Procreate); moving up or down is a scroll of the list
+        // a swipe right adds the layer to the selection (Procreate), or takes it out again
+        if (dx > 36 && Math.abs(dy) < 24 && !d.moved) {
+          clearTimeout(d.timer);
+          this.drag = null;
+          this.togglePick(l.id);
+          return;
+        }
         if (dx < -36 && Math.abs(dy) < 24 && !d.moved) {
           clearTimeout(d.timer);
           this.drag = null; // the swipe is done: let the list redraw with the actions showing
@@ -291,6 +392,7 @@ export class LayerCards {
         return;
       }
       if (d.moved) return;
+      if ((e.shiftKey || e.ctrlKey || e.metaKey) && !on) { this.togglePick(l.id); return; }
       if (this.twoTap === l.id) {
         this.twoTap = null;
         if (l.kind === 'drawings' && !on) this.app.pickLayer(l.id);

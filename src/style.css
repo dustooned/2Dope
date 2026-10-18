@@ -4439,3 +4439,11 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 .fx-switch { flex: 0 0 48px; width: 48px; display: inline-flex; align-items: center; justify-content: center; }
 .fx-switch .lc-switch-knob { display: inline-block; }
 .fx-badge { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* layer multi-select (Procreate: the layer you draw on is the main one, picked ones are lighter) */
+.lc-card.picked { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); }
+.lc-batch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; margin-bottom: 6px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+.lc-batch-top { flex: 1 0 100%; display: flex; align-items: center; justify-content: space-between; }
+.lc-batch-n { font-size: 12px; font-weight: 700; }
+.lc-batch .lc-opt { flex: 1 1 auto; min-height: 36px; font-size: 12px; }
+.lc-batch-x { min-width: 32px; min-height: 32px; padding: 0; }
+.lc-swipe-hint { margin: 0 0 6px; font-size: 11px; }
