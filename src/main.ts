@@ -26,6 +26,7 @@ import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
 import { LayerCards } from './ui/layercards';
 import { FlipMode } from './ui/flipmode';
+import { ReferenceWindow } from './ui/reference';
 import { Bubbles } from './ui/bubbles';
 import { TracksSheet } from './ui/sheet';
 import { Strip } from './ui/strip';
@@ -554,6 +555,7 @@ const menuActions: Record<string, () => void> = {
   manual: () => showManual(),
   updates: () => showManual('updates'),
   quick: () => quick.toggle(),
+  reference: () => reference.toggle(),
   panel: () => setPanel(!document.body.classList.contains('panel-open')),
   bar: toggleBar,
   'export-hub': () => showExportHub(),
@@ -625,6 +627,9 @@ app.onToolChange = chain(app.onToolChange, () => quick.update());
 }
 // Draw's flipbook (Procreate Dreams style): frames as pages on tracks under the canvas; Draw's default view.
 const flipMode = new FlipMode(app, $('#stage'));
+// Reference (Procreate style): a floating window of pictures to draw from, or the whole canvas
+const reference = new ReferenceWindow(app);
+app.onFrameChange = chain(app.onFrameChange, () => reference.refresh());
 // Bubbles: mode and tool bubbles plus a context bar; the level button steps clean / simple / full.
 const layerCards = new LayerCards(app);
 closePopovers = () => layerCards.close();
@@ -642,6 +647,7 @@ const bubbles = new Bubbles(app, $('#stage'), {
   share: { open: () => share.open, show: () => share.show() },
   resetUi: () => resetUi(),
   brushLibrary: (anchor) => brushLib.toggle(anchor),
+  reference: () => reference.toggle(),
   colorPanel: (anchor) => colorPanel.toggle(anchor),
   layers: (anchor) => layersPop.toggle(anchor),
   fit: () => app.refit(),
@@ -737,6 +743,7 @@ const { store, persistent } = await openStore();
 audioPlayback.bank.source = (path) => store.getAsset(path);
 files = new FileUI(app, store, persistent);
 app.onDocChanged = chain(app.onDocChanged, () => audioPlayback.invalidate());
+app.onDocChanged = chain(app.onDocChanged, () => reference.refresh());
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;
 exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
 const newUI = new NewProjectUI(app.device.lite ? app.device.limits : null);

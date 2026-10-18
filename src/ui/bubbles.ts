@@ -20,6 +20,8 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 
 export interface BubbleHooks {
   brushLibrary(anchor: HTMLElement): void;
+  /** The floating reference window (pictures, or the whole canvas). */
+  reference?: () => void;
   colorPanel(anchor: HTMLElement): void;
   layers(anchor: HTMLElement): void;
   fit(): void;
@@ -40,7 +42,7 @@ export interface BubbleHooks {
 }
 
 type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
-  | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
+  | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
 /**
  * Bubbles: a simpler way around the app. Mode bubbles (Draw, Animate, Move, Story) at the top left,
@@ -278,7 +280,7 @@ export class Bubbles {
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     if (ws === 'draw' && this.level === 'clean') return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['color', 'Colour', '']];
-    if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
+    if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'gallery']];
     // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
     if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
     if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard', 'export']];
@@ -327,6 +329,7 @@ export class Bubbles {
       case 'split': this.hooks.motion?.split(); break;
       case 'autokey': a.editor.autoKey = !a.editor.autoKey; a.editor.onChange(); break;
       case 'look': a.editor.throughCamera = !a.editor.throughCamera; a.requestRender(); a.editor.onChange(); break;
+      case 'reference': this.hooks.reference?.(); break;
       case 'flipbook': {
         const id = a.editor.selected.find((s) => a.editor.comp.layers.some((l) => l.id === s && l.kind === 'drawings'));
         a.openFlipbook?.(id);
