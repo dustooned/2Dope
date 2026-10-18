@@ -4368,3 +4368,12 @@ body.ws-time #canvas { cursor: ew-resize; }
 .bub-color2 { position: relative; flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; background: var(--chip, #fff); border: 2px solid var(--line); box-shadow: inset 0 0 0 2px var(--panel); cursor: pointer; }
 .bub-color2 input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
 body.ui-full .bub-ctx[hidden] { display: none !important; }
+/* Full level with the top bar hidden or its tools folded: the mode and tool bubbles stand in, so
+   the tools are never more than a tap away (the options bar moves under them) */
+body.ui-full.bar-collapsed:not(.quick):not(.ui-hidden) .bub-modes, body.ui-full.bar-collapsed:not(.quick):not(.ui-hidden) .bub-tools,
+body.ui-full.tools-folded:not(.quick):not(.ui-hidden) .bub-modes, body.ui-full.tools-folded:not(.quick):not(.ui-hidden) .bub-tools { display: flex !important; }
+body.ui-full.bar-collapsed .bub-tools:empty, body.ui-full.tools-folded .bub-tools:empty { display: none !important; }
+body.ui-full.bar-collapsed .bub-ctx, body.ui-full.tools-folded .bub-ctx { top: 66px; }
+@media (max-width: 700px) { body.ui-full.bar-collapsed .bub-ctx, body.ui-full.tools-folded .bub-ctx { top: var(--tools-bottom, 116px); } }
+body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:not(.quick) .paint-target { top: calc(var(--top-clear, 110px) + 4px); left: 70px; transform: none; max-width: calc(50% - 60px); }
+@media (max-width: 700px) { body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:not(.quick) .paint-target { left: 8px; max-width: calc(100% - 16px); } }

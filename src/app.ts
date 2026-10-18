@@ -3912,7 +3912,9 @@ export class App {
 
   fit(): void {
     // the simple screen's bubble rows float over the top of the stage: fit the page below them
-    const bubbles = !document.body.classList.contains('ui-full');
+    // (at Full they stand in while the top bar is hidden or its tools folded)
+    const b = document.body.classList;
+    const bubbles = !b.contains('ui-full') || b.contains('bar-collapsed') || b.contains('tools-folded');
     // Flip's drawing row floats over the bottom
     const flip = document.body.classList.contains('flipmode');
     const clear = parseFloat(this.stage.style.getPropertyValue('--top-clear')) || 64;

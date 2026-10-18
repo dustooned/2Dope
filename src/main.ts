@@ -393,7 +393,7 @@ function syncFocus(): void {
   try { prefs = JSON.parse(localStorage.getItem(`2dope.focus.${app.workspace}`) ?? '{}') ?? {}; } catch { /* defaults */ }
   document.body.classList.toggle('tools-folded', prefs.tools === false);
   document.body.classList.toggle('timeline-folded', prefs.timeline === false && !TracksSheet.WORKSPACES.has(app.workspace));
-  $('#focus-tools').setAttribute('aria-expanded', String(prefs.tools !== false));
+  $('#focus-tools').setAttribute('aria-expanded', String(prefs.tools !== false && !document.body.classList.contains('bar-collapsed')));
   $('#focus-timeline').setAttribute('aria-expanded', String(prefs.timeline !== false));
   $('#focus-context').textContent = { draw: 'Draw · make your art', time: 'Time · adjust exposure', motion: 'Motion · composite and animate', board: 'Board · plan the story' }[app.workspace];
 }
@@ -404,10 +404,16 @@ for (const part of ['tools', 'timeline'] as const) {
       $('#focus-timeline').setAttribute('aria-expanded', String(sheet.current !== 'peek'));
       return;
     }
-    const folded = document.body.classList.toggle(`${part}-folded`);
+    // Tools: one button for both ways the tools can be put away (folded, or the whole bar hidden)
+    if (part === 'tools' && document.body.classList.contains('bar-collapsed')) {
+      setBar(false);
+      document.body.classList.remove('tools-folded');
+    } else document.body.classList.toggle(`${part}-folded`);
+    const folded = document.body.classList.contains(`${part}-folded`);
     $(`#focus-${part}`).setAttribute('aria-expanded', String(!folded));
     if (part === 'tools' && folded) setPanel(false);
     try { localStorage.setItem(`2dope.focus.${app.workspace}`, JSON.stringify({ tools: !document.body.classList.contains('tools-folded'), timeline: !document.body.classList.contains('timeline-folded') })); } catch { /* optional */ }
+    app.onToolChange(); // the bubbles stand in for folded tools at Full: measure them
     setTimeout(() => app.refit(), 60);
   });
 }
@@ -507,6 +513,8 @@ menu.addEventListener('click', (e) => {
 const BAR_KEY = '2dope.m1.bar';
 const setBar = (collapsed: boolean) => {
   document.body.classList.toggle('bar-collapsed', collapsed);
+  $('#focus-tools').setAttribute('aria-expanded', String(!collapsed && !document.body.classList.contains('tools-folded')));
+  app.onToolChange();
   try {
     localStorage.setItem(BAR_KEY, collapsed ? '1' : '0');
   } catch {
