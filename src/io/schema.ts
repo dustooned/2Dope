@@ -114,6 +114,7 @@ export interface LayerFile {
   clip?: boolean;
   alphaLock?: boolean;
   reference?: boolean;
+  mask?: string;
   /** Written by early schema-2 files; read as play "loop". */
   loop?: boolean;
   /** drawings: Line / Fill part settings that differ from the defaults (additive, no version bump). */
@@ -412,6 +413,7 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   if (v.clip === true) out.clip = true;
   if (v.alphaLock === true) out.alphaLock = true;
   if (v.reference === true) out.reference = true;
+  if (typeof v.mask === 'string' && Object.prototype.hasOwnProperty.call(drawings, v.mask)) out.mask = v.mask;
   if (kind === 'drawings') {
     out.exposures = exposureList(v.exposures, what, drawings);
     if (!out.exposures.length) throw new SchemaError(`${what} has no frames`);
@@ -677,6 +679,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
         ...(l.clip ? { clip: true } : {}),
         ...(l.alphaLock ? { alphaLock: true } : {}),
         ...(l.reference ? { reference: true } : {}),
+        ...(l.mask ? { mask: l.mask } : {}),
       };
       const timed = { play: l.play ?? (l.loop ? 'loop' : 'once'), speed: l.speed ?? 1, single: l.single ?? 0, timeRemap: l.timeRemap ? propOf(l.timeRemap) : null } as const;
       if (l.kind === 'drawings') {
@@ -745,6 +748,7 @@ export function compFile(c: Comp): CompFile {
       if (l.clip) base.clip = true;
       if (l.alphaLock) base.alphaLock = true;
       if (l.reference) base.reference = true;
+      if (l.mask) base.mask = l.mask;
       const timed: Partial<LayerFile> = {};
       if (l.kind === 'drawings' || l.kind === 'comp') {
         if (l.play !== 'once') timed.play = l.play;

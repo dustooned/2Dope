@@ -2287,6 +2287,56 @@ export class App {
     );
   }
 
+  // -------------------------------------------------------------------------------------------
+  // Layer masks: paint hides the layer (on all its frames) without erasing it; the eraser on the
+  // mask reveals again. Delete the mask to show everything.
+
+  private maskEditingOn = false;
+  private maskScratch: HTMLCanvasElement | null = null;
+
+  /** The mask of the layer you draw on, if it has one. */
+  get maskDrawing(): Drawing | null {
+    const l = this.project.isPlaceholder ? null : this.project.layer;
+    return l && l.kind === 'drawings' && l.mask ? (this.project.drawings.get(l.mask) ?? null) : null;
+  }
+
+  /** Brushes paint on the mask instead of the art. */
+  get editingMask(): boolean {
+    return this.maskEditingOn && this.maskDrawing !== null;
+  }
+
+  setMaskEditing(on: boolean): void {
+    if (this.strokeActive) return;
+    this.maskEditingOn = on && this.maskDrawing !== null;
+    if (this.maskEditingOn && this.tool !== 'brush' && this.tool !== 'eraser' && this.tool !== 'pen') this.setTool('brush');
+    this.requestRender();
+    this.onToolChange();
+    this.onFrameChange();
+  }
+
+  addMask(): void {
+    if (this.strokeActive) return;
+    const l = this.project.isPlaceholder ? null : this.project.layer;
+    if (!l || l.kind !== 'drawings' || l.mask) return;
+    const d = this.project.newDrawing();
+    const id = l.id;
+    this.editor.edit('Add mask', (c) => { const x = c.layers.find((y) => y.id === id); if (x && x.kind === 'drawings') x.mask = d.id; });
+    this.setMaskEditing(true);
+    this.onNotice?.('Mask on: paint to hide parts of this layer, erase to bring them back.');
+  }
+
+  deleteMask(): void {
+    if (this.strokeActive) return;
+    const l = this.project.layer;
+    if (l.kind !== 'drawings' || !l.mask) return;
+    const id = l.id;
+    this.maskEditingOn = false;
+    this.editor.edit('Delete mask', (c) => { const x = c.layers.find((y) => y.id === id); if (x && x.kind === 'drawings') delete x.mask; });
+    this.requestRender();
+    this.onToolChange();
+    this.onFrameChange();
+  }
+
   /** Fill layer (Procreate): the current drawing's FILL becomes the colour, everywhere. One undo step. */
   fillDrawing(): void {
     if (this.live || this.blankPage) return;
@@ -3675,6 +3725,10 @@ export class App {
       return;
     }
     if (this.tool === 'fill') {
+      if (this.editingMask) {
+        this.onNotice?.('Paint the mask with the Brush (hide) or the Eraser (reveal).');
+        return;
+      }
       if (!this.blankPage) this.beginFill(e);
       return;
     }
@@ -3697,10 +3751,11 @@ export class App {
       this.project.editLayer();
       this.onDocChanged();
     }
-    const drawing = this.drawing;
+    // editing a mask: brushes hide, the eraser reveals (the mask drawing's paint is what hides)
+    const drawing = this.editingMask ? this.maskDrawing! : this.drawing;
     // Its pixels are still coming back (a few ms after changing frame): ignore this touch.
     if (!this.residency.isReady(drawing)) return;
-    const plane: Plane = tool === 'pen' ? 'line' : this.plane;
+    const plane: Plane = tool === 'pen' || this.editingMask ? 'line' : this.plane;
     const canvas = planeCanvas(drawing, plane);
     this.raster.bind(canvas);
     const record: StrokeRecord = {
@@ -3803,7 +3858,7 @@ export class App {
       );
     } else {
       const c = this.raster.commit(post > 0);
-      if (c && rec.tool !== 'eraser' && this.project.layer.kind === 'drawings' && this.project.layer.alphaLock) {
+      if (c && rec.tool !== 'eraser' && this.project.layer.kind === 'drawings' && this.project.layer.alphaLock && live.drawing !== this.maskDrawing) {
         // Alpha Lock: the stroke changes colour only where there was paint; coverage stays as it was
         const b = c.before.data, a = c.after.data;
         for (let i = 0; i < a.length; i += 4) {
@@ -4894,7 +4949,9 @@ export class App {
       outer('above');
       return;
     }
-    const live = this.live;
+    const maskD = this.maskDrawing;
+    const maskLive = !!this.live && !!maskD && this.live.drawing === maskD;
+    const live = maskLive ? null : this.live;
     const d = live ? live.drawing : this.drawing;
     if (d.parked) {
       // Coming back from storage (a few ms): show its thumbnail stretched meanwhile.
@@ -4958,10 +5015,55 @@ export class App {
       }
     };
 
+    // a layer with a mask: drawn on its own, then the mask takes paint away; while editing the
+    // mask, what it hides shows as a red tint
+    const paintMasked = (x: CanvasRenderingContext2D, partScale = 1) => {
+      if (!maskD || maskD.parked) return paintActive(x, partScale);
+      const W = x.canvas.width, H = x.canvas.height;
+      const s = (this.maskScratch ??= document.createElement('canvas'));
+      if (s.width !== W || s.height !== H) { s.width = W; s.height = H; }
+      const sg = s.getContext('2d')!;
+      sg.setTransform(1, 0, 0, 1, 0, 0);
+      sg.clearRect(0, 0, W, H);
+      paintActive(sg, partScale);
+      const src = maskLive && this.live!.record.tool !== 'pen' ? this.raster.displaySource() : maskD.line;
+      const paintMask = (y: CanvasRenderingContext2D) => {
+        y.setTransform(base);
+        y.drawImage(src, 0, 0);
+        for (const v of maskD.vectors) drawVectorStroke(y, v, this.lengthOf(v));
+        if (maskLive && this.live!.record.tool === 'pen') drawVectorStroke(y, this.live!.record);
+      };
+      if (!this.editingMask) {
+        sg.globalCompositeOperation = 'destination-out';
+        paintMask(sg);
+        sg.globalCompositeOperation = 'source-over';
+      }
+      x.save();
+      x.setTransform(1, 0, 0, 1, 0, 0);
+      x.drawImage(s, 0, 0);
+      x.restore();
+      if (this.editingMask) {
+        // the hidden parts in red over the layer, so you see what the mask does as you paint it
+        sg.setTransform(1, 0, 0, 1, 0, 0);
+        sg.clearRect(0, 0, W, H);
+        paintMask(sg);
+        sg.setTransform(1, 0, 0, 1, 0, 0);
+        sg.globalCompositeOperation = 'source-in';
+        sg.fillStyle = 'rgba(255, 40, 70, 0.45)';
+        sg.fillRect(0, 0, W, H);
+        sg.globalCompositeOperation = 'source-over';
+        x.save();
+        x.setTransform(1, 0, 0, 1, 0, 0);
+        x.drawImage(s, 0, 0);
+        x.restore();
+      }
+      x.setTransform(base);
+    };
+
     if (group) {
       const layerAt = (i: number) => comp.layers[i]!;
       const draw = (i: number, alpha: number) => (x: CanvasRenderingContext2D) => {
-        if (i === idx) paintActive(x, alpha);
+        if (i === idx) paintMasked(x, alpha);
         else drawLayerAround(x, this.project, comp, this.frame, activeId, layerAt(i).blend === 'normal' ? layerAt(i) : ({ ...layerAt(i), blend: 'normal' } as typeof comp.layers[number]), alpha, base);
       };
       const shown = (i: number) => i === idx || (others > 0 && layerAt(i).visible);
@@ -4974,7 +5076,7 @@ export class App {
         'draw',
       );
       g.setTransform(base);
-    } else paintActive(g);
+    } else paintMasked(g);
 
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude);
     outer('above');
@@ -5034,6 +5136,8 @@ export class App {
       return [...out];
     }
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
+    if (this.maskDrawing) out.add(this.maskDrawing);
+    out.add(this.drawing);
     if (this.showLayers || this.boardAlpha > 0) {
       for (const id of frameContent(p.comps, p.comp.id, this.frame).drawings) {
         const d = p.drawings.get(id);

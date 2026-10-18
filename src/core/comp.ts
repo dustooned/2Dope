@@ -56,6 +56,8 @@ interface LayerBase {
   alphaLock?: boolean;
   /** Reference (Procreate): Fill and ColorDrop on any layer use this layer's lines as edges. */
   reference?: boolean;
+  /** Layer mask: a drawing whose paint hides this layer (on every frame); erasing it reveals again. */
+  mask?: string;
 }
 
 /** Is this layer left out of a final render? */
@@ -582,7 +584,8 @@ export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | 
       const id = drawingOf(l, frame);
       if (!id) continue;
       drawings.add(id);
-      parts.push(`${l.id}:${id}@${look}`);
+      if (l.mask) drawings.add(l.mask);
+      parts.push(`${l.id}:${id}${l.mask ? `~${l.mask}` : ''}@${look}`);
     } else {
       const n = comps.get(l.comp);
       const nf = n ? nestedFrame(l, frame, c.fps, n, comps) : null;

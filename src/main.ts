@@ -69,7 +69,7 @@ const syncTools = () => {
   const selection = app.tool === 'fill' && app.fillMode === 'lasso';
   const path = app.editor.crumbs().map((c) => c.comp.name).join(' › ');
   const drawing = app.blankPage ? 'Blank page' : `Drawing ${app.drawing.num}`;
-  const target = selection ? 'Area selection' : plane === 'fill' ? 'Fill' : 'Line';
+  const target = app.editingMask ? 'Mask' : selection ? 'Area selection' : plane === 'fill' ? 'Fill' : 'Line';
   const warning = layer.locked ? ' · Locked' : !layer.visible || !app.partVisible(plane) ? ' · Hidden' : '';
   // the simple screen says only where you paint (the comp path only inside a group)
   const simple = !document.body.classList.contains('ui-full');
@@ -79,7 +79,8 @@ const syncTools = () => {
     : simple ? `${inGroup ? `${path} › ` : ''}${layer.name} · ${target}${warning}` : `${path} › ${layer.name} · ${drawing} · ${target}${warning}`;
   paintTarget.title = `${paintTarget.textContent}. Open Layers to choose where you draw.`;
   paintTarget.setAttribute('aria-label', `Paint target: ${paintTarget.textContent}`);
-  paintTarget.classList.toggle('fill-target', !selection && plane === 'fill');
+  paintTarget.classList.toggle('fill-target', !selection && plane === 'fill' && !app.editingMask);
+  paintTarget.classList.toggle('mask-target', app.editingMask);
 };
 const paintTarget = document.createElement('button');
 paintTarget.type = 'button';

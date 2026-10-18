@@ -269,13 +269,23 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     const id = drawingOf(l, frame);
     const d = id ? project.drawings.get(id) : undefined;
     if (!d || d.parked) return;
-    // A plain layer draws straight in; with opacity or a blend mode the drawing is flattened first
-    // so its fill does not show through its own lines.
-    if (alpha >= 1 && l.blend === 'normal') direct = d;
+    // A plain layer draws straight in; with opacity, a blend mode or a mask the drawing is
+    // flattened first (its fill does not show through its own lines; the mask takes paint away)
+    const mask = l.mask ? project.drawings.get(l.mask) : undefined;
+    const masked = !!mask && !mask.parked;
+    if (alpha >= 1 && l.blend === 'normal' && !masked) direct = d;
     else {
       source = scratchFor(`d${depth}`, project.width, project.height);
       const sg = source.getContext('2d')!;
       paintPlanes(sg, d, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
+      if (masked) {
+        sg.setTransform(1, 0, 0, 1, 0, 0);
+        sg.globalAlpha = 1;
+        sg.globalCompositeOperation = 'destination-out';
+        sg.drawImage(mask.line, 0, 0);
+        for (const v of mask.vectors) drawVectorStroke(sg, v);
+        sg.globalCompositeOperation = 'source-over';
+      }
     }
   } else if (l.kind === 'comp') {
     const n = project.comps.get(l.comp);

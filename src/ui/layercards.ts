@@ -135,7 +135,7 @@ export class LayerCards {
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -194,6 +194,7 @@ export class LayerCards {
       if (l.kind === 'drawings' && l.still) tags.push('still');
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
       if (l.kind === 'drawings' && l.reference) tags.push('reference');
+      if (l.kind === 'drawings' && l.mask) tags.push(on && app.editingMask ? 'editing mask' : 'mask');
       if (l.blend !== 'normal') tags.push(l.blend);
       const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
       if (op < 100) tags.push(`${op}%`);
@@ -418,6 +419,7 @@ export class LayerCards {
       sw('Alpha Lock', 'Brushes change only pixels that already have paint', l.alphaLock === true, flip('alphaLock', 'Alpha Lock'));
       sw('Clipping mask', 'Show this layer only where the layer below has paint', l.clip === true, flip('clip', 'Clipping mask'));
       sw('Reference', 'Fill and ColorDrop on any layer use this layer\u2019s lines as their edges (one per shot)', l.reference === true, () => app.setReference(l.id, !l.reference));
+      if (l.mask) sw('Edit mask', 'Brushes paint on the mask: paint hides, the eraser reveals (all frames of this layer)', app.editingMask, () => app.setMaskEditing(!app.editingMask));
     }
     // actions: icon tiles
     const grid = el('div', { class: 'lc-grid' });
@@ -432,6 +434,8 @@ export class LayerCards {
       tile('Clear', 'eraser', 'Clear this drawing: Line, Fill and vector lines (you can undo)', () => app.clearFrame());
       tile('Flip \u2194', 'fliph', 'Mirror this drawing left to right', () => app.flipDrawing('h'));
       tile('Flip \u2195', 'flipv', 'Mirror this drawing top to bottom', () => app.flipDrawing('v'));
+      if (l.mask) tile('Delete mask', 'deselect', 'Remove the mask: everything shows again (you can undo)', () => app.deleteMask());
+      else tile('Mask', 'invert', 'Add a mask: paint to hide parts of this layer without erasing them', () => app.addMask());
       tile('Select', 'lasso', 'Select what this drawing has, ready to move, scale or fill inside', () => { this.close(); app.selectContents(); });
       tile('Group', 'layers', 'Group this layer with the one below (a folder; tap it to fold open)', () => this.groupWithBelow(l), false, true);
       tile('Merge', 'collapseall', 'Merge down: flatten this layer into the one below (same frames and placement)', () => app.mergeDown(l.id), false, true);

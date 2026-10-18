@@ -4095,6 +4095,7 @@ body.ws-motion .audio-tracks { display: none !important; }
 .lc-tile .ico { width: 20px; height: 20px; }
 .lc-tile.danger { color: #ff6b6b; }
 .lc-tile:active { transform: scale(.96); }
+.paint-target.mask-target { background: #b3263f; color: #fff; }
 .bub-sep { flex: 0 0 auto; width: 1px; height: 26px; margin: 0 2px; background: var(--line); }
 .bub-slider .bub-num { min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; opacity: .8; }
 .tracks-add { min-height: 40px; }

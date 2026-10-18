@@ -213,7 +213,12 @@ export class Project {
   /** Every drawing id some drawings layer shows (the ones a save must keep). */
   usedDrawings(): Set<string> {
     const used = new Set<string>();
-    for (const c of this.comps.values()) for (const l of c.layers) if (l.kind === 'drawings') for (const e of l.exposures) used.add(e.drawing);
+    for (const c of this.comps.values())
+      for (const l of c.layers) {
+        if (l.kind !== 'drawings') continue;
+        for (const e of l.exposures) used.add(e.drawing);
+        if (l.mask) used.add(l.mask);
+      }
     return used;
   }
 
