@@ -1,5 +1,6 @@
 import type { SymmetryMode } from '../core/adjust';
 import type { SelectShape } from '../app';
+import { GUIDE_NAMES, type GuideMode } from '../core/guides';
 import { EASINGS } from '../core/anim';
 import type { App, Workspace } from '../app';
 import type { Tool } from '../core/stroke';
@@ -176,6 +177,19 @@ export class Bubbles {
     const names: Record<SymmetryMode, string> = { off: 'Symmetry', vertical: 'Mirror \u2194', horizontal: 'Mirror \u2195', quadrant: 'Quadrant', radial: 'Radial' };
     const next = order[(order.indexOf(a.symmetry) + 1) % order.length]!;
     return this.chip(names[a.symmetry], `Symmetry: ${a.symmetry}. Tap for ${next}.`, a.symmetry !== 'off', () => a.setSymmetry(next), 'symmetry');
+  }
+
+  /** Drawing Guide: a button that steps through the guides, then Assist and Edit while one is on. */
+  private guideChips(): HTMLButtonElement[] {
+    const a = this.app;
+    const order: GuideMode[] = ['off', 'grid', 'iso', 'persp1', 'persp2'];
+    const next = order[(order.indexOf(a.guide.mode) + 1) % order.length]!;
+    const out = [this.chip(GUIDE_NAMES[a.guide.mode], `Drawing guide: ${GUIDE_NAMES[a.guide.mode]}. Tap for ${GUIDE_NAMES[next]}.`, a.guide.mode !== 'off', () => a.setGuide({ mode: next }), 'guide')];
+    if (a.guide.mode !== 'off') {
+      out.push(this.chip('Assist', a.assist ? 'Assisted drawing: strokes follow the guide. Tap to draw freely' : 'Assisted drawing off: tap so strokes follow the guide', a.assist, () => a.setAssist(!a.assist)));
+      out.push(this.chip('Edit', a.guideEdit ? 'Done editing the guide' : a.guide.mode === 'persp1' || a.guide.mode === 'persp2' ? 'Drag the vanishing points and the horizon' : 'Drag up or down to change the grid size', a.guideEdit, () => a.setGuideEdit(!a.guideEdit)));
+    }
+    return out;
   }
 
   /** Adjustments: Colour (hue, saturation, brightness) or Blur, live sliders, Apply / Cancel. */
@@ -391,7 +405,7 @@ export class Bubbles {
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
     const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
-    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform].join('|');
+    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
@@ -467,6 +481,7 @@ export class Bubbles {
         this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')),
         this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')),
         this.symmetryChip(),
+        ...this.guideChips(),
       );
       if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
     } else if (cur === 'fill') {

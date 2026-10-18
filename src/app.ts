@@ -1,3 +1,4 @@
+import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection, vanishingPoints, type Guide } from './core/guides';
 import { adjustHex, applyBlur, applyHSB, isNoHSB, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
 import { loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
@@ -80,6 +81,8 @@ const FILL_ACROSS_KEY = '2dope.fill.across';
 const FILL_REFER_KEY = '2dope.fill.refer';
 const SYMMETRY_KEY = '2dope.symmetry';
 const SELECT_SHAPE_KEY = '2dope.select.shape';
+const GUIDE_KEY = '2dope.guide';
+const ASSIST_KEY = '2dope.guide.assist';
 
 /** Fill tool: region fill, temporary lasso selection, or leftover cleanup. */
 export type FillMode = 'tap' | 'lasso' | 'leftover';
@@ -125,6 +128,8 @@ interface LiveStroke {
   predicted: StrokePoint[];
   /** Where the pen last came to rest (screen px), for QuickShape's hold. */
   still: { x: number; y: number };
+  /** Assisted drawing: where the stroke began and the guide direction it settled on. */
+  assist?: { x: number; y: number; dir: number | null };
   /** Set once QuickShape snapped the stroke: the recognised shape and the pen point at the snap. */
   shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; profile: number[]; raw: StrokePoint[] };
 }
@@ -1748,6 +1753,86 @@ export class App {
     const out: StrokeRecord[] = [];
     for (let k = 1; k < n; k++) out.push({ ...rec, id: newStrokeId(), sym: undefined, points: rec.points.map((p) => { const c = symmetryCopies(sym.mode, sym.cx, sym.cy, p.x, p.y, 0)[k]!; return { ...p, x: c.x, y: c.y }; }) });
     return out;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Drawing guides (Procreate): grid, isometric, 1- and 2-point perspective; Assisted drawing
+  // keeps strokes on the guide; Edit guide drags the horizon and vanishing points (or the grid size).
+
+  guide: Guide = { ...DEFAULT_GUIDE, ...(loadJSON<Partial<Guide>>(GUIDE_KEY) ?? {}) };
+  assist = loadJSON<boolean>(ASSIST_KEY) ?? false;
+  guideEdit = false;
+  private guideDrag: { id: number; what: 'horizon' | 'vp1' | 'left' | 'right' | 'size'; y0: number; size0: number } | null = null;
+
+  setGuide(patch: Partial<Guide>): void {
+    this.guide = { ...this.guide, ...patch };
+    saveJSON(GUIDE_KEY, this.guide);
+    if (this.guide.mode === 'off') this.guideEdit = false;
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  setAssist(on: boolean): void {
+    this.assist = on;
+    saveJSON(ASSIST_KEY, on);
+    this.onToolChange();
+  }
+
+  setGuideEdit(on: boolean): void {
+    this.guideEdit = on && this.guide.mode !== 'off';
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  private drawGuide(g: CanvasRenderingContext2D): void {
+    const gd = this.guide;
+    if (gd.mode === 'off' || this.workspace === 'motion' || this.workspace === 'board') return;
+    const W = this.docW, H = this.docH;
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, W, H);
+    g.clip();
+    g.lineWidth = 1 / this.view.zoom;
+    g.strokeStyle = this.guideEdit ? 'rgba(74, 163, 255, 0.55)' : 'rgba(74, 163, 255, 0.3)';
+    g.beginPath();
+    for (const [x1, y1, x2, y2] of guideLines(gd, W, H)) { g.moveTo(x1, y1); g.lineTo(x2, y2); }
+    g.stroke();
+    g.restore();
+    if (this.guideEdit) {
+      // handles: the vanishing points and the horizon
+      const z = this.view.zoom;
+      g.save();
+      g.lineWidth = 2 / z;
+      g.strokeStyle = '#4aa3ff';
+      g.fillStyle = '#fff';
+      for (const [x, y] of vanishingPoints(gd, W, H)) { g.beginPath(); g.arc(x, y, 12 / z, 0, Math.PI * 2); g.fill(); g.stroke(); }
+      if (gd.mode === 'persp1' || gd.mode === 'persp2') { g.beginPath(); g.moveTo(0, gd.horizon * H); g.lineTo(W, gd.horizon * H); g.stroke(); }
+      g.restore();
+    }
+  }
+
+  /** Edit guide: a press grabs a vanishing point, the horizon, or (grids) the size. */
+  private beginGuideDrag(e: PointerEvent): void {
+    const p = this.toPoint(e, e.timeStamp);
+    const gd = this.guide, W = this.docW, H = this.docH;
+    const r = 30 / this.view.zoom;
+    let what: 'horizon' | 'vp1' | 'left' | 'right' | 'size' = 'size';
+    if (gd.mode === 'persp1' || gd.mode === 'persp2') {
+      const vps = vanishingPoints(gd, W, H);
+      const near = vps.findIndex(([x, y]) => Math.hypot(p.x - x, p.y - y) <= r);
+      what = near < 0 ? 'horizon' : gd.mode === 'persp1' ? 'vp1' : near === 0 ? 'left' : 'right';
+    }
+    this.guideDrag = { id: e.pointerId, what, y0: p.y, size0: gd.size };
+  }
+
+  private moveGuideDrag(e: PointerEvent): void {
+    const d = this.guideDrag;
+    if (!d) return;
+    const p = this.toPoint(e, e.timeStamp);
+    const W = this.docW, H = this.docH;
+    if (d.what === 'size') this.setGuide({ size: Math.max(8, Math.min(400, Math.round(d.size0 + (d.y0 - p.y) / 2))) });
+    else if (d.what === 'horizon') this.setGuide({ horizon: Math.max(-0.5, Math.min(1.5, p.y / H)) });
+    else this.setGuide({ [d.what]: Math.max(-2, Math.min(3, p.x / W)), horizon: Math.max(-0.5, Math.min(1.5, p.y / H)) });
   }
 
   /** The symmetry guide lines (document space). */
@@ -3593,6 +3678,10 @@ export class App {
       if (!this.blankPage) this.beginFill(e);
       return;
     }
+    if (this.guideEdit && this.guide.mode !== 'off') {
+      this.beginGuideDrag(e);
+      return;
+    }
     if (this.tool === 'brush' && this.smudging) {
       this.beginSmudge(e);
       return;
@@ -3643,6 +3732,7 @@ export class App {
       still: { x: e.clientX, y: e.clientY },
     };
     if (tool !== 'pen') this.raster.begin(record);
+    if (this.assist && this.guide.mode !== 'off') this.live.assist = { x: first.x, y: first.y, dir: null };
     this.feed(first);
     this.armShape(e);
     this.onStrokeState(true);
@@ -3651,6 +3741,13 @@ export class App {
   private feed(p: StrokePoint): void {
     const live = this.live;
     if (!live) return;
+    const as = live.assist;
+    if (as) {
+      // settle on a guide direction once the stroke shows where it is going, then stay on that line
+      if (as.dir === null && Math.hypot(p.x - as.x, p.y - as.y) > 40 / this.view.zoom) as.dir = pickDirection(guideDirections(this.guide, this.docW, this.docH, as.x, as.y), p.x - as.x, p.y - as.y);
+      const q = as.dir === null ? { x: as.x, y: as.y } : assistPoint(as, as.dir, p);
+      p = { ...p, x: q.x, y: q.y };
+    }
     live.lastRaw = p;
     for (const q of live.smoother.push(p)) this.accept(q);
   }
@@ -4169,6 +4266,7 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    if (this.guideDrag && e.pointerId === this.guideDrag.id) return this.moveGuideDrag(e);
     if (this.smudge && e.pointerId === this.smudge.id) return this.moveSmudge(e);
     const hd = this.ve?.hdrag;
     if (hd && e.pointerId === hd.id) {
@@ -4284,6 +4382,7 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (this.guideDrag && e.pointerId === this.guideDrag.id) { this.guideDrag = null; return; }
     if (this.smudge && e.pointerId === this.smudge.id) return this.endSmudge(cancelled);
     const hd = this.ve?.hdrag;
     if (hd && e.pointerId === hd.id && this.ve) {
@@ -4881,6 +4980,7 @@ export class App {
     outer('above');
     this.drawFillPath(g);
     this.drawSymmetryGuide(g);
+    this.drawGuide(g);
     this.drawPointEdit(g);
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
   }

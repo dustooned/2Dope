@@ -38,6 +38,7 @@ const P: Record<string, string> = {
   deselect: '<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/><path d="M9 9l6 6M15 9l-6 6"/>',
   freeform: '<rect x="4" y="7" width="16" height="10" rx="1"/><path d="M1 12h3M20 12h3"/>',
   fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  guide: '<path d="M3 18L12 6l9 12"/><path d="M3 18h18M7.5 12h9"/>',
   smudge: '<path d="M9 21v-6.5a2 2 0 014 0V11a2 2 0 014 0v3"/><path d="M13 11V6a2 2 0 00-4 0v8"/><path d="M17 14v-1a2 2 0 014 0v3a7 7 0 01-7 7h-1"/><path d="M3 7c2-1 3 1 5 0"/>',
   eyedrop: '<path d="M14.5 4.5l5 5"/><path d="M17 2.5a2.1 2.1 0 013 3L17.5 8 16 6.5z"/><path d="M15 7.5l-9.5 9.5L4 20l3-1.5L16.5 9"/>',
   select: '<rect x="4" y="4" width="13" height="13" rx="1.5" stroke-dasharray="3 2.4"/><path d="M13 13l7 3-3 1-1 3z"/>',
