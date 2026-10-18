@@ -30,4 +30,22 @@ describe('layer effects', () => {
     effectPreview.delete('L1');
     expect(activeEffects(l)).toHaveLength(1);
   });
+
+  it('has noise, texture and turbulence with their own ranges and defaults', () => {
+    expect(newEffect('texture', 'a', 1)).toMatchObject({ type: 'texture', target: 'fill', style: 'paper' });
+    expect(newEffect('grain', 'a', 1)).toMatchObject({ type: 'grain', target: 'layer', hold: 1 });
+    expect(newEffect('turbulence', 'a', 1)).toMatchObject({ type: 'turbulence', target: 'layer' });
+    const fx = readEffects([{ type: 'grain', amount: 500, size: 99 }, { type: 'texture', style: 'bogus', amount: 20 }, { type: 'turbulence', amount: 99 }])!;
+    expect(fx[0]).toMatchObject({ amount: 100, size: 16 });
+    expect(fx[1]).toMatchObject({ style: 'paper', amount: 20 });
+    expect(fx[2]).toMatchObject({ amount: 40 });
+  });
+
+  it('keeps a texture still while noise changes every frame', () => {
+    const t = { id: 'L', effects: [newEffect('texture', 'a', 1)] };
+    expect(effectsKey(t, 0)).toBe(effectsKey(t, 5));
+    const n = { id: 'L', effects: [newEffect('grain', 'a', 1)] };
+    expect(effectsKey(n, 0)).not.toBe(effectsKey(n, 1));
+    expect(effectsKey({ id: 'L', effects: [{ ...t.effects[0]!, style: 'dots' as const }] }, 0)).not.toBe(effectsKey(t, 0));
+  });
 });

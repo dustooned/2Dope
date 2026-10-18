@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
-import { EFFECT_LIMITS, EFFECT_TYPES, effectPreview, newEffect, TARGET_NAMES, type EffectTarget, type LayerEffect } from '../core/effects';
+import { EFFECT_TYPES, effectDef, effectPreview, newEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { decorate } from './icons';
 
@@ -91,7 +91,7 @@ export class EffectsPanel {
     r.append(head);
     if (!list.length) r.append(el('p', { class: 'hint' }, 'No effects yet. Add one below: it shows in Motion, in Share and in every export; the layer you draw on stays clean while you draw.'));
     list.forEach((e, i) => {
-      const def = EFFECT_TYPES.find((t) => t.id === e.type)!;
+      const def = effectDef(e.type);
       const card = el('div', { class: `fx-card${e.on ? '' : ' off'}` });
       const top = el('div', { class: 'fx-top' });
       const sw = el('button', { type: 'button', class: `lc-switch fx-on${e.on ? ' on' : ''}`, role: 'switch', 'aria-checked': String(e.on), title: e.on ? 'Turn this effect off' : 'Turn this effect on' });
@@ -126,10 +126,22 @@ export class EffectsPanel {
         row.append(el('span', {}, label), input, out);
         card.append(row);
       };
-      slider('Amount', 'amount', EFFECT_LIMITS.amount, 0.1, ' px');
-      slider('Size', 'size', EFFECT_LIMITS.size, 1, ' px');
+      if (e.type === 'texture') {
+        const look = el('div', { class: 'fx-row' });
+        look.append(el('span', {}, 'Look'));
+        const looks = el('div', { class: 'fx-seg small' });
+        for (const t of TEXTURE_STYLES) {
+          const b = el('button', { type: 'button', 'aria-pressed': String((e.style ?? 'paper') === t.id) }, t.label);
+          b.addEventListener('click', () => { if ((e.style ?? 'paper') !== t.id) this.patch(i, { style: t.id as TextureStyle }, `Texture ${t.label.toLowerCase()}`); });
+          looks.append(b);
+        }
+        look.append(looks);
+        card.append(look);
+      }
+      slider(def.amountLabel, 'amount', def.amountRange, def.amountUnit === '%' ? 1 : 0.1, def.amountUnit);
+      slider(def.sizeLabel, 'size', def.sizeRange, 1, def.sizeUnit);
       // how often the pattern changes: on ones, twos, threes, fours
-      const hold = el('div', { class: 'fx-row' });
+      const hold = el('div', { class: `fx-row${def.animated ? '' : ' hidden'}`, ...(def.animated ? {} : { hidden: '' }) });
       hold.append(el('span', {}, 'Changes'));
       const holds = el('div', { class: 'fx-seg small' });
       for (const [n, t] of [[1, 'Every frame'], [2, 'On 2s'], [3, 'On 3s'], [4, 'On 4s']] as const) {
@@ -140,6 +152,7 @@ export class EffectsPanel {
       hold.append(holds);
       card.append(hold);
       const reseed = el('button', { type: 'button', class: 'fx-reseed', title: 'A different random pattern' }, 'New pattern');
+      if (e.type === 'texture' && (e.style ?? 'paper') !== 'paper') reseed.hidden = true;
       reseed.addEventListener('click', () => this.patch(i, { seed: newSeed() }, `${def.label} new pattern`));
       card.append(reseed);
       r.append(card);

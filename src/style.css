@@ -4377,3 +4377,5 @@ body.ui-full.bar-collapsed .bub-ctx, body.ui-full.tools-folded .bub-ctx { top: 6
 @media (max-width: 700px) { body.ui-full.bar-collapsed .bub-ctx, body.ui-full.tools-folded .bub-ctx { top: var(--tools-bottom, 116px); } }
 body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:not(.quick) .paint-target { top: calc(var(--top-clear, 110px) + 4px); left: 70px; transform: none; max-width: calc(50% - 60px); }
 @media (max-width: 700px) { body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:not(.quick) .paint-target { left: 8px; max-width: calc(100% - 16px); } }
+
+.fx-row[hidden], .fx-reseed[hidden] { display: none !important; }
