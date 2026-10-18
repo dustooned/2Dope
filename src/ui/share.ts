@@ -9,7 +9,7 @@ import { exportSequence } from '../io/exportseq';
 import { exportVideo, videoSupport } from '../io/exportvideo';
 import type { SoundBank } from '../io/sound';
 import { planVideo, videoOptions, VIDEO_LITE_MAX_BYTES, VIDEO_MAX_BYTES, type VideoOptions } from '../io/videoplan';
-import { drawComp, releaseScratch } from '../view/composite';
+import { drawComp, releaseScratch, setExportStamp } from '../view/composite';
 import { decorate } from './icons';
 
 const VIDEO_KEY = '2dope.video-export';
@@ -18,6 +18,7 @@ const GIF_ALPHA_KEY = '2dope.gif.alpha';
 const APNG_KEY = '2dope.share.apng';
 const FRAMES_KEY = '2dope.share.frames';
 const PICTURE_KEY = '2dope.share.picture';
+const STAMP_KEY = '2dope.share.stamp';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -72,6 +73,14 @@ export class ShareView {
   private opts: VideoOptions = (() => { try { return videoOptions(JSON.parse(localStorage.getItem(VIDEO_KEY) ?? 'null')); } catch { return videoOptions(null); } })();
   private gifAlpha = (() => { try { return localStorage.getItem(GIF_ALPHA_KEY) === '1'; } catch { return false; } })();
   private apng: ApngOptions = load(APNG_KEY, DEFAULT_APNG);
+  /** The assignment label (burned into video, GIF, animated PNG and pictures when on). */
+  private stamp: { on: boolean; name: string; klass: string } = load(STAMP_KEY, { on: false, name: '', klass: '' });
+  private get stampText(): string | null {
+    const s = this.stamp;
+    if (!s.on || !(s.name.trim() || s.klass.trim())) return null;
+    const date = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    return [s.name.trim(), s.klass.trim(), date].filter(Boolean).join(' \u00b7 ');
+  }
   private frames: FrameOpts = load(FRAMES_KEY, { passes: ['combined'] as Pass[], scale: 1, background: 'transparent' as const, start: 1, name: '' });
   private picture: PictureOpts = load(PICTURE_KEY, { scale: 1, background: 'transparent' as const });
   private advancedOpen = false;
@@ -207,7 +216,13 @@ export class ShareView {
       g.fillRect(0, 0, w, h);
     }
     g.setTransform(w / c.width, 0, 0, h / c.height, 0, 0);
-    drawComp(g, this.app.project, c.id, Math.min(this.app.frame, compLength(c, this.app.project.comps) - 1), { camera: true, export: true });
+    const stamped = this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture';
+    setExportStamp(stamped ? this.stampText : null);
+    try {
+      drawComp(g, this.app.project, c.id, Math.min(this.app.frame, compLength(c, this.app.project.comps) - 1), { camera: true, export: true });
+    } finally {
+      setExportStamp(null);
+    }
   }
 
   private syncTransport(): void {
@@ -343,6 +358,31 @@ export class ShareView {
       const text = { board: 'Panels with their captions and timing, as a PDF or panel pictures.', blender: 'The shot as an editable Blender scene: layers, drawings as images, camera and timing.', backup: 'The whole project as one .2dope file, to keep or to open on another device.' }[this.kind];
       main.append(el('p', { class: 'hint' }, text));
     }
+    if (this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture') {
+      // for handing in: the student's name, class and the date, burned into the corner
+      const box = el('fieldset', { class: 'share-stamp' });
+      box.append(el('legend', {}, '\ud83c\udf93 Hand in'));
+      const on = el('label', { class: 'share-row toggle' });
+      const tick = el('input', { type: 'checkbox' });
+      tick.checked = this.stamp.on;
+      on.append(tick, el('span', {}, 'Put my name, class and the date in the corner'));
+      const field = (label: string, key: 'name' | 'klass', hint: string) => {
+        const row = el('label', { class: 'share-row' });
+        const input = el('input', { type: 'text', maxlength: '50', placeholder: hint, 'aria-label': label });
+        input.value = this.stamp[key];
+        input.addEventListener('input', () => { this.stamp = { ...this.stamp, [key]: input.value }; save(STAMP_KEY, this.stamp); this.draw(); });
+        input.addEventListener('keydown', (k) => k.stopPropagation());
+        row.append(el('span', {}, label), input);
+        return row;
+      };
+      const name = field('Name', 'name', 'Your name');
+      const klass = field('Class', 'klass', 'Class or assignment');
+      const sync = () => { name.hidden = klass.hidden = !this.stamp.on; };
+      tick.addEventListener('change', () => { this.stamp = { ...this.stamp, on: tick.checked }; save(STAMP_KEY, this.stamp); sync(); this.draw(); });
+      sync();
+      box.append(on, name, klass);
+      main.append(box);
+    }
     s.append(main);
     if (advBody.childElementCount) s.append(adv);
     if (movie) {
@@ -456,6 +496,8 @@ export class ShareView {
     bar.value = 0;
     const name = sanitizeName(this.app.project.name);
     const progress = (n: number, total: number, label: string) => { bar.max = total; bar.value = n; status.textContent = label; };
+    // the hand-in label goes on what you watch (not on PNG frames: those are for compositing)
+    if (this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture') setExportStamp(this.stampText);
     try {
       let blob: Blob, file: string;
       if (this.kind === 'video') {
@@ -489,6 +531,7 @@ export class ShareView {
       this.side.querySelector<HTMLElement>('.share-status')!.textContent = msg;
     } finally {
       this.abort = null;
+      setExportStamp(null);
     }
   }
 

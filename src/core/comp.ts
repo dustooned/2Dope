@@ -47,6 +47,11 @@ interface LayerBase {
    */
   guide?: boolean;
   guideExport?: boolean;
+  /**
+   * A notes layer (a guide): a teacher's or classmate's draw-over corrections. It shows at full
+   * strength while you work (even with Others hidden) and is never exported.
+   */
+  notes?: boolean;
   /** Linked art layers: drawings layers sharing a `cel` group keep the same cels and timing. */
   cel?: string;
   /** A still layer (background, object): one drawing held for the whole shot, like a Procreate layer. */

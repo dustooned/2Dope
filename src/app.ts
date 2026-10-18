@@ -2930,6 +2930,34 @@ export class App {
     this.onDocChanged();
   }
 
+  /**
+   * A notes layer on top (for a teacher's or a classmate's corrections): drawn in red, shown fully
+   * while you work, never exported. One drawing held for the whole shot; + Frame in the flipbook
+   * gives a frame its own note.
+   */
+  addNotesLayer(): void {
+    if (this.strokeActive) return;
+    const p = this.project;
+    const id = p.newId('L');
+    const length = Math.max(1, this.compEnd);
+    this.editor.edit('Add notes layer', (cc) => {
+      const made = drawingsLayer(id, '\ud83d\udcdd Notes', [{ drawing: p.newDrawing().id, length }], p.width, p.height, cc.width, cc.height);
+      made.guide = true;
+      made.notes = true;
+      made.start = 0;
+      made.in = 0;
+      made.out = null;
+      cc.layers.unshift(made);
+    });
+    this.focusLayer(id);
+    if (this.tool !== 'brush' && this.tool !== 'pen') this.setTool('brush');
+    this.setColor('#e5303a');
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+    this.onNotice?.('Notes: draw your corrections in red. They show while you work and never go into an export.');
+  }
+
   /** A picture as an object layer: it shows for the whole shot. Move or scale it with Select. */
   importPicture(name: string, src: CanvasImageSource, w: number, h: number): void {
     if (this.strokeActive || w <= 0 || h <= 0) return;
@@ -5343,7 +5371,9 @@ export class App {
     const others = this.showLayers ? this.otherAlpha : 0;
     // the other layers of this stack (a background's paint layers, a drawing's art layers) always show
     const keep = new Set(this.celLayers.map((l) => l.id).filter((id) => id !== activeId));
-    const around = others > 0 || this.boardAlpha > 0 || keep.size > 0;
+    // notes (draw-over corrections) always show, whatever Others and the storyboard slider say
+    const hasNotes = comp.layers.some((l) => l.notes && l.visible);
+    const around = others > 0 || this.boardAlpha > 0 || keep.size > 0 || hasNotes;
     // a clipping group the layer you draw on belongs to is drawn as one unit, live
     const idx = comp.layers.findIndex((l) => l.id === activeId);
     let group: { base: number; members: number[] } | null = null;
@@ -5557,6 +5587,13 @@ export class App {
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
     if (this.maskDrawing) out.add(this.maskDrawing);
     out.add(this.drawing);
+    // notes show even with Others hidden
+    for (const l of p.comp.layers) {
+      if (l.kind !== 'drawings' || !l.notes || !l.visible) continue;
+      const id = drawingAt(l.exposures, this.frame - l.start);
+      const d = id ? p.drawings.get(id) : undefined;
+      if (d) out.add(d);
+    }
     // the rest of this stack shows even with Others hidden
     for (const m of this.celLayers) {
       const id = drawingAt(m.exposures, ((this.frame - m.start) % Math.max(1, totalFrames(m.exposures)) + Math.max(1, totalFrames(m.exposures))) % Math.max(1, totalFrames(m.exposures)));

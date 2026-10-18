@@ -268,6 +268,7 @@ export class LayerCards {
       choice('Animation', 'flipbook', 'A layer you animate frame by frame (a new track in the flipbook)', () => app.addDrawLayer());
       choice('Background', 'gallery', 'One drawing behind everything, for the whole shot', () => app.addStillLayer('background'));
       choice('Object', 'draw', 'One drawing above this layer, for the whole shot (a prop, a sign, a set piece)', () => app.addStillLayer('object'));
+      choice('Notes', 'draw', 'A layer on top for corrections (a teacher\u2019s or a classmate\u2019s): it shows while you work and never goes into an export', () => app.addNotesLayer());
       choice('Media', 'gallery', 'Bring in a picture, movie or sound: each becomes its own layer from frame 1', () => app.pickMedia?.());
       this.root.append(menu);
     }
@@ -294,7 +295,8 @@ export class LayerCards {
       info.append(el('span', { class: 'lc-name' }, l.name));
       const tags: string[] = [];
       if (l.kind === 'comp') tags.push(`group \u00b7 ${app.project.comps.get(l.comp)?.layers.length ?? 0} layers`);
-      if (l.kind === 'drawings' && l.guide) tags.push('board');
+      if (l.kind === 'drawings' && l.notes) tags.push('\ud83d\udcdd notes \u00b7 not exported');
+      else if (l.kind === 'drawings' && l.guide) tags.push('board');
       if (linked && !inStack) tags.push('linked');
       if (l.kind === 'drawings' && l.still) tags.push('still');
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');

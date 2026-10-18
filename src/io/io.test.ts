@@ -310,6 +310,18 @@ describe('project schema', () => {
     expect(compFile({ ...compsFromFile(back).get('c1')!, layers: [model] }).layers[0]!.parts).toBeUndefined();
   });
 
+  it('keeps a notes layer (a guide that never exports) across save and load', () => {
+    const p = sample();
+    const l = p.comps.c1!.layers[0]!;
+    l.guide = true;
+    l.notes = true;
+    const back = parseProjectFile(stringifyProjectFile(p));
+    expect(back.comps.c1!.layers[0]).toMatchObject({ guide: true, notes: true });
+    const model = compsFromFile(back).get('c1')!.layers[0]!;
+    expect(model.notes).toBe(true);
+    expect(compFile(compsFromFile(back).get('c1')!).layers[0]!.notes).toBe(true);
+  });
+
   it('keeps a part gradient with its tint, and drops a bad one or one without a tint', () => {
     const p = sample();
     const l = p.comps.c1!.layers[0]!;

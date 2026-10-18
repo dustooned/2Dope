@@ -238,6 +238,31 @@ function partFill(g: CanvasRenderingContext2D, tint: string, grad: PartGrad | nu
  * parenting, opacity and blend mode; precomps render into a scratch canvas first and then place
  * like any layer. The drawings a frame needs must be live (see core/residency.ts).
  */
+/** A line burned into final renders (a student's name, class and date), or null. */
+let exportStamp: string | null = null;
+export function setExportStamp(s: string | null): void {
+  exportStamp = s && s.trim() ? s.trim().slice(0, 120) : null;
+}
+
+/** The stamp in the bottom-left corner, in comp units, readable on any picture. */
+function drawStamp(g: CanvasRenderingContext2D, c: Comp, text: string): void {
+  const size = Math.max(10, Math.round(Math.min(c.width, c.height) * 0.035));
+  g.save();
+  g.font = `600 ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
+  const w = g.measureText(text).width;
+  const pad = size * 0.5, x = size * 0.6, y = c.height - size * 0.6;
+  g.globalAlpha = 0.72;
+  g.fillStyle = '#000';
+  g.beginPath();
+  g.roundRect(x - pad, y - size - pad * 0.6, w + pad * 2, size + pad * 1.4, size * 0.3);
+  g.fill();
+  g.globalAlpha = 1;
+  g.fillStyle = '#fff';
+  g.textBaseline = 'alphabetic';
+  g.fillText(text, x, y);
+  g.restore();
+}
+
 export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: string | Comp, frame: number, opt: CompositeOptions = {}, depth = 0): void {
   const comps = project.comps;
   const c = typeof compId === 'string' ? comps.get(compId) : compId;
@@ -278,6 +303,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     drawLayer(g, project, c, l, frame, matOf(l), alpha, planes, opt, depth);
   }
   g.setTransform(base);
+  if (depth === 0 && opt.export && exportStamp && opt.planes === undefined) drawStamp(g, c, exportStamp);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
 }
@@ -376,7 +402,8 @@ export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, 
 }
 
 const showsAround = (l: Layer, frame: number, comps: ReadonlyMap<string, Comp>) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps));
-const aroundAlpha = (l: Layer, frame: number, alpha: number, guideAlpha: number) => opacityAt(l, frame) * (l.guide ? guideAlpha : alpha);
+// notes (draw-over corrections) always show fully; the storyboard and other guides follow their slider
+const aroundAlpha = (l: Layer, frame: number, alpha: number, guideAlpha: number) => opacityAt(l, frame) * (l.notes ? 1 : l.guide ? guideAlpha : alpha);
 
 /**
  * One layer of the Draw view, placed relative to the layer being drawn on (its page is the view's

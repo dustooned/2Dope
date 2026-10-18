@@ -115,6 +115,8 @@ export interface LayerFile {
   /** A guide layer (storyboard / reference): left out of exports unless guideExport. */
   guide?: boolean;
   guideExport?: boolean;
+  /** A notes layer (draw-over corrections; added without a schema bump). */
+  notes?: boolean;
   cel?: string;
   still?: boolean;
   clip?: boolean;
@@ -415,6 +417,7 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   };
   if (v.guide === true) out.guide = true;
   if (v.guideExport === true) out.guideExport = true;
+  if (v.notes === true) out.notes = true;
   if (typeof v.cel === 'string' && ID.test(v.cel)) out.cel = v.cel;
   if (v.still === true) out.still = true;
   if (v.clip === true) out.clip = true;
@@ -688,6 +691,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
         transform: transformOf(l.transform),
         ...(l.guide ? { guide: true } : {}),
         ...(l.guideExport ? { guideExport: true } : {}),
+        ...(l.notes ? { notes: true } : {}),
         ...(l.cel ? { cel: l.cel } : {}),
         ...(l.still ? { still: true } : {}),
         ...(l.clip ? { clip: true } : {}),
@@ -762,6 +766,7 @@ export function compFile(c: Comp): CompFile {
       };
       if (l.guide) base.guide = true;
       if (l.guideExport) base.guideExport = true;
+      if (l.notes) base.notes = true;
       if (l.cel) base.cel = l.cel;
       if (l.still) base.still = true;
       if (l.clip) base.clip = true;
