@@ -246,10 +246,14 @@ export function setExportStamp(s: string | null): void {
 
 /** The stamp in the bottom-left corner, in comp units, readable on any picture. */
 function drawStamp(g: CanvasRenderingContext2D, c: Comp, text: string): void {
-  const size = Math.max(10, Math.round(Math.min(c.width, c.height) * 0.035));
+  // about 3.5% of the page, and never wider than the page
+  let size = Math.max(4, Math.min(c.width, c.height) * 0.035);
   g.save();
-  g.font = `600 ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
-  const w = g.measureText(text).width;
+  const font = () => `600 ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
+  g.font = font();
+  let w = g.measureText(text).width;
+  const room = c.width - size * 2.2;
+  if (w > room && w > 0) { size *= room / w; g.font = font(); w = g.measureText(text).width; }
   const pad = size * 0.5, x = size * 0.6, y = c.height - size * 0.6;
   g.globalAlpha = 0.72;
   g.fillStyle = '#000';
