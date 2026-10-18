@@ -65,6 +65,21 @@ describe('Blender plan', () => {
     expect(plannedLayers(planBlender(p, 'test'), 'c1').B).toBeDefined();
   });
 
+  it('the storyboard goes to 3D as markers with shot, camera and captions, and its pictures', () => {
+    const p = project();
+    const board = drawingsLayer('S', 'Storyboard', [{ drawing: 's1', length: 12, shot: 'Sc 1', camera: 'Wide' }, { drawing: 's2', length: 6, action: 'Ball bounces' }], 400, 300);
+    board.guide = true;
+    board.start = 2;
+    p.shot.layers.push(board);
+    const plan = planBlender(p, 'test');
+    expect(plan.scene.board).toEqual([
+      { n: 1, frame: 2, length: 12, shot: 'Sc 1', camera: 'Wide', image: 'd:s1' },
+      { n: 2, frame: 14, length: 6, action: 'Ball bounces', image: 'd:s2' },
+    ]);
+    expect(plan.scene.images['d:s2']).toBe('drawings/s2.png');
+    expect(planBlender(project(), 'test').scene.board).toBeUndefined();
+  });
+
   it('drawings layers list which image shows on each frame, as runs', () => {
     const plan = planBlender(project(), 'test');
     expect(plannedLayers(plan, 'c1').B!.frames).toEqual([

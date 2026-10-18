@@ -46,6 +46,9 @@ export interface ExposureFile {
   dialogue?: string;
   action?: string;
   slug?: string;
+  /** Storyboard shot info (added without a schema bump). */
+  shot?: string;
+  camera?: string;
 }
 
 /** A keyframe side (see core/anim.ts). `slope` and `influence` only matter for bezier. */

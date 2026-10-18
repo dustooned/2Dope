@@ -88,6 +88,26 @@ export interface BlenderScene {
   comps: Record<string, BlenderComp>;
   /** Image id → path inside the package. */
   images: Record<string, string>;
+  /**
+   * The storyboard, for 3D: one marker per panel at its first frame (frames from 0), with its shot,
+   * camera and captions and the panel's picture. Optional (older packages have none).
+   */
+  board?: BoardMarker[];
+}
+
+export interface BoardMarker {
+  /** Panel number, from 1. */
+  n: number;
+  frame: number;
+  length: number;
+  shot?: string;
+  camera?: string;
+  dialogue?: string;
+  action?: string;
+  slug?: string;
+  note?: string;
+  /** The panel's picture (an image id). */
+  image?: string;
 }
 
 /** What the exporter must render: a frame of a (precomp instance) comp, saved as an image. */
@@ -248,6 +268,19 @@ export function planBlender(project: { name: string; main: string; width: number
       }
     }
     scene.comps[id] = bc;
+  }
+  // the storyboard goes along as markers (the board layer itself stays in 2Dope)
+  const board = main.layers.find((l): l is Extract<typeof l, { kind: 'drawings' }> => l.kind === 'drawings' && !!l.guide);
+  if (board?.exposures.length) {
+    let at = board.start;
+    scene.board = board.exposures.map((e, i) => {
+      const m: BoardMarker = { n: i + 1, frame: at, length: e.length, image: `d:${e.drawing}` };
+      for (const k of ['shot', 'camera', 'dialogue', 'action', 'slug', 'note'] as const) if (e[k]) m[k] = e[k];
+      drawings.add(e.drawing);
+      at += e.length;
+      return m;
+    });
+    notes.add('The storyboard comes along as timeline markers (one per panel, named with its shot and camera) and a \u201c2Dope storyboard\u201d text with every caption.');
   }
   for (const d of drawings) scene.images[`d:${d}`] = `drawings/${d}.png`;
   for (const r of renders) {

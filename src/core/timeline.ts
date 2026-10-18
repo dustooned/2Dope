@@ -12,11 +12,16 @@ export interface Exposure {
   dialogue?: string;
   action?: string;
   slug?: string;
+  /** Storyboard shot info for the hand-off (to animators, to 3D): which shot, and the camera. */
+  shot?: string;
+  camera?: string;
 }
 
 /** The caption fields of an exposure (a storyboard panel), in the order they are shown. */
-export type CaptionField = 'dialogue' | 'action' | 'slug' | 'note';
+export type CaptionField = 'shot' | 'camera' | 'dialogue' | 'action' | 'slug' | 'note';
 export const CAPTION_FIELDS: { key: CaptionField; label: string; max: number }[] = [
+  { key: 'shot', label: 'Shot', max: 60 },
+  { key: 'camera', label: 'Camera', max: 200 },
   { key: 'dialogue', label: 'Dialogue', max: 1000 },
   { key: 'action', label: 'Action', max: 1000 },
   { key: 'slug', label: 'Slugging', max: 300 },

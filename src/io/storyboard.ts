@@ -110,7 +110,7 @@ export function sheetCells(opts: Pick<StoryboardOptions, 'paper' | 'perPage' | '
   return out;
 }
 
-export const CAPTION_LABEL: Record<CaptionField, string> = { dialogue: 'Dialogue', action: 'Action', slug: 'Slugging', note: 'Notes' };
+export const CAPTION_LABEL: Record<CaptionField, string> = { shot: 'Shot', camera: 'Camera', dialogue: 'Dialogue', action: 'Action', slug: 'Slugging', note: 'Notes' };
 
 /**
  * One CSV cell: quoted when needed, and a leading = + - @ is neutralised so a spreadsheet never

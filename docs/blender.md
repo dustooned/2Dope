@@ -28,6 +28,7 @@ README.txt           install steps, plus notes for this scene
 | Precomp on its own clock (offset in time, looping, retimed, frame-picked, or with pinned overrides) | A plane with frames **rendered by 2Dope** (identical frames once). Blender collection instances cannot run on their own clock. |
 | In / out points | `hide_render` / `hide_viewport` keys (on the instance object too: hiding a parent does not hide its children in Blender). |
 | Comp size, fps, length, background | Render resolution, fps (fractional via fps_base), frame range starting at 1, film transparent (or world colour). EEVEE, view transform Standard (colours as in 2Dope). |
+| Storyboard (the Story board) | **Timeline markers**, one per panel at its first frame, named with the panel number, shot and camera (or its action). A **"2Dope storyboard" text** (Text Editor) lists every panel's frame, length, shot, camera, dialogue, action, timing and notes, and its picture in `drawings/`. For 3D students blocking key poses. |
 
 Layers are stacked 1 cm apart along Y (top layer closest to the camera).
 

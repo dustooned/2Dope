@@ -14,8 +14,10 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
   return e;
 }
 
-const ROWS: Record<CaptionField, number> = { dialogue: 2, action: 2, slug: 1, note: 2 };
-const HINT: Record<CaptionField, string> = { dialogue: 'What is said', action: 'What happens', slug: 'Timing (e.g. hold, beat)', note: 'Notes' };
+const ROWS: Record<CaptionField, number> = { shot: 1, camera: 1, dialogue: 2, action: 2, slug: 1, note: 2 };
+const HINT: Record<CaptionField, string> = { shot: '\ud83c\udfac Shot (e.g. Sc 1 \u00b7 Sh 2)', camera: '\ud83c\udfa5 Camera (e.g. Wide, pan left)', dialogue: '\ud83d\udcac What is said', action: '\ud83c\udfc3 What happens', slug: '\u23f1 Timing (e.g. hold, beat)', note: '\ud83d\udcdd Notes' };
+/** Quick picks for the camera field (type anything, or pick one). */
+const CAMERA_PICKS = ['Wide', 'Medium', 'Close-up', 'Extreme close-up', 'Over the shoulder', 'Point of view', 'Bird\u2019s eye', 'Low angle', 'Static', 'Pan left', 'Pan right', 'Tilt up', 'Tilt down', 'Dolly in', 'Dolly out', 'Zoom in', 'Zoom out', 'Truck left', 'Truck right', 'Shake'];
 
 /**
  * The Board workspace's storyboard (doc 16): one card per panel with its picture, duration and
@@ -172,7 +174,7 @@ export class BoardPanel {
     const typing = this.cards.contains(document.activeElement) && (document.activeElement as HTMLElement).matches('textarea, input');
     const sig =
       `${b.id}|${fps}|${app.timeFormat}|` +
-      ex.map((e) => `${e.drawing}:${e.length}:${e.dialogue ?? ''}:${e.action ?? ''}:${e.slug ?? ''}:${e.note ?? ''}:${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join('|');
+      ex.map((e) => `${e.drawing}:${e.length}:${CAPTION_FIELDS.map((f) => e[f.key] ?? '').join(':')}:${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join('|');
     if (sig !== this.sig && !typing) {
       this.sig = sig;
       this.rebuild();
@@ -219,22 +221,28 @@ export class BoardPanel {
       thumb.addEventListener('click', () => app.goPanel(i));
       card.append(thumb);
       for (const f of CAPTION_FIELDS) {
-        const t = el('textarea', { class: 'bfield', rows: String(ROWS[f.key]), placeholder: HINT[f.key], 'aria-label': `Panel ${i + 1} ${f.label}`, 'data-field': f.key, maxlength: String(f.max) });
+        // shot and camera are one line (camera offers quick picks); the rest are small text boxes
+        const line = f.key === 'shot' || f.key === 'camera';
+        const t = line
+          ? el('input', { type: 'text', class: `bfield bline${f.key === 'camera' ? ' bcam' : ''}`, placeholder: HINT[f.key], 'aria-label': `Panel ${i + 1} ${f.label}`, 'data-field': f.key, maxlength: String(f.max), ...(f.key === 'camera' ? { list: 'board-camera-picks' } : {}) })
+          : el('textarea', { class: 'bfield', rows: String(ROWS[f.key]), placeholder: HINT[f.key], 'aria-label': `Panel ${i + 1} ${f.label}`, 'data-field': f.key, maxlength: String(f.max) });
         t.value = e[f.key] ?? '';
         t.addEventListener('focus', () => {
           if (!app.selection.includes(i) || app.selection.length > 1) app.goPanel(i);
+          // the on-screen keyboard can cover it: keep the box you type in in view
+          setTimeout(() => t.scrollIntoView({ block: 'nearest', inline: 'nearest' }), 250);
         });
         const commit = () => {
           if ((app.board?.exposures[i]?.[f.key] ?? '') !== t.value.trim()) app.setCaption(i, f.key, t.value);
         };
         t.addEventListener('change', commit);
-        t.addEventListener('keydown', (k) => {
+        (t as HTMLElement).addEventListener('keydown', (k) => {
           k.stopPropagation();
           if (k.key === 'Enter' && !k.shiftKey) {
             // Return: on to the same field of the next panel (Shift+Return for a new line)
             k.preventDefault();
             commit();
-            const next = this.cards.querySelector<HTMLTextAreaElement>(`.bcard[data-i="${i + 1}"] textarea[data-field="${f.key}"]`);
+            const next = this.cards.querySelector<HTMLTextAreaElement | HTMLInputElement>(`.bcard[data-i="${i + 1}"] [data-field="${f.key}"]`);
             if (next) next.focus();
             else t.blur();
           } else if (k.key === 'Escape') {
@@ -247,6 +255,12 @@ export class BoardPanel {
       }
       frag.append(card);
     });
+    // the camera quick picks (one list for every panel)
+    if (!document.getElementById('board-camera-picks')) {
+      const dl = el('datalist', { id: 'board-camera-picks' });
+      for (const c of CAMERA_PICKS) dl.append(el('option', { value: c }));
+      document.body.append(dl);
+    }
     this.cards.replaceChildren(frag);
     // keep the current panel in view
     const at = this.cards.querySelector<HTMLElement>('.bcard.on');

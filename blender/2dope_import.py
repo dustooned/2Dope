@@ -466,7 +466,33 @@ class Builder:
             obj.rotation_euler = (math.pi / 2, 0.0, 0.0)
             cam.clip_end = 1000
             scene.camera = obj
+        self.storyboard(scene)
         return objects
+
+    def storyboard(self, scene):
+        # the storyboard for 3D blocking: a timeline marker per panel and a text with every caption
+        board = self.s.get("board") or []
+        if not board:
+            return
+        lines = ["2Dope storyboard", ""]
+        for p in board:
+            what = [p.get("shot", ""), p.get("camera", "")]
+            if not any(what):
+                what = [(p.get("action") or p.get("dialogue") or "")[:40]]
+            label = " ".join(x for x in [str(p.get("n", ""))] + what if x)
+            m = scene.timeline_markers.new(label[:63] or "Panel", frame=self.fs + int(p.get("frame", 0)))
+            m.select = False
+            lines.append(f"Panel {p.get('n')}  frame {self.fs + int(p.get('frame', 0))}  ({p.get('length', 0)} frames)")
+            for key, name in (("shot", "Shot"), ("camera", "Camera"), ("dialogue", "Dialogue"), ("action", "Action"), ("slug", "Timing"), ("note", "Notes")):
+                if p.get(key):
+                    lines.append(f"  {name}: {p[key]}")
+            img = p.get("image")
+            if img and img in self.s.get("images", {}):
+                lines.append(f"  Picture: {self.s['images'][img]}")
+            lines.append("")
+        text = bpy.data.texts.get("2Dope storyboard") or bpy.data.texts.new("2Dope storyboard")
+        text.clear()
+        text.write("\n".join(lines))
 
 
 def import_2dope(path, ppu=None):

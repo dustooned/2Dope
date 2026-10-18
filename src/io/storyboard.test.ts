@@ -88,8 +88,8 @@ describe('storyboard export', () => {
       (n) => `${n}f`,
       (n) => `panels/${panelFile(n, 1)}`,
     );
-    expect(csv.startsWith('﻿Panel,Start,Frames,Duration,Dialogue,Action,Slugging,Notes,Image\r\n')).toBe(true);
-    expect(csv).toContain('1,f0,24,24f,"Hello,\nworld",,,,panels/panel_001.png');
+    expect(csv.startsWith('﻿Panel,Start,Frames,Duration,Shot,Camera,Dialogue,Action,Slugging,Notes,Image\r\n')).toBe(true);
+    expect(csv).toContain('1,f0,24,24f,,,"Hello,\nworld",,,,panels/panel_001.png');
     expect(panelFile(7, 1200)).toBe('panel_0007.png');
   });
 });

@@ -2894,7 +2894,8 @@ body.ui-hidden .board {
 .board-cards {
   display: flex;
   gap: 10px;
-  height: min(var(--board-h), 46vh);
+  /* never smaller than a usable card (an on-screen keyboard shrinks the viewport while typing) */
+  height: max(240px, min(var(--board-h), 46vh));
   padding: 4px 10px 10px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -3043,7 +3044,7 @@ body.ui-hidden .board {
   }
 
   .board-cards {
-    height: min(var(--board-h), 36vh);
+    height: max(240px, min(var(--board-h), 36vh));
   }
 
   .mscroll {
@@ -4461,3 +4462,7 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 .lc-stack-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-stack .lc-icon { flex: 0 0 auto; }
 .lc-card.in-stack { margin-left: 16px; }
+/* storyboard cards: the fields keep their size and the card scrolls (they used to be squeezed flat) */
+.bcard > * { flex: 0 0 auto; }
+.bfield.bline { min-height: 30px; }
+.bthumb { max-height: 150px; object-fit: contain; }
