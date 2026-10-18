@@ -442,7 +442,7 @@ export class Bubbles {
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
     const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
-    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.currentHold, a.currentRole, a.lf, a.fillStyle, a.color2].join('|');
+    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.currentHold, a.currentRole, a.lf, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
@@ -530,6 +530,11 @@ export class Bubbles {
       );
       if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
     } else if (cur === 'fill') {
+      // a gradient just filled: drag its handles on the canvas, then keep it or put it back
+      if (a.gradEditing) {
+        add(this.chip('Done', 'Keep the gradient (or tap elsewhere)', false, () => a.applyGradEdit(), 'check'));
+        add(this.chip('Cancel', 'Put the area back', false, () => a.cancelGradEdit(), 'close'));
+      }
       add(
         this.chip('Tap / drag', 'Fill the areas you tap or drag across', a.fillMode === 'tap', () => a.setFillMode('tap')),
         this.chip('Leftovers', 'Clean up specks the fill missed', a.fillMode === 'leftover', () => a.setFillMode('leftover')),

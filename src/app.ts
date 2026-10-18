@@ -210,6 +210,7 @@ export class App {
 
   /** Switch workspace (Draw / Time / Motion): the same project, a different arrangement. */
   setWorkspace(w: Workspace): void {
+    if (this.gradEdit) this.applyGradEdit();
     if (w === this.workspace || this.live) return;
     if (this.playing) this.togglePlay();
     if (w === 'motion') this.leaveBlankPage();
@@ -357,6 +358,7 @@ export class App {
 
   setTool(t: Tool): void {
     if (this.adjusting) this.applyAdjust();
+    if (this.gradEdit) this.applyGradEdit();
     if (this.fillG) this.endFill(true);
     if (t !== 'brush') this.smudging = false;
     if (t !== 'pen') this.exitPointEdit();
@@ -1085,6 +1087,10 @@ export class App {
     if (!res) return false;
     this.paintMask(d, res.mask, res, this.rgbOf(this.color), this.gradFor(res));
     this.touchFill(d);
+    if (this.fillStyle !== 'solid') {
+      this.startGradEdit(d, res, before, res, this.defaultGrad(res), this.spatialSelection, 'Gradient ColorDrop');
+      return true;
+    }
     this.pushFill('ColorDrop', [this.fillEntry(d, before, res)]);
     this.residency.updateThumb(d);
     this.requestRender();
@@ -1563,6 +1569,10 @@ export class App {
     const before = planeCanvas(d, 'fill').getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
     this.paintMask(d, area.mask, area, this.rgbOf(this.color), this.gradFor(area));
     this.touchFill(d);
+    if (this.fillStyle !== 'solid') {
+      this.startGradEdit(d, area, before, area, this.defaultGrad(area), null, 'Gradient fill selected area');
+      return;
+    }
     this.pushFill('Fill selected area', [this.fillEntry(d, before, area)]);
   }
   /** Also fill the same spot on this many following drawings (0 = this drawing only). */
@@ -1902,7 +1912,10 @@ export class App {
   color2 = loadJSON<string>(COLOR2_KEY) ?? '#ffffff';
 
   setFillStyle(s: 'solid' | 'linear' | 'radial'): void {
+    // switching between Linear and Radial reshapes the gradient being edited; Solid keeps it
+    if (this.gradEdit && s === 'solid') this.applyGradEdit();
     this.fillStyle = s;
+    if (this.gradEdit) this.repaintGradEdit();
     saveJSON(FILL_STYLE_KEY, s);
     this.onToolChange();
   }
@@ -1910,6 +1923,7 @@ export class App {
   setColor2(c: string): void {
     this.color2 = c;
     saveJSON(COLOR2_KEY, c);
+    if (this.gradEdit) this.repaintGradEdit();
     this.onToolChange();
   }
 
@@ -1918,6 +1932,142 @@ export class App {
     const a = this.color;
     this.setColor(this.color2);
     this.setColor2(a);
+  }
+
+  /**
+   * A gradient just filled, still adjustable (Affinity style): its start and end handles show on
+   * the canvas; drag one to move it, drag the line to move both. Done, a tap elsewhere or another
+   * tool keeps it (one undo step); Cancel puts the area back.
+   */
+  private gradEdit: { d: Drawing; area: Area; before: ImageData; box: Box4; grad: Grad; sel: Area | null; label: string; drag: { id: number; what: 'start' | 'end' | 'move'; x: number; y: number; g0: Grad } | null } | null = null;
+
+  get gradEditing(): boolean {
+    return this.gradEdit !== null;
+  }
+
+  private startGradEdit(d: Drawing, area: Area, before: ImageData, box: Box4, grad: Grad, sel: Area | null, label: string): void {
+    this.gradEdit = { d, area, before, box: { ...box }, grad: { ...grad }, sel, label, drag: null };
+    this.residency.updateThumb(d);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** Paint the area again with the gradient as it is now (and the current two colours). */
+  private repaintGradEdit(): void {
+    const ge = this.gradEdit;
+    if (!ge) return;
+    const a = ge.area;
+    const rect = { x: a.x0, y: a.y0, w: a.x1 - a.x0 + 1, h: a.y1 - a.y0 + 1 };
+    const back = new ImageData(rect.w, rect.h);
+    for (let y = 0; y < rect.h; y++) {
+      const from = ((rect.y + y) * this.docW + rect.x) * 4;
+      back.data.set(ge.before.data.subarray(from, from + rect.w * 4), y * rect.w * 4);
+    }
+    putPixels(planeCanvas(ge.d, 'fill'), rect, back);
+    this.paintMask(ge.d, a.mask, a, this.rgbOf(this.color), { ...ge.grad, kind: this.fillStyle === 'radial' ? 'radial' : 'linear' }, ge.sel);
+    this.touchFill(ge.d);
+  }
+
+  /** Keep the gradient (one undo step). */
+  applyGradEdit(): void {
+    const ge = this.gradEdit;
+    if (!ge) return;
+    this.gradEdit = null;
+    this.pushFill(ge.label, [this.fillEntry(ge.d, ge.before, ge.box)]);
+    this.residency.updateThumb(ge.d);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** Put the area back as it was before the gradient. */
+  cancelGradEdit(): void {
+    const ge = this.gradEdit;
+    if (!ge) return;
+    this.gradEdit = null;
+    const rect = { x: ge.box.x0, y: ge.box.y0, w: ge.box.x1 - ge.box.x0 + 1, h: ge.box.y1 - ge.box.y0 + 1 };
+    const back = new ImageData(rect.w, rect.h);
+    for (let y = 0; y < rect.h; y++) {
+      const from = ((rect.y + y) * this.docW + rect.x) * 4;
+      back.data.set(ge.before.data.subarray(from, from + rect.w * 4), y * rect.w * 4);
+    }
+    putPixels(planeCanvas(ge.d, 'fill'), rect, back);
+    this.touchFill(ge.d);
+    this.residency.updateThumb(ge.d);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** Which gradient handle a document point is on (start, end, the line between), if any. */
+  private gradHit(x: number, y: number): 'start' | 'end' | 'move' | null {
+    const ge = this.gradEdit;
+    if (!ge) return null;
+    const r = 26 / this.view.zoom;
+    const g = ge.grad;
+    if (Math.hypot(x - g.x1, y - g.y1) <= r) return 'end';
+    if (Math.hypot(x - g.x0, y - g.y0) <= r) return 'start';
+    // near the line between them: move the whole gradient
+    const dx = g.x1 - g.x0, dy = g.y1 - g.y0, len2 = dx * dx + dy * dy || 1;
+    const t = ((x - g.x0) * dx + (y - g.y0) * dy) / len2;
+    if (t > 0 && t < 1 && Math.hypot(x - (g.x0 + dx * t), y - (g.y0 + dy * t)) <= r * 0.6) return 'move';
+    return null;
+  }
+
+  private moveGradDrag(e: PointerEvent): void {
+    const ge = this.gradEdit;
+    const d = ge?.drag;
+    if (!ge || !d) return;
+    const p = this.toPoint(e, e.timeStamp);
+    const dx = p.x - d.x, dy = p.y - d.y;
+    const g = { ...d.g0 };
+    if (d.what === 'start' || d.what === 'move') { g.x0 += dx; g.y0 += dy; }
+    if (d.what === 'end' || d.what === 'move') { g.x1 += dx; g.y1 += dy; }
+    ge.grad = g;
+    this.repaintGradEdit();
+  }
+
+  /** The handles on the canvas (document space). */
+  private drawGradHandles(g: CanvasRenderingContext2D): void {
+    const ge = this.gradEdit;
+    if (!ge) return;
+    const z = this.view.zoom;
+    const gr = ge.grad;
+    g.save();
+    g.lineWidth = 2 / z;
+    g.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    g.setLineDash([]);
+    if (this.fillStyle === 'radial') {
+      g.setLineDash([6 / z, 5 / z]);
+      g.beginPath();
+      g.arc(gr.x0, gr.y0, Math.hypot(gr.x1 - gr.x0, gr.y1 - gr.y0), 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash([]);
+    }
+    for (const [w, c] of [[4, 'rgba(0,0,0,0.45)'], [2, '#fff']] as const) {
+      g.lineWidth = w / z;
+      g.strokeStyle = c;
+      g.beginPath();
+      g.moveTo(gr.x0, gr.y0);
+      g.lineTo(gr.x1, gr.y1);
+      g.stroke();
+    }
+    const knob = (x: number, y: number, fill: string) => {
+      g.beginPath();
+      g.arc(x, y, 11 / z, 0, Math.PI * 2);
+      g.fillStyle = '#fff';
+      g.fill();
+      g.beginPath();
+      g.arc(x, y, 8 / z, 0, Math.PI * 2);
+      g.fillStyle = fill;
+      g.fill();
+      g.lineWidth = 1.5 / z;
+      g.strokeStyle = 'rgba(0,0,0,0.5)';
+      g.beginPath();
+      g.arc(x, y, 11 / z, 0, Math.PI * 2);
+      g.stroke();
+    };
+    knob(gr.x0, gr.y0, this.color);
+    knob(gr.x1, gr.y1, this.color2);
+    g.restore();
   }
 
   /** The default gradient of an area: top to bottom, or from its centre to its farthest corner. */
@@ -1974,7 +2124,8 @@ export class App {
   }
 
   /** Paint mask pixels (inside `box`) in one colour on a drawing's fill plane; returns the changed box. */
-  private paintMask(d: Drawing, mask: Uint8Array, box: Box4, rgb: number, grad: Grad | null = null): void {
+  private paintMask(d: Drawing, mask: Uint8Array, box: Box4, rgb: number, grad: Grad | null = null, sel?: Area | null): void {
+    const selMask = sel !== undefined ? sel?.mask : this.fillG?.selection?.mask;
     const target = planeCanvas(d, 'fill');
     const tg = target.getContext('2d')!;
     const rect = { x: box.x0, y: box.y0, w: box.x1 - box.x0 + 1, h: box.y1 - box.y0 + 1 };
@@ -1985,7 +2136,7 @@ export class App {
     for (let yy = 0; yy < rect.h; yy++) {
       for (let xx = 0; xx < rect.w; xx++) {
         const i = (rect.y + yy) * this.docW + rect.x + xx;
-        if (!mask[i] || (this.fillG?.selection && !this.fillG.selection.mask[i])) continue;
+        if (!mask[i] || (selMask && !selMask[i])) continue;
         const o = (yy * rect.w + xx) * 4;
         if (grad) {
           const t = gradientAt(grad, rect.x + xx + 0.5, rect.y + yy + 0.5);
@@ -2005,6 +2156,7 @@ export class App {
 
   private beginFill(e: PointerEvent): void {
     if (this.fillBusy || this.fillG) return;
+    if (this.gradEdit) this.applyGradEdit();
     if (this.project.isPlaceholder) this.project.editLayer();
     const d = this.drawing;
     if (!this.residency.isReady(d)) return;
@@ -2131,6 +2283,11 @@ export class App {
       return;
     }
     this.touchFill(d);
+    // a gradient on one area: its handles stay up to adjust (Fill across fills straight away)
+    if (g.mode === 'tap' && this.fillStyle !== 'solid' && g.area && !(this.fillAcross > 0 && !g.selection)) {
+      this.startGradEdit(d, g.area, g.before!, g.box, g.grad ?? this.defaultGrad(g.area), g.selection, 'Gradient fill');
+      return;
+    }
     const entries = [this.fillEntry(d, g.before!, g.box)];
     const label = g.mode === 'leftover' ? 'Fill leftovers' : g.seeds.length > 1 ? 'Drag fill' : 'Fill';
     if (this.fillAcross > 0 && !g.selection && g.mode !== 'leftover') void this.fillFollowing(d, g.seeds, color, entries, label, g.grad ?? null);
@@ -2285,6 +2442,7 @@ export class App {
   setColor(c: string): void {
     this.color = c;
     saveJSON(COLOR_KEY, c);
+    if (this.gradEdit) this.repaintGradEdit();
     this.onColorChange();
   }
 
@@ -2305,6 +2463,7 @@ export class App {
   // Commands
 
   undo(): void {
+    if (this.gradEdit) return this.cancelGradEdit();
     this.stepHistory('undo');
   }
 
@@ -3107,6 +3266,7 @@ export class App {
 
   setFrame(f: number): void {
     if (this.adjusting) this.applyAdjust();
+    if (this.gradEdit) this.applyGradEdit();
     if (this.strokeActive) return;
     this.leaveBlankPage();
     const len = this.compEnd;
@@ -3837,6 +3997,7 @@ export class App {
   }
 
   private beginStroke(e: PointerEvent): void {
+    if (this.gradEdit) this.applyGradEdit();
     if (this.playing) {
       this.playing = false;
       this.onFrameChange();
@@ -4089,6 +4250,16 @@ export class App {
       this.canvas.setPointerCapture(e.pointerId);
     } catch {
       // Capture can fail for pointers the browser no longer tracks; drawing still works.
+    }
+    if (this.gradEdit) {
+      const p = this.toPoint(e, e.timeStamp);
+      const hit = this.gradHit(p.x, p.y);
+      if (hit) {
+        this.gradEdit.drag = { id: e.pointerId, what: hit, x: p.x, y: p.y, g0: { ...this.gradEdit.grad } };
+        return;
+      }
+      // a touch may be the start of a pinch: only the pen or mouse keeps the gradient here
+      if (e.pointerType !== 'touch') this.applyGradEdit();
     }
     if (this.eyedropArmed) {
       // the eyedropper: this tap picks a colour and draws nothing
@@ -4451,6 +4622,7 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    if (this.gradEdit?.drag && e.pointerId === this.gradEdit.drag.id) return this.moveGradDrag(e);
     if (this.tscrub && e.pointerId === this.tscrub.id) return this.moveTimeScrub(e);
     if (this.guideDrag && e.pointerId === this.guideDrag.id) return this.moveGuideDrag(e);
     if (this.smudge && e.pointerId === this.smudge.id) return this.moveSmudge(e);
@@ -4568,6 +4740,11 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (this.gradEdit?.drag && e.pointerId === this.gradEdit.drag.id) {
+      this.gradEdit.drag = null;
+      this.residency.updateThumb(this.gradEdit.d);
+      return;
+    }
     if (this.tscrub && e.pointerId === this.tscrub.id) this.endTimeScrub(cancelled);
     if (this.guideDrag && e.pointerId === this.guideDrag.id) { this.guideDrag = null; return; }
     if (this.smudge && e.pointerId === this.smudge.id) return this.endSmudge(cancelled);
@@ -5213,6 +5390,7 @@ export class App {
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude);
     outer('above');
     this.drawFillPath(g);
+    this.drawGradHandles(g);
     this.drawSymmetryGuide(g);
     this.drawGuide(g);
     this.drawPointEdit(g);
