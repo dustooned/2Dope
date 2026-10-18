@@ -132,8 +132,10 @@ export class Bubbles {
     const tools = Math.max(bottomOf(this.modes), bottomOf(this.tools));
     if (!tools) return;
     const narrow = window.innerWidth <= 700;
-    // on a phone the context row sits under the tools, and the layer label under that
-    const clear = Math.round(tools + (narrow ? 58 : 8));
+    // on a phone the context row sits under the tools, and the layer label under that; on a tall
+    // screen (portrait) there is room to keep the page clear of the context row too
+    const tall = s.height > s.width * 1.1;
+    const clear = Math.round(narrow ? tools + 58 : tall ? Math.max(tools + 8, bottomOf(this.ctx) + 6) : tools + 8);
     this.stage.style.setProperty('--tools-bottom', `${Math.round(tools + 6)}px`);
     this.stage.style.setProperty('--side-top', `${clear + (narrow ? 40 : 0)}px`);
     if (clear === this.topClear) return;
@@ -498,10 +500,19 @@ export class Bubbles {
         ['ellipse', 'Ellipse', 'Drag an ellipse', 'selellipse'],
         ['auto', 'Automatic', 'Tap an area between lines', 'selauto'],
       ];
-      for (const [k, label, title, icon] of shapes) add(this.chip(label, title, a.selectShape === k, () => a.setSelectShape(k), icon));
-      add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
-      for (const [k, label, title, icon] of [['new', 'New', 'A new selection', 'selnew'], ['add', 'Add', 'Add to the selection', 'seladd'], ['subtract', 'Subtract', 'Take away from the selection', 'selsub']] as const) add(this.chip(label, title, a.selectOp === k, () => a.setSelectOp(k), icon));
-      add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
+      // one button each: tap to step through (fewer buttons, the same choices)
+      const si = shapes.findIndex(([k]) => k === a.selectShape);
+      const [, sLabel, sTitle, sIcon] = shapes[si]!;
+      const sNext = shapes[(si + 1) % shapes.length]!;
+      const shapeChip = this.chip(sLabel, `${sLabel}: ${sTitle.toLowerCase()}. Tap for ${sNext[1]}.`, false, () => a.setSelectShape(sNext[0]), sIcon);
+      shapeChip.classList.add('bub-cycle');
+      const ops = [['new', 'New', 'a new selection', 'selnew'], ['add', 'Add', 'adds to the selection', 'seladd'], ['subtract', 'Subtract', 'takes away from the selection', 'selsub']] as const;
+      const oi = ops.findIndex(([k]) => k === a.selectOp);
+      const [, oLabel, oTitle, oIcon] = ops[oi]!;
+      const oNext = ops[(oi + 1) % ops.length]!;
+      const opChip = this.chip(oLabel, `${oLabel}: ${oTitle}. Tap for ${oNext[1]}.`, a.selectOp !== 'new', () => a.setSelectOp(oNext[0]), oIcon);
+      opChip.classList.add('bub-cycle');
+      add(shapeChip, opChip, el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
       if (sel) {
         add(
           this.chip('Transform', 'Move, size, rotate or flip what is selected (drag the canvas to move)', false, () => a.beginTransform(), 'motion'),
