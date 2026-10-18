@@ -4,7 +4,8 @@ import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick, type Ctx
 import { frameMenu } from './framemenu';
 import { decorate } from './icons';
 
-const KEY = '2dope.flip.on';
+/** Draw's bottom view: 'flipbook' (the default) or 'timeline'. (The old Flip mode's key is not read.) */
+const KEY = '2dope.draw.view';
 /** One frame of time on the strip, and one track row (Procreate Dreams shows three at a time). */
 const CELL = 44;
 const ROW = 50;
@@ -18,13 +19,14 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 };
 
 /**
- * Flip: a flipbook in the style of Procreate Dreams. The canvas is big; at the bottom a strip shows
+ * Draw's flipbook (Procreate Dreams' Draw & Paint with its Flipbook): under the canvas a strip shows
  * every frame of time for up to three tracks (the shot's drawing layers, front first), with held
  * drawings spanning their frames. Swipe the strip to move through time, tap a frame to go there,
  * tap it again (or press and hold) for its options, and drag the handle on the current frame to
  * make it hold longer. + Frame adds a page after this frame (on a held drawing it ends the hold
- * here; hold the button to add after the whole hold). Everything edits the same layers and timing
- * that Draw, Timing and Motion show.
+ * here; hold the button to add after the whole hold). It is Draw's default view; Timeline swaps in
+ * the traditional strip, and the Focus level always shows the flipbook. Everything edits the same
+ * layers and timing that Timing and Motion show.
  */
 export class FlipMode {
   readonly row = el('div', { class: 'flip-row', role: 'region', 'aria-label': 'Flipbook' });
@@ -55,48 +57,47 @@ export class FlipMode {
       b.addEventListener('click', () => { if (held) { held = false; return; } run(); });
       return b;
     };
-    const done = btn('Done', 'Back to Draw (the timeline shows what you made)', 'check', () => this.set(false), undefined, 'flip-btn flip-done');
+    const done = btn('Timeline', 'Show the timeline under the canvas instead (tracks, ruler, holds)', 'time', () => this.set(false), undefined, 'flip-btn flip-adv flip-view');
     this.play.addEventListener('click', () => this.app.togglePlay());
     const prev = btn('Previous drawing', 'Previous drawing (hold: the first frame)', 'prev', () => this.app.prevDrawing(), () => this.app.setLayerFrame(0), 'flip-btn flip-icon', '');
     const next = btn('Next drawing', 'Next drawing (hold: the last frame)', 'next', () => this.app.nextDrawing(), () => this.app.setLayerFrame(this.app.project.length - 1), 'flip-btn flip-icon', '');
     const add = btn('Frame', 'Add a frame after this one. On a held drawing the hold ends here; hold the button to add after the whole hold.', 'plus', () => this.app.flipAddFrame(false), () => this.app.flipAddFrame(true), 'flip-btn flip-add');
-    const track = btn('Track', 'Add a track: a new drawing layer above this one, with its own frames', 'layers', () => this.app.addDrawLayer());
+    const track = btn('Track', 'Add a track: a new drawing layer above this one, with its own frames', 'layers', () => this.app.addDrawLayer(), undefined, 'flip-btn flip-adv');
     const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
     onion.classList.add('flip-onion');
-    const fit = btn('Fit', 'Fit the page to the screen', 'fit', () => this.app.fit(), undefined, 'flip-btn flip-icon', '');
-    this.head.append(done, this.play, prev, this.count, next, add, track, onion, fit);
+    const fit = btn('Fit', 'Fit the page to the screen', 'fit', () => this.app.fit(), undefined, 'flip-btn flip-icon flip-adv', '');
+    this.head.append(this.play, prev, this.count, next, add, onion, track, fit, done);
     this.grid.append(this.playhead);
     this.scroll.append(this.grid);
     this.row.append(this.head, this.scroll);
     stage.append(this.row);
     this.wireStrip();
-    try { this.on = localStorage.getItem(KEY) === '1'; } catch { /* default */ }
-    this.apply();
+    // the flipbook is Draw's view unless you picked the timeline
+    try { this.on = localStorage.getItem(KEY) !== 'timeline'; } catch { /* default */ }
+    this.update();
   }
 
+  /** Draw's bottom view: the flipbook (true) or the timeline. */
   set(on: boolean): void {
     this.on = on;
-    try { localStorage.setItem(KEY, on ? '1' : '0'); } catch { /* optional */ }
-    if (on) {
-      if (this.app.workspace !== 'draw') this.app.setWorkspace('draw');
-      if (this.app.tool !== 'brush' && this.app.tool !== 'eraser') this.app.setTool('brush');
-      // seeing the last drawing faintly is what makes drawing the next one easy
-      if (!this.app.onion.enabled) this.app.toggleOnion();
-    }
-    this.apply();
+    try { localStorage.setItem(KEY, on ? 'flipbook' : 'timeline'); } catch { /* optional */ }
+    // seeing the last drawing faintly is what makes drawing the next one easy
+    if (on && !this.app.onion.enabled) this.app.toggleOnion();
+    this.sig = '';
+    this.update();
     this.onChange();
   }
 
-  /** The timeline for timing (kept for the menu's "Open the timeline"). */
+  /** The timeline for timing (Timing mode). */
   timeline(): void {
     this.set(false);
     this.openTimeline();
   }
 
-  private apply(): void {
-    document.body.classList.toggle('flipmode', this.on);
-    this.sig = '';
-    this.update();
+  /** The flipbook shows in Draw when it is the chosen view, and always at the Focus level. */
+  private get shown(): boolean {
+    const b = document.body.classList;
+    return this.app.workspace === 'draw' && !b.contains('quick') && (this.on || b.contains('ui-clean'));
   }
 
   /** The tracks: the shot's drawing layers (not guides), front first. */
@@ -106,7 +107,14 @@ export class FlipMode {
 
   update(): void {
     const app = this.app;
-    const active = this.on && app.workspace === 'draw' && !app.uiHidden;
+    const shown = this.shown;
+    if (document.body.classList.contains('flipmode') !== shown) {
+      document.body.classList.toggle('flipmode', shown);
+      this.sig = '';
+      // the page fits above (or back below) the flipbook
+      setTimeout(() => this.onChange(), 0);
+    }
+    const active = shown && !app.uiHidden;
     this.row.hidden = !active;
     if (!active) return;
     if (this.playing !== app.playing) {

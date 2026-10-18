@@ -653,9 +653,8 @@ app.onToolChange = chain(app.onToolChange, () => bubbles.update());
 app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
-flipMode.onChange = () => { layerCards.close(); bubbles.update(); $('#flip-ws').setAttribute('aria-pressed', String(flipMode.on)); setTimeout(() => app.refit(), 60); };
-$('#flip-ws').addEventListener('click', () => flipMode.set(!flipMode.on));
-$('#flip-ws').setAttribute('aria-pressed', String(flipMode.on));
+flipMode.onChange = () => { layerCards.close(); bubbles.update(); strip.update(); setTimeout(() => app.refit(), 60); };
+app.onToolChange = chain(app.onToolChange, () => flipMode.update());
 // Motion (and anywhere else): open a drawing layer frame by frame in Flip
 app.openFlipbook = (id) => {
   if (app.workspace !== 'draw') app.setWorkspace('draw');
@@ -669,7 +668,7 @@ onShareChange = () => { layerCards.close(); bubbles.update(); };
   app.editor.onChange = () => { edChange(); bubbles.update(); };
 }
 app.onColorChange = chain(app.onColorChange, () => bubbles.update());
-app.onWorkspaceChange = chain(app.onWorkspaceChange, () => { if (app.workspace !== 'draw' && flipMode.on) flipMode.set(false); bubbles.update(); flipMode.update(); });
+app.onWorkspaceChange = chain(app.onWorkspaceChange, () => { bubbles.update(); flipMode.update(); });
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
 app.onThumbs = () => { strip.update(); flipMode.update(); layerCards.update(); };
@@ -775,7 +774,7 @@ function resetUi(): void {
   if (app.playing) app.togglePlay();
   share.close();
   quick.set(false);
-  flipMode.set(false);
+  flipMode.set(true);
   layerCards.close();
   layersPop.close?.();
   colorPanel.close();

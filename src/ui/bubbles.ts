@@ -65,11 +65,10 @@ export class Bubbles {
   private topClear = -1;
 
   constructor(private readonly app: App, private readonly stage: HTMLElement, private readonly hooks: BubbleHooks) {
-    // the order of a shot: plan it (Story), sketch it (Flip), draw it, time it, move it
+    // the order of a shot: plan it (Story), draw it (frame by frame, in the flipbook), time it, move it
     const modes: [Workspace | 'flip', string, string, string][] = [
       ['board', 'Story', 'board', 'Story: panels, captions and the animatic'],
-      ['flip', 'Flip', 'flipbook', 'Flip: just draw frame after frame, no timing yet'],
-      ['draw', 'Draw', 'draw', 'Draw: your art, layer by layer'],
+      ['draw', 'Draw', 'draw', 'Draw: draw frame by frame in the flipbook, layer by layer'],
       ['time', 'Timing', 'time', 'Timing: holds, marks and the exposure sheet'],
       ['motion', 'Motion', 'motion', 'Motion: move layers, keyframes and the camera'],
     ];
@@ -86,7 +85,6 @@ export class Bubbles {
       const b = this.bubble(label, icon, title);
       b.dataset.ws = ws;
       b.addEventListener('click', () => {
-        hooks.flip?.set(false);
         app.setWorkspace(ws);
         this.sig = '';
         this.update();
@@ -286,6 +284,8 @@ export class Bubbles {
   private toolsFor(ws: Workspace): [ToolKey, string, string][] {
     const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso'], ['adjust', 'Adjust: hue, saturation, brightness, blur', 'adjust']];
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
+    // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
+    if (ws === 'draw' && this.level === 'clean') return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['color', 'Colour', '']];
     if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
     if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
@@ -468,9 +468,8 @@ export class Bubbles {
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
     const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
-    for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
-    this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
-    this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
+    for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws));
+    this.modeName.textContent = { draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
     if (sig === this.sig) return;
     this.sig = sig;
 

@@ -110,7 +110,9 @@ export class Strip {
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
 
     const nav = el('div', { class: 'group' });
+    const flipView = btn('\ud83d\udcd6 Flipbook', 'Show the flipbook under the canvas instead (frames as pages, tracks, swipe to scrub)', () => app.openFlipbook?.(), 'strip-flipview');
     nav.append(
+      flipView,
       btn('⏮', 'Previous drawing (↓)', () => app.prevDrawing()),
       btn('◀', 'Previous frame (←)', () => app.prevFrame()),
       this.playBtn,
@@ -243,7 +245,7 @@ export class Strip {
     // duplicate, delete, flipbook, onion) as icons; the rest waits behind More.
     const extra = (e: Element | null | undefined) => e?.setAttribute('data-extra', '');
     extra(this.layerChip);
-    extra(nav.firstElementChild);
+    extra(flipView.nextElementSibling);
     extra(nav.lastElementChild);
     extra(this.frameLabel);
     extra(this.fpsSel);
