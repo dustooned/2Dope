@@ -1,10 +1,19 @@
 import type { App } from '../app';
-import { hexToHsv, hsvToHex, normalizeHex, pushRecent, type HSV } from '../core/color';
-import { attachContextMenu } from './contextmenu';
+import { harmony, HARMONY_MODES, hexToHsv, hsvToHex, normalizeHex, paletteFromPixels, pushRecent, type HarmonyMode, type HSV } from '../core/color';
+import { attachContextMenu, showContextMenu, type CtxItem } from './contextmenu';
+import { askText, confirmBox } from './dialogs';
 
 const RECENT_KEY = '2dope.color.recent';
 const PALETTE_KEY = '2dope.color.palette';
 const MODE_KEY = '2dope.color.mode';
+const PALETTES_KEY = '2dope.color.palettes';
+const PALETTE_AT_KEY = '2dope.color.paletteAt';
+const HARMONY_KEY = '2dope.color.harmony';
+
+interface Palette {
+  name: string;
+  colors: string[];
+}
 
 /** A starter palette: inks, skin, warm and cool, greys. */
 const BASICS = [
@@ -65,7 +74,33 @@ export class ColorPanel {
   private before = '#000000';
   private mode: Mode = load<Mode>(MODE_KEY, 'disc') === 'values' ? 'values' : 'disc';
   private recent: string[] = load<string[]>(RECENT_KEY, []).filter((c) => !!normalizeHex(c));
-  private palette: string[] = load<string[] | null>(PALETTE_KEY, null) ?? [...BASICS];
+  /** Named palettes (Procreate): the first is Basics; the old single palette became "My palette". */
+  private palettes: Palette[] = (() => {
+    const saved = load<Palette[] | null>(PALETTES_KEY, null);
+    if (Array.isArray(saved) && saved.length) return saved.filter((x) => x && typeof x.name === 'string' && Array.isArray(x.colors)).map((x) => ({ name: x.name.slice(0, 40), colors: x.colors.filter((c) => !!normalizeHex(c)).slice(0, 60) }));
+    const old = load<string[] | null>(PALETTE_KEY, null);
+    return [{ name: 'Basics', colors: [...BASICS] }, ...(old && old.join() !== BASICS.join() ? [{ name: 'My palette', colors: old }] : [])];
+  })();
+  private paletteAt = Math.max(0, Math.min(this.palettes.length - 1, load<number>(PALETTE_AT_KEY, 0)));
+  private harmonyMode: HarmonyMode = load<HarmonyMode>(HARMONY_KEY, 'complementary');
+  private readonly paletteSel = el('select', { class: 'cp-palsel', 'aria-label': 'Palette' });
+  private readonly harmonyRow = el('div', { class: 'cp-swatches', 'aria-label': 'Harmony' });
+  private readonly harmonySel = el('select', { class: 'cp-palsel', 'aria-label': 'Harmony' });
+
+  private get palette(): string[] {
+    return this.palettes[this.paletteAt]?.colors ?? [];
+  }
+
+  private set palette(colors: string[]) {
+    const pal = this.palettes[this.paletteAt];
+    if (pal) pal.colors = colors;
+    this.savePalettes();
+  }
+
+  private savePalettes(): void {
+    save(PALETTES_KEY, this.palettes);
+    save(PALETTE_AT_KEY, this.paletteAt);
+  }
 
   private readonly disc = el('canvas', { class: 'cp-disc', width: '440', height: '440', 'aria-label': 'Hue ring and saturation / brightness square' });
   private readonly values = el('div', { class: 'cp-values' });
@@ -147,9 +182,48 @@ export class ColorPanel {
     const add = el('button', { type: 'button', class: 'cp-add', title: 'Add this colour to the palette' }, '+');
     add.addEventListener('click', () => {
       if (!this.palette.includes(this.app.color)) this.palette = [...this.palette, this.app.color].slice(-60);
-      save(PALETTE_KEY, this.palette);
       this.renderSwatches();
     });
+    // palettes: pick one, make a new one (empty or from a picture), rename or delete it
+    this.paletteSel.addEventListener('change', () => { this.paletteAt = Number(this.paletteSel.value); this.savePalettes(); this.renderSwatches(); });
+    const picFile = el('input', { type: 'file', accept: 'image/*', hidden: '' });
+    picFile.addEventListener('change', () => void (async () => {
+      const f = picFile.files?.[0];
+      picFile.value = '';
+      if (!f) return;
+      try {
+        const bmp = await createImageBitmap(f);
+        const k = Math.min(1, 160 / Math.max(bmp.width, bmp.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(bmp.width * k));
+        c.height = Math.max(1, Math.round(bmp.height * k));
+        c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+        const colors = paletteFromPixels(c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data, 12);
+        if (!colors.length) throw new Error('empty');
+        this.palettes.push({ name: f.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 40) || 'From picture', colors });
+        this.paletteAt = this.palettes.length - 1;
+        this.savePalettes();
+        this.renderSwatches();
+      } catch {
+        this.app.onNotice?.('That picture could not be read.');
+      }
+    })());
+    const palMenu = el('button', { type: 'button', class: 'cp-palbtn', title: 'New, from a picture, rename or delete a palette', 'aria-label': 'Palette options' }, '\u22ef');
+    const palItems = (): CtxItem[] => [
+      { label: 'New palette', run: () => void (async () => { const n = await askText('Palette name', `Palette ${this.palettes.length + 1}`, 'Create'); if (n === null) return; this.palettes.push({ name: n.slice(0, 40) || 'Palette', colors: [] }); this.paletteAt = this.palettes.length - 1; this.savePalettes(); this.renderSwatches(); })() },
+      { label: 'New from picture\u2026', run: () => picFile.click() },
+      { label: 'Rename palette', run: () => void (async () => { const pal = this.palettes[this.paletteAt]; if (!pal) return; const n = await askText('Palette name', pal.name, 'Rename'); if (n === null) return; pal.name = n.slice(0, 40) || pal.name; this.savePalettes(); this.renderSwatches(); })() },
+      ...(this.palettes.length > 1 ? [{ label: 'Delete palette', danger: true, run: () => void (async () => { const pal = this.palettes[this.paletteAt]; if (!pal || !(await confirmBox(`Delete \u201c${pal.name}\u201d?`, 'Its colours are removed from this device.', 'Delete', true))) return; this.palettes.splice(this.paletteAt, 1); this.paletteAt = Math.max(0, this.paletteAt - 1); this.savePalettes(); this.renderSwatches(); })() }] : []),
+    ];
+    palMenu.addEventListener('click', () => { const r = palMenu.getBoundingClientRect(); showContextMenu(r.left, r.bottom + 4, palItems()); });
+    const palHead = el('div', { class: 'cp-palhead' });
+    palHead.append(this.paletteSel, palMenu, picFile);
+    // harmony: colours that go with this one
+    for (const m of HARMONY_MODES) this.harmonySel.append(el('option', { value: m.id }, m.label));
+    this.harmonySel.value = this.harmonyMode;
+    this.harmonySel.addEventListener('change', () => { this.harmonyMode = this.harmonySel.value as HarmonyMode; save(HARMONY_KEY, this.harmonyMode); this.renderSwatches(); });
+    const harmHead = el('div', { class: 'cp-palhead' });
+    harmHead.append(el('span', { class: 'cp-label' }, 'Harmony'), this.harmonySel);
     attachContextMenu(this.paletteRow, ({ target }) => {
       const s = (target as HTMLElement).closest<HTMLElement>('[data-c]');
       if (!s) return null;
@@ -160,22 +234,20 @@ export class ColorPanel {
           label: 'Remove from palette',
           run: () => {
             this.palette = this.palette.filter((x) => x !== c);
-            save(PALETTE_KEY, this.palette);
             this.renderSwatches();
           },
         },
         {
-          label: 'Reset palette',
+          label: 'Reset to Basics',
           run: () => {
             this.palette = [...BASICS];
-            save(PALETTE_KEY, this.palette);
             this.renderSwatches();
           },
         },
       ];
     });
 
-    this.root.append(head, this.disc, this.values, el('div', { class: 'cp-label' }, 'Recent'), this.recentRow, el('div', { class: 'cp-label' }, 'Palette'), this.paletteRow, add);
+    this.root.append(head, this.disc, this.values, harmHead, this.harmonyRow, el('div', { class: 'cp-label' }, 'Recent'), this.recentRow, palHead, this.paletteRow, add);
     document.body.append(this.root);
     // tapping elsewhere closes it (not the circle that opened it, which toggles)
     window.addEventListener(
@@ -183,7 +255,7 @@ export class ColorPanel {
       (e) => {
         if (this.root.hidden) return;
         const t = e.target as Node;
-        if (this.root.contains(t) || this.anchor?.contains(t)) return;
+        if (this.root.contains(t) || this.anchor?.contains(t) || (t as HTMLElement).closest?.('.ctxmenu, dialog')) return;
         this.close();
       },
       true,
@@ -292,6 +364,13 @@ export class ColorPanel {
     };
     fill(this.recentRow, this.recent, 'Recent colour');
     fill(this.paletteRow, this.palette, 'Palette colour');
+    fill(this.harmonyRow, harmony(cur, this.harmonyMode), 'Harmony colour');
+    const names = this.palettes.map((x) => x.name).join('|') + this.paletteAt;
+    if (this.paletteSel.dataset.sig !== names) {
+      this.paletteSel.dataset.sig = names;
+      this.paletteSel.replaceChildren(...this.palettes.map((x, i) => el('option', { value: String(i) }, `${x.name} (${x.colors.length})`)));
+      this.paletteSel.value = String(this.paletteAt);
+    }
   }
 
   // the disc: an outer hue ring and a saturation (→) / brightness (↑) square inside it

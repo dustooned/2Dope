@@ -25,3 +25,23 @@ describe('colour', () => {
     ).toHaveLength(12);
   });
 });
+
+describe('harmony and palettes from pictures', () => {
+  it('turns the hue round the wheel', async () => {
+    const { harmony } = await import('./color');
+    expect(harmony('#ff0000', 'complementary')).toEqual(['#ff0000', '#00ffff']);
+    expect(harmony('#ff0000', 'triadic')).toEqual(['#ff0000', '#00ff00', '#0000ff']);
+    expect(harmony('#ff0000', 'tetradic')).toHaveLength(4);
+  });
+
+  it('finds the main colours of a picture, darkest first', async () => {
+    const { paletteFromPixels } = await import('./color');
+    const data = new Uint8ClampedArray(4 * 300);
+    for (let i = 0; i < 300; i++) {
+      const c = i < 100 ? [250, 10, 10] : i < 200 ? [10, 10, 250] : [240, 240, 240];
+      data.set([...c, 255], i * 4);
+    }
+    const p = paletteFromPixels(data, 3);
+    expect(p).toEqual(['#0a0afa', '#fa0a0a', '#f0f0f0']);
+  });
+});
