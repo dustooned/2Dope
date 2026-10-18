@@ -59,6 +59,8 @@ if (import.meta.env.DEV) (window as unknown as { __2dope: App }).__2dope = app;
 
 // Toolbar
 const toolButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-tool]')];
+// Full level's extra tools (Smudge, Select, Adjust): the same as their bubbles
+const toolXButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-tool-x]')];
 const planeButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-plane]')];
 const partButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-part-eye]')];
 const rippleBtn = $<HTMLButtonElement>('#ripple-btn');
@@ -66,7 +68,12 @@ rippleBtn.addEventListener('click', () => app.setRipple(!app.ripple));
 const syncTools = () => {
   rippleBtn.setAttribute('aria-pressed', String(app.ripple));
   for (const b of partButtons) b.setAttribute('aria-pressed', String(app.partVisible(b.dataset.partEye === 'fill' ? 'fill' : 'line')));
-  for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool));
+  const selectOn = app.tool === 'fill' && app.fillMode === 'lasso';
+  for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool && !(b.dataset.tool === 'brush' && app.smudging) && !(b.dataset.tool === 'fill' && selectOn) && !app.adjusting));
+  for (const b of toolXButtons) {
+    const k = b.dataset.toolX;
+    b.setAttribute('aria-pressed', String(k === 'smudge' ? app.smudging && app.tool === 'brush' : k === 'select' ? selectOn : !!app.adjusting));
+  }
   for (const b of planeButtons) b.setAttribute('aria-pressed', String(b.dataset.plane === app.plane));
   const layer = app.project.layer;
   const plane = app.tool === 'fill' ? 'fill' : app.tool === 'pen' ? 'line' : app.plane;
@@ -89,7 +96,7 @@ const syncTools = () => {
 const paintTarget = document.createElement('button');
 paintTarget.type = 'button';
 paintTarget.className = 'paint-target';
-paintTarget.addEventListener('click', () => (document.body.classList.contains('ui-full') ? layersPop.toggle(paintTarget) : layerCards.toggle(paintTarget)));
+paintTarget.addEventListener('click', () => layerCards.toggle(paintTarget));
 document.querySelector('#stage')?.append(paintTarget);
 
 // QuickShape: after a snap, an Edit shape button (Procreate style) to switch the shape or keep the stroke
@@ -131,8 +138,21 @@ for (const b of planeButtons) b.addEventListener('click', () => app.setPlane(b.d
 for (const b of toolButtons)
   b.addEventListener('click', () => {
     const t = b.dataset.tool as Tool;
-    if (t === app.tool && t !== 'fill') brushLib.toggle(b);
+    if (app.transforming) app.cancelTransform();
+    if (t === 'brush' && app.smudging) app.setSmudging(false);
+    else if (t === 'fill' && app.tool === 'fill' && app.fillMode === 'lasso') { app.selectMoves = false; app.setFillMode('tap'); }
+    else if (t === app.tool && t !== 'fill') brushLib.toggle(b);
     else app.setTool(t);
+  });
+for (const b of toolXButtons)
+  b.addEventListener('click', () => {
+    if (b.dataset.toolX === 'smudge') app.setSmudging(true);
+    else if (b.dataset.toolX === 'select') {
+      app.setTool('fill');
+      app.setFillMode('lasso');
+      app.selectMoves = true;
+      app.onToolChange();
+    } else if (!app.adjusting) app.beginAdjust('hsb');
   });
 app.onToolChange = syncTools;
 syncTools();
@@ -206,8 +226,8 @@ app.onColorChange = chain(app.onColorChange, () => {
 }
 const layersPop = new LayersPopover(app);
 const layersBtn = $<HTMLButtonElement>('#layers-btn');
-layersBtn.addEventListener('click', () => layersPop.toggle(layersBtn));
-app.openLayers = (anchor) => (document.body.classList.contains('ui-full') ? layersPop.toggle(anchor) : layerCards.toggle(anchor));
+layersBtn.addEventListener('click', () => layerCards.toggle(layersBtn));
+app.openLayers = (anchor) => layerCards.toggle(anchor);
 app.onToolChange = chain(app.onToolChange, () => layersPop.update());
 syncColor();
 
