@@ -4486,3 +4486,13 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 .ref-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; text-align: center; font-size: 12px; color: var(--muted); }
 .ref-empty[hidden] { display: none; }
 .ref-grip { position: absolute; right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; touch-action: none; background: linear-gradient(135deg, transparent 50%, var(--muted) 50%, var(--muted) 58%, transparent 58%, transparent 70%, var(--muted) 70%, var(--muted) 78%, transparent 78%); opacity: .7; }
+/* the flipbook's handle, and the floating mini flipbook (Procreate Dreams) */
+.flip-handle { align-self: center; width: 100%; height: 14px; margin: -4px 0 -2px; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
+.flip-handle-bar { width: 44px; height: 5px; border-radius: 3px; background: var(--muted); opacity: .6; }
+.flip-handle:hover .flip-handle-bar { opacity: 1; }
+.flip-row.mini { right: auto; bottom: auto; width: min(380px, calc(100% - 16px)); box-shadow: 0 8px 28px rgba(0, 0, 0, .5); }
+.flip-row.mini .flip-track:not(.active) { display: none; }
+.flip-row.mini .flip-adv, .flip-row.mini .flip-count { display: none !important; }
+.flip-row.mini .flip-btn { font-size: 0; gap: 0; padding: 0 9px; }
+.flip-row.mini .flip-btn svg { margin: 0; }
+.flip-row > .flip-head, .flip-row > .flip-scroll { min-width: 0; max-width: 100%; width: 100%; box-sizing: border-box; }

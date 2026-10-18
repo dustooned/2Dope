@@ -6,6 +6,8 @@ import { decorate } from './icons';
 
 /** Draw's bottom view: 'flipbook' (the default) or 'timeline'. (The old Flip mode's key is not read.) */
 const KEY = '2dope.draw.view';
+/** The mini flipbook: floating (with where it was), or docked at the bottom. */
+const MINI_KEY = '2dope.flip.mini';
 /** One frame of time on the strip, and one track row (Procreate Dreams shows three at a time). */
 const CELL = 44;
 const ROW = 50;
@@ -41,6 +43,8 @@ export class FlipMode {
   private readonly grid = el('div', { class: 'flip-grid' });
   private readonly playhead = el('div', { class: 'flip-playhead', 'aria-hidden': 'true' });
   private playing: boolean | null = null;
+  /** Floating mini flipbook (its top-left in the stage), or null when docked at the bottom. */
+  private mini: { x: number; y: number } | null = null;
   /** Set while a swipe or trim is under way: the strip does not scroll itself then. */
   private dragging = false;
   private dragged = false;
@@ -69,9 +73,14 @@ export class FlipMode {
     this.head.append(this.play, prev, this.count, next, add, onion, track, fit, done);
     this.grid.append(this.playhead);
     this.scroll.append(this.grid);
-    this.row.append(this.head, this.scroll);
+    // the handle (Procreate Dreams): drag it up to float a mini flipbook, back down to dock it
+    const handle = el('div', { class: 'flip-handle', role: 'button', tabindex: '0', title: 'Drag up to float a mini flipbook anywhere; drag it to the bottom (or double-tap) to dock it', 'aria-label': 'Flipbook handle' });
+    handle.append(el('span', { class: 'flip-handle-bar', 'aria-hidden': 'true' }));
+    this.row.append(handle, this.head, this.scroll);
     stage.append(this.row);
     this.wireStrip();
+    this.wireHandle(handle, stage);
+    try { const m = JSON.parse(localStorage.getItem(MINI_KEY) ?? 'null'); if (m && Number.isFinite(m.x)) this.mini = m; } catch { /* docked */ }
     // the flipbook is Draw's view unless you picked the timeline
     try { this.on = localStorage.getItem(KEY) !== 'timeline'; } catch { /* default */ }
     this.update();
@@ -179,15 +188,85 @@ export class FlipMode {
       row.append(eye, cells);
       this.grid.append(row);
     }
-    // the strip shows three tracks at a time (the rest scroll)
-    this.scroll.style.maxHeight = `${22 + Math.min(3, Math.max(1, tracks.length)) * ROW + 2}px`;
-    // the page fits above the panel
+    // the strip shows three tracks at a time (the rest scroll); the mini one shows the track you draw on
+    this.scroll.style.maxHeight = this.mini ? `${22 + ROW + 2}px` : `${22 + Math.min(3, Math.max(1, tracks.length)) * ROW + 2}px`;
+    this.placeMini();
+    // the page fits above the docked panel (a floating one leaves the page its full height)
     requestAnimationFrame(() => {
       const h = this.row.offsetHeight;
       const stage = this.row.parentElement;
-      if (stage && h) stage.style.setProperty('--flip-h', `${h + 16}px`);
+      if (stage) stage.style.setProperty('--flip-h', this.mini ? '0px' : `${h + 16}px`);
       this.app.refit();
     });
+  }
+
+  /** Float (at a place in the stage) or dock the flipbook. */
+  private setMini(m: { x: number; y: number } | null): void {
+    this.mini = m;
+    try { localStorage.setItem(MINI_KEY, JSON.stringify(m)); } catch { /* optional */ }
+    this.sig = '';
+    this.update();
+  }
+
+  private placeMini(): void {
+    const r = this.row;
+    r.classList.toggle('mini', !!this.mini);
+    if (!this.mini) { r.style.left = r.style.top = ''; return; }
+    const stage = r.parentElement;
+    const sw = stage?.clientWidth ?? window.innerWidth, sh = stage?.clientHeight ?? window.innerHeight;
+    const w = Math.min(380, sw - 16);
+    const x = Math.max(8, Math.min(sw - w - 8, this.mini.x)), y = Math.max(8, Math.min(sh - 140, this.mini.y));
+    r.style.left = `${x}px`;
+    r.style.top = `${y}px`;
+  }
+
+  private wireHandle(handle: HTMLElement, stage: HTMLElement): void {
+    let last = 0;
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const now = performance.now();
+      // double-tap: dock it (or float it where it is)
+      if (now - last < 350) {
+        last = 0;
+        const r = this.row.getBoundingClientRect(), s = stage.getBoundingClientRect();
+        this.setMini(this.mini ? null : { x: r.left - s.left + 40, y: r.top - s.top - 160 });
+        return;
+      }
+      last = now;
+      const s = stage.getBoundingClientRect();
+      const r0 = this.row.getBoundingClientRect();
+      const dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+      handle.setPointerCapture(e.pointerId);
+      let moved = false;
+      const move = (ev: PointerEvent) => {
+        const x = ev.clientX - s.left - dx, y = ev.clientY - s.top - dy;
+        if (!this.mini) {
+          // undock once it is pulled clearly up
+          if (r0.top - ev.clientY + dy < 40 && !moved) return;
+          moved = true;
+          this.mini = { x, y };
+          this.sig = '';
+          this.update();
+        } else {
+          moved = true;
+          this.mini = { x, y };
+          this.placeMini();
+        }
+      };
+      const up = (ev: PointerEvent) => {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        handle.removeEventListener('pointercancel', up);
+        if (!moved) return;
+        // dropped near the bottom: dock it again
+        const docked = ev.clientY > s.bottom - 70;
+        this.setMini(docked ? null : this.mini);
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+      handle.addEventListener('pointercancel', up);
+    });
+    handle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.setMini(this.mini ? null : { x: 40, y: 80 }); } });
   }
 
   /** Per frame: the playhead, the current cells and the counter (no rebuild while playing). */

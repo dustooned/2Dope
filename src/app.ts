@@ -4013,7 +4013,8 @@ export class App {
     const clear = Number.isFinite(set) ? set : 64;
     // the extra top inset beyond the margin: the bubble rows, or Full's floating options row
     const top = bubbles ? clear - 16 : Math.max(0, clear - 40);
-    const flipH = flip ? parseFloat(this.stage.style.getPropertyValue('--flip-h')) || 200 : 0;
+    const fh = parseFloat(this.stage.style.getPropertyValue('--flip-h'));
+    const flipH = flip ? (Number.isFinite(fh) ? fh : 200) : 0;
     this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top, flipH);
     // the layer label floats under the bubble rows: when the page would reach under it (an upright
     // tablet, a phone), fit again a little lower
