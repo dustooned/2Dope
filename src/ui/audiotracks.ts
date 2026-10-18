@@ -183,7 +183,7 @@ export class AudioTracks {
 
   /** One row per clip under the drawing rails, lined up on the same clock (`x0` = frame at the left edge). */
   railRows(top: number, x0: number, cell: number, width: number): { nodes: HTMLElement[]; height: number } {
-    const app = this.app; const c = app.project.comp; const project = app.project;
+    const app = this.app; const c = app.project.comp;
     const nodes: HTMLElement[] = [];
     let y = top;
     const H = 38;

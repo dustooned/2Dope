@@ -39,7 +39,7 @@ export interface BubbleHooks {
   resetUi?: () => void;
 }
 
-type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'flip' | 'onion' | 'layers'
+type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
   | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
 /**
@@ -66,7 +66,7 @@ export class Bubbles {
 
   constructor(private readonly app: App, private readonly stage: HTMLElement, private readonly hooks: BubbleHooks) {
     // the order of a shot: plan it (Story), draw it (frame by frame, in the flipbook), time it, move it
-    const modes: [Workspace | 'flip', string, string, string][] = [
+    const modes: [Workspace, string, string, string][] = [
       ['board', 'Story', 'board', 'Story: panels, captions and the animatic'],
       ['draw', 'Draw', 'draw', 'Draw: draw frame by frame in the flipbook, layer by layer'],
       ['time', 'Timing', 'time', 'Timing: holds, marks and the exposure sheet'],
@@ -74,14 +74,6 @@ export class Bubbles {
     ];
     // Share comes last: watch the movie, then make it
     for (const [ws, label, icon, title] of modes) {
-      if (ws === 'flip') {
-        if (!hooks.flip) continue;
-        const flip = this.bubble(label, icon, title);
-        flip.dataset.mode = 'flip';
-        flip.addEventListener('click', () => hooks.flip!.set(true));
-        this.modes.append(flip);
-        continue;
-      }
       const b = this.bubble(label, icon, title);
       b.dataset.ws = ws;
       b.addEventListener('click', () => {
@@ -321,7 +313,6 @@ export class Bubbles {
         if (this.hooks.layerCards) this.hooks.layerCards(this.tools);
         else this.layersOpen = !this.layersOpen;
         break;
-      case 'flip': a.flipToBlank(); break;
       case 'insert': a.insertBlank('after'); break;
       case 'onion': a.toggleOnion(); break;
       case 'panel': if (!a.board) a.createBoard(); else a.addPanel(); break;
@@ -487,7 +478,7 @@ export class Bubbles {
         : k === 'autokey' ? a.editor.autoKey
         : k === 'look' ? a.editor.throughCamera
         : k === 'play' ? a.playing
-        : k === cur || (k === 'onion' && a.onion.enabled) || (k === 'flip' && a.blankPage);
+        : k === cur || (k === 'onion' && a.onion.enabled);
       b.setAttribute('aria-pressed', String(on));
       b.addEventListener('click', () => this.pickTool(k, b));
       this.tools.append(b);

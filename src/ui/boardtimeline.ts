@@ -15,7 +15,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 }
 
 const ZOOM_KEY = '2dope.board.zoom';
-const RULER_H = 18;
 
 type Drag =
   | { kind: 'edge'; index: number; x0: number; len0: number; len: number }

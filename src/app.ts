@@ -16,7 +16,7 @@ import { domPlaneOps } from './view/planeops';
 import { applyPoint, clipRect, IDENTITY, isIdentity, matrixFor, overallScale, transformedRect, transformMask, transformRegion, transformVectors, unionRect, type Rect, type XParams } from './core/selxform';
 import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
-import { editPoint, rippleComp, rippleExposures, shiftLater } from './core/ripple';
+import { editPoint, rippleComp, rippleExposures } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type Comp, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { valueAt } from './core/anim';

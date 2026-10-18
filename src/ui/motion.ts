@@ -78,7 +78,6 @@ export class MotionPanel {
   /** Simple screen: every layer row shows (otherwise the selected layers, their linked layers and cameras). */
   private allRows = (() => { try { return localStorage.getItem('2dope.motion.allRows') === '1'; } catch { return false; } })();
   private drag: Drag | null = null;
-  private startX = 0;
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private pinch: { dist: number; cell: number } | null = null;
 
@@ -1041,7 +1040,6 @@ export class MotionPanel {
     const key = t.closest<HTMLElement>('[data-key]');
     const handle = t.closest<HTMLElement>('[data-handle]');
     const barEl = t.closest<HTMLElement>('[data-bar]');
-    this.startX = e.clientX;
     if (key) {
       const [layer, prop, f] = key.dataset.key!.split('|');
       const ref = { layer: layer!, prop: prop as PropKey, f: Number(f) };

@@ -4378,7 +4378,6 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 .flip-head { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .flip-btn { flex: 0 0 auto; min-height: 40px; height: 40px; padding: 0 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .flip-btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
-.flip-done { background: var(--accent); color: #fff; font-weight: 600; }
 .flip-add { border: 2px solid var(--accent); }
 .flip-count { flex: 0 0 auto; min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
 .flip-scroll { position: relative; overflow: auto; scrollbar-width: thin; touch-action: pan-y; border-radius: 12px; background: var(--panel-2); overscroll-behavior: contain; }
@@ -4405,7 +4404,7 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 .flip-trim { position: absolute; right: 0; top: 0; bottom: 0; width: 14px; background: var(--accent); cursor: ew-resize; touch-action: none; }
 .flip-trim::after { content: ''; position: absolute; left: 5px; top: 30%; bottom: 30%; width: 4px; border-left: 1px solid #fff; border-right: 1px solid #fff; }
 .flip-playhead { position: absolute; top: 0; bottom: 0; width: 44px; margin-left: 0; pointer-events: none; z-index: 1; background: color-mix(in srgb, var(--accent) 14%, transparent); border-left: 2px solid var(--accent); }
-@media (max-width: 700px) { .flip-btn .lbl, .flip-btn:not(.flip-done) { font-size: 0; gap: 0; } .flip-btn:not(.flip-done) svg { margin: 0; } }
+@media (max-width: 700px) { .flip-btn { font-size: 0; gap: 0; } .flip-btn svg { margin: 0; } }
 .flip-icon { width: 40px; padding: 0; justify-content: center; }
 /* the Effects card: a stack like Procreate's layers */
 .fxpanel { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }

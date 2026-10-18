@@ -11,7 +11,6 @@ import { frameMenu } from './framemenu';
 const THUMB_W = 56;
 const THUMB_H = 32;
 const RULER_H = 18;
-const HANDLE_W = 9;
 const DRAG_THRESHOLD = 4;
 const ZOOM_KEY = '2dope.m1.cell';
 

@@ -192,7 +192,6 @@ export class BoardPanel {
     const app = this.app;
     const b = app.board!;
     const p = app.project;
-    const fps = p.comp.fps;
     const frag = document.createDocumentFragment();
     let startAt = b.start;
     b.exposures.forEach((e, i) => {

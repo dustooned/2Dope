@@ -623,11 +623,8 @@ app.onToolChange = chain(app.onToolChange, () => quick.update());
     });
   }
 }
-// Flip: the beginner mode (draw frame after frame; a row of drawing bubbles; nudge to the timeline later).
-const flipMode = new FlipMode(app, $('#stage'), () => {
-  app.setWorkspace('time');
-  if (sheet.current === 'peek') sheet.set('half');
-});
+// Draw's flipbook (Procreate Dreams style): frames as pages on tracks under the canvas; Draw's default view.
+const flipMode = new FlipMode(app, $('#stage'));
 // Bubbles: mode and tool bubbles plus a context bar; the level button steps clean / simple / full.
 const layerCards = new LayerCards(app);
 closePopovers = () => layerCards.close();

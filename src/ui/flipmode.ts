@@ -45,7 +45,7 @@ export class FlipMode {
   private dragging = false;
   private dragged = false;
 
-  constructor(private readonly app: App, stage: HTMLElement, private readonly openTimeline: () => void) {
+  constructor(private readonly app: App, stage: HTMLElement) {
     const btn = (label: string, title: string, icon: string, run: () => void, hold?: () => void, cls = 'flip-btn', show = label) => {
       const b = el('button', { type: 'button', class: cls, title, 'aria-label': label }, show);
       decorate(b, icon);
@@ -86,12 +86,6 @@ export class FlipMode {
     this.sig = '';
     this.update();
     this.onChange();
-  }
-
-  /** The timeline for timing (Timing mode). */
-  timeline(): void {
-    this.set(false);
-    this.openTimeline();
   }
 
   /** The flipbook shows in Draw when it is the chosen view, and always at the Focus level. */
