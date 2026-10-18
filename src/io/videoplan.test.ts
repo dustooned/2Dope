@@ -32,7 +32,9 @@ describe('video planning', () => {
 
   it('validates stored options rather than trusting their shape or values', () => {
     expect(videoOptions(null)).toEqual(DEFAULT_VIDEO);
-    expect(videoOptions({ size: '4k', format: 5, quality: {}, background: 'transparent' })).toEqual(DEFAULT_VIDEO);
+    expect(videoOptions({ size: '4k', format: 5, quality: {}, background: 'pink' })).toEqual(DEFAULT_VIDEO);
+    // see-through video is always WebM (MP4 / H.264 cannot hold transparency)
+    expect(videoOptions({ format: 'mp4', background: 'transparent' })).toMatchObject({ format: 'webm', background: 'transparent' });
     expect(videoOptions({ size: 'original', format: 'webm', quality: 'high', background: 'black' }))
       .toEqual({ size: 'original', format: 'webm', quality: 'high', background: 'black' });
   });
