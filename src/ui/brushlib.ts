@@ -1,3 +1,5 @@
+import { BrushImportError, readBrushFile, type ImportedBrush, type ImportedTip } from '../io/brushimport';
+import { loadTip } from '../brush/raster';
 import type { App } from '../app';
 import { cloneBrush, PRESETS, type BrushSettings } from '../core/brush';
 import { CATEGORIES, categoryOf, isBuiltIn, readBrush, uniqueName, type BrushCategory } from '../core/brushlib';
@@ -58,7 +60,17 @@ export class BrushLibrary {
       this.close();
       this.openStudio();
     });
-    head.append(el('span', { class: 'bl-title' }, 'Brushes'), studio, save);
+    // Procreate (.brushset, .brush) and Photoshop (.abr) brushes; no accept filter, since iPad
+    // Safari greys out file types it does not know
+    const picker = el('input', { type: 'file', multiple: '', hidden: '' });
+    picker.addEventListener('change', () => {
+      const files = [...(picker.files ?? [])];
+      picker.value = '';
+      if (files.length) void this.importFiles(files);
+    });
+    const imp = el('button', { type: 'button', title: 'Bring in brushes from Procreate (.brushset, .brush) or Photoshop (.abr)' }, '\u2913 Import');
+    imp.addEventListener('click', () => picker.click());
+    head.append(el('span', { class: 'bl-title' }, 'Brushes'), imp, studio, save, picker);
     const main = el('div', { class: 'bl-main' });
     main.append(this.cats, this.list);
     this.root.append(head, main, el('p', { class: 'hint bl-hint' }, 'Tap to use · double-tap for all settings · hold for more'));
@@ -154,6 +166,37 @@ export class BrushLibrary {
     this.use(b);
     this.close();
     this.openStudio();
+  }
+
+  /** Brushes from other apps into My brushes: each tip becomes a small picture tip. */
+  private async importFiles(files: File[]): Promise<void> {
+    let added = 0;
+    const names: string[] = [];
+    for (const f of files) {
+      try {
+        if (f.size > 64 * 1024 * 1024) throw new BrushImportError(`${f.name} is too large to bring in.`);
+        const found = await readBrushFile(new Uint8Array(await f.arrayBuffer()), f.name);
+        const room = Math.max(0, 200 - this.mine.length);
+        for (const ib of found.slice(0, Math.min(IMPORT_MAX, room))) {
+          const tip = await tipDataUrl(ib.tip);
+          if (!tip) continue;
+          const b = importedBrush(ib, tip, [...this.names(), ...names]);
+          this.mine = [...this.mine, b];
+          names.push(b.name);
+          added++;
+          void loadTip(tip);
+        }
+        if (found.length > IMPORT_MAX) this.app.onNotice?.(`${f.name} has ${found.length} brushes; the first ${IMPORT_MAX} came in.`);
+      } catch (e) {
+        this.app.onNotice?.(e instanceof BrushImportError ? e.message : `${f.name} could not be read as a brush file.`);
+      }
+    }
+    if (!added) return;
+    this.saveMine();
+    this.cat = 'mine';
+    this.render();
+    this.app.onNotice?.(`${added} brush${added === 1 ? '' : 'es'} added to My brushes. Tips and the main settings come across; textures and special dynamics do not.`);
+    setTimeout(() => this.render(), 300); // previews again once the tips have decoded
   }
 
   private add(b: BrushSettings): void {
@@ -269,3 +312,62 @@ export class BrushLibrary {
     return c;
   }
 }
+
+/** At most this many brushes from one file (they are kept on the device). */
+const IMPORT_MAX = 60;
+
+/** An imported tip as a small PNG data URL (fits the engine's 128 px tip), or null. */
+async function tipDataUrl(tip: ImportedTip): Promise<string | null> {
+  try {
+    let src: CanvasImageSource;
+    let w: number, h: number;
+    if (tip.kind === 'png') {
+      const bmp = await createImageBitmap(new Blob([tip.bytes as BlobPart], { type: 'image/png' }));
+      src = bmp;
+      w = bmp.width;
+      h = bmp.height;
+    } else {
+      // white where it paints: the alpha is the tip
+      const c = document.createElement('canvas');
+      c.width = tip.w;
+      c.height = tip.h;
+      const g = c.getContext('2d')!;
+      const img = g.createImageData(tip.w, tip.h);
+      for (let i = 0; i < tip.alpha.length; i++) {
+        img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 255;
+        img.data[i * 4 + 3] = tip.alpha[i]!;
+      }
+      g.putImageData(img, 0, 0);
+      src = c;
+      w = tip.w;
+      h = tip.h;
+    }
+    const k = Math.min(1, 128 / Math.max(w, h));
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(w * k));
+    out.height = Math.max(1, Math.round(h * k));
+    out.getContext('2d')!.drawImage(src, 0, 0, out.width, out.height);
+    return out.toDataURL('image/png');
+  } catch {
+    return null;
+  }
+}
+
+/** 2Dope brush settings for an imported brush: a picture tip on a plain base, plus what maps. */
+function importedBrush(ib: ImportedBrush, tip: string, taken: string[]): BrushSettings {
+  const b = cloneBrush(PRESETS[0]!);
+  b.name = uniqueName(ib.name, taken);
+  b.tipImage = tip;
+  b.hardness = 1;
+  b.roundness = 1;
+  b.angle = 0;
+  b.grain = 0;
+  b.spacing = ib.spacing ?? 0.15;
+  if (ib.size !== undefined) b.size = ib.size;
+  if (ib.opacity !== undefined) b.opacity = ib.opacity;
+  b.flow = 1;
+  b.scatter = ib.scatter ?? 0;
+  if (ib.pressureSize !== undefined) b.sizeDyn = { ...b.sizeDyn, control: 'pressure', min: Math.max(0, 1 - ib.pressureSize) };
+  return b;
+}
+
