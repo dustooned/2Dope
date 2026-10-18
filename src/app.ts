@@ -2782,7 +2782,10 @@ export class App {
       const s = cc.layers.find((l) => l.id === src.id);
       if (!s || s.kind !== 'drawings') return;
       s.cel = group;
-      const made = drawingsLayer(id, `${s.name} \u00b7 ${count + 1}`, s.exposures.map((e) => ({ drawing: p.newDrawing().id, length: e.length })), p.width, p.height, cc.width, cc.height);
+      // in a background or object stack the new one is a paint layer; for animation, an art layer
+      const name = s.still ? `Paint ${count + 1}` : `${s.name} \u00b7 ${count + 1}`;
+      const made = drawingsLayer(id, name, s.exposures.map((e) => ({ drawing: p.newDrawing().id, length: e.length })), p.width, p.height, cc.width, cc.height);
+      if (s.still) { made.still = true; made.play = s.play; }
       made.start = s.start;
       made.in = s.in;
       made.out = s.out;
@@ -2816,6 +2819,8 @@ export class App {
       made.start = 0;
       made.in = 0;
       made.out = null;
+      // a stack of paint layers from the start (Procreate style): + Paint layer adds to it
+      made.cel = id;
       const at = kind === 'background' ? cc.layers.length : Math.max(0, cc.layers.findIndex((l) => l.id === above));
       cc.layers.splice(at, 0, made);
     });
@@ -5275,7 +5280,9 @@ export class App {
     const comp = this.project.comp;
     const activeId = this.project.layer.id;
     const others = this.showLayers ? this.otherAlpha : 0;
-    const around = others > 0 || this.boardAlpha > 0;
+    // the other layers of this stack (a background's paint layers, a drawing's art layers) always show
+    const keep = new Set(this.celLayers.map((l) => l.id).filter((id) => id !== activeId));
+    const around = others > 0 || this.boardAlpha > 0 || keep.size > 0;
     // a clipping group the layer you draw on belongs to is drawn as one unit, live
     const idx = comp.layers.findIndex((l) => l.id === activeId);
     let group: { base: number; members: number[] } | null = null;
@@ -5292,10 +5299,10 @@ export class App {
       g.restore();
     };
     outer('below');
-    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha, exclude);
+    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha, exclude, keep);
     this.drawOnion(g);
     if (this.blankPage && !this.live && !group) {
-      if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha);
+      if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, undefined, keep);
       outer('above');
       return;
     }
@@ -5428,7 +5435,7 @@ export class App {
       g.setTransform(base);
     } else paintMasked(g);
 
-    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude);
+    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude, keep);
     outer('above');
     this.drawFillPath(g);
     this.drawGradHandles(g);
@@ -5489,6 +5496,12 @@ export class App {
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
     if (this.maskDrawing) out.add(this.maskDrawing);
     out.add(this.drawing);
+    // the rest of this stack shows even with Others hidden
+    for (const m of this.celLayers) {
+      const id = drawingAt(m.exposures, ((this.frame - m.start) % Math.max(1, totalFrames(m.exposures)) + Math.max(1, totalFrames(m.exposures))) % Math.max(1, totalFrames(m.exposures)));
+      const d = id ? p.drawings.get(id) : undefined;
+      if (d) out.add(d);
+    }
     if (this.showLayers || this.boardAlpha > 0) {
       for (const id of frameContent(p.comps, p.comp.id, this.frame).drawings) {
         const d = p.drawings.get(id);

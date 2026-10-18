@@ -4454,3 +4454,10 @@ body.flipmode .sidebar { top: 8px; transform: none; max-height: calc(100% - var(
 body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sidebar, body.flipmode.ui-full.tools-folded .sidebar { top: var(--side-top, 72px); max-height: calc(100% - var(--side-top, 72px) - var(--flip-h, 240px)); }
 .pgrad { flex: 0 0 auto; min-width: 26px; min-height: 26px; height: 26px; padding: 0 4px; border-radius: 8px; font-size: 13px; line-height: 1; background: transparent; opacity: .7; }
 .pgrad.on { opacity: 1; color: var(--accent); }
+/* stacks of linked layers (a background's paint layers): one head, its layers indented under it */
+.lc-stack { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 4px 4px 4px 2px; border-radius: 12px; background: color-mix(in srgb, var(--panel-2) 60%, transparent); }
+.lc-stack.here { box-shadow: inset 3px 0 0 var(--accent); }
+.lc-stack-fold { flex: 1; min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 6px; background: transparent; text-align: left; }
+.lc-stack-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-stack .lc-icon { flex: 0 0 auto; }
+.lc-card.in-stack { margin-left: 16px; }

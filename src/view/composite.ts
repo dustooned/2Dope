@@ -337,7 +337,9 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
  * frame, placed relative to it (the drawn-on layer's page is the view's space). Cameras and nulls
  * are not drawn. `alpha` fades them (a light-table look); hidden layers stay hidden.
  */
-export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, side: 'below' | 'above', alpha = 1, guideAlpha = 1, exclude?: Set<string>): void {
+export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, side: 'below' | 'above', alpha = 1, guideAlpha = 1, exclude?: Set<string>, keep?: Set<string>): void {
+  // `keep`: layers of the same stack as the one you paint on show fully, whatever Others says
+  const alphaOf = (l: Layer) => aroundAlpha(l, frame, keep?.has(l.id) ? 1 : alpha, guideAlpha);
   const comps = project.comps;
   const idx = c.layers.findIndex((l) => l.id === activeId);
   const base = g.getTransform();
@@ -354,17 +356,17 @@ export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, 
       drawClipGroup(
         g,
         (x) => drawLayerAround(x, project, c, frame, activeId, plain(l), 1, base),
-        aroundAlpha(l, frame, alpha, guideAlpha),
+        alphaOf(l),
         l.blend,
         members.map((j) => {
           const cl = c.layers[j]!;
-          return { draw: (x) => drawLayerAround(x, project, c, frame, activeId, plain(cl), aroundAlpha(cl, frame, alpha, guideAlpha), base), blend: cl.blend };
+          return { draw: (x) => drawLayerAround(x, project, c, frame, activeId, plain(cl), alphaOf(cl), base), blend: cl.blend };
         }),
         'around',
       );
       continue;
     }
-    const a = aroundAlpha(l, frame, alpha, guideAlpha);
+    const a = alphaOf(l);
     if (a <= 0) continue;
     drawLayerAround(g, project, c, frame, activeId, l, a, base);
   }

@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { BLEND_MODES, partOf, type BlendMode, type Layer, type PartName } from '../core/comp';
+import { BLEND_MODES, partOf, type BlendMode, type DrawingsLayer, type Layer, type PartName } from '../core/comp';
 import type { PropKey } from '../compedit';
 import { drawingAt } from '../core/timeline';
 import { askText, confirmBox } from './dialogs';
@@ -42,6 +42,8 @@ export class LayerCards {
    * Hide, Duplicate and Delete then work on all of them; Motion sees the same selection.
    */
   private readonly picked = new Set<string>();
+  /** Paint / art layer stacks folded shut (by stack id). */
+  private readonly foldedStacks = new Set<string>();
 
   constructor(private readonly app: App) {
     document.body.append(this.root);
@@ -225,7 +227,7 @@ export class LayerCards {
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${[...this.foldedStacks].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.root.replaceChildren();
@@ -276,6 +278,14 @@ export class LayerCards {
     const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': 'Layers', 'aria-multiselectable': 'true' });
     for (const l of layers) {
       const on = l.id === active;
+      // linked layers (a background's paint layers, a drawing's art layers) are one stack
+      // (a still layer from before stacks is a stack of one: adding to it links them the same way)
+      const stackOf = (x: Layer) => (x.kind === 'drawings' ? (x.cel ?? (x.still ? x.id : null)) : null);
+      const stackId = stackOf(l);
+      const members = stackId ? layers.filter((x): x is DrawingsLayer => x.kind === 'drawings' && stackOf(x) === stackId) : [];
+      const inStack = !!stackId && (members.length > 1 || (l.kind === 'drawings' && !!l.still));
+      if (inStack && members[0] === l) list.append(this.stackHeader(stackId!, members, active));
+      if (inStack && this.foldedStacks.has(stackId!) && !members.some((m) => m.id === active)) continue;
       const pick = this.picked.has(l.id);
       const card = el('div', { class: `lc-card${on ? ' on' : ''}${pick ? ' picked' : ''}${l.visible ? '' : ' off'}`, role: 'option', 'aria-selected': String(on || pick), tabindex: '0' });
       card.dataset.id = l.id;
@@ -285,7 +295,7 @@ export class LayerCards {
       const tags: string[] = [];
       if (l.kind === 'comp') tags.push(`group \u00b7 ${app.project.comps.get(l.comp)?.layers.length ?? 0} layers`);
       if (l.kind === 'drawings' && l.guide) tags.push('board');
-      if (linked) tags.push('linked');
+      if (linked && !inStack) tags.push('linked');
       if (l.kind === 'drawings' && l.still) tags.push('still');
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
       if (l.kind === 'drawings' && l.reference) tags.push('reference');
@@ -301,7 +311,8 @@ export class LayerCards {
       decorate(eye, 'eye');
       eye.addEventListener('pointerdown', (e) => e.stopPropagation());
       eye.addEventListener('click', (e) => { e.stopPropagation(); app.editor.setFlag(l.id, 'visible', !l.visible); this.update(); });
-      if (linked) card.classList.add('linked');
+      if (linked && !inStack) card.classList.add('linked');
+      if (inStack) card.classList.add('in-stack');
       if (l.kind === 'drawings' && l.clip) card.classList.add('clipped');
       if (l.kind === 'comp') {
         // a group folds open in place; its options are behind the dots
@@ -415,6 +426,42 @@ export class LayerCards {
     };
     card.addEventListener('pointerup', (e) => end(e, false));
     card.addEventListener('pointercancel', (e) => end(e, true));
+  }
+
+  /**
+   * The head of a stack of linked layers: its name, how many layers, + for another paint layer, one
+   * eye for all of them, and a fold. Its layers sit under it and are painted on directly.
+   */
+  private stackHeader(id: string, members: DrawingsLayer[], active: string): HTMLElement {
+    const app = this.app;
+    const still = members.every((m) => m.still);
+    const base = members[members.length - 1]!;
+    const folded = this.foldedStacks.has(id) && !members.some((m) => m.id === active);
+    const head = el('div', { class: `lc-stack${members.some((m) => m.id === active) ? ' here' : ''}`, role: 'group', 'aria-label': `${base.name} stack` });
+    const fold = el('button', { type: 'button', class: 'lc-stack-fold', 'aria-expanded': String(!folded), title: folded ? 'Show its layers' : 'Fold its layers away' });
+    fold.append(el('span', { class: 'lc-fold', 'aria-hidden': 'true' }, folded ? '\u25b8' : '\u25be'), el('span', { class: 'lc-stack-name' }, `${still ? '\ud83d\uddbc\ufe0f' : '\ud83c\udf9e\ufe0f'} ${base.name}`), el('span', { class: 'lc-tags' }, `${members.length} layer${members.length === 1 ? '' : 's'}`));
+    fold.addEventListener('click', () => { if (this.foldedStacks.has(id)) this.foldedStacks.delete(id); else this.foldedStacks.add(id); this.sig = ''; this.update(); });
+    const add = el('button', { type: 'button', class: 'lc-icon', title: still ? 'Add a paint layer to this stack (on top)' : 'Add an art layer to this drawing (same frames, its own paint)', 'aria-label': `Add a layer to ${base.name}` }, still ? 'Paint layer' : 'Art layer');
+    decorate(add, 'plus');
+    add.addEventListener('click', () => {
+      if (!members.some((m) => m.id === active)) app.pickLayer(members[0]!.id);
+      app.addCelLayer();
+      this.foldedStacks.delete(id);
+      this.sig = '';
+      this.update();
+    });
+    const shown = members.some((m) => m.visible);
+    const eye = el('button', { type: 'button', class: 'lc-eye', 'aria-pressed': String(shown), title: shown ? 'Hide the whole stack' : 'Show the whole stack', 'aria-label': `${shown ? 'Hide' : 'Show'} ${base.name}` }, shown ? 'Hide' : 'Show');
+    decorate(eye, 'eye');
+    eye.addEventListener('click', () => {
+      const ids = members.map((m) => m.id);
+      app.editor.edit(shown ? 'Hide stack' : 'Show stack', (c) => { for (const l of c.layers) if (ids.includes(l.id)) l.visible = !shown; });
+      app.requestRender();
+      this.sig = '';
+      this.update();
+    });
+    head.append(fold, add, eye);
+    return head;
   }
 
   /** A folded-open group's layers: tap one to draw on it (inside the group). */
