@@ -4630,8 +4630,7 @@ export class App {
       }
     const o = this.onion;
     if (o.enabled) {
-      const keys = o.keysOnly ? (id: string) => p.drawing(id).role === 'key' : undefined;
-      const n = neighborDrawings(p.exposures, this.lf, o.before, o.after, keys);
+      const n = this.onionNeighbors();
       for (const nb of [...n.before, ...n.after]) out.add(p.drawing(nb.drawing));
     }
     if (this.playing) {
@@ -4646,11 +4645,24 @@ export class App {
   }
 
   /** Ghosts of the neighboring drawings: previous in blue, next in red, fading with distance. */
+  /**
+   * The drawings the onion skin shows. Keys only shows the key drawings; when none nearby is marked
+   * as a key it shows the neighbours anyway, so the onion skin never goes blank without a reason.
+   */
+  private onionNeighbors(): ReturnType<typeof neighborDrawings> {
+    const o = this.onion;
+    const p = this.project;
+    if (o.keysOnly) {
+      const n = neighborDrawings(p.exposures, this.lf, o.before, o.after, (id) => p.drawing(id).role === 'key');
+      if (n.before.length || n.after.length) return n;
+    }
+    return neighborDrawings(p.exposures, this.lf, o.before, o.after);
+  }
+
   private drawOnion(g: CanvasRenderingContext2D): void {
     const o = this.onion;
     if ((!o.enabled && !this.blankPage) || this.playing || (this.scrubbing && !o.whileScrubbing)) return;
-    const keys = o.keysOnly ? (id: string) => this.project.drawing(id).role === 'key' : undefined;
-    const n = neighborDrawings(this.project.exposures, this.lf, o.before, o.after, keys);
+    const n = this.onionNeighbors();
     if (this.blankPage && !this.live) {
       // the blank page comes after the last drawing: it and the ones before it are all "before"
       const cur = this.drawing.id;
