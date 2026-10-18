@@ -82,6 +82,8 @@ export interface PartFile {
   /** "#rrggbb" */
   tint?: string;
   offset?: PropFile<Vec2>;
+  /** With a tint: a gradient to a second colour. */
+  grad?: { kind: 'linear' | 'radial'; color2: string; angle: number };
 }
 
 export interface LayerFile {
@@ -431,6 +433,11 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
         if (pv.visible === false) pf.visible = false;
         if (pv.opacity !== undefined) pf.opacity = prop<number>(pv.opacity, `${what} ${n} opacity`, 1);
         if (typeof pv.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(pv.tint)) pf.tint = pv.tint;
+        const gv = pv.grad;
+        if (pf.tint && isObj(gv) && (gv.kind === 'linear' || gv.kind === 'radial') && typeof gv.color2 === 'string' && /^#[0-9a-fA-F]{6}$/.test(gv.color2)) {
+          const ang = typeof gv.angle === 'number' && Number.isFinite(gv.angle) ? ((Math.round(gv.angle) % 360) + 360) % 360 : 0;
+          pf.grad = { kind: gv.kind, color2: gv.color2, angle: ang };
+        }
         if (pv.offset !== undefined) pf.offset = prop<Vec2>(pv.offset, `${what} ${n} offset`, 2);
         parts[n] = pf;
       }
@@ -696,6 +703,10 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
             if (!f) continue;
             const d = defaultPart();
             layer.parts[n] = { visible: f.visible !== false, opacity: f.opacity ? propOf(f.opacity) : d.opacity, tint: f.tint ?? null, offset: f.offset ? propOf(f.offset) : d.offset };
+            const g = f.grad;
+            if (g && (g.kind === 'linear' || g.kind === 'radial') && typeof g.color2 === 'string' && /^#[0-9a-f]{6}$/i.test(g.color2)) {
+              layer.parts[n]!.grad = { kind: g.kind, color2: g.color2, angle: Number.isFinite(g.angle) ? ((Math.round(g.angle) % 360) + 360) % 360 : 0 };
+            }
           }
         }
         return layer;
@@ -772,6 +783,7 @@ export function compFile(c: Comp): CompFile {
           if (!pt.visible) f.visible = false;
           if (pt.opacity.keys.length || pt.opacity.value !== 100) f.opacity = propFile(pt.opacity);
           if (pt.tint) f.tint = pt.tint;
+          if (pt.grad) f.grad = { ...pt.grad };
           if (pt.offset.keys.length || pt.offset.value[0] || pt.offset.value[1]) f.offset = propFile(pt.offset);
           parts[n] = f;
         }

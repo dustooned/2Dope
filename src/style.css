@@ -4452,3 +4452,5 @@ body.ui-clean .flip-adv { display: none !important; }
 /* the flipbook docks at the bottom: the sidebar stays above it */
 body.flipmode .sidebar { top: 8px; transform: none; max-height: calc(100% - var(--flip-h, 240px) - 16px); }
 body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sidebar, body.flipmode.ui-full.tools-folded .sidebar { top: var(--side-top, 72px); max-height: calc(100% - var(--side-top, 72px) - var(--flip-h, 240px)); }
+.pgrad { flex: 0 0 auto; min-width: 26px; min-height: 26px; height: 26px; padding: 0 4px; border-radius: 8px; font-size: 13px; line-height: 1; background: transparent; opacity: .7; }
+.pgrad.on { opacity: 1; color: var(--accent); }

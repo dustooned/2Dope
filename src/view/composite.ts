@@ -25,6 +25,7 @@ import {
   type Layer,
   type Mat,
   type PartName,
+  type PartGrad,
 } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { strokeLength } from '../core/stroke';
@@ -204,7 +205,7 @@ function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, op
       const tg = t.getContext('2d')!;
       paint(tg, name);
       tg.globalCompositeOperation = 'source-in';
-      tg.fillStyle = p.tint;
+      tg.fillStyle = partFill(tg, p.tint, p.grad ?? null, t.width, t.height);
       tg.fillRect(0, 0, t.width, t.height);
       tg.globalCompositeOperation = 'source-over';
       g.drawImage(t, 0, 0);
@@ -214,6 +215,22 @@ function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, op
 }
 
 const toDom = (m: Mat) => new DOMMatrix(m);
+
+/** A part's recolour: one colour, or a gradient across the page to a second colour. */
+function partFill(g: CanvasRenderingContext2D, tint: string, grad: PartGrad | null, w: number, h: number): string | CanvasGradient {
+  if (!grad) return tint;
+  const cx = w / 2, cy = h / 2, r = Math.hypot(w, h) / 2;
+  let gr: CanvasGradient;
+  if (grad.kind === 'radial') gr = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+  else {
+    const a = (grad.angle * Math.PI) / 180;
+    const dx = Math.cos(a) * r, dy = Math.sin(a) * r;
+    gr = g.createLinearGradient(cx - dx, cy - dy, cx + dx, cy + dy);
+  }
+  gr.addColorStop(0, tint);
+  gr.addColorStop(1, grad.color2);
+  return gr;
+}
 
 /**
  * Draw one frame of a comp onto `g`, on top of the transform `g` already has (so callers can

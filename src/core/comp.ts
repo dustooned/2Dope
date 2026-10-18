@@ -116,6 +116,27 @@ export interface Part {
   tint: string | null;
   /** Shift relative to the layer, in layer pixels. Keys in layer time. */
   offset: Prop<Vec2>;
+  /** With a recolour: a gradient from the tint to a second colour (like the Fill tool's gradients). */
+  grad?: PartGrad | null;
+}
+
+export interface PartGrad {
+  kind: 'linear' | 'radial';
+  /** The colour the gradient goes to ("#rrggbb"). */
+  color2: string;
+  /** Linear: the direction it runs, in degrees (0 = left to right, 90 = top to bottom). */
+  angle: number;
+}
+
+/** A part's look at a layer frame, for frame keys (two frames that look the same share one key). */
+export function partsKey(l: DrawingsLayer, lf: number): string {
+  if (!partsActive(l)) return '';
+  return PART_NAMES.map((n) => {
+    const p = partOf(l, n);
+    const o = valueAt(p.offset, lf);
+    const g = p.grad ? `${p.grad.kind}${p.grad.color2}${p.grad.angle}` : '';
+    return `${p.visible ? 1 : 0}${valueAt(p.opacity, lf).toFixed(2)}${p.tint ?? ''}${g}${o[0].toFixed(2)},${o[1].toFixed(2)}`;
+  }).join('/');
 }
 
 export function defaultPart(): Part {
@@ -129,7 +150,7 @@ export function partOf(l: DrawingsLayer, name: PartName): Part {
 
 /** Does this part look exactly like no settings at all? */
 export function isDefaultPart(p: Part): boolean {
-  return p.visible && p.tint === null && !p.opacity.keys.length && p.opacity.value === 100 && !p.offset.keys.length && p.offset.value[0] === 0 && p.offset.value[1] === 0;
+  return p.visible && p.tint === null && !p.grad && !p.opacity.keys.length && p.opacity.value === 100 && !p.offset.keys.length && p.offset.value[0] === 0 && p.offset.value[1] === 0;
 }
 
 /** Does any part of the layer change how its drawings look? */
@@ -589,7 +610,8 @@ export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | 
       drawings.add(id);
       if (l.mask) drawings.add(l.mask);
       const fx = effectsKey(l, frame - l.start);
-      parts.push(`${l.id}:${id}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}@${look}`);
+      const pk = partsKey(l, frame - l.start);
+      parts.push(`${l.id}:${id}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}${pk ? `<${pk}>` : ''}@${look}`);
     } else {
       const n = comps.get(l.comp);
       const nf = n ? nestedFrame(l, frame, c.fps, n, comps) : null;

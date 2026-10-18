@@ -182,6 +182,25 @@ describe('line and fill parts', () => {
     expect(partOf(l, 'fill').tint).toBe('#123456');
     expect(isDefaultPart(partOf(l, 'line'))).toBe(true);
   });
+
+  it('a part gradient counts as a change, and part looks are in the frame key', async () => {
+    const { frameContent, partsKey } = await import('./comp');
+    const c = newComp('c1', 'Shot', 400, 300, 12);
+    const l = drawingsLayer('L', 'A', [{ drawing: 'd1', length: 4 }], 400, 300);
+    c.layers.push(l);
+    const comps = new Map([[c.id, c]]);
+    const plain = frameContent(comps, c, 0).key;
+    expect(partsKey(l, 0)).toBe('');
+    l.parts = { fill: { ...defaultPart(), grad: { kind: 'radial', color2: '#ffffff', angle: 0 } } };
+    expect(isDefaultPart(partOf(l, 'fill'))).toBe(false);
+    l.parts.fill!.tint = '#000000';
+    const tinted = frameContent(comps, c, 0).key;
+    expect(tinted).not.toBe(plain);
+    l.parts.fill!.grad = { kind: 'linear', color2: '#ffffff', angle: 90 };
+    expect(frameContent(comps, c, 0).key).not.toBe(tinted);
+    // the same look on a held frame shares the key
+    expect(frameContent(comps, c, 1).key).toBe(frameContent(comps, c, 0).key);
+  });
 });
 
 describe('frame content', () => {

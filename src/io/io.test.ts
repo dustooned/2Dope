@@ -310,6 +310,20 @@ describe('project schema', () => {
     expect(compFile({ ...compsFromFile(back).get('c1')!, layers: [model] }).layers[0]!.parts).toBeUndefined();
   });
 
+  it('keeps a part gradient with its tint, and drops a bad one or one without a tint', () => {
+    const p = sample();
+    const l = p.comps.c1!.layers[0]!;
+    l.parts = { fill: { tint: '#ff0000', grad: { kind: 'linear', color2: '#0000ff', angle: 450 } }, line: { grad: { kind: 'radial', color2: '#00ff00', angle: 0 } } };
+    const back = parseProjectFile(stringifyProjectFile(p));
+    expect(back.comps.c1!.layers[0]!.parts?.fill?.grad).toEqual({ kind: 'linear', color2: '#0000ff', angle: 90 });
+    expect(back.comps.c1!.layers[0]!.parts?.line?.grad).toBeUndefined();
+    const model = compsFromFile(back).get('c1')!.layers[0]!;
+    expect(model.kind === 'drawings' && model.parts?.fill?.grad?.kind).toBe('linear');
+    expect(compFile(compsFromFile(back).get('c1')!).layers[0]!.parts?.fill?.grad).toEqual({ kind: 'linear', color2: '#0000ff', angle: 90 });
+    (l.parts.fill!.grad as unknown as { kind: string }).kind = 'spiral';
+    expect(parseProjectFile(stringifyProjectFile(p)).comps.c1!.layers[0]!.parts?.fill?.grad).toBeUndefined();
+  });
+
   it('reads the early schema-2 "loop" flag as the loop play mode and keeps play, speed and remap', () => {
     const p = sample();
     const l = p.comps.c1!.layers[0]!;

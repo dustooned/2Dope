@@ -21,7 +21,7 @@ import {
   type Layer,
   type Mat,
 } from './core/comp';
-import { defaultPart, localMatrix, nestedFrame, partOf, type PartName } from './core/comp';
+import { defaultPart, localMatrix, nestedFrame, partOf, type PartGrad, type PartName } from './core/comp';
 import { rippleExposures, shiftLater } from './core/ripple';
 import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
 import { totalFrames } from './core/timeline';
@@ -765,8 +765,8 @@ export class CompEditor {
   }
 
   /** Show / hide or recolour one part (Line or Fill) of a drawings layer. One undo step. */
-  setPart(id: string, part: PartName, patch: { visible?: boolean; tint?: string | null }): void {
-    const what = patch.visible !== undefined ? `${patch.visible ? 'Show' : 'Hide'} ${part}s` : patch.tint ? `Recolour ${part}s` : `Original ${part} colours`;
+  setPart(id: string, part: PartName, patch: { visible?: boolean; tint?: string | null; grad?: PartGrad | null }): void {
+    const what = patch.visible !== undefined ? `${patch.visible ? 'Show' : 'Hide'} ${part}s` : patch.grad !== undefined ? (patch.grad ? `${part === 'line' ? 'Line' : 'Fill'} gradient` : `Flat ${part} colour`) : patch.tint ? `Recolour ${part}s` : `Original ${part} colours`;
     this.edit(what, (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (l?.kind === 'drawings') l.parts = { ...l.parts, [part]: { ...partOf(l, part), ...patch } };

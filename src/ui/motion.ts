@@ -3,6 +3,8 @@ import { autoIcon, setLabel } from './icons';
 import { easingOf, EASINGS, isAnimated, spacingTicks, type Easing, type Prop, type Vec2 } from '../core/anim';
 import { compLength, layerEnd, PART_NAMES, partOf, playsOn, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
+import { newEffect } from '../core/effects';
+import { newSeed } from '../core/rng';
 import { isPartProp, isPin, keyId, PROP_LABEL, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
 import { attachContextMenu, type CtxItem } from './contextmenu';
@@ -527,6 +529,18 @@ export class MotionPanel {
     });
     tint.addEventListener('change', () => ed.setPart(l.id, part, { tint: tint.value }));
     left.append(chev, eye, name, tint);
+    // recolour style, like the Fill tool: one colour, or a gradient (linear / radial) to a second
+    const style = p.grad?.kind ?? 'flat';
+    const next = { flat: 'linear', linear: 'radial', radial: 'flat' } as const;
+    const glyph = { flat: '\u25ac', linear: '\u25e2', radial: '\u25ce' }[style];
+    const styleBtn = el('button', { type: 'button', class: `pgrad${p.grad ? ' on' : ''}`, title: `${label} colour: ${style === 'flat' ? 'one colour' : `${style} gradient`}. Tap for ${next[style] === 'flat' ? 'one colour' : `a ${next[style]} gradient`} (hold or right-click for more)`, 'aria-label': `${label} colour style` }, glyph);
+    styleBtn.addEventListener('click', () => this.setPartStyle(l, part, next[style]));
+    left.append(styleBtn);
+    if (p.grad) {
+      const c2 = el('input', { type: 'color', class: 'ptint on', value: p.grad.color2, title: `The colour the ${label.toLowerCase()} gradient goes to`, 'aria-label': `${label} second colour` });
+      c2.addEventListener('change', () => ed.setPart(l.id, part, { grad: { ...p.grad!, color2: c2.value } }));
+      left.append(c2);
+    }
     if (p.tint) left.append(el('button', { type: 'button', class: 'pstar', 'data-act': 'parttintclear', title: 'Back to the drawing’s own colours' }, '✕'));
     const right = el('div', { class: 'mright' });
     right.style.width = `${end * this.cell}px`;
@@ -900,7 +914,12 @@ export class MotionPanel {
       return [
         { title: `${name} of ${l.name}` },
         { label: p.visible ? `Hide ${name.toLowerCase()}` : `Show ${name.toLowerCase()}`, run: () => ed.setPart(l.id, part, { visible: !p.visible }) },
-        ...(p.tint ? [{ label: 'Original colours', run: () => ed.setPart(l.id, part, { tint: null }) }] : []),
+        ...(p.tint ? [{ label: 'Original colours', run: () => ed.setPart(l.id, part, { tint: null, grad: null }) }] : []),
+        { title: 'Colour' },
+        { chips: (['flat', 'linear', 'radial'] as const).map((k) => ({ label: k === 'flat' ? '\u25ac One colour' : k === 'linear' ? '\u25e2 Linear' : '\u25ce Radial', on: (p.grad?.kind ?? (p.tint ? 'flat' : '')) === k, run: () => this.setPartStyle(l, part, k) })) },
+        ...(p.grad?.kind === 'linear' ? [{ title: 'Direction' }, { chips: [[0, '\u2192'], [45, '\u2198'], [90, '\u2193'], [135, '\u2199'], [180, '\u2190'], [225, '\u2196'], [270, '\u2191'], [315, '\u2197']].map(([deg, g]) => ({ label: String(g), title: `${deg}\u00b0`, on: p.grad!.angle === deg, run: () => ed.setPart(l.id, part, { grad: { ...p.grad!, angle: Number(deg) } }) })) }] : []),
+        { sep: true },
+        { label: `\u2728 Add a texture to the ${name.toLowerCase()}\u2026`, run: () => this.addPartTexture(l, part) },
         { label: `Reset ${name.toLowerCase()} settings`, run: () => ed.resetPart(l.id, part), danger: true },
       ];
     }
@@ -915,6 +934,29 @@ export class MotionPanel {
     }
     if (!ed.selected.includes(l.id)) ed.select(l.id);
     return this.layerItems(l);
+  }
+
+  /** One colour, or a gradient from the recolour to a second colour (a recolour is made if needed). */
+  private setPartStyle(l: DrawingsLayer, part: PartName, k: 'flat' | 'linear' | 'radial'): void {
+    const ed = this.ed;
+    const p = partOf(l, part);
+    if (k === 'flat') { ed.setPart(l.id, part, { grad: null }); return; }
+    const tint = p.tint ?? (part === 'line' ? '#222222' : '#ff5a8a');
+    const grad = { kind: k, color2: p.grad?.color2 ?? (part === 'line' ? '#5a7dff' : '#5ad1ff'), angle: p.grad?.angle ?? 90 };
+    if (!p.tint) ed.setPart(l.id, part, { tint });
+    ed.setPart(l.id, part, { grad });
+  }
+
+  /** A Texture effect aimed at this part, then the Effects card to tune it. */
+  private addPartTexture(l: DrawingsLayer, part: PartName): void {
+    const fx = newEffect('texture', `fx${Date.now().toString(36)}`, newSeed());
+    fx.target = part;
+    this.ed.edit(`Texture on ${part}`, (c) => {
+      const x = c.layers.find((y) => y.id === l.id);
+      if (x && x.kind === 'drawings') x.effects = [...(x.effects ?? []), fx];
+    });
+    this.app.requestRender();
+    this.app.openEffects?.(l.id);
   }
 
   /** Split the selected layers at the playhead; says so when nothing spans it. */
