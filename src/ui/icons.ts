@@ -81,7 +81,8 @@ export function decorate(b: HTMLElement, name = b.dataset.icon ?? ''): void {
   if (!label) {
     label = document.createElement('span');
     label.className = 'lbl';
-    label.textContent = b.textContent?.trim() ?? '';
+    // a plus icon already says "+": "+ Null" reads Null next to it, not "+ + Null"
+    label.textContent = (b.textContent?.trim() ?? '').replace(name === 'plus' ? /^\+\s*/ : /^$/, '');
     b.textContent = '';
     b.append(label);
   }

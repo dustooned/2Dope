@@ -3158,7 +3158,12 @@ export class App {
   }
 
   fit(): void {
-    this.view.fit(this.docW, this.docH, this.viewW, this.viewH);
+    // the simple screen's bubble rows float over the top of the stage: fit the page below them
+    const bubbles = !document.body.classList.contains('ui-full');
+    // Flip's drawing row floats over the bottom
+    const flip = document.body.classList.contains('flipmode');
+    const clear = parseFloat(this.stage.style.getPropertyValue('--top-clear')) || 64;
+    this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, bubbles ? clear - 16 : 0, flip ? 76 : 0);
     this.fitSig = this.viewSig();
     this.requestRender();
   }

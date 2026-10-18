@@ -55,11 +55,12 @@ export class Viewport {
     this.y += dy;
   }
 
-  fit(docW: number, docH: number, viewW: number, viewH: number, margin = 40): void {
+  /** Fit the page in the view; `top` is kept clear (floating bars over the top of the canvas). */
+  fit(docW: number, docH: number, viewW: number, viewH: number, margin = 40, top = 0, bottom = 0): void {
     this.rot = 0;
-    const z = Math.min((viewW - margin * 2) / docW, (viewH - margin * 2) / docH);
+    const z = Math.min((viewW - margin * 2) / docW, (viewH - margin * 2 - top - bottom) / docH);
     this.zoom = Math.min(Viewport.MAX_ZOOM, Math.max(Viewport.MIN_ZOOM, z));
-    this.center(docW, docH, viewW, viewH);
+    this.anchor(new DOMPoint(docW / 2, docH / 2), viewW / 2, top + (viewH - top - bottom) / 2);
   }
 
   actualSize(docW: number, docH: number, viewW: number, viewH: number): void {

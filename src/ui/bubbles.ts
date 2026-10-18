@@ -55,7 +55,10 @@ export class Bubbles {
   /** Point editing's on/off settings, folded behind one chip. */
   private pointSettings = false;
 
-  constructor(private readonly app: App, stage: HTMLElement, private readonly hooks: BubbleHooks) {
+  /** How far down the bubble rows reach (px from the stage top); the canvas fits below it. */
+  private topClear = -1;
+
+  constructor(private readonly app: App, private readonly stage: HTMLElement, private readonly hooks: BubbleHooks) {
     // the order of a shot: plan it (Story), sketch it (Flip), draw it, time it, move it
     const modes: [Workspace | 'flip', string, string, string][] = [
       ['board', 'Story', 'board', 'Story: panels, captions and the animatic'],
@@ -86,12 +89,35 @@ export class Bubbles {
     this.modes.append(this.modeName);
     this.levelBtn.addEventListener('click', () => this.setLevel(LEVELS[(LEVELS.indexOf(this.level) + 1) % LEVELS.length]!));
     stage.append(this.modes, this.tools, this.ctx);
-    document.body.append(this.levelBtn);
+    // inside the stage, so it never sits on a side panel
+    stage.append(this.levelBtn);
     try {
       const v = localStorage.getItem(LEVEL_KEY);
       if (v === 'clean' || v === 'simple' || v === 'full') this.level = v;
     } catch { /* default */ }
     this.setLevel(this.level, false);
+    window.addEventListener('resize', () => setTimeout(() => this.measure(), 0));
+  }
+
+  /**
+   * Measure the bubble rows (they wrap on narrow screens) and publish it to the stage as CSS
+   * variables: --tools-bottom (where the context row goes on a phone), --top-clear (what the
+   * canvas, layer label and sidebar keep clear of) and --side-top (the sidebar's top edge).
+   */
+  private measure(): void {
+    const s = this.stage.getBoundingClientRect();
+    const bottomOf = (e: HTMLElement) => (e.offsetParent && !e.hidden ? e.getBoundingClientRect().bottom - s.top : 0);
+    const tools = Math.max(bottomOf(this.modes), bottomOf(this.tools));
+    if (!tools) return;
+    const narrow = window.innerWidth <= 700;
+    // on a phone the context row sits under the tools, and the layer label under that
+    const clear = Math.round(tools + (narrow ? 58 : 8));
+    this.stage.style.setProperty('--tools-bottom', `${Math.round(tools + 6)}px`);
+    this.stage.style.setProperty('--side-top', `${clear + (narrow ? 40 : 0)}px`);
+    if (clear === this.topClear) return;
+    this.topClear = clear;
+    this.stage.style.setProperty('--top-clear', `${clear}px`);
+    this.hooks.fit();
   }
 
   setLevel(l: UiLevel, remember = true): void {
@@ -344,7 +370,8 @@ export class Bubbles {
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
     const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
-    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry].join('|');
+    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size].join('|');
+    setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
     this.modeName.textContent = flip ? 'Flip' : { draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
@@ -441,11 +468,13 @@ export class Bubbles {
       add(this.chip('Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later', 'Move the selected panels later', false, () => a.moveSelection(1)));
       add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));
     } else if (ws === 'motion') {
-      // easing for the keys you selected, and how new keys start
-      for (const e of EASINGS) add(this.chip(e.label, `Easing of the selected keys: ${e.label}`, false, () => a.editor.setEasing(e.id)));
+      // easing, reverse and delete only when keys are selected; otherwise just how new keys start
+      if (a.editor.keys.size) {
+        for (const e of EASINGS) add(this.chip(e.label, `Easing of the selected keys: ${e.label}`, false, () => a.editor.setEasing(e.id)));
+        add(this.chip('Reverse', 'Play the selected keys backwards', false, () => a.editor.reverse()));
+        add(this.chip('Delete key', 'Delete the selected keys', false, () => a.editor.deleteKeys(), 'trash'));
+      }
       add(this.chip('Key at start', 'The first key also keeps the old value at frame 0, so motion begins at once', a.editor.keyAtStart, () => { a.editor.keyAtStart = !a.editor.keyAtStart; a.editor.onChange(); }));
-      add(this.chip('Reverse', 'Play the selected keys backwards', false, () => a.editor.reverse()));
-      add(this.chip('Delete key', 'Delete the selected keys', false, () => a.editor.deleteKeys(), 'trash'));
     } else if (ws === 'time') {
       add(
         this.chip('New page', 'A fresh blank page after the last drawing', a.blankPage, () => a.flipToBlank()),

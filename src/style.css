@@ -3242,7 +3242,8 @@ dialog.manual[open] {
   font-weight: 600;
   width: 34%;
 }
-.has-news {
+/* the dot needs a positioned parent; the floating menu button is already fixed */
+.has-news:not(.dock) {
   position: relative;
 }
 .has-news::after {
@@ -4052,7 +4053,7 @@ body.quick .focusbar, body.ui-hidden .focusbar { display: none; }
 .tracks-handle button { min-width: 44px; min-height: 40px; }
 .tracks-handle .spacer { flex: 1; }
 .tracks-time { cursor: pointer; font-variant-numeric: tabular-nums; }
-.tracks-size::after { content: 'B4'; margin-left: 6px; display: inline-block; transition: transform .15s; }
+.tracks-size::after { content: '\25B4'; margin-left: 6px; display: inline-block; transition: transform .15s; }
 .tracks-size[data-state="full"]::after { transform: rotate(180deg); }
 body.sheet-ws #splitter { display: none; }
 body.sheet-peek:not(.quick) #strip, body.sheet-peek:not(.quick) .audio-tracks { display: none !important; }
@@ -4107,7 +4108,7 @@ body.ws-motion .audio-tracks { display: none !important; }
 .bub-chip { min-height: 40px; padding: 0 14px; border-radius: 20px; white-space: nowrap; }
 .bub-chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .bub-hint { font-size: 13px; color: var(--muted); padding: 0 8px; align-self: center; }
-.bub-level { position: fixed; z-index: 60; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); width: 40px; height: 40px; min-height: 40px; border-radius: 12px; background: var(--panel-2); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); font-size: 20px; }
+.bub-level { position: absolute; z-index: 60; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); width: 40px; height: 40px; min-height: 40px; border-radius: 12px; background: var(--panel-2); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); font-size: 20px; }
 /* levels: full = the classic layout; simple = bubbles instead of the bars; clean = canvas and modes only */
 body.ui-full .bub-modes, body.ui-full .bub-tools, body.ui-full .bub-ctx { display: none !important; }
 body.ui-simple:not(.quick) .topbar, body.ui-clean:not(.quick) .topbar, body.ui-simple .focusbar, body.ui-clean .focusbar { display: none !important; }
@@ -4117,10 +4118,10 @@ body.quick .bub-modes, body.quick .bub-tools, body.quick .bub-ctx, body.ui-hidde
 @media (max-width: 700px) {
   .bub-name { display: none; }
   .bub-tools { top: 62px; right: 8px; left: auto; max-width: calc(100% - 16px); flex-wrap: wrap; }
-  .bub-ctx { top: 116px; right: 8px; max-width: calc(100% - 16px); }
+  .bub-ctx { top: var(--tools-bottom, 116px); right: 8px; max-width: calc(100% - 16px); }
 }
-body.ui-simple .paint-target, body.ui-clean .paint-target { top: 118px; left: 56px; transform: none; max-width: calc(50% - 60px); }
-@media (max-width: 700px) { body.ui-simple .paint-target, body.ui-clean .paint-target { top: 176px; left: 8px; max-width: calc(100% - 16px); } }
+body.ui-simple .paint-target, body.ui-clean .paint-target { top: calc(var(--top-clear, 110px) + 4px); left: 70px; transform: none; max-width: calc(50% - 60px); }
+@media (max-width: 700px) { body.ui-simple .paint-target, body.ui-clean .paint-target { left: 8px; max-width: calc(100% - 16px); } }
 
 /* Flip: beginner mode. Drawing bubbles at the bottom of the canvas; no timeline. */
 .flip-row { position: absolute; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); padding: 6px; border-radius: 22px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); }
@@ -4213,3 +4214,6 @@ body.eyedropping #canvas { cursor: crosshair; }
 body.ui-simple .motion [data-dup], body.ui-clean .motion [data-dup] { display: none !important; }
 .mmore { min-height: 32px; display: flex; align-items: center; padding-left: 8px; }
 .mmore-btn { color: var(--muted); font-size: 12px; min-height: 30px; }
+
+/* simple screen: the canvas sidebar sits below the bubble row (the menu button is above it) */
+body:not(.ui-full) .sidebar { top: var(--side-top, 72px); transform: none; max-height: calc(100% - var(--side-top, 72px) - 10px); }

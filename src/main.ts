@@ -383,7 +383,10 @@ for (const part of ['tools', 'timeline'] as const) {
   });
 }
 syncFocus();
+// set once the layer cards exist (applyWorkspace also runs at start-up, before them)
+let closePopovers = (): void => {};
 const applyWorkspace = () => {
+  closePopovers();
   const w = app.workspace;
   document.body.classList.remove('ws-board', 'ws-draw', 'ws-time', 'ws-motion');
   document.body.classList.add(`ws-${w}`);
@@ -581,6 +584,7 @@ const flipMode = new FlipMode(app, $('#stage'), () => {
 });
 // Bubbles: mode and tool bubbles plus a context bar; the level button steps clean / simple / full.
 const layerCards = new LayerCards(app);
+closePopovers = () => layerCards.close();
 const bubbles = new Bubbles(app, $('#stage'), {
   layerCards: (anchor) => layerCards.toggle(anchor),
   story: {
@@ -601,7 +605,12 @@ app.onToolChange = chain(app.onToolChange, () => bubbles.update());
 app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
-flipMode.onChange = () => { bubbles.update(); setTimeout(() => app.refit(), 60); };
+flipMode.onChange = () => { layerCards.close(); bubbles.update(); setTimeout(() => app.refit(), 60); };
+// key selection in Motion changes what the context bar offers
+{
+  const edChange = app.editor.onChange;
+  app.editor.onChange = () => { edChange(); bubbles.update(); };
+}
 app.onColorChange = chain(app.onColorChange, () => bubbles.update());
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => { if (app.workspace !== 'draw' && flipMode.on) flipMode.set(false); bubbles.update(); flipMode.update(); });
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
