@@ -1,10 +1,14 @@
 import type { App } from '../app';
+import type { DrawingsLayer } from '../core/comp';
+import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick, type CtxItem } from './contextmenu';
+import { frameMenu } from './framemenu';
 import { decorate } from './icons';
 
 const KEY = '2dope.flip.on';
-const NUDGED = '2dope.flip.nudged';
-/** After this many drawings, invite the student to time them on the timeline. */
-const NUDGE_AT = 6;
+/** One frame of time on the strip, and one track row (Procreate Dreams shows three at a time). */
+const CELL = 44;
+const ROW = 50;
+const LABEL = 46;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -14,30 +18,58 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 };
 
 /**
- * Flip: the first step for new animators. A big canvas, brush / eraser / colour, and a row of
- * little drawing bubbles at the bottom: one per drawing, in order, with a + for a fresh page. No
- * holds, ruler or tracks: just draw the next frame. Play loops it. After a few drawings a nudge
- * offers the timeline (Animate) for timing. View only: it edits nothing the other modes do not.
+ * Flip: a flipbook in the style of Procreate Dreams. The canvas is big; at the bottom a strip shows
+ * every frame of time for up to three tracks (the shot's drawing layers, front first), with held
+ * drawings spanning their frames. Swipe the strip to move through time, tap a frame to go there,
+ * tap it again (or press and hold) for its options, and drag the handle on the current frame to
+ * make it hold longer. + Frame adds a page after this frame (on a held drawing it ends the hold
+ * here; hold the button to add after the whole hold). Everything edits the same layers and timing
+ * that Draw, Timing and Motion show.
  */
 export class FlipMode {
-  readonly row = el('div', { class: 'flip-row', role: 'toolbar', 'aria-label': 'Drawings' });
-  private readonly nudge = el('div', { class: 'flip-nudge', role: 'status', hidden: '' });
+  readonly row = el('div', { class: 'flip-row', role: 'region', 'aria-label': 'Flipbook' });
   on = false;
   private sig = '';
   onChange: () => void = () => {};
-  // Play, the list and Fit stay the same elements while playing (only the list's bubbles are
-  // rebuilt, and only when the drawings change), so a tap on Pause is never lost to a rebuild.
-  private readonly play = el('button', { type: 'button', class: 'flip-btn' }, 'Play');
-  private readonly list = el('div', { class: 'flip-list' });
-  private readonly fit = el('button', { type: 'button', class: 'flip-btn flip-fit', title: 'Fit the page to the screen', 'aria-label': 'Fit to screen' }, '\u2922');
+  // the header's buttons stay the same elements while playing, so a tap on Pause is never lost
+  private readonly head = el('div', { class: 'flip-head', role: 'toolbar', 'aria-label': 'Flipbook controls' });
+  private readonly play = el('button', { type: 'button', class: 'flip-btn' });
+  private readonly count = el('span', { class: 'flip-count', 'aria-live': 'off' });
+  private readonly scroll = el('div', { class: 'flip-scroll' });
+  private readonly grid = el('div', { class: 'flip-grid' });
+  private readonly playhead = el('div', { class: 'flip-playhead', 'aria-hidden': 'true' });
   private playing: boolean | null = null;
-  private nudgeCount = -1;
+  /** Set while a swipe or trim is under way: the strip does not scroll itself then. */
+  private dragging = false;
+  private dragged = false;
 
   constructor(private readonly app: App, stage: HTMLElement, private readonly openTimeline: () => void) {
+    const btn = (label: string, title: string, icon: string, run: () => void, hold?: () => void, cls = 'flip-btn', show = label) => {
+      const b = el('button', { type: 'button', class: cls, title, 'aria-label': label }, show);
+      decorate(b, icon);
+      let timer = 0, held = false;
+      if (hold) {
+        b.addEventListener('pointerdown', () => { held = false; clearTimeout(timer); timer = window.setTimeout(() => { held = true; hold(); }, HOLD_MS); });
+        for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => clearTimeout(timer));
+      }
+      b.addEventListener('click', () => { if (held) { held = false; return; } run(); });
+      return b;
+    };
+    const done = btn('Done', 'Back to Draw (the timeline shows what you made)', 'check', () => this.set(false), undefined, 'flip-btn flip-done');
     this.play.addEventListener('click', () => this.app.togglePlay());
-    this.fit.addEventListener('click', () => this.app.fit());
-    this.row.append(this.play, this.list, this.fit);
-    stage.append(this.row, this.nudge);
+    const prev = btn('Previous drawing', 'Previous drawing (hold: the first frame)', 'prev', () => this.app.prevDrawing(), () => this.app.setLayerFrame(0), 'flip-btn flip-icon', '');
+    const next = btn('Next drawing', 'Next drawing (hold: the last frame)', 'next', () => this.app.nextDrawing(), () => this.app.setLayerFrame(this.app.project.length - 1), 'flip-btn flip-icon', '');
+    const add = btn('Frame', 'Add a frame after this one. On a held drawing the hold ends here; hold the button to add after the whole hold.', 'plus', () => this.app.flipAddFrame(false), () => this.app.flipAddFrame(true), 'flip-btn flip-add');
+    const track = btn('Track', 'Add a track: a new drawing layer above this one, with its own frames', 'layers', () => this.app.addDrawLayer());
+    const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
+    onion.classList.add('flip-onion');
+    const fit = btn('Fit', 'Fit the page to the screen', 'fit', () => this.app.fit(), undefined, 'flip-btn flip-icon', '');
+    this.head.append(done, this.play, prev, this.count, next, add, track, onion, fit);
+    this.grid.append(this.playhead);
+    this.scroll.append(this.grid);
+    this.row.append(this.head, this.scroll);
+    stage.append(this.row);
+    this.wireStrip();
     try { this.on = localStorage.getItem(KEY) === '1'; } catch { /* default */ }
     this.apply();
   }
@@ -55,103 +87,263 @@ export class FlipMode {
     this.onChange();
   }
 
+  /** The timeline for timing (kept for the menu's "Open the timeline"). */
+  timeline(): void {
+    this.set(false);
+    this.openTimeline();
+  }
+
   private apply(): void {
     document.body.classList.toggle('flipmode', this.on);
     this.sig = '';
     this.update();
   }
 
+  /** The tracks: the shot's drawing layers (not guides), front first. */
+  private tracks(): DrawingsLayer[] {
+    return this.app.drawLayers().filter((l) => !l.guide);
+  }
+
   update(): void {
     const app = this.app;
     const active = this.on && app.workspace === 'draw' && !app.uiHidden;
     this.row.hidden = !active;
-    if (!active) { this.nudge.hidden = true; return; }
-    const p = app.project;
-    const ex = p.exposures;
-    let at = 0, cur = -1;
-    const lf = app.lf;
-    for (let i = 0; i < ex.length; i++) { if (lf >= at && lf < at + ex[i]!.length) cur = i; at += ex[i]!.length; }
-    if (app.blankPage) cur = -1;
-    // every linked art layer of these cels, drawn back to front into each bubble
-    const stack = [...app.celLayers].reverse();
-    if (!stack.length) stack.push(p.layer as never);
+    if (!active) return;
     if (this.playing !== app.playing) {
       this.playing = app.playing;
       this.play.textContent = app.playing ? 'Pause' : 'Play';
       decorate(this.play, app.playing ? 'pause' : 'play');
-      this.play.title = app.playing ? 'Pause' : 'Play your drawings';
+      this.play.title = app.playing ? 'Pause' : 'Play your drawings (loops)';
       this.play.setAttribute('aria-label', this.play.title);
       this.play.setAttribute('aria-pressed', String(app.playing));
     }
-    // the current bubble moves every frame while playing: only its highlight changes
-    const mark = () => {
-      const cels = this.list.querySelectorAll<HTMLElement>('.flip-cel');
-      cels.forEach((b, i) => {
-        const on = i === cels.length - 1 ? app.blankPage : i === cur;
-        b.classList.toggle('on', on);
-        b.setAttribute('aria-pressed', String(on));
-      });
-      if (!app.playing) (this.list.querySelector('.on') as HTMLElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    };
-    const sig = `${p.layer.id}|` + stack.map((l) => l.exposures.map((e) => `${e.drawing}:${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
-    if (sig === this.sig) {
-      mark();
-      this.nudgeCheck(ex.length);
-      return;
+    this.head.querySelector('.flip-onion')?.setAttribute('aria-pressed', String(app.onion.enabled));
+    const p = app.project;
+    const tracks = this.tracks();
+    const len = Math.max(1, app.compEnd);
+    const sig = `${len}|${p.activeLayer}|` + tracks.map((l) => `${l.id}:${l.visible}:${l.start}:${l.name}:` + l.exposures.map((e) => `${e.drawing}.${e.length}.${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
+    // mid-drag the strip is not rebuilt: that would pull the handle out from under the finger
+    if (sig !== this.sig && !this.dragging) {
+      this.sig = sig;
+      this.build(tracks, len);
     }
-    this.sig = sig;
-
-    const list = this.list;
-    list.replaceChildren();
-    let start = 0;
-    ex.forEach((e, i) => {
-      const b = el('button', { type: 'button', class: 'flip-cel', title: `Drawing ${i + 1}`, 'aria-label': `Drawing ${i + 1}` });
-      const c = el('canvas', { width: '96', height: '72' });
-      const g = c.getContext('2d');
-      if (g) {
-        g.fillStyle = '#fff'; g.fillRect(0, 0, 96, 72);
-        for (const l of stack) {
-          const le = l.exposures[i];
-          const t = le ? p.drawing(le.drawing).thumb : null;
-          if (!t) continue;
-          const s = Math.min(96 / t.width, 72 / t.height);
-          g.drawImage(t, (96 - t.width * s) / 2, (72 - t.height * s) / 2, t.width * s, t.height * s);
-        }
-      }
-      b.append(c, el('span', { class: 'flip-num' }, String(i + 1)));
-      const f = start;
-      b.addEventListener('click', () => { if (app.playing) app.togglePlay(); app.setLayerFrame(f); });
-      list.append(b);
-      start += e.length;
-    });
-    const add = el('button', { type: 'button', class: 'flip-cel flip-add', title: 'A fresh page for the next drawing', 'aria-label': 'New page' }, '+');
-    add.addEventListener('click', () => app.flipToBlank());
-    list.append(add);
-    setTimeout(mark, 0);
-    this.nudgeCheck(ex.length);
+    this.mark(len);
   }
 
-  private nudgeCheck(count: number): void {
+  /** The strip: one row per track, each drawing a cell as wide as it is held. */
+  private build(tracks: DrawingsLayer[], len: number): void {
     const app = this.app;
-    const ex = { length: count };
-    let nudged = false;
-    try { nudged = localStorage.getItem(NUDGED) === '1'; } catch { /* show */ }
-    if (!nudged && ex.length >= NUDGE_AT && !app.playing) {
-      // rebuild only when the count changes, so its buttons are never swapped under a tap
-      if (!this.nudge.hidden && this.nudgeCount === count) return;
-      this.nudgeCount = count;
-      this.nudge.replaceChildren(el('span', {}, `${ex.length} drawings! Ready to time them?`));
-      const go = el('button', { type: 'button', class: 'bub-chip on' }, 'Open the timeline');
-      go.addEventListener('click', () => { this.dismiss(); this.set(false); this.openTimeline(); });
-      const x = el('button', { type: 'button', class: 'bub-chip', 'aria-label': 'Not now' }, 'Not now');
-      x.addEventListener('click', () => this.dismiss());
-      this.nudge.append(go, x);
-      this.nudge.hidden = false;
-    } else this.nudge.hidden = true;
+    const p = app.project;
+    this.grid.replaceChildren(this.playhead);
+    this.grid.style.width = `${LABEL + len * CELL + CELL}px`;
+    // a ruler: frame numbers every frame, seconds stand out
+    const ruler = el('div', { class: 'flip-ruler', 'aria-hidden': 'true' });
+    const fps = app.project.fps || 24;
+    for (let f = 0; f < len; f++) {
+      const t = el('span', { class: f % fps === 0 ? 'sec' : '' }, String(f + 1));
+      t.style.left = `${LABEL + f * CELL}px`;
+      ruler.append(t);
+    }
+    this.grid.append(ruler);
+    for (const l of tracks) {
+      const row = el('div', { class: `flip-track${l.id === p.activeLayer ? ' active' : ''}${l.visible ? '' : ' off'}`, 'data-id': l.id });
+      const eye = el('button', { type: 'button', class: 'flip-eye', 'aria-pressed': String(l.visible), title: `${l.name}: tap to ${l.visible ? 'hide' : 'show'}, hold for track options`, 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}` });
+      eye.append(el('span', { class: 'flip-check', 'aria-hidden': 'true' }, l.visible ? '✓' : ''), el('span', { class: 'flip-name' }, l.name));
+      eye.addEventListener('click', () => app.editor.setFlag(l.id, 'visible', !l.visible));
+      attachContextMenu(eye, () => this.trackMenu(l, eye));
+      const cells = el('div', { class: 'flip-cells' });
+      let start = l.start;
+      l.exposures.forEach((e, i) => {
+        const c = el('div', { class: 'flip-cel', 'data-i': String(i), 'data-start': String(start), 'data-len': String(e.length) });
+        c.style.left = `${start * CELL}px`;
+        c.style.width = `${e.length * CELL - 3}px`;
+        const d = p.drawing(e.drawing);
+        const t = d.thumb;
+        if (t) {
+          const cv = el('canvas', { width: '80', height: '60' });
+          const g = cv.getContext('2d');
+          if (g) {
+            g.fillStyle = '#fff'; g.fillRect(0, 0, 80, 60);
+            const s = Math.min(80 / t.width, 60 / t.height);
+            g.drawImage(t, (80 - t.width * s) / 2, (60 - t.height * s) / 2, t.width * s, t.height * s);
+          }
+          c.append(cv);
+        } else c.classList.add('empty');
+        if (e.length > 1) c.append(el('span', { class: 'flip-hold' }, `×${e.length}`));
+        if (d.role === 'key') c.append(el('span', { class: 'flip-role', title: 'Key drawing' }, '🔑'));
+        cells.append(c);
+        start += e.length;
+      });
+      row.append(eye, cells);
+      this.grid.append(row);
+    }
+    // the strip shows three tracks at a time (the rest scroll)
+    this.scroll.style.maxHeight = `${22 + Math.min(3, Math.max(1, tracks.length)) * ROW + 2}px`;
+    // the page fits above the panel
+    requestAnimationFrame(() => {
+      const h = this.row.offsetHeight;
+      const stage = this.row.parentElement;
+      if (stage && h) stage.style.setProperty('--flip-h', `${h + 16}px`);
+      this.app.refit();
+    });
   }
 
-  private dismiss(): void {
-    try { localStorage.setItem(NUDGED, '1'); } catch { /* fine */ }
-    this.nudge.hidden = true;
+  /** Per frame: the playhead, the current cells and the counter (no rebuild while playing). */
+  private mark(len: number): void {
+    const app = this.app;
+    const f = app.frame;
+    this.count.textContent = `${Math.min(f + 1, len)} / ${len}`;
+    this.playhead.style.left = `${LABEL + f * CELL}px`;
+    const activeId = app.project.activeLayer;
+    for (const row of this.grid.querySelectorAll<HTMLElement>('.flip-track')) {
+      const mine = row.dataset.id === activeId;
+      for (const c of row.querySelectorAll<HTMLElement>('.flip-cel')) {
+        const s = Number(c.dataset.start), n = Number(c.dataset.len);
+        const here = f >= s && f < s + n;
+        c.classList.toggle('on', here && mine && !app.blankPage);
+        c.classList.toggle('here', here && !mine);
+        const trim = c.querySelector('.flip-trim');
+        if (here && mine && !app.playing) { if (!trim) c.append(this.trimHandle(c)); }
+        else trim?.remove();
+      }
+    }
+    if (!this.dragging) {
+      // keep the playhead in view (centred while playing, nearest otherwise)
+      const x = LABEL + f * CELL, w = this.scroll.clientWidth;
+      const left = this.scroll.scrollLeft;
+      if (app.playing || x < left + LABEL + CELL || x > left + w - CELL * 2) this.scroll.scrollLeft = Math.max(0, x - w / 2);
+    }
+  }
+
+  /** The frame under a point of the strip, and its track. */
+  private hit(x: number, y: number): { layer: DrawingsLayer; frame: number } | null {
+    const rowEl = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>('.flip-track');
+    const layer = rowEl ? this.tracks().find((l) => l.id === rowEl.dataset.id) : undefined;
+    if (!rowEl || !layer) return null;
+    const r = this.grid.getBoundingClientRect();
+    const frame = Math.max(0, Math.min(this.app.compEnd - 1, Math.floor((x - r.left - LABEL) / CELL)));
+    return { layer, frame };
+  }
+
+  /** Go to a frame of a track (drawing on that track from now on). */
+  private go(layer: DrawingsLayer, frame: number): void {
+    const app = this.app;
+    if (app.playing) app.togglePlay();
+    if (layer.id !== app.project.activeLayer) app.pickLayer(layer.id);
+    app.setFrame(frame);
+  }
+
+  private wireStrip(): void {
+    const s = this.scroll;
+    let start: { x: number; y: number; id: number; frame: number; mode: '' | 'scrub' | 'scroll' } | null = null;
+    s.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('.flip-eye, .flip-trim') || !e.isPrimary || e.button > 0) return;
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId, frame: this.app.frame, mode: '' };
+      this.dragged = false;
+    });
+    s.addEventListener('pointermove', (e) => {
+      if (!start || e.pointerId !== start.id) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!start.mode) {
+        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+          start.mode = 'scrub';
+          this.dragging = this.dragged = true;
+          s.setPointerCapture(e.pointerId);
+          this.app.beginScrub();
+        } else if (Math.abs(dy) > 8) start.mode = 'scroll';
+      }
+      if (start.mode === 'scrub') {
+        // swipe left to go forward in time, right to go back (the strip moves under your finger)
+        const f = Math.max(0, Math.min(this.app.compEnd - 1, start.frame - Math.round(dx / CELL)));
+        if (f !== this.app.frame) this.app.setFrame(f);
+        const x = LABEL + f * CELL;
+        s.scrollLeft = Math.max(0, x - s.clientWidth / 2);
+      }
+    });
+    const end = (e: PointerEvent) => {
+      if (!start || e.pointerId !== start.id) return;
+      if (start.mode === 'scrub') this.app.endScrub();
+      start = null;
+      this.dragging = false;
+    };
+    s.addEventListener('pointerup', end);
+    s.addEventListener('pointercancel', end);
+    // tap: go to that frame; tap the current frame again for its options
+    s.addEventListener('click', (e) => {
+      if (this.dragged) { this.dragged = false; return; }
+      if ((e.target as HTMLElement).closest('.flip-eye, .flip-trim')) return;
+      const h = this.hit(e.clientX, e.clientY);
+      if (!h) return;
+      const app = this.app;
+      if (h.layer.id === app.project.activeLayer && h.frame === app.frame && !app.playing) {
+        showContextMenu(e.clientX, e.clientY, this.frameItems(h.layer));
+        return;
+      }
+      this.go(h.layer, h.frame);
+    });
+    // press and hold (or right-click) a frame: its options
+    attachContextMenu(s, ({ x, y, target }) => {
+      if ((target as HTMLElement | null)?.closest?.('.flip-eye')) return null;
+      const h = this.hit(x, y);
+      if (!h || this.dragged) return null;
+      this.go(h.layer, h.frame);
+      return this.frameItems(h.layer);
+    });
+  }
+
+  private frameItems(layer: DrawingsLayer): CtxItem[] {
+    this.app.setSelection([]);
+    return frameMenu(this.app, [{ sep: true }, { label: `Track options (${layer.name})…`, run: () => this.app.openLayers?.(this.row) }]);
+  }
+
+  private trackMenu(l: DrawingsLayer, anchor: HTMLElement): CtxItem[] {
+    const app = this.app;
+    return [
+      { title: l.name },
+      { label: 'Draw on this track', run: () => app.pickLayer(l.id), disabled: l.id === app.project.activeLayer },
+      { label: l.visible ? 'Hide' : 'Show', run: () => app.editor.setFlag(l.id, 'visible', !l.visible) },
+      { label: 'Track options (opacity, blend, clip, mask, name)…', run: () => { app.pickLayer(l.id); app.openLayers?.(anchor); } },
+      { label: '✨ Effects…', run: () => app.openEffects?.(l.id) },
+      { label: 'Duplicate track', run: () => void app.duplicateLayer(l.id) },
+    ];
+  }
+
+  /** The handle on the current frame's right edge: drag to hold it for more or fewer frames. */
+  private trimHandle(cell: HTMLElement): HTMLElement {
+    const h = el('div', { class: 'flip-trim', title: 'Drag to show this drawing for more or fewer frames', role: 'slider', 'aria-label': 'Frame duration' });
+    h.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const app = this.app;
+      const i = Number(cell.dataset.i);
+      const before = app.project.exposures;
+      const len0 = before[i]?.length ?? 1;
+      let after = before;
+      this.dragging = this.dragged = true;
+      h.setPointerCapture(e.pointerId);
+      const x0 = e.clientX;
+      const move = (ev: PointerEvent) => {
+        const n = Math.max(1, len0 + Math.round((ev.clientX - x0) / CELL));
+        if (n === (after[i]?.length ?? len0)) return;
+        after = before.map((x, k) => (k === i ? { ...x, length: n } : x));
+        cell.style.width = `${n * CELL - 3}px`;
+        cell.dataset.len = String(n);
+        app.previewExposures(after);
+      };
+      const up = () => {
+        h.removeEventListener('pointermove', move);
+        h.removeEventListener('pointerup', up);
+        h.removeEventListener('pointercancel', up);
+        this.dragging = false;
+        swallowNextClick();
+        app.commitExposures('Frame duration', before, after);
+        this.sig = '';
+        this.update();
+      };
+      h.addEventListener('pointermove', move);
+      h.addEventListener('pointerup', up);
+      h.addEventListener('pointercancel', up);
+    });
+    return h;
   }
 }

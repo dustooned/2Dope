@@ -385,3 +385,28 @@ export function setCaption(ex: Exposure[], index: number, field: CaptionField, t
   out[index] = next;
   return out;
 }
+
+/**
+ * Flip's Add frame (Procreate Dreams style): a new one-frame drawing right after the frame you are
+ * on. On a held drawing the hold ends at this frame (the rest of it gives way to the new page);
+ * with `toEnd` the hold stays whole and the new page goes after it.
+ */
+export function addFrameHere(ex: Exposure[], frame: number, drawing: string, toEnd = false): Edit {
+  const l = locate(ex, frame);
+  if (!l) return { ex: [...ex, { drawing, length: 1 }], frame: totalFrames(ex), selection: [] };
+  const e = ex[l.index]!;
+  const keep = toEnd ? e.length : l.offset + 1;
+  const next = [...ex.slice(0, l.index), { ...e, length: keep }, { drawing, length: 1 }, ...ex.slice(l.index + 1)];
+  return { ex: next, frame: l.start + keep, selection: [] };
+}
+
+/** Fill duration: the drawing at `index` holds until the layer reaches `total` frames. */
+export function fillHold(ex: Exposure[], index: number, total: number): Edit | null {
+  const e = ex[index];
+  const extra = total - totalFrames(ex);
+  if (!e || extra <= 0) return null;
+  const next = ex.map((x, i) => (i === index ? { ...x, length: x.length + extra } : x));
+  let start = 0;
+  for (let i = 0; i < index; i++) start += ex[i]!.length;
+  return { ex: next, frame: start, selection: [] };
+}

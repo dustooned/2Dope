@@ -653,7 +653,15 @@ app.onToolChange = chain(app.onToolChange, () => bubbles.update());
 app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
-flipMode.onChange = () => { layerCards.close(); bubbles.update(); setTimeout(() => app.refit(), 60); };
+flipMode.onChange = () => { layerCards.close(); bubbles.update(); $('#flip-ws').setAttribute('aria-pressed', String(flipMode.on)); setTimeout(() => app.refit(), 60); };
+$('#flip-ws').addEventListener('click', () => flipMode.set(!flipMode.on));
+$('#flip-ws').setAttribute('aria-pressed', String(flipMode.on));
+// Motion (and anywhere else): open a drawing layer frame by frame in Flip
+app.openFlipbook = (id) => {
+  if (app.workspace !== 'draw') app.setWorkspace('draw');
+  if (id) app.pickLayer(id);
+  flipMode.set(true);
+};
 onShareChange = () => { layerCards.close(); bubbles.update(); };
 // key selection in Motion changes what the context bar offers
 {

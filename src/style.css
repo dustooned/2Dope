@@ -4155,23 +4155,9 @@ body.ui-simple .paint-target, body.ui-clean .paint-target { top: calc(var(--top-
 @media (max-width: 700px) { body.ui-simple .paint-target, body.ui-clean .paint-target { left: 8px; max-width: calc(100% - 16px); } }
 
 /* Flip: beginner mode. Drawing bubbles at the bottom of the canvas; no timeline. */
-.flip-row { position: absolute; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); padding: 6px; border-radius: 22px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); }
-.flip-row[hidden] { display: none; }
-.flip-list { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
-.flip-cel { position: relative; flex: 0 0 auto; width: 64px; height: 50px; min-height: 50px; padding: 0; border-radius: 12px; overflow: hidden; border: 2px solid transparent; background: #fff; }
-.flip-cel canvas { display: block; width: 100%; height: 100%; }
-.flip-cel.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-.flip-num { position: absolute; right: 4px; bottom: 2px; font-size: 10px; color: #333; }
-.flip-add { background: var(--panel-2); color: var(--text); font-size: 26px; line-height: 1; border: 2px dashed var(--line); }
-.flip-btn { width: 50px; height: 50px; min-height: 50px; padding: 0; border-radius: 50%; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
-.flip-btn .lbl { display: none; }
-.flip-nudge { position: absolute; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 16px; background: var(--panel); border: 1px solid var(--accent); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); }
-.flip-nudge[hidden] { display: none; }
 body.flipmode .tracks-handle, body.flipmode #strip, body.flipmode .audio-tracks, body.flipmode #splitter, body.flipmode .paint-target, body.flipmode #stats { display: none !important; }
-body.quick .flip-row, body.quick .flip-nudge, body.ui-full .flip-row, body.ui-full .flip-nudge { display: none !important; }
+body.quick .flip-row { display: none !important; }
 /* scroll containers reset touch-action: never let Safari zoom the page from inside them */
-.flip-list { touch-action: pan-x; }
-.flip-row, .flip-nudge, .bub-modes, .bub-tools, .bub-ctx { touch-action: manipulation; }
 .audio-card { touch-action: pan-y; }
 .bub-meter { position: relative; width: 44px; height: 40px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel-2); touch-action: none; cursor: ns-resize; overflow: hidden; }
 .bub-meter-fill { position: absolute; left: 6px; right: 6px; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: var(--accent); box-shadow: 0 -8px 0 var(--line), 0 8px 0 var(--line); }
@@ -4386,3 +4372,38 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 /* phone, Full level: the layer label goes under the floating options row */
 @media (max-width: 700px) { body.ui-full:not(.bar-collapsed):not(.tools-folded) .paint-target { top: calc(var(--top-clear, 56px) + 4px); left: 64px; transform: none; max-width: calc(100% - 72px); } }
 .bub-hold { white-space: nowrap; }
+/* Flip: a Procreate Dreams style flipbook docked at the bottom of the canvas */
+.flip-row { position: absolute; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 9; display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); }
+.flip-row[hidden] { display: none; }
+.flip-head { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.flip-btn { flex: 0 0 auto; min-height: 40px; height: 40px; padding: 0 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.flip-btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.flip-done { background: var(--accent); color: #fff; font-weight: 600; }
+.flip-add { border: 2px solid var(--accent); }
+.flip-count { flex: 0 0 auto; min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.flip-scroll { position: relative; overflow: auto; scrollbar-width: thin; touch-action: pan-y; border-radius: 12px; background: var(--panel-2); overscroll-behavior: contain; }
+.flip-grid { position: relative; min-width: 100%; padding-top: 20px; }
+.flip-ruler { position: absolute; left: 0; right: 0; top: 0; height: 18px; pointer-events: none; }
+.flip-ruler span { position: absolute; top: 2px; width: 44px; text-align: center; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.flip-ruler span.sec { color: var(--text); font-weight: 700; }
+.flip-track { position: relative; height: 50px; display: flex; }
+.flip-track.off .flip-cells { opacity: .4; }
+.flip-eye { position: sticky; left: 0; z-index: 2; flex: 0 0 46px; width: 46px; height: 46px; min-height: 46px; margin: 2px 0; padding: 0; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; background: var(--panel); }
+.flip-check { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--muted); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1; }
+.flip-eye[aria-pressed="true"] .flip-check { background: var(--text); color: var(--panel); border-color: var(--text); }
+.flip-track.active .flip-eye { box-shadow: inset 0 0 0 2px var(--accent); }
+.flip-name { max-width: 42px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: var(--muted); }
+.flip-cells { position: relative; flex: 1 0 auto; }
+.flip-cel { position: absolute; top: 3px; height: 44px; border-radius: 8px; overflow: hidden; background: #fff; border: 2px solid transparent; box-sizing: border-box; cursor: pointer; }
+.flip-cel canvas { display: block; height: 100%; width: auto; max-width: 56px; }
+.flip-cel.empty { background: #8a8a92; }
+.flip-cel.here { border-color: var(--muted); }
+.flip-cel.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.flip-track:not(.active) .flip-cel { opacity: .85; }
+.flip-hold { position: absolute; right: 16px; bottom: 2px; font-size: 10px; font-weight: 700; color: #333; background: rgba(255, 255, 255, .85); border-radius: 6px; padding: 0 4px; }
+.flip-role { position: absolute; left: 2px; top: 1px; font-size: 10px; }
+.flip-trim { position: absolute; right: 0; top: 0; bottom: 0; width: 14px; background: var(--accent); cursor: ew-resize; touch-action: none; }
+.flip-trim::after { content: ''; position: absolute; left: 5px; top: 30%; bottom: 30%; width: 4px; border-left: 1px solid #fff; border-right: 1px solid #fff; }
+.flip-playhead { position: absolute; top: 0; bottom: 0; width: 44px; margin-left: 0; pointer-events: none; z-index: 1; background: color-mix(in srgb, var(--accent) 14%, transparent); border-left: 2px solid var(--accent); }
+@media (max-width: 700px) { .flip-btn .lbl, .flip-btn:not(.flip-done) { font-size: 0; gap: 0; } .flip-btn:not(.flip-done) svg { margin: 0; } }
+.flip-icon { width: 40px; padding: 0; justify-content: center; }

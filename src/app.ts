@@ -46,6 +46,8 @@ import {
   shiftBlock,
   setCaption,
   startOf,
+  addFrameHere,
+  fillHold,
   type CaptionField,
   totalFrames,
   type Edit,
@@ -3651,6 +3653,31 @@ export class App {
     this.editTimeline('Add frame', (ex) => addAfter(ex, this.lf, d.id));
   }
 
+  /** Flip's Add frame (Procreate Dreams style): ends a hold here, or with `toEnd` adds after the whole hold. */
+  flipAddFrame(toEnd = false): void {
+    if (this.live || this.strokeActive) return;
+    this.leaveBlankPage();
+    const d = this.project.newDrawing();
+    this.editTimeline('Add frame', (ex) => addFrameHere(ex, this.lf, d.id, toEnd));
+  }
+
+  /** Fill duration: the current drawing holds until the end of the shot. */
+  fillDuration(): void {
+    const l = locate(this.project.exposures, this.lf);
+    if (!l) return;
+    const total = this.compEnd - this.project.layer.start;
+    let none = false;
+    this.editTimeline('Fill duration', (ex) => {
+      const r = fillHold(ex, l.index, total);
+      if (!r) { none = true; return { ex, frame: this.lf }; }
+      return r;
+    });
+    if (none) this.onNotice?.('This drawing already reaches the end of the shot.');
+  }
+
+  /** Open a drawings layer in Flip (set by the UI). */
+  openFlipbook: ((layerId?: string) => void) | null = null;
+
   duplicateFrame(): void {
     if (!this.residency.isReady(this.drawing)) return;
     const d = this.project.cloneDrawing(this.drawing);
@@ -3921,14 +3948,15 @@ export class App {
     const clear = Number.isFinite(set) ? set : 64;
     // the extra top inset beyond the margin: the bubble rows, or Full's floating options row
     const top = bubbles ? clear - 16 : Math.max(0, clear - 40);
-    this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top, flip ? 76 : 0);
+    const flipH = flip ? parseFloat(this.stage.style.getPropertyValue('--flip-h')) || 200 : 0;
+    this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top, flipH);
     // the layer label floats under the bubble rows: when the page would reach under it (an upright
     // tablet, a phone), fit again a little lower
     const label = this.stage.querySelector<HTMLElement>('.paint-target');
     if (label?.offsetParent && label.offsetWidth) {
       const s = this.stage.getBoundingClientRect(), r = label.getBoundingClientRect();
       const bottom = r.bottom - s.top + 6, right = r.right - s.left;
-      if (this.view.x < right && this.view.y < bottom) this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top + (bottom - this.view.y), flip ? 76 : 0);
+      if (this.view.x < right && this.view.y < bottom) this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top + (bottom - this.view.y), flipH);
     }
     this.fitSig = this.viewSig();
     this.requestRender();
