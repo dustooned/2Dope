@@ -21,7 +21,25 @@ export type ImportedTip = { kind: 'alpha'; w: number; h: number; alpha: Uint8Arr
 
 export interface ImportedBrush {
   name: string;
-  tip: ImportedTip;
+  /** The tip picture; null = the round tip (Procreate brushes that use its own round shape). */
+  tip: ImportedTip | null;
+  /** A grain (texture) picture: white lets paint through, black holds it back. */
+  grain?: { bytes: Uint8Array; scale?: number; depth?: number; invert?: boolean };
+  /** Procreate's Invert shape: black paints instead of white. */
+  tipInvert?: boolean;
+  /** Rotate the tip with the stroke. */
+  follow?: boolean;
+  /** Random size / opacity per dab (0..1). */
+  sizeJitter?: number;
+  opacityJitter?: number;
+  /** 0..1: how much pen pressure changes the opacity. */
+  pressureOpacity?: number;
+  /** Taper at the start / end, as a fraction of a long stroke (0..1). */
+  taperStart?: number;
+  taperEnd?: number;
+  /** StreamLine (0..1). */
+  smoothing?: number;
+  roundness?: number;
   /** Dab spacing as a fraction of the diameter. */
   spacing?: number;
   /** Diameter in pixels. */
@@ -34,7 +52,7 @@ export interface ImportedBrush {
 
 export class BrushImportError extends Error {}
 
-const MAX_BRUSHES = 120;
+const MAX_BRUSHES = 300;
 const MAX_TIP = 4096;
 
 // ---------------------------------------------------------------------------------------------
@@ -232,19 +250,39 @@ export function unarchive(plist: unknown): Record<string, unknown> | null {
 // ---------------------------------------------------------------------------------------------
 // Procreate
 
-const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'boolean' ? (v ? 1 : 0) : undefined);
+/** A string, or an archived NSString ({ NS.string } / { NS.bytes }). */
+const str = (v: unknown): string | undefined => {
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o['NS.string'] === 'string') return o['NS.string'] as string;
+    if (o['NS.bytes'] instanceof Uint8Array) return new TextDecoder().decode(o['NS.bytes'] as Uint8Array);
+  }
+  return undefined;
+};
+/** The first of several possible setting names that the brush has (names differ across Procreate versions). */
+const pick = (info: Record<string, unknown> | null, keys: string[]): number | undefined => {
+  if (!info) return undefined;
+  for (const k of keys) {
+    const n = num(info[k]);
+    if (n !== undefined) return n;
+  }
+  return undefined;
+};
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
 /** The brushes in a Procreate .brushset or .brush (a zip). */
 export async function readProcreate(bytes: Uint8Array, fileName: string): Promise<ImportedBrush[]> {
   let files: Map<string, Uint8Array>;
   try {
-    files = await readZip(bytes);
+    files = await readZip(bytes, { lenient: true });
   } catch (e) {
     throw new BrushImportError(`${fileName} is not a Procreate brush file (${e instanceof Error ? e.message : 'unreadable'}).`);
   }
   const lower = new Map([...files.keys()].map((k) => [k.toLowerCase(), k]));
-  const archives = [...files.keys()].filter((k) => /(^|\/)brush\.archive$/i.test(k));
+  // Procreate keeps a backup of each brush in Reset/: that is not a brush of its own
+  const archives = [...files.keys()].filter((k) => /(^|\/)brush\.archive$/i.test(k) && !/(^|\/)(reset|__macosx)\//i.test(k));
   if (!archives.length) throw new BrushImportError(`${fileName} has no Procreate brushes in it.`);
   // the set's own order, when it lists one
   const setPlist = lower.get('brushset.plist');
@@ -252,7 +290,7 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
   if (setPlist) {
     try {
       const s = parsePlist(files.get(setPlist)!) as { brushes?: unknown };
-      if (Array.isArray(s.brushes)) order = s.brushes.filter((x): x is string => typeof x === 'string');
+      if (Array.isArray(s.brushes)) order = s.brushes.map((x) => str(x)).filter((x): x is string => !!x);
     } catch {
       // no order: zip order
     }
@@ -263,32 +301,51 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
     return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
   });
   const base = fileName.replace(/\.[a-z]+$/i, '');
+  const find = (dir: string, file: string) => lower.get(`${dir}${file}`.toLowerCase()) ?? lower.get(`${dir}reset/${file}`.toLowerCase());
   const out: ImportedBrush[] = [];
   for (const arch of archives.slice(0, MAX_BRUSHES)) {
     const dir = dirOf(arch);
-    const shapeKey = lower.get(`${dir}shape.png`.toLowerCase());
-    if (!shapeKey) continue; // Procreate's own round tip: nothing to bring
     let info: Record<string, unknown> | null = null;
     try {
       info = unarchive(parsePlist(files.get(arch)!));
     } catch {
       info = null;
     }
-    const name = typeof info?.name === 'string' && info.name.trim() ? info.name.trim() : archives.length === 1 ? base : `${base} ${out.length + 1}`;
-    const b: ImportedBrush = { name: name.slice(0, 60), tip: { kind: 'png', bytes: files.get(shapeKey)! } };
-    const size = num(info?.paintSize);
+    const shapeKey = find(dir, 'shape.png');
+    const grainKey = find(dir, 'grain.png');
+    const named = str(info?.name)?.trim();
+    const b: ImportedBrush = { name: (named || (archives.length === 1 ? base : `${base} ${out.length + 1}`)).slice(0, 60), tip: shapeKey ? { kind: 'png', bytes: files.get(shapeKey)! } : null };
+    if (grainKey) b.grain = { bytes: files.get(grainKey)!, scale: pick(info, ['textureScale', 'grainScale', 'textureZoom']), depth: pick(info, ['textureDepth', 'grainDepth']), invert: (pick(info, ['textureInverted', 'grainInverted', 'textureInvert']) ?? 0) > 0 };
+    if ((pick(info, ['shapeInverted', 'shapeInvert']) ?? 0) > 0) b.tipInvert = true;
+    const size = pick(info, ['paintSize', 'maxSize']);
     if (size !== undefined) b.size = clamp(Math.round(size * 100), 2, 200);
-    const op = num(info?.paintOpacity);
+    const op = pick(info, ['paintOpacity', 'maxOpacity']);
     if (op !== undefined) b.opacity = clamp(op, 0.05, 1);
-    const sp = num(info?.plotSpacing);
+    const sp = pick(info, ['plotSpacing']);
     if (sp !== undefined) b.spacing = clamp(sp, 0.02, 2);
-    const jit = num(info?.plotJitter);
+    const jit = pick(info, ['plotJitter']);
     if (jit !== undefined) b.scatter = clamp(jit, 0, 2);
-    const ps = num(info?.dynamicsPressureSize);
+    const ps = pick(info, ['dynamicsPressureSize']);
     if (ps !== undefined) b.pressureSize = clamp(ps, 0, 1);
+    const po = pick(info, ['dynamicsPressureOpacity']);
+    if (po !== undefined) b.pressureOpacity = clamp(po, 0, 1);
+    const sj = pick(info, ['dynamicsJitterSize']);
+    if (sj !== undefined) b.sizeJitter = clamp(sj, 0, 1);
+    const oj = pick(info, ['dynamicsJitterOpacity']);
+    if (oj !== undefined) b.opacityJitter = clamp(oj, 0, 1);
+    const rot = pick(info, ['shapeRotation']);
+    if (rot !== undefined) b.follow = rot > 0.5;
+    const round = pick(info, ['shapeRoundness']);
+    if (round !== undefined && round > 0) b.roundness = clamp(round, 0.05, 1);
+    const t0 = pick(info, ['taperStartLength', 'pencilTaperStartLength']);
+    if (t0 !== undefined) b.taperStart = clamp(t0, 0, 1);
+    const t1 = pick(info, ['taperEndLength', 'pencilTaperEndLength']);
+    if (t1 !== undefined) b.taperEnd = clamp(t1, 0, 1);
+    const sm = pick(info, ['plotSmoothing', 'streamLine', 'streamline']);
+    if (sm !== undefined) b.smoothing = clamp(sm, 0, 1);
     out.push(b);
   }
-  if (!out.length) throw new BrushImportError(`${fileName}: its brushes use Procreate's round tip only; nothing to bring in.`);
+  if (!out.length) throw new BrushImportError(`${fileName} has no Procreate brushes in it.`);
   return out;
 }
 
@@ -384,38 +441,101 @@ export function readAbr(bytes: Uint8Array, fileName: string): ImportedBrush[] {
     }
   } else if (version === 6 || version === 7 || version === 10) {
     const sub = r.u16();
-    // find the "samp" section among the 8BIM sections
+    // the 8BIM sections: "samp" holds the tips, "desc" the presets (names, size, spacing)
     let end = -1;
+    let sampAt = -1;
+    let presets = new Map<string, AbrPreset>();
     while (r.p + 12 <= bytes.length) {
       const sig = r.str4();
-      if (sig !== '8BIM' && sig !== '8B64') throw new BrushImportError('unrecognised section in the brush file');
+      if (sig !== '8BIM' && sig !== '8B64') break;
       const key = r.str4();
       const len = r.u32();
-      if (key === 'samp') {
-        end = Math.min(bytes.length, r.p + len);
-        break;
-      }
+      if (key === 'samp' && sampAt < 0) { sampAt = r.p; end = Math.min(bytes.length, r.p + len); }
+      if (key === 'desc') presets = abrPresets(bytes.subarray(r.p, Math.min(bytes.length, r.p + len)));
+      if (r.p + len > bytes.length) break;
       r.skip(len);
     }
+    r.p = sampAt;
     if (end < 0) throw new BrushImportError(`${fileName} has no sampled brush tips (only computed round brushes?).`);
     while (r.p + 4 < end && out.length < MAX_BRUSHES) {
       let len = r.u32();
       while (len % 4) len++;
-      const next = r.p + len;
-      if (next > bytes.length) throw new BrushImportError('the brush file ends early');
-      r.skip(sub === 1 ? 47 : 301);
-      const top = r.i32(), left = r.i32(), bottom = r.i32(), right = r.i32();
-      try {
-        const tip = readSample(r, top, left, bottom, right);
-        out.push({ name: `${base} ${out.length + 1}`, tip: { kind: 'alpha', ...tip }, size: clamp(Math.max(tip.w, tip.h), 2, 200) });
-      } catch (e) {
-        if (!out.length && next >= end) throw e;
-        // one unreadable tip: skip it, keep the others
+      const at = r.p;
+      const next = at + len;
+      if (next > bytes.length) break;
+      // the sample's id (a Pascal string), which the presets refer to
+      const idLen = bytes[at]!;
+      const id = String.fromCharCode(...bytes.subarray(at + 1, at + 1 + idLen));
+      // the header before the bounds is 47 bytes in older files and 301 in newer ones; try both
+      let tip: { w: number; h: number; alpha: Uint8Array } | null = null;
+      for (const skip of sub === 1 ? [47, 301] : [301, 47]) {
+        r.p = at + skip;
+        try {
+          const top = r.i32(), left = r.i32(), bottom = r.i32(), right = r.i32();
+          if (bottom - top <= 0 || right - left <= 0 || bottom - top > MAX_TIP || right - left > MAX_TIP) continue;
+          tip = readSample(r, top, left, bottom, right);
+          break;
+        } catch {
+          // try the other header length
+        }
+      }
+      if (tip) {
+        const pre = presets.get(id) ?? presets.get(id.replace(/^\$/, ''));
+        out.push({
+          name: (pre?.name || `${base} ${out.length + 1}`).slice(0, 60),
+          tip: { kind: 'alpha', ...tip },
+          size: clamp(Math.round(pre?.diameter ?? Math.max(tip.w, tip.h)), 2, 200),
+          ...(pre?.spacing ? { spacing: clamp(pre.spacing / 100, 0.02, 2) } : {}),
+        });
       }
       r.p = next;
     }
   } else throw new BrushImportError(`${fileName}: Photoshop brush version ${version} is not supported.`);
   if (!out.length) throw new BrushImportError(`${fileName} has no sampled brush tips (only computed round brushes?).`);
+  return out;
+}
+
+interface AbrPreset {
+  name: string;
+  diameter?: number;
+  spacing?: number;
+}
+
+/**
+ * The presets in an ABR "desc" section, by the id of the sample they use. The descriptor is a
+ * Photoshop action descriptor; rather than parse all of it, scan for the few keys that matter:
+ * a preset's name (Nm), its tip's diameter (Dmtr) and spacing (Spcn), and its sample (sampledData).
+ */
+export function abrPresets(d: Uint8Array): Map<string, AbrPreset> {
+  const out = new Map<string, AbrPreset>();
+  const v = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const at = (i: number, s: string) => { for (let k = 0; k < s.length; k++) if (d[i + k] !== s.charCodeAt(k)) return false; return true; };
+  const text = (i: number): string | null => {
+    // TEXT: u32 count of UTF-16 code units, then the units (often ending in a 0)
+    if (i + 4 > d.length) return null;
+    const n = v.getUint32(i);
+    if (n > 512 || i + 4 + n * 2 > d.length) return null;
+    let s = '';
+    for (let k = 0; k < n; k++) s += String.fromCharCode(v.getUint16(i + 4 + k * 2));
+    return s.replace(/\0+$/, '');
+  };
+  const double = (i: number): number | null => (i + 8 <= d.length ? v.getFloat64(i) : null);
+  let cur: AbrPreset = { name: '' };
+  for (let i = 0; i + 12 < d.length; i++) {
+    if (at(i, 'Nm  TEXT')) {
+      const n = text(i + 8);
+      if (n !== null) cur = { name: n.trim() };
+    } else if (at(i, 'DmtrUntF')) {
+      const x = double(i + 12);
+      if (x !== null && x > 0 && x < 10000) cur.diameter = x;
+    } else if (at(i, 'SpcnUntF')) {
+      const x = double(i + 12);
+      if (x !== null && x > 0 && x < 1000) cur.spacing = x;
+    } else if (at(i, 'sampledDataTEXT')) {
+      const id = text(i + 15);
+      if (id) out.set(id, { ...cur });
+    }
+  }
   return out;
 }
 

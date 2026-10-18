@@ -131,7 +131,11 @@ async function inflateRaw(data: Uint8Array, expected: number): Promise<Uint8Arra
 }
 
 /** Read every file in a ZIP. Throws ZipError for anything malformed, unsafe or corrupt. */
-export async function readZip(buf: Uint8Array): Promise<Map<string, Uint8Array>> {
+/**
+ * Read a zip. `lenient` (brush files from other apps): an entry that cannot be read is skipped
+ * instead of failing the whole archive.
+ */
+export async function readZip(buf: Uint8Array, opts: { lenient?: boolean } = {}): Promise<Map<string, Uint8Array>> {
   if (buf.length < 22) throw new ZipError('not a zip file');
   const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   let eocd = -1;
@@ -160,13 +164,23 @@ export async function readZip(buf: Uint8Array): Promise<Map<string, Uint8Array>>
     const commentLen = v.getUint16(p + 32, true);
     const local = v.getUint32(p + 42, true);
     if (p + 46 + nameLen > buf.length) throw new ZipError('corrupt directory');
+    const at = p;
+    p += 46 + nameLen + extraLen + commentLen;
+    if (opts.lenient) {
+      try {
+        const one = await readEntry(buf, v, at, flags, method, crc, csize, usize, nameLen, local, out, total, lenientDec);
+        if (one) { out.set(one.name, one.data); total += one.data.length; }
+      } catch {
+        // skipped: one unreadable entry does not spoil the rest
+      }
+      continue;
+    }
     let name: string;
     try {
-      name = dec.decode(buf.subarray(p + 46, p + 46 + nameLen));
+      name = dec.decode(buf.subarray(at + 46, at + 46 + nameLen));
     } catch {
       throw new ZipError('file name is not valid text');
     }
-    p += 46 + nameLen + extraLen + commentLen;
     if (name.endsWith('/')) continue; // directory entry
     if (!safeName(name)) throw new ZipError(`unsafe file name: ${name}`);
     if (out.has(name)) throw new ZipError(`duplicate file name: ${name}`);
@@ -187,4 +201,25 @@ export async function readZip(buf: Uint8Array): Promise<Map<string, Uint8Array>>
     out.set(name, data);
   }
   return out;
+}
+
+const lenientDec = new TextDecoder('utf-8');
+
+/** One entry of a lenient read (null for a directory); throws when it cannot be read. */
+async function readEntry(buf: Uint8Array, v: DataView, at: number, flags: number, method: number, crc: number, csize: number, usize: number, nameLen: number, local: number, out: Map<string, Uint8Array>, total: number, decoder: TextDecoder): Promise<{ name: string; data: Uint8Array } | null> {
+  const name = decoder.decode(buf.subarray(at + 46, at + 46 + nameLen));
+  if (name.endsWith('/')) return null;
+  if (!safeName(name) || out.has(name) || flags & 1) throw new ZipError('skipped');
+  if (usize > MAX_FILE_BYTES || total + usize > MAX_TOTAL_BYTES) throw new ZipError('too large');
+  if (local + 30 > buf.length || v.getUint32(local, true) !== 0x04034b50) throw new ZipError('corrupt entry');
+  const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
+  if (start + csize > buf.length) throw new ZipError('entry runs past the end of the file');
+  const raw = buf.subarray(start, start + csize);
+  let data: Uint8Array;
+  if (method === 0) data = raw.slice();
+  else if (method === 8) data = await inflateRaw(raw, usize);
+  else throw new ZipError(`unsupported compression method ${method}`);
+  // a wrong checksum is tolerated here: the picture or settings may still be good
+  void crc;
+  return { name, data };
 }

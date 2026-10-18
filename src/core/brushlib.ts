@@ -60,5 +60,6 @@ export function readBrush(v: unknown): BrushSettings | null {
   if (!Number.isFinite(out.size) || out.size <= 0) out.size = base.size;
   // an image tip must be a small image data URL; anything else falls back to the round tip
   if (out.tipImage !== undefined && !(typeof out.tipImage === 'string' && out.tipImage.startsWith('data:image/') && out.tipImage.length < 400_000)) delete out.tipImage;
+  if (out.grainImage !== undefined && !(typeof out.grainImage === 'string' && out.grainImage.startsWith('data:image/') && out.grainImage.length < 600_000)) delete out.grainImage;
   return out;
 }

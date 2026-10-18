@@ -44,6 +44,11 @@ export interface BrushSettings {
    * black (or transparent) does not. Missing = the round tip. Raster brushes only.
    */
   tipImage?: string;
+  /**
+   * A grain picture (Procreate's grain source) as a small PNG data URL, tiled across the paper:
+   * white lets paint through, black holds it back. Missing = the built-in paper grain.
+   */
+  grainImage?: string;
   /** Diameter in document pixels. */
   size: number;
   /** Edge hardness 0 (soft) .. 1 (hard). */

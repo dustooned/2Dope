@@ -1,5 +1,6 @@
 import { BrushImportError, readBrushFile, type ImportedBrush, type ImportedTip } from '../io/brushimport';
-import { loadTip } from '../brush/raster';
+import { loadGrain, loadTip } from '../brush/raster';
+import { loadBrushes, saveBrushes } from '../io/brushstore';
 import type { App } from '../app';
 import { cloneBrush, PRESETS, type BrushSettings } from '../core/brush';
 import { CATEGORIES, categoryOf, isBuiltIn, readBrush, uniqueName, type BrushCategory } from '../core/brushlib';
@@ -44,6 +45,16 @@ export class BrushLibrary {
     private readonly openStudio: () => void,
   ) {
     this.mine = this.loadMine();
+    // My brushes live in IndexedDB (picture tips are too big for localStorage); older lists move over
+    void loadBrushes()
+      .then((list) => {
+        if (list) {
+          this.mine = this.readList(list);
+          for (const b of this.mine) { if (b.tipImage) void loadTip(b.tipImage); if (b.grainImage) void loadGrain(b.grainImage); }
+          this.render();
+        } else if (this.mine.length) this.saveMine();
+      })
+      .catch(() => { /* localStorage stays the store */ });
     let c: BrushCategory = categoryOf(app.brush.name, this.mine);
     try {
       const saved = localStorage.getItem(CAT_KEY);
@@ -135,26 +146,38 @@ export class BrushLibrary {
     return this.all().find((b) => b.name === name);
   }
 
+  private readList(raw: unknown[]): BrushSettings[] {
+    const out: BrushSettings[] = [];
+    for (const r of raw) {
+      const b = readBrush(r);
+      if (b && !isBuiltIn(b.name) && !out.some((x) => x.name === b.name)) out.push(b);
+    }
+    return out.slice(0, MINE_MAX);
+  }
+
   private loadMine(): BrushSettings[] {
     try {
       const raw = JSON.parse(localStorage.getItem(MINE_KEY) ?? '[]') as unknown[];
-      const out: BrushSettings[] = [];
-      for (const r of Array.isArray(raw) ? raw : []) {
-        const b = readBrush(r);
-        if (b && !isBuiltIn(b.name) && !out.some((x) => x.name === b.name)) out.push(b);
-      }
-      return out.slice(0, 200);
+      return this.readList(Array.isArray(raw) ? raw : []);
     } catch {
       return [];
     }
   }
 
   private saveMine(): void {
-    try {
-      localStorage.setItem(MINE_KEY, JSON.stringify(this.mine));
-    } catch {
-      this.app.onNotice?.('Could not save your brushes on this device (storage is full or blocked).');
-    }
+    const list = this.mine;
+    void saveBrushes(list)
+      .then(() => {
+        // saved in IndexedDB: the old copy no longer takes localStorage space
+        try { localStorage.removeItem(MINE_KEY); } catch { /* fine */ }
+      })
+      .catch(() => {
+        try {
+          localStorage.setItem(MINE_KEY, JSON.stringify(list));
+        } catch {
+          this.app.onNotice?.('Could not save your brushes on this device (storage is full or blocked).');
+        }
+      });
   }
 
   private use(b: BrushSettings): void {
@@ -168,25 +191,29 @@ export class BrushLibrary {
     this.openStudio();
   }
 
-  /** Brushes from other apps into My brushes: each tip becomes a small picture tip. */
+  /** Brushes from other apps into My brushes: tips and grains become small pictures. */
   private async importFiles(files: File[]): Promise<void> {
-    let added = 0;
+    let added = 0, round = 0, grained = 0, failed = 0, full = 0;
     const names: string[] = [];
     for (const f of files) {
       try {
-        if (f.size > 64 * 1024 * 1024) throw new BrushImportError(`${f.name} is too large to bring in.`);
+        if (f.size > 256 * 1024 * 1024) throw new BrushImportError(`${f.name} is too large to bring in.`);
         const found = await readBrushFile(new Uint8Array(await f.arrayBuffer()), f.name);
-        const room = Math.max(0, 200 - this.mine.length);
-        for (const ib of found.slice(0, Math.min(IMPORT_MAX, room))) {
-          const tip = await tipDataUrl(ib.tip);
-          if (!tip) continue;
-          const b = importedBrush(ib, tip, [...this.names(), ...names]);
+        for (const ib of found) {
+          if (this.mine.length >= MINE_MAX) { full++; continue; }
+          // a tip picture that will not decode: the brush still comes in, with the round tip
+          const tip = ib.tip ? await picDataUrl(ib.tip, 128, ib.tipInvert) : null;
+          if (ib.tip && !tip) failed++;
+          const grain = ib.grain ? await picDataUrl({ kind: 'png', bytes: ib.grain.bytes }, 256, ib.grain.invert) : null;
+          const b = importedBrush(ib, tip, grain, [...this.names(), ...names]);
           this.mine = [...this.mine, b];
           names.push(b.name);
           added++;
-          void loadTip(tip);
+          if (!tip) round++;
+          if (grain) grained++;
+          if (tip) void loadTip(tip);
+          if (grain) void loadGrain(grain);
         }
-        if (found.length > IMPORT_MAX) this.app.onNotice?.(`${f.name} has ${found.length} brushes; the first ${IMPORT_MAX} came in.`);
       } catch (e) {
         this.app.onNotice?.(e instanceof BrushImportError ? e.message : `${f.name} could not be read as a brush file.`);
       }
@@ -195,7 +222,8 @@ export class BrushLibrary {
     this.saveMine();
     this.cat = 'mine';
     this.render();
-    this.app.onNotice?.(`${added} brush${added === 1 ? '' : 'es'} added to My brushes. Tips and the main settings come across; textures and special dynamics do not.`);
+    const bits = [round ? `${round} with the round tip` : '', grained ? `${grained} with their grain` : '', failed ? `${failed} tip picture${failed === 1 ? '' : 's'} could not be read` : '', full ? `${full} left out (My brushes is full)` : ''].filter(Boolean);
+    this.app.onNotice?.(`${added} brush${added === 1 ? '' : 'es'} added to My brushes${bits.length ? ` (${bits.join(', ')})` : ''}. Close to the originals, not identical: wet mixing and dual brushes are not carried over.`);
     setTimeout(() => this.render(), 300); // previews again once the tips have decoded
   }
 
@@ -313,11 +341,11 @@ export class BrushLibrary {
   }
 }
 
-/** At most this many brushes from one file (they are kept on the device). */
-const IMPORT_MAX = 60;
+/** My brushes holds at most this many (kept on the device, in IndexedDB). */
+const MINE_MAX = 600;
 
-/** An imported tip as a small PNG data URL (fits the engine's 128 px tip), or null. */
-async function tipDataUrl(tip: ImportedTip): Promise<string | null> {
+/** A picture (tip or grain) as a small PNG data URL, at most `max` px across; null if it will not decode. */
+async function picDataUrl(tip: ImportedTip, max: number, invert = false): Promise<string | null> {
   try {
     let src: CanvasImageSource;
     let w: number, h: number;
@@ -342,32 +370,56 @@ async function tipDataUrl(tip: ImportedTip): Promise<string | null> {
       w = tip.w;
       h = tip.h;
     }
-    const k = Math.min(1, 128 / Math.max(w, h));
+    const k = Math.min(1, max / Math.max(w, h));
     const out = document.createElement('canvas');
     out.width = Math.max(1, Math.round(w * k));
     out.height = Math.max(1, Math.round(h * k));
-    out.getContext('2d')!.drawImage(src, 0, 0, out.width, out.height);
+    const og = out.getContext('2d')!;
+    og.drawImage(src, 0, 0, out.width, out.height);
+    if (invert) {
+      // Procreate's Invert: dark becomes light (an opaque picture reads its brightness)
+      const d = og.getImageData(0, 0, out.width, out.height);
+      for (let i = 0; i < d.data.length; i += 4) { d.data[i] = 255 - d.data[i]!; d.data[i + 1] = 255 - d.data[i + 1]!; d.data[i + 2] = 255 - d.data[i + 2]!; }
+      og.putImageData(d, 0, 0);
+    }
     return out.toDataURL('image/png');
   } catch {
     return null;
   }
 }
 
-/** 2Dope brush settings for an imported brush: a picture tip on a plain base, plus what maps. */
-function importedBrush(ib: ImportedBrush, tip: string, taken: string[]): BrushSettings {
+/** 2Dope brush settings for an imported brush: its tip and grain pictures on a plain base, plus what maps. */
+function importedBrush(ib: ImportedBrush, tip: string | null, grain: string | null, taken: string[]): BrushSettings {
   const b = cloneBrush(PRESETS[0]!);
   b.name = uniqueName(ib.name, taken);
-  b.tipImage = tip;
-  b.hardness = 1;
-  b.roundness = 1;
+  if (tip) b.tipImage = tip;
+  else delete b.tipImage;
+  b.hardness = tip ? 1 : 0.85;
+  b.roundness = ib.roundness ?? 1;
   b.angle = 0;
-  b.grain = 0;
+  b.followDirection = ib.follow ?? false;
+  // the grain picture is the paper texture; its depth is how strongly it holds paint back
+  if (grain) {
+    b.grainImage = grain;
+    b.grain = ib.grain?.depth ?? 0.8;
+    b.grainScale = Math.max(0.1, Math.min(4, ib.grain?.scale ? ib.grain.scale * 2 : 1));
+  } else {
+    delete b.grainImage;
+    b.grain = 0;
+  }
   b.spacing = ib.spacing ?? 0.15;
   if (ib.size !== undefined) b.size = ib.size;
   if (ib.opacity !== undefined) b.opacity = ib.opacity;
   b.flow = 1;
   b.scatter = ib.scatter ?? 0;
-  if (ib.pressureSize !== undefined) b.sizeDyn = { ...b.sizeDyn, control: 'pressure', min: Math.max(0, 1 - ib.pressureSize) };
+  if (ib.pressureSize !== undefined) b.sizeDyn = { ...b.sizeDyn, control: ib.pressureSize > 0 ? 'pressure' : 'off', min: Math.max(0, 1 - ib.pressureSize) };
+  if (ib.sizeJitter !== undefined) b.sizeDyn = { ...b.sizeDyn, jitter: ib.sizeJitter };
+  if (ib.pressureOpacity !== undefined) b.opacityDyn = { ...b.opacityDyn, control: ib.pressureOpacity > 0 ? 'pressure' : 'off', min: Math.max(0, 1 - ib.pressureOpacity) };
+  if (ib.opacityJitter !== undefined) b.opacityDyn = { ...b.opacityDyn, jitter: ib.opacityJitter };
+  // tapers: a fraction of a long stroke, as document pixels
+  if (ib.taperStart !== undefined) b.taperStart = Math.round(ib.taperStart * 160);
+  if (ib.taperEnd !== undefined) b.taperEnd = Math.round(ib.taperEnd * 160);
+  if (ib.smoothing !== undefined) b.smoothing = ib.smoothing;
   return b;
 }
 

@@ -1,6 +1,6 @@
 import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection, vanishingPoints, type Guide } from './core/guides';
 import { adjustHex, applyBlur, applyHSB, isNoHSB, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
-import { loadTip } from './brush/raster';
+import { loadGrain, loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
@@ -311,6 +311,7 @@ export class App {
     // Merge over the default so brushes saved by older builds gain new fields.
     this.brush = { ...cloneBrush(PRESETS[0]!), ...(loadJSON<Partial<BrushSettings>>(BRUSH_KEY) ?? {}) };
     if (this.brush.tipImage) void loadTip(this.brush.tipImage);
+    if (this.brush.grainImage) void loadGrain(this.brush.grainImage);
     this.color = loadJSON<string>(COLOR_KEY) ?? '#1d1d24';
     this.bindEvents();
     this.resize();
@@ -2200,6 +2201,7 @@ export class App {
   setBrush(b: BrushSettings): void {
     this.brush = b;
     if (b.tipImage) void loadTip(b.tipImage);
+    if (b.grainImage) void loadGrain(b.grainImage);
     saveJSON(BRUSH_KEY, b);
     this.onBrushChange();
   }
@@ -3761,7 +3763,7 @@ export class App {
     const record: StrokeRecord = {
       id: newStrokeId(),
       tool,
-      brush: cloneBrush(this.brush),
+      brush: tool === 'pen' ? (({ tipImage: _t, grainImage: _g, ...rest }) => rest)(cloneBrush(this.brush)) : cloneBrush(this.brush),
       color: this.color,
       seed: newSeed(),
       points: [],

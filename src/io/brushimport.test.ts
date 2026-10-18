@@ -103,7 +103,9 @@ describe('Procreate brushes', () => {
       { name: 'C3/Brush.archive', data: keyedArchive({ name: 'Round only' }) },
     ]);
     const out = await readProcreate(zip, 'Kit.brushset');
-    expect(out.map((b) => b.name)).toEqual(['First', 'Second']);
+    // a brush with Procreate's own round shape comes in too, with the round tip
+    expect(out.map((b) => b.name)).toEqual(['First', 'Second', 'Round only']);
+    expect(out[2]!.tip).toBeNull();
     expect(out[1]).toMatchObject({ size: 30, opacity: 0.8, spacing: 0.12, scatter: 0.4, pressureSize: 0.6 });
     expect(out[1]!.tip).toEqual({ kind: 'png', bytes: PNG });
   });
@@ -145,5 +147,30 @@ describe('Photoshop ABR', () => {
   it('refuses unknown versions and truncated files', () => {
     expect(() => readAbr(new W().u16(3).u16(0).out, 'x.abr')).toThrow(BrushImportError);
     expect(() => readAbr(new W().u16(2).u16(1).u16(2).u32(500).out, 'x.abr')).toThrow(BrushImportError);
+  });
+});
+
+describe('more brush files', () => {
+  it('skips the Reset backups, reads NSString names, grain pictures and inverted shapes', async () => {
+    const archive = (root: Record<string, unknown>) => bplist({ $objects: ['$null', root, { 'NS.string': 'Chalky' }], $top: { root: { uid: 1 } } });
+    const zip = writeZip([
+      { name: 'A/Brush.archive', data: archive({ name: { uid: 2 }, textureDepth: 0.6, shapeInverted: 1, dynamicsPressureOpacity: 0.5, shapeRotation: 1 }) },
+      { name: 'A/Shape.png', data: PNG },
+      { name: 'A/Reset/Brush.archive', data: archive({ name: { uid: 2 } }) },
+      { name: 'A/Reset/Grain.png', data: PNG },
+    ]);
+    const out = await readProcreate(zip, 'Set.brushset');
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ name: 'Chalky', tipInvert: true, pressureOpacity: 0.5, follow: true });
+    expect(out[0]!.grain).toMatchObject({ bytes: PNG, depth: 0.6 });
+  });
+
+  it('names ABR v6 tips from their presets, with size and spacing', async () => {
+    const { abrPresets } = await import('./brushimport');
+    const utf16 = (t: string) => { const w = new W().u32(t.length + 1); for (const c of t) w.u16(c.charCodeAt(0)); return w.u16(0).out; };
+    const dbl = (x: number) => { const b = new Uint8Array(8); new DataView(b.buffer).setFloat64(0, x); return b; };
+    const desc = new W().str('Nm  TEXT').bytes(utf16('Dry Ink')).str('DmtrUntF#Pxl').bytes(dbl(42)).str('SpcnUntF#Prc').bytes(dbl(25)).str('sampledDataTEXT').bytes(utf16('$abc')).out;
+    const p = abrPresets(desc);
+    expect(p.get('$abc')).toEqual({ name: 'Dry Ink', diameter: 42, spacing: 25 });
   });
 });
