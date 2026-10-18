@@ -442,7 +442,7 @@ export class Bubbles {
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
     const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
-    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.currentHold, a.currentRole, a.lf].join('|');
+    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.currentHold, a.currentRole, a.lf, a.fillStyle, a.color2].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
@@ -534,6 +534,19 @@ export class Bubbles {
         this.chip('Tap / drag', 'Fill the areas you tap or drag across', a.fillMode === 'tap', () => a.setFillMode('tap')),
         this.chip('Leftovers', 'Clean up specks the fill missed', a.fillMode === 'leftover', () => a.setFillMode('leftover')),
       );
+      add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
+      for (const [k, label, title] of [['solid', 'Solid', 'One colour'], ['linear', 'Linear', 'A gradient: tap fills top to bottom, drag to set the direction'], ['radial', 'Radial', 'A gradient from the middle: drag from the centre to the edge']] as const) add(this.chip(label, title, a.fillStyle === k, () => a.setFillStyle(k)));
+      if (a.fillStyle !== 'solid') {
+        // the second colour (the gradient goes from your colour to this one) and a swap
+        const second = el('label', { class: 'bub-color2', title: 'The second colour of the gradient' });
+        second.style.setProperty('--chip', a.color2);
+        const input = el('input', { type: 'color', 'aria-label': 'Second gradient colour' });
+        input.value = a.color2;
+        input.addEventListener('input', () => { second.style.setProperty('--chip', input.value); });
+        input.addEventListener('change', () => a.setColor2(input.value));
+        second.append(input);
+        add(second, this.chip('Swap', 'Swap the two colours', false, () => a.swapColors()));
+      }
       if (sel) add(this.chip('Fill selection', 'Colour everything inside the selection', false, () => a.fillSelectedArea()));
     } else if (cur === 'select') {
       // how to select (Procreate's modes) and how a new selection combines with this one

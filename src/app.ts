@@ -1,3 +1,4 @@
+import { gradientAt, type Grad } from './fill/gradient';
 import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection, vanishingPoints, type Guide } from './core/guides';
 import { adjustHex, applyBlur, applyHSB, isNoHSB, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
 import { loadGrain, loadTip } from './brush/raster';
@@ -67,6 +68,8 @@ type SnapPoint = { x: number; y: number; id: string; end: 'start' | 'end' | null
 
 const FLIPBOOK_KEY = '2dope.flipbook';
 const FILL_MODE_KEY = '2dope.fill.mode';
+const FILL_STYLE_KEY = '2dope.fill.style';
+const COLOR2_KEY = '2dope.color2';
 const LAYERS_KEY = '2dope.draw.layers';
 const BOARD_ALPHA_KEY = '2dope.draw.boardAlpha';
 const RIPPLE_KEY = '2dope.ripple';
@@ -1080,7 +1083,7 @@ export class App {
     const before = planeCanvas(d, 'fill').getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
     const res = fillFrom(this.fillMapFor(d), x, y, false, this.spatialSelection?.mask);
     if (!res) return false;
-    this.paintMask(d, res.mask, res, this.rgbOf(this.color));
+    this.paintMask(d, res.mask, res, this.rgbOf(this.color), this.gradFor(res));
     this.touchFill(d);
     this.pushFill('ColorDrop', [this.fillEntry(d, before, res)]);
     this.residency.updateThumb(d);
@@ -1558,7 +1561,7 @@ export class App {
     const d = this.drawing;
     if (!this.residency.isReady(d)) return;
     const before = planeCanvas(d, 'fill').getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
-    this.paintMask(d, area.mask, area, this.rgbOf(this.color));
+    this.paintMask(d, area.mask, area, this.rgbOf(this.color), this.gradFor(area));
     this.touchFill(d);
     this.pushFill('Fill selected area', [this.fillEntry(d, before, area)]);
   }
@@ -1885,8 +1888,50 @@ export class App {
     /** Pixels filled so far in this gesture (a drag does not refill them). */
     painted: Uint8Array;
     box: Box4;
+    /** Gradient fills: the area the gesture began in, and the direction dragged (null = the default). */
+    area?: Area;
+    grad?: Grad | null;
   } | null = null;
   private fillBusy = false;
+
+  // -------------------------------------------------------------------------------------------
+  // Gradient fills: Solid, Linear or Radial from the colour to the second colour. A tap fills the
+  // area top to bottom (radial: from its centre); a drag sets the direction (radial: centre to edge).
+
+  fillStyle: 'solid' | 'linear' | 'radial' = (() => { const v = loadJSON<string>(FILL_STYLE_KEY); return v === 'linear' || v === 'radial' ? v : 'solid'; })();
+  color2 = loadJSON<string>(COLOR2_KEY) ?? '#ffffff';
+
+  setFillStyle(s: 'solid' | 'linear' | 'radial'): void {
+    this.fillStyle = s;
+    saveJSON(FILL_STYLE_KEY, s);
+    this.onToolChange();
+  }
+
+  setColor2(c: string): void {
+    this.color2 = c;
+    saveJSON(COLOR2_KEY, c);
+    this.onToolChange();
+  }
+
+  /** The two gradient colours change places. */
+  swapColors(): void {
+    const a = this.color;
+    this.setColor(this.color2);
+    this.setColor2(a);
+  }
+
+  /** The default gradient of an area: top to bottom, or from its centre to its farthest corner. */
+  private defaultGrad(a: { x0: number; y0: number; x1: number; y1: number }): Grad {
+    const cx = (a.x0 + a.x1 + 1) / 2, cy = (a.y0 + a.y1 + 1) / 2;
+    if (this.fillStyle === 'radial') return { kind: 'radial', x0: cx, y0: cy, x1: a.x1 + 1, y1: a.y1 + 1 };
+    return { kind: 'linear', x0: cx, y0: a.y0, x1: cx, y1: a.y1 + 1 };
+  }
+
+  /** The gradient a fill of this area uses now (null = solid colour). */
+  private gradFor(a: { x0: number; y0: number; x1: number; y1: number }, dragged?: Grad | null): Grad | null {
+    if (this.fillStyle === 'solid') return null;
+    return dragged ? { ...dragged, kind: this.fillStyle } : this.defaultGrad(a);
+  }
 
   /** The line art of a drawing as a fill map (line plane + vector strokes). */
   private fillMapOf(d: Drawing, frame = this.frame): FillMap {
@@ -1929,20 +1974,29 @@ export class App {
   }
 
   /** Paint mask pixels (inside `box`) in one colour on a drawing's fill plane; returns the changed box. */
-  private paintMask(d: Drawing, mask: Uint8Array, box: Box4, rgb: number): void {
+  private paintMask(d: Drawing, mask: Uint8Array, box: Box4, rgb: number, grad: Grad | null = null): void {
     const target = planeCanvas(d, 'fill');
     const tg = target.getContext('2d')!;
     const rect = { x: box.x0, y: box.y0, w: box.x1 - box.x0 + 1, h: box.y1 - box.y0 + 1 };
     const img = tg.getImageData(rect.x, rect.y, rect.w, rect.h);
     const [r, g, b] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255];
+    const c2 = this.rgbOf(this.color2);
+    const [r2, g2, b2] = [(c2 >> 16) & 255, (c2 >> 8) & 255, c2 & 255];
     for (let yy = 0; yy < rect.h; yy++) {
       for (let xx = 0; xx < rect.w; xx++) {
         const i = (rect.y + yy) * this.docW + rect.x + xx;
         if (!mask[i] || (this.fillG?.selection && !this.fillG.selection.mask[i])) continue;
         const o = (yy * rect.w + xx) * 4;
-        img.data[o] = r;
-        img.data[o + 1] = g;
-        img.data[o + 2] = b;
+        if (grad) {
+          const t = gradientAt(grad, rect.x + xx + 0.5, rect.y + yy + 0.5);
+          img.data[o] = r + (r2 - r) * t;
+          img.data[o + 1] = g + (g2 - g) * t;
+          img.data[o + 2] = b + (b2 - b) * t;
+        } else {
+          img.data[o] = r;
+          img.data[o + 1] = g;
+          img.data[o + 2] = b;
+        }
         img.data[o + 3] = 255;
       }
     }
@@ -1975,7 +2029,8 @@ export class App {
     if (x < 0 || y < 0 || x >= this.docW || y >= this.docH || g.painted[y * this.docW + x]) return;
     const r = fillFrom(this.fillMapFor(g.d), x, y, exact, g.selection?.mask);
     if (!r) return;
-    this.paintMask(g.d, r.mask, r, this.rgbOf(this.color));
+    if (!g.area) g.area = r;
+    this.paintMask(g.d, r.mask, r, this.rgbOf(this.color), this.gradFor(r, g.grad));
     for (let yy = r.y0; yy <= r.y1; yy++) for (let xx = r.x0; xx <= r.x1; xx++) if (r.mask[yy * this.docW + xx]) g.painted[yy * this.docW + xx] = 1;
     grow4(g.box, r);
     g.seeds.push([x, y]);
@@ -1989,7 +2044,22 @@ export class App {
     for (const ev of events.length ? events : [e]) {
       const p = this.toPoint(ev, ev.timeStamp);
       const last = g.points[g.points.length - 1]!;
-      if (g.mode === 'tap') {
+      if (g.mode === 'tap' && this.fillStyle !== 'solid' && g.area) {
+        // gradient: the drag is its direction (radial: centre to edge), shown live
+        const [sx, sy] = g.points[0]!;
+        if (Math.hypot(p.x - sx, p.y - sy) < 6 / this.view.zoom) continue;
+        g.grad = { kind: this.fillStyle, x0: sx, y0: sy, x1: p.x, y1: p.y };
+        const a = g.area;
+        const rect = { x: a.x0, y: a.y0, w: a.x1 - a.x0 + 1, h: a.y1 - a.y0 + 1 };
+        const back = new ImageData(rect.w, rect.h);
+        for (let y = 0; y < rect.h; y++) {
+          const from = ((rect.y + y) * this.docW + rect.x) * 4;
+          back.data.set(g.before!.data.subarray(from, from + rect.w * 4), y * rect.w * 4);
+        }
+        putPixels(planeCanvas(g.d, 'fill'), rect, back);
+        this.paintMask(g.d, a.mask, a, this.rgbOf(this.color), g.grad);
+        this.touchFill(g.d);
+      } else if (g.mode === 'tap') {
         // drag fill: every area the finger passes over, sampled every 2 px so thin areas are not skipped
         const steps = Math.max(1, Math.ceil(Math.hypot(p.x - last[0], p.y - last[1]) / 2));
         for (let k = 1; k <= steps; k++) this.fillSeed(last[0] + ((p.x - last[0]) * k) / steps, last[1] + ((p.y - last[1]) * k) / steps, true);
@@ -2063,7 +2133,7 @@ export class App {
     this.touchFill(d);
     const entries = [this.fillEntry(d, g.before!, g.box)];
     const label = g.mode === 'leftover' ? 'Fill leftovers' : g.seeds.length > 1 ? 'Drag fill' : 'Fill';
-    if (this.fillAcross > 0 && !g.selection && g.mode !== 'leftover') void this.fillFollowing(d, g.seeds, color, entries, label);
+    if (this.fillAcross > 0 && !g.selection && g.mode !== 'leftover') void this.fillFollowing(d, g.seeds, color, entries, label, g.grad ?? null);
     else this.pushFill(label, entries);
   }
 
@@ -2099,7 +2169,7 @@ export class App {
   }
 
   /** Repeat a fill at the same spot on the next drawings (distinct, holds skipped). One undo step for all. */
-  private async fillFollowing(first: Drawing, seeds: [number, number][], rgb: number, entries: FillEntry[], label: string): Promise<void> {
+  private async fillFollowing(first: Drawing, seeds: [number, number][], rgb: number, entries: FillEntry[], label: string, grad: Grad | null = null): Promise<void> {
     this.fillBusy = true;
     try {
       const ex = this.project.exposures;
@@ -2120,7 +2190,7 @@ export class App {
           const results = seeds.map(([x, y], k) => (painted[y * this.docW + x] ? null : fillFrom(map, x, y, k > 0)));
           for (const r of results) {
             if (!r) continue;
-            this.paintMask(d, r.mask, r, rgb);
+            this.paintMask(d, r.mask, r, rgb, this.gradFor(r, grad));
             for (let yy = r.y0; yy <= r.y1; yy++) for (let xx = r.x0; xx <= r.x1; xx++) if (r.mask[yy * this.docW + xx]) painted[yy * this.docW + xx] = 1;
             grow4(box, r);
           }
