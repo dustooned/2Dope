@@ -1,3 +1,4 @@
+import { scrollArrows } from './ui/scrollarrows';
 import { openExportHub } from './ui/exporthub';
 import { openBoardExport } from './ui/boardexport';
 import './style.css';
@@ -14,6 +15,7 @@ import { buildPanel } from './ui/panel';
 import { openStore } from './io/persist';
 import { ExportUI } from './ui/exportdialog';
 import { VideoExportUI } from './ui/videoexport';
+import { ShareView } from './ui/share';
 import { FileUI } from './ui/files';
 import { Gallery } from './ui/gallery';
 import { MotionPanel } from './ui/motion';
@@ -436,6 +438,9 @@ sheet.update();
 let files: FileUI | null = null;
 let exporter: ExportUI | null = null;
 const videoExporter = new VideoExportUI(app, (message) => files?.toast(message), audioPlayback.bank);
+// Share: the last mode (preview the movie, check it, make it, save or send it)
+let onShareChange = (): void => {};
+const share = new ShareView(app, { sounds: audioPlayback.bank, moreFormats: () => showExportHub(), onOpenChange: () => onShareChange() });
 const quick = new Quick(app, $('#quickbar'), {
   exportPng: () => void app.exportPNG(),
   saveFile: () => void files?.exportProject(),
@@ -597,6 +602,8 @@ const bubbles = new Bubbles(app, $('#stage'), {
   motion: { group: () => motion.group(), split: () => motion.split() },
   editShape: (anchor) => openShapeMenu(anchor),
   flip: { on: () => flipMode.on, set: (on) => flipMode.set(on) },
+  share: { open: () => share.open, show: () => share.show() },
+  resetUi: () => resetUi(),
   brushLibrary: (anchor) => brushLib.toggle(anchor),
   colorPanel: (anchor) => colorPanel.toggle(anchor),
   layers: (anchor) => layersPop.toggle(anchor),
@@ -607,6 +614,7 @@ app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
 flipMode.onChange = () => { layerCards.close(); bubbles.update(); setTimeout(() => app.refit(), 60); };
+onShareChange = () => { layerCards.close(); bubbles.update(); };
 // key selection in Motion changes what the context bar offers
 {
   const edChange = app.editor.onChange;
@@ -702,10 +710,42 @@ document.querySelectorAll('[data-file="new"]').forEach((b) =>
 );
 if (import.meta.env.DEV) (window as unknown as { __gallery: Gallery }).__gallery = gallery;
 $('#export-seq').addEventListener('click', showExportHub);
-$('#focus-export').addEventListener('click', showExportHub);
+$('#focus-export').addEventListener('click', () => share.show());
 if (import.meta.env.DEV) (window as unknown as { __export: ExportUI }).__export = exporter;
 await files.start();
 if (!persistent) files.toast('Browser storage is unavailable here (private window?), so your work will not survive closing this tab. Export a .2dope file to keep it.');
+
+/**
+ * Hold the interface button: everything back to the starting layout (Simple), whatever got
+ * folded, opened or switched on. The drawing, the project and undo are untouched.
+ */
+// bars that scroll sideways get arrows at their ends (tap to move along, hold to keep going)
+for (const bar of document.querySelectorAll<HTMLElement>('.bub-ctx, .nav-row, .topbar, .focusbar, .layer-toggles, .xs-acts')) scrollArrows(bar);
+
+function resetUi(): void {
+  if (app.strokeActive) return;
+  if (app.playing) app.togglePlay();
+  share.close();
+  quick.set(false);
+  flipMode.set(false);
+  layerCards.close();
+  layersPop.close?.();
+  colorPanel.close();
+  brushLib.close();
+  app.setMaskEditing(false);
+  if (app.transforming) app.cancelTransform();
+  app.setGuideEdit(false);
+  setPanel(false);
+  try {
+    for (const ws of ['draw', 'time', 'motion', 'board']) localStorage.removeItem(`2dope.focus.${ws}`);
+    localStorage.removeItem('2dope.focus');
+  } catch { /* optional */ }
+  document.body.classList.remove('tools-folded', 'timeline-folded', 'bar-collapsed', 'ui-hidden');
+  if (sheet.active) sheet.set('half');
+  syncFocus();
+  setTimeout(() => app.fit(), 120);
+  files?.toast('Screen reset to the starting layout. Your work is unchanged.');
+}
 
 function showExportHub(): void {
   openExportHub(app, {

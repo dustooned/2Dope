@@ -33,6 +33,10 @@ export interface BubbleHooks {
   motion?: { group(): void; split(): void };
   /** Flip: the beginner drawing-only mode (a sub-mode of Draw). */
   flip?: { on(): boolean; set(on: boolean): void };
+  /** Share: the last mode, preview and make the movie. */
+  share?: { open(): boolean; show(): void };
+  /** Hold the interface button: put the whole screen back to its starting layout. */
+  resetUi?: () => void;
 }
 
 type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'flip' | 'onion' | 'layers'
@@ -69,6 +73,7 @@ export class Bubbles {
       ['time', 'Timing', 'time', 'Timing: holds, marks and the exposure sheet'],
       ['motion', 'Motion', 'motion', 'Motion: move layers, keyframes and the camera'],
     ];
+    // Share comes last: watch the movie, then make it
     for (const [ws, label, icon, title] of modes) {
       if (ws === 'flip') {
         if (!hooks.flip) continue;
@@ -88,6 +93,12 @@ export class Bubbles {
       });
       this.modes.append(b);
     }
+    if (hooks.share) {
+      const share = this.bubble('Share', 'export', 'Share: watch the movie, check it, then save or send it');
+      share.dataset.mode = 'share';
+      share.addEventListener('click', () => hooks.share!.show());
+      this.modes.append(share);
+    }
     this.modes.append(this.modeName);
     // the interface level: a small menu that says what each choice shows (not a blind cycle)
     const menu = el('div', { class: 'bub-levelmenu', role: 'menu', hidden: '' });
@@ -104,7 +115,23 @@ export class Bubbles {
         return b;
       }));
     };
-    this.levelBtn.addEventListener('click', () => { fill(); menu.hidden = !menu.hidden; });
+    // a tap opens the menu; holding it (about half a second) resets the screen
+    let held = 0, didHold = false;
+    this.levelBtn.addEventListener('pointerdown', () => {
+      didHold = false;
+      clearTimeout(held);
+      held = window.setTimeout(() => {
+        didHold = true;
+        menu.hidden = true;
+        this.setLevel('simple');
+        this.hooks.resetUi?.();
+      }, 650);
+    });
+    const cancelHold = () => clearTimeout(held);
+    this.levelBtn.addEventListener('pointerup', cancelHold);
+    this.levelBtn.addEventListener('pointercancel', cancelHold);
+    this.levelBtn.addEventListener('pointerleave', cancelHold);
+    this.levelBtn.addEventListener('click', () => { if (didHold) { didHold = false; return; } fill(); menu.hidden = !menu.hidden; });
     window.addEventListener('pointerdown', (e) => {
       if (menu.hidden || menu.contains(e.target as Node) || this.levelBtn.contains(e.target as Node)) return;
       menu.hidden = true;
@@ -148,7 +175,7 @@ export class Bubbles {
     this.level = l;
     for (const x of LEVELS) document.body.classList.toggle(`ui-${x}`, x === l);
     this.levelBtn.textContent = l === 'clean' ? '○' : l === 'simple' ? '◐' : '●';
-    this.levelBtn.title = `Interface: ${l === 'clean' ? 'Focus' : l === 'simple' ? 'Simple' : 'Full'}. Tap to choose how much shows.`;
+    this.levelBtn.title = `Interface: ${l === 'clean' ? 'Focus' : l === 'simple' ? 'Simple' : 'Full'}. Tap to choose how much shows; hold to reset the screen.`;
     this.levelBtn.setAttribute('aria-label', this.levelBtn.title);
     if (remember) {
       try { localStorage.setItem(LEVEL_KEY, l); } catch { /* optional */ }
@@ -551,6 +578,6 @@ export class Bubbles {
         this.chip('▶', 'Next frame', false, () => a.nextFrame()),
       );
     }
-    this.ctx.hidden = !this.ctx.childElementCount;
+    this.ctx.hidden = !this.ctx.querySelector(':scope > :not(.scroll-arrow)');
   }
 }

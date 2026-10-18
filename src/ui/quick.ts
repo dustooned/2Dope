@@ -1,3 +1,4 @@
+import { decorate } from './icons';
 import type { App } from '../app';
 import { autoIcon, setLabel } from './icons';
 import { FPS_PRESETS } from '../core/project';
@@ -98,7 +99,11 @@ export class Quick {
       btn('Exit Quick Animate', 'Back to the full interface (Tab)', () => this.set(false)),
     );
 
+    // always in reach: the way back (it used to hide under More)
+    const exit = btn('Exit', 'Back to the full interface (Tab)', () => this.set(false), 'quick-exit');
+    decorate(exit, 'close');
     host.append(
+      group(exit),
       group(...this.toolBtns.values()),
       group(this.color),
       group(this.undoBtn, this.redoBtn),
@@ -124,9 +129,8 @@ export class Quick {
       if (active) this.more.classList.remove('open');
     };
     try {
-      // First visit on a small screen (an iPad held upright, a phone): start in Quick Animate.
-      const saved = localStorage.getItem(KEY);
-      if (saved === '1' || (saved === null && window.innerWidth < 900)) this.set(true);
+      // only when you chose it last time (the simple screen is the starting point now)
+      if (localStorage.getItem(KEY) === '1') this.set(true);
     } catch {
       // preference unavailable: start in the full interface
     }
