@@ -4095,6 +4095,7 @@ body.ws-motion .audio-tracks { display: none !important; }
 .lc-tile .ico { width: 20px; height: 20px; }
 .lc-tile.danger { color: #ff6b6b; }
 .lc-tile:active { transform: scale(.96); }
+.bub-sep { flex: 0 0 auto; width: 1px; height: 26px; margin: 0 2px; background: var(--line); }
 .bub-slider .bub-num { min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; opacity: .8; }
 .tracks-add { min-height: 40px; }
 .audio-card { position: fixed; z-index: 60; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); max-height: 70dvh; overflow: auto; padding: 0 14px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px #0008; }

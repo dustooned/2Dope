@@ -12,6 +12,9 @@ export interface XParams {
   rotate: number;
   flipH: boolean;
   flipV: boolean;
+  /** Freeform: extra stretch across and down (1 = none), on top of the uniform scale. */
+  sx?: number;
+  sy?: number;
 }
 
 export const IDENTITY: XParams = { dx: 0, dy: 0, scale: 1, rotate: 0, flipH: false, flipV: false };
@@ -27,21 +30,26 @@ export interface Rect {
 }
 
 export function isIdentity(p: XParams): boolean {
-  return p.dx === 0 && p.dy === 0 && p.scale === 1 && p.rotate === 0 && !p.flipH && !p.flipV;
+  return p.dx === 0 && p.dy === 0 && p.scale === 1 && p.rotate === 0 && !p.flipH && !p.flipV && (p.sx ?? 1) === 1 && (p.sy ?? 1) === 1;
 }
 
 export function matrixFor(p: XParams, cx: number, cy: number): Mat {
   const r = (p.rotate * Math.PI) / 180;
   const cos = Math.cos(r);
   const sin = Math.sin(r);
-  const sx = p.scale * (p.flipH ? -1 : 1);
-  const sy = p.scale * (p.flipV ? -1 : 1);
+  const sx = p.scale * (p.sx ?? 1) * (p.flipH ? -1 : 1);
+  const sy = p.scale * (p.sy ?? 1) * (p.flipV ? -1 : 1);
   // rotate · scale/flip, about (cx, cy), then move
   const a = cos * sx;
   const b = sin * sx;
   const c = -sin * sy;
   const d = cos * sy;
   return [a, b, c, d, cx + p.dx - (a * cx + c * cy), cy + p.dy - (b * cx + d * cy)];
+}
+
+/** The overall size change (for line widths), counting a freeform stretch. */
+export function overallScale(p: XParams): number {
+  return p.scale * Math.sqrt(Math.abs((p.sx ?? 1) * (p.sy ?? 1)));
 }
 
 export function applyPoint(m: Mat, x: number, y: number): [number, number] {
@@ -155,4 +163,15 @@ export function transformVectors(vectors: StrokeRecord[], mask: Uint8Array, w: n
     };
   });
   return { vectors: moved ? out : vectors, moved };
+}
+
+/** Where a selection mask lands under the transform (keeps an exact selection exact after Apply). */
+export function transformMask(mask: Uint8Array, w: number, h: number, m: Mat, region: Rect): Uint8Array {
+  const src = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < mask.length; i++) if (mask[i]) src[i * 4 + 3] = 255;
+  const moved = transformRegion(src, w, h, mask, m, region);
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < region.h; y++)
+    for (let x = 0; x < region.w; x++) if (moved[(y * region.w + x) * 4 + 3]! >= 128) out[(region.y + y) * w + region.x + x] = 1;
+  return out;
 }

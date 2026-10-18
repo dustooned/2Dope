@@ -11,7 +11,7 @@ import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
-import { applyPoint, clipRect, IDENTITY, isIdentity, matrixFor, transformedRect, transformRegion, transformVectors, unionRect, type Rect, type XParams } from './core/selxform';
+import { applyPoint, clipRect, IDENTITY, isIdentity, matrixFor, overallScale, transformedRect, transformMask, transformRegion, transformVectors, unionRect, type Rect, type XParams } from './core/selxform';
 import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures, shiftLater } from './core/ripple';
@@ -79,9 +79,12 @@ const SHAPE_SLOP = 5;
 const FILL_ACROSS_KEY = '2dope.fill.across';
 const FILL_REFER_KEY = '2dope.fill.refer';
 const SYMMETRY_KEY = '2dope.symmetry';
+const SELECT_SHAPE_KEY = '2dope.select.shape';
 
 /** Fill tool: region fill, temporary lasso selection, or leftover cleanup. */
 export type FillMode = 'tap' | 'lasso' | 'leftover';
+/** Procreate's selection modes. */
+export type SelectShape = 'free' | 'rect' | 'ellipse' | 'auto';
 
 /** An inclusive pixel box (x1 < 0 = empty). */
 interface Box4 {
@@ -572,7 +575,8 @@ export class App {
   /** Region fill, lasso selection, or leftover cleanup. */
   fillMode: FillMode = loadJSON<FillMode>(FILL_MODE_KEY) ?? 'tap';
   /** Temporary spatial selection, independent of the timeline's exposure selection. */
-  private spatial: { project: Project; comp: string; layer: string; drawing: Drawing; frame: number; area: Area; points: [number, number][] } | null = null;
+  /** `exact`: the mask is the selection (Automatic, combined, Select contents); the points are only its box. */
+  private spatial: { project: Project; comp: string; layer: string; drawing: Drawing; frame: number; area: Area; points: [number, number][]; exact?: boolean } | null = null;
 
   get spatialSelection(): Area | null {
     const s = this.spatial;
@@ -922,7 +926,7 @@ export class App {
   private xf: {
     d: Drawing; area: Area; points: [number, number][]; pivot: [number, number]; params: XParams;
     baseLine: ImageData; baseFill: ImageData | null; vectors: StrokeRecord[]; region: Rect | null;
-    drag: { id: number; kind: 'move' | 'scale' | 'rotate'; x: number; y: number; dx: number; dy: number; scale: number; rotate: number; d0: number; a0: number } | null;
+    drag: { id: number; kind: 'move' | 'scale' | 'rotate'; x: number; y: number; dx: number; dy: number; scale: number; rotate: number; d0: number; a0: number; sx: number; sy: number; lx: number; ly: number } | null;
   } | null = null;
 
   get transforming(): boolean {
@@ -1123,7 +1127,7 @@ export class App {
     this.setTool('fill');
     this.setFillMode('lasso');
     this.selectMoves = true;
-    this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: d, frame: this.frame, area: { mask, x0, y0, x1, y1 }, points };
+    this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: d, frame: this.frame, area: { mask, x0, y0, x1, y1 }, points, exact: true };
     this.beginTransform();
     this.onToolChange();
     this.requestRender();
@@ -1153,6 +1157,8 @@ export class App {
     if (!x) return;
     const p = { ...x.params, ...patch };
     p.scale = Math.max(0.1, Math.min(8, p.scale));
+    if (p.sx !== undefined) p.sx = Math.max(0.05, Math.min(20, p.sx));
+    if (p.sy !== undefined) p.sy = Math.max(0.05, Math.min(20, p.sy));
     p.rotate = ((((p.rotate + 180) % 360) + 360) % 360) - 180;
     x.params = p;
     this.renderTransform();
@@ -1178,7 +1184,7 @@ export class App {
       canvas.getContext('2d')!.putImageData(new ImageData(transformRegion(base.data, W, H, a.mask, m, region), region.w, region.h), region.x, region.y);
     put(x.d.line, x.baseLine);
     if (x.baseFill && x.d.fill) put(x.d.fill, x.baseFill);
-    x.d.vectors = transformVectors(x.vectors, a.mask, W, H, m, x.params.scale).vectors;
+    x.d.vectors = transformVectors(x.vectors, a.mask, W, H, m, overallScale(x.params)).vectors;
     this.touch(x.d);
     this.requestRender();
   }
@@ -1287,9 +1293,13 @@ export class App {
     const fillBefore = x.baseFill ? grab(x.baseFill) : null;
     const fillAfter = x.baseFill && d.fill ? d.fill.getContext('2d')!.getImageData(region.x, region.y, region.w, region.h) : null;
     const vBefore = x.vectors, vAfter = d.vectors;
-    const area = polygonMask(pts, W, H);
     const selBefore = this.spatial;
-    const selAfter = selBefore && area ? { ...selBefore, area, points: pts } : null;
+    let area: Area | null;
+    if (selBefore?.exact) {
+      const mask = transformMask(x.area.mask, W, H, matrixFor(x.params, x.pivot[0], x.pivot[1]), region);
+      area = boxOf(mask, W, H);
+    } else area = polygonMask(pts, W, H);
+    const selAfter = selBefore && area ? { ...selBefore, area, points: selBefore.exact ? boxPoints(area) : pts } : null;
     this.spatial = selAfter;
     this.history.push({
       label: 'Transform selection',
@@ -1313,6 +1323,225 @@ export class App {
     this.residency.updateThumb(d);
     this.requestRender();
     this.onToolChange();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Selection (Procreate): Freehand, Rectangle, Ellipse or Automatic; New, Add or Subtract;
+  // Invert; Copy, Cut, Paste, Duplicate and Delete what is selected.
+
+  selectShape: SelectShape = loadJSON<SelectShape>(SELECT_SHAPE_KEY) ?? 'free';
+  selectOp: 'new' | 'add' | 'subtract' = 'new';
+  /** Transform: corners stretch freely instead of keeping proportions. */
+  transformFreeform = false;
+  /** Copied art (Copy / Cut): the selected pixels of Line and Fill, and the vector lines inside. */
+  private artClip: { rect: Rect; line: ImageData; fill: ImageData | null; vectors: StrokeRecord[] } | null = null;
+
+  setSelectShape(s: SelectShape): void {
+    this.selectShape = s;
+    saveJSON(SELECT_SHAPE_KEY, s);
+    this.onToolChange();
+  }
+
+  setSelectOp(o: 'new' | 'add' | 'subtract'): void {
+    this.selectOp = o;
+    this.onToolChange();
+  }
+
+  get hasArtClip(): boolean {
+    return this.artClip !== null;
+  }
+
+  /** A transform drag in the selection's own frame (undoing its rotation). */
+  private localOf(dx: number, dy: number): [number, number] {
+    const r = -((this.xf?.params.rotate ?? 0) * Math.PI) / 180;
+    return [dx * Math.cos(r) - dy * Math.sin(r), dx * Math.sin(r) + dy * Math.cos(r)];
+  }
+
+  /** The outline of a rectangle or ellipse dragged from a to b. */
+  private shapePoints(a: [number, number], b: [number, number]): [number, number][] {
+    if (this.selectShape === 'rect') return [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]];
+    const cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2, rx = Math.abs(b[0] - a[0]) / 2, ry = Math.abs(b[1] - a[1]) / 2;
+    return Array.from({ length: 64 }, (_, i) => [cx + rx * Math.cos((i / 64) * Math.PI * 2), cy + ry * Math.sin((i / 64) * Math.PI * 2)] as [number, number]);
+  }
+
+  /** Put an area into the selection the way selectOp says (a new one, added, or taken away). */
+  private takeSelection(area: Area | null, points: [number, number][], exact: boolean): void {
+    const W = this.docW, H = this.docH;
+    const prev = this.spatialSelection;
+    let out = area, pts = points, ex = exact;
+    if (prev && area && this.selectOp !== 'new') {
+      const mask = new Uint8Array(W * H);
+      const add = this.selectOp === 'add';
+      for (let i = 0; i < mask.length; i++) mask[i] = add ? prev.mask[i]! | area.mask[i]! : prev.mask[i]! & (area.mask[i]! ^ 1);
+      out = boxOf(mask, W, H);
+      pts = out ? boxPoints(out) : [];
+      ex = true;
+    } else if (!area && this.selectOp === 'subtract') return;
+    this.spatial = out ? { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: this.drawing, frame: this.frame, area: out, points: pts, exact: ex } : null;
+  }
+
+  /** Automatic selection: tap an area (the same areas Fill finds between your lines). */
+  private autoSelect(fx: number, fy: number): void {
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    const r = fillFrom(this.fillMapFor(d), Math.floor(fx), Math.floor(fy), false);
+    if (!r) {
+      this.onNotice?.('Tap inside an area between lines to select it.');
+      return;
+    }
+    this.takeSelection({ mask: r.mask, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 }, boxPoints(r), true);
+    this.requestRender();
+    this.onToolChange();
+    if (this.selectMoves && this.selectOp === 'new' && this.spatial) this.beginTransform();
+  }
+
+  /** Invert: select everything that was not selected (everything, when nothing was). */
+  invertSelection(): void {
+    if (this.strokeActive || this.xf) return;
+    const W = this.docW, H = this.docH;
+    const prev = this.spatialSelection;
+    const mask = new Uint8Array(W * H).fill(1);
+    if (prev) for (let i = 0; i < mask.length; i++) if (prev.mask[i]) mask[i] = 0;
+    const area = boxOf(mask, W, H);
+    const op = this.selectOp;
+    this.selectOp = 'new';
+    this.takeSelection(area, area ? boxPoints(area) : [], true);
+    this.selectOp = op;
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** The selected pixels of a plane within the selection's box (unselected pixels see-through). */
+  private cutOut(canvas: HTMLCanvasElement, a: Area): ImageData {
+    const rect = { x: a.x0, y: a.y0, w: a.x1 - a.x0 + 1, h: a.y1 - a.y0 + 1 };
+    const img = canvas.getContext('2d')!.getImageData(rect.x, rect.y, rect.w, rect.h);
+    for (let y = 0; y < rect.h; y++)
+      for (let x = 0; x < rect.w; x++) if (!a.mask[(rect.y + y) * this.docW + rect.x + x]) img.data[(y * rect.w + x) * 4 + 3] = 0;
+    return img;
+  }
+
+  /** Vector lines that lie wholly inside the selection. */
+  private vectorsInside(d: Drawing, a: Area): StrokeRecord[] {
+    const W = this.docW, H = this.docH;
+    const inside = (x: number, y: number) => { const px = Math.floor(x), py = Math.floor(y); return px >= 0 && py >= 0 && px < W && py < H && a.mask[py * W + px] === 1; };
+    return d.vectors.filter((v) => v.points.length && v.points.every((p) => inside(p.x, p.y)));
+  }
+
+  /** Copy what is selected (Line, Fill and the vector lines inside), to paste on any drawing. */
+  copyArt(): boolean {
+    const a = this.spatialSelection;
+    const d = this.drawing;
+    if (!a || !this.residency.isReady(d)) return false;
+    if (this.xf) this.applyTransform();
+    const sel = this.spatialSelection ?? a;
+    this.artClip = {
+      rect: { x: sel.x0, y: sel.y0, w: sel.x1 - sel.x0 + 1, h: sel.y1 - sel.y0 + 1 },
+      line: this.cutOut(d.line, sel),
+      fill: d.fill ? this.cutOut(d.fill, sel) : null,
+      vectors: structuredClone(this.vectorsInside(d, sel)),
+    };
+    this.onNotice?.('Copied. Paste it on any drawing, any frame.');
+    this.onToolChange();
+    return true;
+  }
+
+  /** Delete what is selected (one undo step). The selection stays. */
+  deleteSelectedArt(label = 'Delete selected'): void {
+    const a = this.spatialSelection;
+    const d = this.drawing;
+    if (!a || this.strokeActive || this.project.layer.locked || !this.residency.isReady(d)) return;
+    if (this.xf) this.cancelTransform();
+    const rect = { x: a.x0, y: a.y0, w: a.x1 - a.x0 + 1, h: a.y1 - a.y0 + 1 };
+    const steps = [d.line, d.fill].filter((c): c is HTMLCanvasElement => !!c).map((c) => {
+      const before = c.getContext('2d')!.getImageData(rect.x, rect.y, rect.w, rect.h);
+      const after = new ImageData(new Uint8ClampedArray(before.data), rect.w, rect.h);
+      for (let y = 0; y < rect.h; y++)
+        for (let x = 0; x < rect.w; x++) if (a.mask[(rect.y + y) * this.docW + rect.x + x]) after.data[(y * rect.w + x) * 4 + 3] = 0;
+      return { c, before, after };
+    });
+    const gone = new Set(this.vectorsInside(d, a).map((v) => v.id));
+    const vBefore = d.vectors, vAfter = d.vectors.filter((v) => !gone.has(v.id));
+    this.history.push({
+      label,
+      drawings: [d],
+      do: () => { for (const s of steps) putPixels(s.c, rect, s.after); d.vectors = vAfter; this.touch(d); },
+      undo: () => { for (const s of steps) putPixels(s.c, rect, s.before); d.vectors = vBefore; this.touch(d); },
+    }, false);
+  }
+
+  cutArt(): void {
+    if (this.copyArt()) this.deleteSelectedArt('Cut');
+  }
+
+  /** Paste the copied art onto this drawing where it was, selected and ready to move. */
+  pasteArt(): void {
+    const clip = this.artClip;
+    if (!clip) {
+      this.onNotice?.('Copy a selection first.');
+      return;
+    }
+    if (this.strokeActive || this.project.layer.locked || this.blankPage) return;
+    if (this.xf) this.applyTransform();
+    if (this.project.isPlaceholder) this.project.editLayer();
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    const r = clip.rect;
+    const stamp = (canvas: HTMLCanvasElement, img: ImageData) => {
+      const tmp = makeCanvas(r.w, r.h);
+      tmp.getContext('2d')!.putImageData(img, 0, 0);
+      canvas.getContext('2d')!.drawImage(tmp, r.x, r.y);
+    };
+    const planes: { c: HTMLCanvasElement; img: ImageData }[] = [{ c: d.line, img: clip.line }];
+    if (clip.fill) planes.push({ c: planeCanvas(d, 'fill'), img: clip.fill });
+    const steps = planes.map(({ c, img }) => {
+      const before = c.getContext('2d')!.getImageData(r.x, r.y, r.w, r.h);
+      stamp(c, img);
+      return { c, before, after: c.getContext('2d')!.getImageData(r.x, r.y, r.w, r.h) };
+    });
+    const added = clip.vectors.map((v) => ({ ...structuredClone(v), id: newStrokeId() }));
+    const vBefore = d.vectors, vAfter = [...d.vectors, ...added];
+    d.vectors = vAfter;
+    this.history.push({
+      label: 'Paste',
+      drawings: [d],
+      do: () => { for (const s of steps) putPixels(s.c, r, s.after); d.vectors = vAfter; this.touch(d); },
+      undo: () => { for (const s of steps) putPixels(s.c, r, s.before); d.vectors = vBefore; this.touch(d); },
+    });
+    this.touch(d);
+    // what was pasted is the selection, so it can be moved straight away
+    const W = this.docW;
+    const mask = new Uint8Array(W * this.docH);
+    const mark = (img: ImageData) => { for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) if (img.data[(y * r.w + x) * 4 + 3]) mask[(r.y + y) * W + r.x + x] = 1; };
+    mark(clip.line);
+    if (clip.fill) mark(clip.fill);
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (!mask[y * W + x] && added.length) mask[y * W + x] = 1;
+    const area = boxOf(mask, W, this.docH);
+    if (area) {
+      this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: d, frame: this.frame, area, points: boxPoints(area), exact: true };
+      this.setTool('fill');
+      this.setFillMode('lasso');
+      this.selectMoves = true;
+      this.beginTransform();
+    }
+    this.onToolChange();
+  }
+
+  /** Copy and paste in place: a second copy of what is selected, ready to move. */
+  duplicateArt(): void {
+    if (this.copyArt()) this.pasteArt();
+  }
+
+  /** Transform: scale the selection to fit the page, centred. */
+  fitTransform(): void {
+    const x = this.xf;
+    if (!x) return;
+    const a = x.area;
+    const k = Math.min(this.docW / (a.x1 - a.x0 + 1), this.docH / (a.y1 - a.y0 + 1));
+    this.setTransform({ scale: k, sx: 1, sy: 1, rotate: 0, dx: this.docW / 2 - x.pivot[0], dy: this.docH / 2 - x.pivot[1] });
+  }
+
+  resetTransform(): void {
+    if (this.xf) this.setTransform({ ...IDENTITY, sx: 1, sy: 1 });
   }
 
   /** Direct fill uses the selection itself, never line detection or following drawings. */
@@ -1639,6 +1868,10 @@ export class App {
     const d = this.drawing;
     if (!this.residency.isReady(d)) return;
     const p = this.toPoint(e, e.timeStamp);
+    if (this.fillMode === 'lasso' && this.selectShape === 'auto') {
+      this.autoSelect(p.x, p.y);
+      return;
+    }
     const before = this.fillMode === 'lasso' ? null : planeCanvas(d, 'fill').getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
     this.fillG = { pointerId: e.pointerId, d, mode: this.fillMode, points: [[p.x, p.y]], seeds: [], before, selection: this.spatialSelection, painted: new Uint8Array(this.fillMode === 'lasso' ? 0 : this.docW * this.docH), box: emptyBox() };
     if (this.fillMode === 'tap') this.fillSeed(p.x, p.y, false);
@@ -1674,7 +1907,8 @@ export class App {
         const steps = Math.max(1, Math.ceil(Math.hypot(p.x - last[0], p.y - last[1]) / 2));
         for (let k = 1; k <= steps; k++) this.fillSeed(last[0] + ((p.x - last[0]) * k) / steps, last[1] + ((p.y - last[1]) * k) / steps, true);
         g.points[g.points.length - 1] = [p.x, p.y];
-      } else if (Math.hypot(p.x - last[0], p.y - last[1]) >= 1.5 / this.view.zoom) g.points.push([p.x, p.y]);
+      } else if (g.mode === 'lasso' && (this.selectShape === 'rect' || this.selectShape === 'ellipse')) g.points[1] = [p.x, p.y];
+      else if (Math.hypot(p.x - last[0], p.y - last[1]) >= 1.5 / this.view.zoom) g.points.push([p.x, p.y]);
     }
     this.requestRender();
   }
@@ -1692,12 +1926,13 @@ export class App {
     const d = g.d;
     if (g.mode === 'lasso') {
       if (!cancel) {
-        const area = polygonMask(g.points, this.docW, this.docH);
-        if (area) this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: d, frame: this.frame, area, points: g.points };
+        const shaped = this.selectShape === 'rect' || this.selectShape === 'ellipse';
+        const pts = shaped ? (g.points.length > 1 ? this.shapePoints(g.points[0]!, g.points[g.points.length - 1]!) : []) : g.points;
+        this.takeSelection(polygonMask(pts, this.docW, this.docH), pts, false);
       }
       this.requestRender();
       this.onToolChange();
-      if (!cancel && this.selectMoves && this.spatial) this.beginTransform();
+      if (!cancel && this.selectMoves && this.selectOp === 'new' && this.spatial) this.beginTransform();
       return;
     }
     const target = planeCanvas(d, 'fill');
@@ -1816,10 +2051,28 @@ export class App {
     }
   }
 
+  private tintCache: { area: Area; canvas: HTMLCanvasElement } | null = null;
+
+  /** An exact selection (Automatic, combined) shows as a light tint over what is selected. */
+  private drawSelectionTint(g: CanvasRenderingContext2D, a: Area): void {
+    if (this.tintCache?.area !== a) {
+      const W = this.docW, H = this.docH;
+      const c = makeCanvas(W, H);
+      const cg = c.getContext('2d')!;
+      const img = cg.createImageData(W, H);
+      for (let i = 0; i < a.mask.length; i++) if (a.mask[i]) { img.data[i * 4] = 255; img.data[i * 4 + 1] = 90; img.data[i * 4 + 2] = 138; img.data[i * 4 + 3] = 70; }
+      cg.putImageData(img, 0, 0);
+      this.tintCache = { area: a, canvas: c };
+    }
+    g.drawImage(this.tintCache.canvas, 0, 0);
+  }
+
   /** The lasso or leftover path while the pen is down (document space, on top of the drawing). */
   private drawFillPath(g: CanvasRenderingContext2D): void {
     const selected = this.spatialSelection ? this.spatial : null;
-    const f = this.fillG ?? (selected ? { mode: 'lasso', points: this.transformedPoints() ?? selected.points } : null);
+    if (selected?.exact && !this.fillG && !this.xf) this.drawSelectionTint(g, selected.area);
+    let f = this.fillG ?? (selected ? { mode: 'lasso', points: this.transformedPoints() ?? selected.points } : null);
+    if (f && this.fillG && f.mode === 'lasso' && (this.selectShape === 'rect' || this.selectShape === 'ellipse') && f.points.length > 1) f = { ...f, points: this.shapePoints(f.points[0]!, f.points[f.points.length - 1]!) };
     if (!f || f.mode === 'tap' || f.points.length < 2) return;
     g.save();
     g.lineJoin = 'round';
@@ -3660,9 +3913,11 @@ export class App {
         const p = this.toPoint(e, e.timeStamp);
         const x = this.xf;
         const c = this.transformFrame()?.centre ?? [p.x, p.y];
+        const [lx, ly] = this.localOf(p.x - c[0], p.y - c[1]);
         x.drag = {
           id: e.pointerId, kind: this.transformGrab(p.x, p.y), x: p.x, y: p.y, dx: x.params.dx, dy: x.params.dy, scale: x.params.scale, rotate: x.params.rotate,
           d0: Math.max(1, Math.hypot(p.x - c[0], p.y - c[1])), a0: Math.atan2(p.y - c[1], p.x - c[0]),
+          sx: x.params.sx ?? 1, sy: x.params.sy ?? 1, lx: Math.max(1, Math.abs(lx)), ly: Math.max(1, Math.abs(ly)),
         };
       }
       return;
@@ -3967,7 +4222,11 @@ export class App {
       else {
         const x = this.xf!;
         const c: [number, number] = [x.pivot[0] + x.params.dx, x.pivot[1] + x.params.dy];
-        if (xd.kind === 'scale') this.setTransform({ scale: xd.scale * (Math.hypot(p.x - c[0], p.y - c[1]) / xd.d0) });
+        if (xd.kind === 'scale' && this.transformFreeform) {
+          // Freeform: a corner stretches across and down on their own
+          const [lx, ly] = this.localOf(p.x - c[0], p.y - c[1]);
+          this.setTransform({ sx: xd.sx * (Math.max(1, Math.abs(lx)) / xd.lx), sy: xd.sy * (Math.max(1, Math.abs(ly)) / xd.ly) });
+        } else if (xd.kind === 'scale') this.setTransform({ scale: xd.scale * (Math.hypot(p.x - c[0], p.y - c[1]) / xd.d0) });
         else {
           let deg = xd.rotate + ((Math.atan2(p.y - c[1], p.x - c[0]) - xd.a0) * 180) / Math.PI;
           // a gentle snap to every 15 degrees
@@ -4786,4 +5045,23 @@ function saveJSON(key: string, value: unknown): void {
   } catch {
     // Storage can be unavailable (private mode); settings just won't persist.
   }
+}
+
+/** The pixels a mask covers, with their box (inclusive), or null when it covers none. */
+function boxOf(mask: Uint8Array, w: number, h: number): Area | null {
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (!mask[y * w + x]) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  return x1 < 0 ? null : { mask, x0, y0, x1, y1 };
+}
+
+/** The corners of an area's box (its outline on screen when the mask itself is the selection). */
+function boxPoints(a: { x0: number; y0: number; x1: number; y1: number }): [number, number][] {
+  return [[a.x0, a.y0], [a.x1 + 1, a.y0], [a.x1 + 1, a.y1 + 1], [a.x0, a.y1 + 1]];
 }

@@ -1,4 +1,5 @@
 import type { SymmetryMode } from '../core/adjust';
+import type { SelectShape } from '../app';
 import { EASINGS } from '../core/anim';
 import type { App, Workspace } from '../app';
 import type { Tool } from '../core/stroke';
@@ -390,7 +391,7 @@ export class Bubbles {
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
     const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
-    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size].join('|');
+    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
@@ -434,14 +435,17 @@ export class Bubbles {
     } else if (xp) {
       const step = (label: string, title: string, patch: () => Partial<XParams>) => this.chip(label, title, false, () => a.setTransform(patch()));
       add(
-        step('\u2212', 'Smaller', () => ({ scale: xp.scale / 1.1 })),
-        step('+', 'Bigger', () => ({ scale: xp.scale * 1.1 })),
-        step('\u27f2', 'Rotate left 15\u00b0', () => ({ rotate: xp.rotate - 15 })),
-        step('\u27f3', 'Rotate right 15\u00b0', () => ({ rotate: xp.rotate + 15 })),
-        this.chip('\u2194', 'Mirror left to right', xp.flipH, () => a.flipTransform('h')),
-        this.chip('\u2195', 'Mirror top to bottom', xp.flipV, () => a.flipTransform('v')),
         this.chip('Apply', 'Keep it (Enter)', false, () => a.applyTransform(), 'check'),
         this.chip('Cancel', 'Put it back (Esc)', false, () => a.cancelTransform(), 'close'),
+        this.chip('Freeform', a.transformFreeform ? 'Freeform: corners stretch freely. Tap for uniform' : 'Uniform: corners keep proportions. Tap for freeform', a.transformFreeform, () => { a.transformFreeform = !a.transformFreeform; this.sig = ''; this.update(); }, 'freeform'),
+        step('\u2212', 'Smaller', () => ({ scale: xp.scale / 1.1 })),
+        step('+', 'Bigger', () => ({ scale: xp.scale * 1.1 })),
+        step('\u27f245', 'Rotate left 45\u00b0', () => ({ rotate: xp.rotate - 45 })),
+        step('\u27f345', 'Rotate right 45\u00b0', () => ({ rotate: xp.rotate + 45 })),
+        this.chip('Flip \u2194', 'Mirror left to right', xp.flipH, () => a.flipTransform('h'), 'fliph'),
+        this.chip('Flip \u2195', 'Mirror top to bottom', xp.flipV, () => a.flipTransform('v'), 'flipv'),
+        this.chip('Fit', 'Fit to the page', false, () => a.fitTransform(), 'fit'),
+        this.chip('Reset', 'Back to where it started', false, () => a.resetTransform(), 'undo'),
       );
     } else if (cur === 'adjust' && a.adjusting) {
       add(...this.adjustControls());
@@ -472,14 +476,33 @@ export class Bubbles {
       );
       if (sel) add(this.chip('Fill selection', 'Colour everything inside the selection', false, () => a.fillSelectedArea()));
     } else if (cur === 'select') {
+      // how to select (Procreate's modes) and how a new selection combines with this one
+      const shapes: [SelectShape, string, string, string][] = [
+        ['free', 'Freehand', 'Draw round what you want', 'lasso'],
+        ['rect', 'Rectangle', 'Drag a rectangle', 'selrect'],
+        ['ellipse', 'Ellipse', 'Drag an ellipse', 'selellipse'],
+        ['auto', 'Automatic', 'Tap an area between lines', 'selauto'],
+      ];
+      for (const [k, label, title, icon] of shapes) add(this.chip(label, title, a.selectShape === k, () => a.setSelectShape(k), icon));
+      add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
+      for (const [k, label, title, icon] of [['new', 'New', 'A new selection', 'selnew'], ['add', 'Add', 'Add to the selection', 'seladd'], ['subtract', 'Subtract', 'Take away from the selection', 'selsub']] as const) add(this.chip(label, title, a.selectOp === k, () => a.setSelectOp(k), icon));
+      add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
       if (sel) {
         add(
-          this.chip('Transform', 'Move, size, rotate or flip what is selected (drag the canvas to move)', false, () => a.beginTransform()),
-          this.chip('Fill', 'Colour everything inside the selection', false, () => a.fillSelectedArea()),
-          this.chip('Clear', 'Drop the selection', false, () => a.clearSpatialSelection()),
+          this.chip('Transform', 'Move, size, rotate or flip what is selected (drag the canvas to move)', false, () => a.beginTransform(), 'motion'),
+          this.chip('Fill', 'Colour everything inside the selection', false, () => a.fillSelectedArea(), 'fill'),
+          this.chip('Copy', 'Copy what is selected (paste on any drawing)', false, () => a.copyArt(), 'copy'),
+          this.chip('Cut', 'Copy what is selected and remove it', false, () => a.cutArt(), 'scissors'),
+          this.chip('Duplicate', 'A second copy in place, ready to move', false, () => a.duplicateArt(), 'layers'),
+          this.chip('Delete', 'Remove what is selected', false, () => a.deleteSelectedArt(), 'trash'),
+          this.chip('Invert', 'Select everything else', false, () => a.invertSelection(), 'invert'),
+          this.chip('Deselect', 'Drop the selection', false, () => a.clearSpatialSelection(), 'deselect'),
         );
-      } else add(el('span', { class: 'bub-hint' }, 'Draw a loop to move it, or'));
-      add(this.chip('Move all', 'Move, size or rotate the whole drawing', false, () => a.moveAll(), 'motion'));
+      } else {
+        add(this.chip('Move all', 'Move, size or rotate the whole drawing', false, () => a.moveAll(), 'motion'));
+        add(this.chip('Select all', 'Select everything on this drawing', false, () => a.invertSelection(), 'selnew'));
+      }
+      if (a.hasArtClip) add(this.chip('Paste', 'Paste what you copied, ready to move', false, () => a.pasteArt(), 'paste'));
     } else if (ws === 'board') {
       const st = this.hooks.story;
       if (st) {

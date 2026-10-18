@@ -124,3 +124,24 @@ describe('selection transform vectors', () => {
     expect(transformVectors(list, new Uint8Array(w * h), w, h, matrixFor(IDENTITY, 5, 5), 1).vectors).toBe(list);
   });
 });
+
+describe('freeform and exact masks', () => {
+  it('stretches across and down on their own, and counts it in the overall scale', async () => {
+    const { matrixFor, applyPoint, overallScale, isIdentity, IDENTITY } = await import('./selxform');
+    const m = matrixFor({ ...IDENTITY, sx: 2, sy: 0.5 }, 10, 10);
+    expect(applyPoint(m, 12, 12)).toEqual([14, 11]);
+    expect(overallScale({ ...IDENTITY, sx: 4, sy: 1 })).toBe(2);
+    expect(isIdentity({ ...IDENTITY, sx: 1, sy: 1 })).toBe(true);
+    expect(isIdentity({ ...IDENTITY, sx: 1.5 })).toBe(false);
+  });
+
+  it('moves a selection mask with the transform', async () => {
+    const { matrixFor, transformMask, IDENTITY } = await import('./selxform');
+    const w = 8, h = 4;
+    const mask = new Uint8Array(w * h);
+    mask[1 * w + 1] = 1;
+    const out = transformMask(mask, w, h, matrixFor({ ...IDENTITY, dx: 3 }, 1.5, 1.5), { x: 0, y: 0, w, h });
+    expect(out[1 * w + 4]).toBe(1);
+    expect(out[1 * w + 1]).toBe(0);
+  });
+});
