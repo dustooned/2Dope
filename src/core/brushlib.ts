@@ -60,6 +60,13 @@ export function readBrush(v: unknown): BrushSettings | null {
   if (!Number.isFinite(out.size) || out.size <= 0) out.size = base.size;
   // an image tip must be a small image data URL; anything else falls back to the round tip
   if (out.tipImage !== undefined && !(typeof out.tipImage === 'string' && out.tipImage.startsWith('data:image/') && out.tipImage.length < 400_000)) delete out.tipImage;
+  for (const k of ['hueJitter', 'satJitter', 'brightJitter', 'wetPull'] as const) {
+    const v = out[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v)) delete out[k];
+    else out[k] = Math.min(1, Math.max(0, v));
+  }
+  if (out.strokeColor !== undefined && typeof out.strokeColor !== 'boolean') delete out.strokeColor;
   if (out.grainImage !== undefined && !(typeof out.grainImage === 'string' && out.grainImage.startsWith('data:image/') && out.grainImage.length < 600_000)) delete out.grainImage;
   return out;
 }

@@ -39,6 +39,12 @@ export interface ImportedBrush {
   taperEnd?: number;
   /** StreamLine (0..1). */
   smoothing?: number;
+  /** Colour dynamics and wet mix (0..1). */
+  hueJitter?: number;
+  satJitter?: number;
+  brightJitter?: number;
+  strokeColor?: boolean;
+  wetPull?: number;
   roundness?: number;
   /** Dab spacing as a fraction of the diameter. */
   spacing?: number;
@@ -343,6 +349,17 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
     if (t1 !== undefined) b.taperEnd = clamp(t1, 0, 1);
     const sm = pick(info, ['plotSmoothing', 'streamLine', 'streamline']);
     if (sm !== undefined) b.smoothing = clamp(sm, 0, 1);
+    // colour dynamics: stamp (per dab) first, stroke jitter otherwise
+    const dh = pick(info, ['dynamicsHueJitter', 'colorDynamicsHue', 'stampHueJitter', 'hueJitter']);
+    const ds = pick(info, ['dynamicsSaturationJitter', 'colorDynamicsSaturation', 'stampSaturationJitter', 'saturationJitter']);
+    const dv = pick(info, ['dynamicsBrightnessJitter', 'dynamicsDarknessJitter', 'colorDynamicsBrightness', 'stampBrightnessJitter', 'brightnessJitter']);
+    const sh = pick(info, ['strokeHueJitter', 'colorDynamicsStrokeHue']);
+    const ss = pick(info, ['strokeSaturationJitter', 'colorDynamicsStrokeSaturation']);
+    const sv = pick(info, ['strokeBrightnessJitter', 'strokeDarknessJitter', 'colorDynamicsStrokeBrightness']);
+    if ((dh ?? 0) + (ds ?? 0) + (dv ?? 0) > 0) Object.assign(b, { hueJitter: clamp(dh ?? 0, 0, 1), satJitter: clamp(ds ?? 0, 0, 1), brightJitter: clamp(dv ?? 0, 0, 1) });
+    else if ((sh ?? 0) + (ss ?? 0) + (sv ?? 0) > 0) Object.assign(b, { hueJitter: clamp(sh ?? 0, 0, 1), satJitter: clamp(ss ?? 0, 0, 1), brightJitter: clamp(sv ?? 0, 0, 1), strokeColor: true });
+    const pull = pick(info, ['wetMixPull', 'dynamicsPull', 'paintPull', 'pull']);
+    if (pull !== undefined && pull > 0) b.wetPull = clamp(pull, 0, 1);
     out.push(b);
   }
   if (!out.length) throw new BrushImportError(`${fileName} has no Procreate brushes in it.`);

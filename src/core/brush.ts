@@ -49,6 +49,14 @@ export interface BrushSettings {
    * white lets paint through, black holds it back. Missing = the built-in paper grain.
    */
   grainImage?: string;
+  /** Colour dynamics (Procreate): hue, saturation and brightness vary, 0..1 each. */
+  hueJitter?: number;
+  satJitter?: number;
+  brightJitter?: number;
+  /** The colour varies once per stroke instead of on every dab. */
+  strokeColor?: boolean;
+  /** Wet mix pull (Procreate): how much of the colour already on the canvas the brush picks up, 0..1. */
+  wetPull?: number;
   /** Diameter in document pixels. */
   size: number;
   /** Edge hardness 0 (soft) .. 1 (hard). */

@@ -25,7 +25,7 @@ interface SliderDef {
 const SECTIONS: {
   title: string;
   sliders: SliderDef[];
-  toggles?: { key: 'followDirection' | 'pulledString' | 'antiAlias'; label: string }[];
+  toggles?: { key: 'followDirection' | 'pulledString' | 'antiAlias' | 'strokeColor'; label: string }[];
   dyn?: DynKey[];
   tilt?: boolean;
 }[] = [
@@ -49,6 +49,16 @@ const SECTIONS: {
       { key: 'grain', label: 'Paper grain', min: 0, max: 1, step: 0.01 },
       { key: 'grainScale', label: 'Grain scale', min: 0.25, max: 3, step: 0.05 },
     ],
+  },
+  {
+    title: 'Colour and wet mix',
+    sliders: [
+      { key: 'hueJitter', label: 'Hue jitter', min: 0, max: 1, step: 0.01 },
+      { key: 'satJitter', label: 'Saturation jitter', min: 0, max: 1, step: 0.01 },
+      { key: 'brightJitter', label: 'Brightness jitter', min: 0, max: 1, step: 0.01 },
+      { key: 'wetPull', label: 'Wet mix: pull', min: 0, max: 1, step: 0.01 },
+    ],
+    toggles: [{ key: 'strokeColor', label: 'Vary once per stroke (not every dab)' }],
   },
   {
     title: 'Tilt shading',

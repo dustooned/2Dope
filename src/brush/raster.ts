@@ -1,6 +1,7 @@
 import { symmetryCopies } from '../core/adjust';
 import type { StrokeRecord } from '../core/stroke';
 import { hash01 } from '../core/rng';
+import { jitterColor, mixColor } from '../core/color';
 import { strokeLength } from '../core/stroke';
 import { dabsForStroke, type Dab } from './dabs';
 
@@ -48,6 +49,7 @@ export function tipSprite(hardness: number, color: string): HTMLCanvasElement {
   const key = `${h}|${color}`;
   const hit = tipCache.get(key);
   if (hit) return hit;
+  if (tipCache.size > 600) tipCache.clear();
   const c = makeCanvas(TIP, TIP);
   const g = ctx2d(c);
   const r = TIP / 2;
@@ -112,6 +114,7 @@ export function imageTipSprite(url: string, color: string): HTMLCanvasElement | 
   const key = `${url.length}:${url.slice(-48)}|${color}`;
   const hit = tipColored.get(key);
   if (hit) return hit;
+  if (tipColored.size > 600) tipColored.clear();
   const c = makeCanvas(TIP, TIP);
   const g = ctx2d(c);
   g.drawImage(mask, 0, 0);
@@ -269,6 +272,12 @@ export class RasterEngine {
   private shadeTip: HTMLCanvasElement | null = null;
   private hasShade = false;
   private bbox: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  /** Colour dynamics / wet mix: each dab has its own colour (seeded by the stroke and dab index). */
+  private dabColour = false;
+  private strokeColour = '#000000';
+  private dabIndex = 0;
+  /** Wet mix: the canvas as the stroke began (the colour the brush picks up). */
+  private pullFrom: Uint8ClampedArray | null = null;
 
   constructor(
     public width: number,
@@ -309,10 +318,26 @@ export class RasterEngine {
     return this.record;
   }
 
+  /** The tip in a colour (the picture tip when it has decoded, the round one otherwise). */
+  private tipIn(color: string): HTMLCanvasElement {
+    const b = this.record!.brush;
+    return (b.tipImage ? imageTipSprite(b.tipImage, color) : null) ?? tipSprite(b.hardness, color);
+  }
+
   begin(record: StrokeRecord): void {
     this.record = record;
-    const color = record.tool === 'eraser' ? '#000000' : record.color;
-    this.tip = (record.brush.tipImage ? imageTipSprite(record.brush.tipImage, color) : null) ?? tipSprite(record.brush.hardness, color);
+    const b = record.brush;
+    let color = record.tool === 'eraser' ? '#000000' : record.color;
+    const jit = { hue: b.hueJitter ?? 0, sat: b.satJitter ?? 0, bright: b.brightJitter ?? 0 };
+    const varies = record.tool !== 'eraser' && (jit.hue > 0 || jit.sat > 0 || jit.bright > 0);
+    // colour dynamics per stroke: one shift for the whole stroke
+    if (varies && b.strokeColor) color = jitterColor(color, jit, hash01(record.seed, 0, 71), hash01(record.seed, 0, 72), hash01(record.seed, 0, 73));
+    this.strokeColour = color;
+    this.dabIndex = 0;
+    const pull = record.tool === 'eraser' ? 0 : (b.wetPull ?? 0);
+    this.dabColour = (varies && !b.strokeColor) || pull > 0;
+    this.pullFrom = pull > 0 ? ctx2d(this.target).getImageData(0, 0, this.width, this.height).data : null;
+    this.tip = this.tipIn(color);
     this.shadeTip = tipSprite(record.brush.tiltShade.hardness, color);
     this.hasShade = false;
     this.bbox = null;
@@ -322,8 +347,24 @@ export class RasterEngine {
 
   addDabs(dabs: Dab[]): void {
     if (!this.tip || !this.shadeTip) return;
+    const rec = this.record!;
+    const b = rec.brush;
     for (const d of mirrored(dabs, this.record)) {
-      if (d.shade < 1) drawDab(this.bctx, d, this.tip, 1 - d.shade);
+      let tip = this.tip;
+      if (this.dabColour) {
+        const i = ++this.dabIndex;
+        let c = b.strokeColor ? this.strokeColour : jitterColor(this.strokeColour, { hue: b.hueJitter ?? 0, sat: b.satJitter ?? 0, bright: b.brightJitter ?? 0 }, hash01(rec.seed, i, 81), hash01(rec.seed, i, 82), hash01(rec.seed, i, 83));
+        const src = this.pullFrom;
+        if (src) {
+          // wet mix: pick up the colour under the dab, as much as there is paint there
+          const x = Math.max(0, Math.min(this.width - 1, Math.round(d.x))), y = Math.max(0, Math.min(this.height - 1, Math.round(d.y)));
+          const k = (y * this.width + x) * 4;
+          const a = src[k + 3]! / 255;
+          if (a > 0) c = mixColor(c, [src[k]!, src[k + 1]!, src[k + 2]!], (b.wetPull ?? 0) * a);
+        }
+        tip = this.tipIn(c);
+      }
+      if (d.shade < 1) drawDab(this.bctx, d, tip, 1 - d.shade);
       if (d.shade > 0) {
         drawDab(this.sctx, d, this.shadeTip, d.shade);
         this.hasShade = true;

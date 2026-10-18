@@ -420,6 +420,8 @@ function importedBrush(ib: ImportedBrush, tip: string | null, grain: string | nu
   if (ib.taperStart !== undefined) b.taperStart = Math.round(ib.taperStart * 160);
   if (ib.taperEnd !== undefined) b.taperEnd = Math.round(ib.taperEnd * 160);
   if (ib.smoothing !== undefined) b.smoothing = ib.smoothing;
+  for (const k of ['hueJitter', 'satJitter', 'brightJitter', 'wetPull'] as const) if (ib[k] !== undefined) b[k] = ib[k];
+  if (ib.strokeColor) b.strokeColor = true;
   return b;
 }
 

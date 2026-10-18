@@ -45,3 +45,14 @@ describe('harmony and palettes from pictures', () => {
     expect(p).toEqual(['#0a0afa', '#fa0a0a', '#f0f0f0']);
   });
 });
+
+describe('colour dynamics', () => {
+  it('jitters within the range, the same for the same random numbers', async () => {
+    const { jitterColor, hexToHsv, mixColor } = await import('./color');
+    expect(jitterColor('#ff0000', { hue: 0, sat: 0, bright: 0 }, 0.9, 0.9, 0.9)).toBe('#ff0000');
+    const a = jitterColor('#ff0000', { hue: 0.2, sat: 0, bright: 0 }, 1, 0.5, 0.5);
+    expect(hexToHsv(a).h).toBeCloseTo(36, 0);
+    expect(jitterColor('#808080', { hue: 0, sat: 0, bright: 0.5 }, 0.5, 0.5, 0)).toBe('#000000');
+    expect(mixColor('#000000', [255, 255, 255], 0.5)).toBe('#808080');
+  });
+});

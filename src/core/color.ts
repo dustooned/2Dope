@@ -123,3 +123,31 @@ export function paletteFromPixels(data: Uint8ClampedArray, count = 12, step = 1)
   avg.sort((p, q) => p[0] * 0.3 + p[1] * 0.59 + p[2] * 0.11 - (q[0] * 0.3 + q[1] * 0.59 + q[2] * 0.11));
   return [...new Set(avg.map((c) => rgbToHex(...c)))];
 }
+
+// ---- Colour dynamics (Procreate's Color dynamics): colour that varies per dab or per stroke ----
+
+export interface ColorJitter {
+  /** 0..1: up to half a turn of the hue wheel either way. */
+  hue: number;
+  /** 0..1: saturation moves up to this much either way. */
+  sat: number;
+  /** 0..1: brightness moves up to this much either way. */
+  bright: number;
+}
+
+/** `hex` moved by a jitter; r1..r3 are random numbers 0..1 (seeded, so strokes replay the same). */
+export function jitterColor(hex: string, j: ColorJitter, r1: number, r2: number, r3: number): string {
+  if (!j.hue && !j.sat && !j.bright) return hex;
+  const c = hexToHsv(hex);
+  const h = (((c.h + (r1 * 2 - 1) * j.hue * 180) % 360) + 360) % 360;
+  const s = Math.min(1, Math.max(0, c.s + (r2 * 2 - 1) * j.sat));
+  const v = Math.min(1, Math.max(0, c.v + (r3 * 2 - 1) * j.bright));
+  return hsvToHex({ h, s, v });
+}
+
+/** `a` mixed towards `b` by t (0 = a, 1 = b), rounded to 6 bits a channel so few distinct colours result. */
+export function mixColor(a: string, rgb: readonly [number, number, number], t: number): string {
+  const [r, g, b] = hexToRgb(a);
+  const q = (x: number) => Math.min(255, Math.round(x / 4) * 4);
+  return rgbToHex(q(r + (rgb[0] - r) * t), q(g + (rgb[1] - g) * t), q(b + (rgb[2] - b) * t));
+}
