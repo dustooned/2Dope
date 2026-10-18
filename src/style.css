@@ -4379,3 +4379,4 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 @media (max-width: 700px) { body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:not(.quick) .paint-target { left: 8px; max-width: calc(100% - 16px); } }
 
 .fx-row[hidden], .fx-reseed[hidden] { display: none !important; }
+.fx-row select { flex: 1; min-width: 0; min-height: 34px; background: var(--panel-2); color: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; }

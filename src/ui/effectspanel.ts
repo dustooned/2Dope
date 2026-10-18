@@ -1,5 +1,6 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
+import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
 import { EFFECT_TYPES, effectDef, effectPreview, newEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { decorate } from './icons';
@@ -137,6 +138,23 @@ export class EffectsPanel {
         }
         look.append(looks);
         card.append(look);
+      }
+      if (e.type === 'dither') {
+        const pick = (label: string, options: { id: string; label: string }[], value: string, set: (v: string) => Partial<LayerEffect>, what: string) => {
+          const row = el('label', { class: 'fx-row' });
+          const sel = el('select', { 'aria-label': label });
+          for (const o of options) sel.append(el('option', { value: o.id }, o.label));
+          sel.value = value;
+          sel.addEventListener('change', () => this.patch(i, set(sel.value), `Dither ${what}`));
+          row.append(el('span', {}, label), sel);
+          card.append(row);
+        };
+        pick('Colours', PALETTES, e.palette ?? 'pico8', (v) => ({ palette: v as PaletteId }), 'colours');
+        pick('Pattern', DITHER_METHODS, e.method ?? 'bayer4', (v) => ({ method: v as DitherMethod }), 'pattern');
+        const gray = el('button', { type: 'button', class: `lc-switch fx-on${e.gray ? ' on' : ''}`, role: 'switch', 'aria-checked': String(!!e.gray), title: 'Turn the picture grey before dithering' });
+        gray.append(el('span', { class: 'lc-switch-name' }, 'Grey first'), el('span', { class: 'lc-switch-knob', 'aria-hidden': 'true' }));
+        gray.addEventListener('click', () => this.patch(i, { gray: !e.gray }, 'Dither grey'));
+        card.append(gray);
       }
       slider(def.amountLabel, 'amount', def.amountRange, def.amountUnit === '%' ? 1 : 0.1, def.amountUnit);
       slider(def.sizeLabel, 'size', def.sizeRange, 1, def.sizeUnit);

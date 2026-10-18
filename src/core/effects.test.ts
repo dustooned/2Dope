@@ -48,4 +48,13 @@ describe('layer effects', () => {
     expect(effectsKey(n, 0)).not.toBe(effectsKey(n, 1));
     expect(effectsKey({ id: 'L', effects: [{ ...t.effects[0]!, style: 'dots' as const }] }, 0)).not.toBe(effectsKey(t, 0));
   });
+
+  it('has a dither effect: still, with a palette, a pattern and a pixel size', () => {
+    const d = newEffect('dither', 'a', 1);
+    expect(d).toMatchObject({ type: 'dither', target: 'layer', palette: 'pico8', method: 'bayer4', gray: false, amount: 100, size: 2 });
+    expect(effectsKey({ id: 'L', effects: [d] }, 0)).toBe(effectsKey({ id: 'L', effects: [d] }, 9));
+    expect(effectsKey({ id: 'L', effects: [{ ...d, palette: 'bw' as const }] }, 0)).not.toBe(effectsKey({ id: 'L', effects: [d] }, 0));
+    const [r] = readEffects([{ type: 'dither', palette: 'nope', method: 'floyd', gray: true, size: 99 }])!;
+    expect(r).toMatchObject({ palette: 'pico8', method: 'floyd', gray: true, size: 16 });
+  });
 });

@@ -1,5 +1,6 @@
 import { makeCanvas } from '../brush/raster';
 import { activeEffects, effectsKey, effectTick, type LayerEffect } from '../core/effects';
+import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
 
 /**
@@ -104,6 +105,58 @@ function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number): void 
   else if (e.type === 'turbulence') displace(c, e, tick, 3);
   else if (e.type === 'grain') grain(c, e, tick);
   else if (e.type === 'texture') texture(c, e);
+  else if (e.type === 'dither') dither(c, e);
+}
+
+/**
+ * Dither: the picture is cut into `size`-pixel cells (the chunky retro pixel), each cell takes the
+ * average colour of what is in it, and the cells are dithered to the palette. Alpha stays smooth.
+ */
+function dither(c: HTMLCanvasElement, e: LayerEffect): void {
+  const w = c.width, h = c.height;
+  const p = Math.max(1, Math.round(e.size));
+  const g = c.getContext('2d', { willReadFrequently: true })!;
+  const img = g.getImageData(0, 0, w, h);
+  const src = new Uint32Array(img.data.buffer);
+  const box = paintedBox(src, w, h, 0);
+  if (!box) return;
+  // cells line up with the page (not with the drawing), so the pattern does not swim when it moves
+  const cx0 = Math.floor(box.x0 / p), cy0 = Math.floor(box.y0 / p);
+  const cw = Math.floor(box.x1 / p) - cx0 + 1, ch = Math.floor(box.y1 / p) - cy0 + 1;
+  const cells = new Uint8ClampedArray(cw * ch * 4);
+  const d = img.data;
+  for (let cy = 0; cy < ch; cy++) {
+    for (let cx = 0; cx < cw; cx++) {
+      let r = 0, gg = 0, b = 0, a = 0, n = 0;
+      const xs = (cx0 + cx) * p, ys = (cy0 + cy) * p;
+      for (let y = ys; y < Math.min(h, ys + p); y++) {
+        for (let x = xs; x < Math.min(w, xs + p); x++) {
+          const i = (y * w + x) * 4;
+          const al = d[i + 3]!;
+          r += d[i]! * al; gg += d[i + 1]! * al; b += d[i + 2]! * al; a += al; n++;
+        }
+      }
+      const o = (cy * cw + cx) * 4;
+      if (a > 0) { cells[o] = r / a; cells[o + 1] = gg / a; cells[o + 2] = b / a; cells[o + 3] = Math.max(1, Math.round(a / n)); }
+    }
+  }
+  ditherPixels(cells, cw, ch, { palette: e.palette ?? 'pico8', method: e.method ?? 'bayer4', gray: e.gray, strength: e.amount / 100 });
+  // paint the cells back as blocks, keeping each pixel's own alpha so edges stay smooth
+  for (let cy = 0; cy < ch; cy++) {
+    for (let cx = 0; cx < cw; cx++) {
+      const o = (cy * cw + cx) * 4;
+      if (!cells[o + 3]) continue;
+      const xs = (cx0 + cx) * p, ys = (cy0 + cy) * p;
+      for (let y = ys; y < Math.min(h, ys + p); y++) {
+        for (let x = xs; x < Math.min(w, xs + p); x++) {
+          const i = (y * w + x) * 4;
+          if (!d[i + 3]) continue;
+          d[i] = cells[o]!; d[i + 1] = cells[o + 1]!; d[i + 2] = cells[o + 2]!;
+        }
+      }
+    }
+  }
+  g.putImageData(img, 0, 0);
 }
 
 /** The area that holds paint, padded: what a displacing effect needs to work on. */
