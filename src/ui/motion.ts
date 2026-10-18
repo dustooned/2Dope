@@ -73,6 +73,8 @@ export class MotionPanel {
   private cell = loadNum(ZOOM_KEY, 28, 8, 80);
   private rowH = loadNum(ROW_KEY, 44, 32, 72);
   private signature = '';
+  /** Sounds as rows under the layers (set by the shell). */
+  audio: { sig: () => string; rows: (cell: number, end: number) => HTMLElement[] } | null = null;
   /** Simple screen: every layer row shows (otherwise the selected layers, their linked layers and cameras). */
   private allRows = (() => { try { return localStorage.getItem('2dope.motion.allRows') === '1'; } catch { return false; } })();
   private drag: Drag | null = null;
@@ -147,6 +149,7 @@ export class MotionPanel {
       ),
       group(
         dup(btn('+ Drawing', 'A new drawings layer at the playhead', () => ed.addLayer('drawings'))),
+        btn('+ Media', 'Bring in a picture, movie or sound: each becomes its own track from frame 1', () => app.pickMedia?.()),
         btn('+ Null', 'An empty handle to parent other layers to', () => ed.addLayer('null')),
         dup(btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera'))),
       ),
@@ -264,7 +267,7 @@ export class MotionPanel {
     let content = 0;
     for (const l of c.layers) if (l.kind === 'drawings') for (const e of l.exposures) content += e.length + 1;
     const simple = !document.body.classList.contains('ui-full');
-    const sig = `${simple}|${this.allRows}|${c.id}|${ed.rev}|${ed.selected.join(',')}|${[...ed.keys].join(',')}|${[...ed.open].join(',')}|${this.cell}|${this.rowH}|${content}|${app.compEnd}`;
+    const sig = `${simple}|${this.allRows}|${c.id}|${ed.rev}|${ed.selected.join(',')}|${[...ed.keys].join(',')}|${[...ed.open].join(',')}|${this.cell}|${this.rowH}|${content}|${app.compEnd}|${this.audio?.sig() ?? ''}`;
     // never rebuild the rows under a finger that is dragging one of them
     if (sig !== this.signature && !this.drag && !this.scrubbing) {
       this.signature = sig;
@@ -444,6 +447,8 @@ export class MotionPanel {
       more.append(b);
       this.grid.append(more);
     }
+    // sounds: rows on the same clock, drag to move or trim (the top comp's sounds)
+    if (this.audio && c === app.project.comp) for (const r of this.audio.rows(this.cell, end)) this.grid.append(r);
     if (!c.layers.length) {
       const empty = el('div', { class: 'mempty' });
       empty.append(el('p', {}, 'No layers yet.'), el('p', { class: 'hint' }, 'Add a drawing layer, a null or a camera above. Then drag things on the canvas to move, scale and rotate them.'));

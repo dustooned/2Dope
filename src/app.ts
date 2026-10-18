@@ -1649,6 +1649,8 @@ export class App {
 
   /** Opens the Layers popover next to a button (set by main). */
   openLayers: ((anchor: HTMLElement) => void) | null = null;
+  /** Open the media picker (pictures, movies, sounds); set by the shell. */
+  pickMedia: (() => void) | null = null;
 
   /** Shows a short message to the person (the file UI sets it to a toast). */
   onNotice: ((message: string) => void) | null = null;
@@ -1922,6 +1924,107 @@ export class App {
     this.onCompChanged();
     this.requestRender();
     this.onFrameChange();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Imported media (Procreate Dreams style): every picture or movie is its own layer on the
+  // timeline from frame 1. The pixels go on the FILL part, so the LINE stays free to draw over.
+
+  /** Longest movie brought in as frames (seconds); longer movies are cut here. */
+  static readonly MOVIE_MAX_S = 12;
+
+  /** Paint a picture onto a drawing's FILL, fitted inside the page and centred. */
+  private paintMedia(d: Drawing, src: CanvasImageSource, sw: number, sh: number): void {
+    const g = planeCanvas(d, 'fill').getContext('2d')!;
+    const k = Math.min(this.docW / sw, this.docH / sh);
+    g.drawImage(src, (this.docW - sw * k) / 2, (this.docH - sh * k) / 2, sw * k, sh * k);
+    d.rev += 1;
+    this.residency.touch(d);
+    this.residency.updateThumb(d);
+  }
+
+  /** A new layer above the one you draw on, holding these drawings from frame 1 (one undo step). */
+  private addMediaLayer(name: string, frames: Drawing[], still: boolean): void {
+    const p = this.project;
+    const id = p.newId('L');
+    const above = p.isPlaceholder ? null : p.activeLayer;
+    this.editor.edit(still ? 'Import picture' : 'Import movie', (cc) => {
+      const made = drawingsLayer(id, name.slice(0, 60), frames.map((d) => ({ drawing: d.id, length: 1 })), p.width, p.height, cc.width, cc.height);
+      if (still) {
+        made.still = true;
+        made.play = 'loop';
+      }
+      made.start = 0;
+      made.in = 0;
+      made.out = null;
+      cc.layers.splice(Math.max(0, cc.layers.findIndex((l) => l.id === above)), 0, made);
+    });
+    this.focusLayer(id);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+    this.onDocChanged();
+  }
+
+  /** A picture as an object layer: it shows for the whole shot. Move or scale it with Select. */
+  importPicture(name: string, src: CanvasImageSource, w: number, h: number): void {
+    if (this.strokeActive || w <= 0 || h <= 0) return;
+    const d = this.project.newDrawing();
+    this.paintMedia(d, src, w, h);
+    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), [d], true);
+  }
+
+  /**
+   * A movie as a drawings layer: one drawing per frame of the shot, from frame 1 (up to
+   * MOVIE_MAX_S seconds). Trace over it, or keep it as live footage in the shot.
+   */
+  async importMovie(file: File, progress: (done: number, total: number) => void = () => {}): Promise<boolean> {
+    if (this.strokeActive) return false;
+    if (this.playing) this.togglePlay();
+    const p = this.project;
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.src = url;
+    const made: Drawing[] = [];
+    try {
+      await new Promise<void>((ok, bad) => {
+        v.onloadeddata = () => ok();
+        v.onerror = () => bad(new Error('This movie could not be opened here. MP4 (H.264) or MOV usually works.'));
+        setTimeout(() => bad(new Error('This movie took too long to open.')), 15000);
+      });
+      if (!v.videoWidth || !Number.isFinite(v.duration)) throw new Error('This movie has no picture to bring in.');
+      const fps = p.comp.fps;
+      const all = Math.max(1, Math.round(v.duration * fps));
+      const total = Math.min(all, App.MOVIE_MAX_S * fps);
+      for (let i = 0; i < total; i++) {
+        if (this.project !== p) throw new Error('The project changed while the movie was loading.');
+        const t = Math.min(v.duration - 0.001, (i + 0.25) / fps);
+        await new Promise<void>((ok) => {
+          const done = () => { clearTimeout(timer); ok(); };
+          const timer = setTimeout(done, 3000);
+          v.addEventListener('seeked', done, { once: true });
+          v.currentTime = t;
+        });
+        const d = p.newDrawing();
+        this.paintMedia(d, v, v.videoWidth, v.videoHeight);
+        made.push(d);
+        if (i % 6 === 0) progress(i, total);
+      }
+      this.addMediaLayer(file.name.replace(/\.[a-z0-9]+$/i, ''), made, false);
+      if (total < all) this.onNotice?.(`Only the first ${App.MOVIE_MAX_S} seconds of the movie came in (${total} frames).`);
+      return true;
+    } catch (e) {
+      for (const d of made) p.drawings.delete(d.id);
+      this.onNotice?.(e instanceof Error ? e.message : String(e));
+      return false;
+    } finally {
+      URL.revokeObjectURL(url);
+      v.removeAttribute('src');
+      v.load();
+    }
   }
 
   /**

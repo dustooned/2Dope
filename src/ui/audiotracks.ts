@@ -38,11 +38,12 @@ export class AudioTracks {
     };
     this.app.history.push({ label, do: () => apply(after), undo: () => apply(before) }, false);
   }
-  private async import(file: File): Promise<void> {
+  /** Import a sound as a clip from frame 1. `quiet`: no message when it has no sound (a silent movie). */
+  async import(file: File, quiet = false): Promise<void> {
     if (this.importing || this.app.strokeActive) return;
     if (this.app.playing) this.app.togglePlay();
     this.importing = true;
-    const p = this.app.project; const comp = p.comp; const frame = this.app.frame;
+    const p = this.app.project; const comp = p.comp; const frame = 0;
     this.update(true);
     try {
       const result = await this.playback.bank.import(p, file);
@@ -51,8 +52,8 @@ export class AudioTracks {
       const clip: SoundClip = { id: p.newId('a'), asset: result.id, name: file.name.slice(0, 120), start: frame, trimIn: 0, trimOut: result.sound.duration, gain: 1, muted: false, link: null };
       this.edit('Import audio', clips => [...clips, clip]);
       this.root.open = true;
-      this.app.onNotice?.('Audio imported. Move or trim it here; link dialogue to a board panel to follow its timing.');
-    } catch (e) { this.app.onNotice?.(e instanceof Error ? e.message : String(e)); }
+      if (!quiet) this.app.onNotice?.('Sound added at frame 1. Drag it on the timeline to move it; drag its ends to trim.');
+    } catch (e) { if (!quiet) this.app.onNotice?.(e instanceof Error ? e.message : String(e)); }
     finally { this.importing = false; this.update(true); }
   }
   update(force = false): void {
@@ -196,23 +197,109 @@ export class AudioTracks {
       const name = el('button', `\u266A ${clip.name}`); name.type = 'button'; name.className = 'rail-name'; name.title = 'Sound settings';
       name.onclick = () => this.openCard(clip.id);
       tag.append(mute, name); row.append(tag);
-      const start = soundStart(clip, c);
-      const b = el('div'); b.className = 'rblock audio-block'; b.title = 'Tap for this sound\u2019s settings';
-      b.style.left = `${((start ?? clip.start) - x0) * cell}px`;
-      b.style.width = `${Math.max(6, (clip.trimOut - clip.trimIn) * c.fps * cell - 3)}px`;
-      const canvas = el('canvas'); canvas.height = 28; canvas.setAttribute('aria-label', `${clip.name} waveform`);
-      b.append(canvas);
-      b.onclick = () => this.openCard(clip.id);
-      const draw = () => {
-        if (!canvas.isConnected || app.project !== project) return;
-        const data = this.playback.bank.waveform(clip.asset);
-        if (data) paintWaveform(canvas, data, clip);
-      };
-      void this.playback.bank.load(project, clip.asset).then(() => setTimeout(draw, 0)).catch(() => {});
-      setTimeout(draw, 50);
-      row.append(b); nodes.push(row); y += H;
+      row.append(this.clipBlock(clip, x0, cell)); nodes.push(row); y += H;
     }
     return { nodes, height: y - top };
+  }
+
+  /** Motion: one row per sound under the layers, on Motion's clock (frame 0 at the left of the lanes). */
+  motionRows(cell: number, end: number): HTMLElement[] {
+    return (this.app.project.comp.audio ?? []).map((clip) => {
+      const row = el('div'); row.className = `mrow audio${clip.muted ? ' off' : ''}`;
+      const left = el('div'); left.className = 'mleft';
+      const name = el('button', `\u266A ${clip.name}`); name.type = 'button'; name.className = 'lname'; name.title = 'Sound settings';
+      name.onclick = () => this.openCard(clip.id);
+      const mute = el('button', clip.muted ? '\u2013' : '\u266A'); mute.type = 'button'; mute.className = 'leye';
+      mute.setAttribute('aria-pressed', String(!clip.muted)); mute.title = clip.muted ? 'Unmute this sound' : 'Mute this sound';
+      mute.onclick = () => this.edit(clip.muted ? 'Unmute audio' : 'Mute audio', list => list.map(s => s.id === clip.id ? { ...s, muted: !s.muted } : s));
+      left.append(name, mute);
+      const right = el('div'); right.className = 'mright'; right.style.width = `${end * cell}px`;
+      right.append(this.clipBlock(clip, 0, cell));
+      row.append(left, right);
+      return row;
+    });
+  }
+
+  /**
+   * One sound on the timeline (Procreate Dreams style): drag it to move it, drag an end to trim it,
+   * tap it for its settings. Snaps to frames; one undo step per drag.
+   */
+  private clipBlock(clip: SoundClip, x0: number, cell: number): HTMLElement {
+    const app = this.app; const c = app.project.comp; const project = app.project; const fps = c.fps;
+    const start = soundStart(clip, c) ?? clip.start;
+    const duration = project.sounds.get(clip.asset)?.duration ?? clip.trimOut;
+    const b = el('div'); b.className = 'rblock audio-block'; b.title = 'Drag to move \u00b7 drag an end to trim \u00b7 tap for settings';
+    const place = (s: number, tin: number, tout: number) => {
+      b.style.left = `${(s - x0) * cell}px`;
+      b.style.width = `${Math.max(6, (tout - tin) * fps * cell - 3)}px`;
+    };
+    place(start, clip.trimIn, clip.trimOut);
+    const canvas = el('canvas'); canvas.height = 28; canvas.setAttribute('aria-label', `${clip.name} waveform`);
+    const edgeIn = el('span'); edgeIn.className = 'ab-edge in'; edgeIn.dataset.edge = 'in'; edgeIn.title = 'Drag to trim the start';
+    const edgeOut = el('span'); edgeOut.className = 'ab-edge out'; edgeOut.dataset.edge = 'out'; edgeOut.title = 'Drag to trim the end';
+    b.append(canvas, edgeIn, edgeOut);
+    const draw = () => {
+      if (!canvas.isConnected || app.project !== project) return;
+      const data = this.playback.bank.waveform(clip.asset);
+      if (data) paintWaveform(canvas, data, clip);
+    };
+    void this.playback.bank.load(project, clip.asset).then(() => setTimeout(draw, 0)).catch(() => {});
+    setTimeout(draw, 50);
+
+    let drag: { id: number; x: number; what: 'move' | 'in' | 'out'; moved: boolean; patch: Partial<SoundClip> } | null = null;
+    let dragged = false;
+    b.addEventListener('pointerdown', (e) => {
+      // the timeline under it must not scrub or select while a sound is held
+      e.stopPropagation();
+      if (e.button > 0 || app.strokeActive) return;
+      const edge = (e.target as HTMLElement).dataset.edge as 'in' | 'out' | undefined;
+      drag = { id: e.pointerId, x: e.clientX, what: edge ?? 'move', moved: false, patch: {} };
+      try { b.setPointerCapture(e.pointerId); } catch { /* still works without capture */ }
+    });
+    b.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x;
+      if (!drag.moved && Math.abs(dx) < 5) return;
+      drag.moved = true;
+      b.classList.add('dragging');
+      let df = Math.round(dx / cell);
+      if (drag.what === 'move') {
+        df = Math.max(df, -start);
+        drag.patch = { start: start + df };
+        place(start + df, clip.trimIn, clip.trimOut);
+      } else if (drag.what === 'in') {
+        // trim the front: the sound stays put, its beginning is cut (or brought back)
+        df = Math.min(Math.floor((clip.trimOut - clip.trimIn) * fps) - 1, Math.max(-start, Math.ceil(-clip.trimIn * fps), df));
+        const tin = Math.max(0, clip.trimIn + df / fps);
+        drag.patch = { start: start + df, trimIn: tin };
+        place(start + df, tin, clip.trimOut);
+      } else {
+        const tout = Math.min(duration, Math.max(clip.trimIn + 1 / fps, clip.trimOut + df / fps));
+        drag.patch = { trimOut: tout };
+        place(start, clip.trimIn, tout);
+      }
+    });
+    const end = (e: PointerEvent, cancel: boolean) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const d = drag; drag = null;
+      b.classList.remove('dragging');
+      if (!d.moved) return;
+      dragged = true;
+      setTimeout(() => { dragged = false; }, 0);
+      if (cancel) { place(start, clip.trimIn, clip.trimOut); return; }
+      const patch = { ...d.patch };
+      if ((patch.start ?? start) === start && (patch.trimIn ?? clip.trimIn) === clip.trimIn && (patch.trimOut ?? clip.trimOut) === clip.trimOut) return;
+      // a sound linked to a board panel moves by its offset, so it keeps following the panel
+      if (clip.link && patch.start !== undefined) {
+        patch.link = { ...clip.link, offset: clip.link.offset + patch.start - start };
+        delete patch.start;
+      }
+      this.edit(d.what === 'move' ? 'Move sound' : 'Trim sound', list => list.map(s => s.id === clip.id ? { ...s, ...patch } : s));
+    };
+    b.addEventListener('pointerup', (e) => end(e, false));
+    b.addEventListener('pointercancel', (e) => end(e, true));
+    b.addEventListener('click', (e) => { e.stopPropagation(); if (!dragged) this.openCard(clip.id); });
+    return b;
   }
 
   /** A floating card with one sound's settings. Closes with X, Escape, a tap outside, or a swipe down on its top. */

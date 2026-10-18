@@ -4063,6 +4063,17 @@ body.sheet-ws .audio-tracks { display: none !important; }
 .rail.audio .audio-block { top: 4px; bottom: 4px; height: auto; background: #3a3320; border: 1px solid #8a7430; border-radius: 6px; overflow: hidden; cursor: pointer; padding: 0; }
 .rail.audio .audio-block canvas { display: block; width: 100%; height: 100%; }
 .rail.audio.off .audio-block { filter: grayscale(1); opacity: .6; }
+/* sounds are clips you drag (move) or drag by an end (trim), like Procreate Dreams */
+.audio-block { touch-action: pan-y; cursor: grab; }
+.audio-block.dragging { cursor: grabbing; outline: 2px solid #e8c45a; z-index: 3; }
+.audio-block .ab-edge { position: absolute; top: 0; bottom: 0; width: 12px; cursor: ew-resize; background: linear-gradient(90deg, rgba(232,196,90,.55), rgba(232,196,90,0)); }
+.audio-block .ab-edge.in { left: 0; }
+.audio-block .ab-edge.out { right: 0; transform: scaleX(-1); }
+.mrow.audio .mright { position: relative; }
+.mrow.audio .audio-block { position: absolute; top: 5px; bottom: 5px; margin: 0; background: #3a3320; border: 1px solid #8a7430; border-radius: 6px; overflow: hidden; padding: 0; }
+.mrow.audio .audio-block canvas { display: block; width: 100%; height: 100%; }
+.mrow.audio.off .audio-block { filter: grayscale(1); opacity: .6; }
+body.ws-motion .audio-tracks { display: none !important; }
 .tracks-add { min-height: 40px; }
 .audio-card { position: fixed; z-index: 60; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); max-height: 70dvh; overflow: auto; padding: 0 14px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px #0008; }
 .audio-card-head { position: sticky; top: 0; display: flex; align-items: center; gap: 8px; min-height: 52px; background: var(--panel); font-weight: 600; touch-action: none; }

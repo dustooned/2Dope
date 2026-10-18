@@ -3,6 +3,7 @@ import { openBoardExport } from './ui/boardexport';
 import './style.css';
 import { AudioPlayback } from './audio';
 import { AudioTracks } from './ui/audiotracks';
+import { mediaPicker } from './ui/media';
 
 // Tells the page's start-up watchdog (index.html) that the app code loaded.
 (window as unknown as { __2dopeBooted?: boolean }).__2dopeBooted = true;
@@ -299,15 +300,19 @@ const audioPlayback = new AudioPlayback(app);
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 // In the tracks sheet, sounds are rows under the layers; their settings open in a floating card.
 strip.audio = { active: () => sheet.active, sig: () => audioTracks.railSig(), rows: (t, x, c, w) => audioTracks.railRows(t, x, c, w) };
+// Motion lists sounds as rows too (drag to move or trim), so the old audio lane is Board's only
+motion.audio = { sig: () => audioTracks.railSig(), rows: (c, end) => audioTracks.motionRows(c, end) };
+// Media (Procreate Dreams style): pictures, movies and sounds each become a track from frame 1
+app.pickMedia = mediaPicker(app, audioTracks);
 {
-  const addSound = document.createElement('button');
-  addSound.type = 'button';
-  addSound.className = 'tracks-add';
-  addSound.textContent = '+ Audio';
-  addSound.title = 'Import a sound (WAV, MP3, M4A, OGG, FLAC) at the playhead';
-  addSound.addEventListener('pointerdown', (e) => e.stopPropagation());
-  addSound.addEventListener('click', (e) => { e.stopPropagation(); audioTracks.pickFile(); });
-  sheet.bar.insertBefore(addSound, sheet.bar.querySelector('.spacer'));
+  const addMedia = document.createElement('button');
+  addMedia.type = 'button';
+  addMedia.className = 'tracks-add';
+  addMedia.textContent = '+ Media';
+  addMedia.title = 'Bring in a picture, movie or sound: each becomes its own track from frame 1';
+  addMedia.addEventListener('pointerdown', (e) => e.stopPropagation());
+  addMedia.addEventListener('click', (e) => { e.stopPropagation(); app.pickMedia?.(); });
+  sheet.bar.insertBefore(addMedia, sheet.bar.querySelector('.spacer'));
 }
 board.setAudio(audioPlayback);
 // the panel's dialogue as a subtitle under the picture (Board, and while playing with a board)

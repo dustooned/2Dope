@@ -153,6 +153,7 @@ export class LayerCards {
       choice('Animation', 'flipbook', 'A layer you animate frame by frame', () => app.addDrawLayer());
       choice('Background', 'gallery', 'One drawing behind everything, for the whole shot', () => app.addStillLayer('background'));
       choice('Object', 'draw', 'One drawing above this layer, for the whole shot (a prop, a sign, a set piece)', () => app.addStillLayer('object'));
+      choice('Media', 'gallery', 'Bring in a picture, movie or sound: each becomes its own layer from frame 1', () => app.pickMedia?.());
       this.root.append(menu);
     }
 
