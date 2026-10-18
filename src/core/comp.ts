@@ -1,3 +1,4 @@
+import { effectsKey, type LayerEffect } from './effects';
 import { staticProp, valueAt, type Prop, type Vec2 } from './anim';
 import { drawingAt, totalFrames, type Exposure } from './timeline';
 import { soundStart, type SoundClip } from './audio';
@@ -58,6 +59,8 @@ interface LayerBase {
   reference?: boolean;
   /** Layer mask: a drawing whose paint hides this layer (on every frame); erasing it reveals again. */
   mask?: string;
+  /** Effects (line boil...), in order; see core/effects.ts. */
+  effects?: LayerEffect[];
 }
 
 /** Is this layer left out of a final render? */
@@ -585,7 +588,8 @@ export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | 
       if (!id) continue;
       drawings.add(id);
       if (l.mask) drawings.add(l.mask);
-      parts.push(`${l.id}:${id}${l.mask ? `~${l.mask}` : ''}@${look}`);
+      const fx = effectsKey(l, frame - l.start);
+      parts.push(`${l.id}:${id}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}@${look}`);
     } else {
       const n = comps.get(l.comp);
       const nf = n ? nestedFrame(l, frame, c.fps, n, comps) : null;

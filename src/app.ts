@@ -2220,6 +2220,8 @@ export class App {
 
   /** Opens the Layers popover next to a button (set by main). */
   openLayers: ((anchor: HTMLElement) => void) | null = null;
+  /** Open a layer's Effects card; set by the shell. */
+  openEffects: ((layerId: string) => void) | null = null;
   /** Open the media picker (pictures, movies, sounds); set by the shell. */
   pickMedia: (() => void) | null = null;
 

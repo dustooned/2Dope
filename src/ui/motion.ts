@@ -14,7 +14,7 @@ const LEFT_W = 196;
 const DRAG = 4;
 const LABELS = ['#9a9aa8', '#ff5a8a', '#ffd24a', '#4aa3ff', '#4ade80', '#c084fc', '#fb923c'];
 const KIND_COLOR: Record<Layer['kind'], string> = { drawings: '#6f82e8', comp: '#3fbf8f', camera: '#e0a83c', null: '#8f8fa3' };
-type LayerAct = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'play' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique';
+type LayerAct = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'play' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique' | 'effects';
 
 const KIND_ICON: Record<Layer['kind'], string> = { drawings: '✎', comp: '▣', camera: '🎥', null: '✛' };
 
@@ -964,6 +964,7 @@ export class MotionPanel {
       { label: 'Colour…', value: 'colour' },
     );
     if (l.kind === 'drawings' || l.kind === 'comp') items.push({ label: 'Playback (once, loop, ping-pong, hold a frame, speed)…', value: 'play' });
+    if (l.kind === 'drawings') items.push({ label: `Effects…${l.effects?.length ? ` (${l.effects.length})` : ''}`, value: 'effects' });
     items.push({ label: 'Delete', value: 'delete' });
     return items;
   }
@@ -1001,6 +1002,9 @@ export class MotionPanel {
         break;
       case 'parent':
         await this.pickParent(l);
+        break;
+      case 'effects':
+        this.app.openEffects?.(l.id);
         break;
       case 'lock':
         ed.setFlag(l.id, 'locked', !l.locked);

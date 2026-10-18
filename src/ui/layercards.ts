@@ -197,6 +197,7 @@ export class LayerCards {
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
       if (l.kind === 'drawings' && l.reference) tags.push('reference');
       if (l.kind === 'drawings' && l.mask) tags.push(on && app.editingMask ? 'editing mask' : 'mask');
+      if (l.kind === 'drawings' && l.effects?.length) tags.push('fx');
       if (l.blend !== 'normal') tags.push(l.blend);
       const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
       if (op < 100) tags.push(`${op}%`);
@@ -438,6 +439,7 @@ export class LayerCards {
       tile('Flip \u2195', 'flipv', 'Mirror this drawing top to bottom', () => app.flipDrawing('v'));
       if (l.mask) tile('Delete mask', 'deselect', 'Remove the mask: everything shows again (you can undo)', () => app.deleteMask());
       else tile('Mask', 'invert', 'Add a mask: paint to hide parts of this layer without erasing them', () => app.addMask());
+      tile('Effects', 'fx', 'Line boil and other effects (they show in Motion, Share and exports)', () => { this.close(); app.openEffects?.(l.id); });
       tile('Select', 'lasso', 'Select what this drawing has, ready to move, scale or fill inside', () => { this.close(); app.selectContents(); });
       tile('Group', 'layers', 'Group this layer with the one below (a folder; tap it to fold open)', () => this.groupWithBelow(l), false, true);
       tile('Merge', 'collapseall', 'Merge down: flatten this layer into the one below (same frames and placement)', () => app.mergeDown(l.id), false, true);

@@ -4338,3 +4338,26 @@ body.ws-time #canvas { cursor: ew-resize; }
 .xs-holdedit { display: inline-flex; align-items: center; gap: 2px; position: relative; z-index: 2; }
 .xs-holdedit button { min-width: 28px; height: 24px; min-height: 24px; padding: 0; border-radius: 12px; font-weight: 700; }
 .xs-holdedit input { width: 42px; height: 24px; text-align: center; }
+
+/* Effects card */
+.fxpanel { position: fixed; z-index: 66; top: 120px; right: 12px; width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 140px); overflow-y: auto; padding: 10px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 10px 34px rgba(0, 0, 0, .5); display: flex; flex-direction: column; gap: 8px; }
+.fxpanel[hidden] { display: none; }
+.fx-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fx-x { min-width: 36px; min-height: 36px; border-radius: 50%; padding: 0; }
+.fx-card { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; background: var(--panel-2); }
+.fx-card.off { opacity: .6; }
+.fx-top { display: flex; align-items: center; gap: 6px; }
+.fx-top .lc-switch { flex: 1; }
+.fx-del { min-width: 36px; min-height: 36px; padding: 0; border-radius: 50%; color: #ff6b6b; }
+.fx-del .lbl { display: none; }
+.fx-seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.fx-seg button { flex: 1; min-height: 34px; border-radius: 10px; font-size: 12px; padding: 0 6px; }
+.fx-seg button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.fx-seg.small button { min-height: 30px; font-size: 11px; }
+.fx-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.fx-row > span:first-child { min-width: 58px; opacity: .8; }
+.fx-row input[type=range] { flex: 1; accent-color: #ff5a8a; }
+.fx-row output { min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; opacity: .8; }
+.fx-reseed { align-self: flex-start; min-height: 32px; border-radius: 10px; font-size: 12px; }
+.fx-add { display: flex; gap: 6px; flex-wrap: wrap; }
+.fx-add button { min-height: 40px; border-radius: 12px; }

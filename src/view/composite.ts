@@ -1,3 +1,5 @@
+import { activeEffects } from '../core/effects';
+import { drawEffected, releaseEffectScratch } from './effects';
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { valueAt } from '../core/anim';
@@ -159,6 +161,7 @@ export function releaseScratch(): void {
     c.height = 0;
   }
   scratch.clear();
+  releaseEffectScratch();
 }
 
 /** The layer a drawing is painted for, so its Line / Fill part settings apply. */
@@ -273,11 +276,18 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     // flattened first (its fill does not show through its own lines; the mask takes paint away)
     const mask = l.mask ? project.drawings.get(l.mask) : undefined;
     const masked = !!mask && !mask.parked;
-    if (alpha >= 1 && l.blend === 'normal' && !masked) direct = d;
+    const lf = layerFrame(l, frame);
+    // effects (line boil...): the layer is painted part by part and processed first
+    const fx = activeEffects(l).length ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, d, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}:${l.parts ? JSON.stringify(l.parts) : ''}`) : null;
+    if (alpha >= 1 && l.blend === 'normal' && !masked && !fx) direct = d;
     else {
       source = scratchFor(`d${depth}`, project.width, project.height);
       const sg = source.getContext('2d')!;
-      paintPlanes(sg, d, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
+      if (fx) {
+        sg.setTransform(1, 0, 0, 1, 0, 0);
+        sg.clearRect(0, 0, source.width, source.height);
+        sg.drawImage(fx, 0, 0);
+      } else paintPlanes(sg, d, planes, opt, { layer: l, lf, depth });
       if (masked) {
         sg.setTransform(1, 0, 0, 1, 0, 0);
         sg.globalAlpha = 1;

@@ -1,3 +1,5 @@
+import { setEffectCacheBudget } from './view/effects';
+import { EffectsPanel } from './ui/effectspanel';
 import { scrollArrows } from './ui/scrollarrows';
 import { openExportHub } from './ui/exporthub';
 import { openBoardExport } from './ui/boardexport';
@@ -318,6 +320,10 @@ motion.audio = { sig: () => audioTracks.railSig(), rows: (c, end) => audioTracks
   new MutationObserver(placeNav).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   placeNav();
 }
+// Effects card (line boil...): from Motion's fx bubble and layer menu, and the layer cards
+const effectsPanel = new EffectsPanel(app);
+if (app.device.lite) setEffectCacheBudget(32 * 1024 * 1024);
+app.openEffects = (id) => effectsPanel.show(id);
 // Media (Procreate Dreams style): pictures, movies and sounds each become a track from frame 1
 app.pickMedia = mediaPicker(app, audioTracks);
 {
