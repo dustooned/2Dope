@@ -6,7 +6,8 @@ export interface VideoOptions {
   format: 'mp4' | 'webm';
   size: '720p' | '1080p' | 'original';
   quality: 'standard' | 'high';
-  background: 'white' | 'black';
+  /** 'transparent' keeps the see-through areas (WebM with VP9 / VP8 only: MP4 cannot hold it). */
+  background: 'white' | 'black' | 'transparent';
 }
 
 export const DEFAULT_VIDEO: VideoOptions = { format: 'mp4', size: '720p', quality: 'standard', background: 'white' };
@@ -17,10 +18,11 @@ export const VIDEO_LITE_MAX_BYTES = 32 * 1024 * 1024;
 export function videoOptions(raw: unknown): VideoOptions {
   const r = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   return {
-    format: r.format === 'webm' ? 'webm' : 'mp4',
+    // a transparent video is always WebM: MP4 (H.264) has no transparency
+    format: r.format === 'webm' || r.background === 'transparent' ? 'webm' : 'mp4',
     size: r.size === '1080p' || r.size === 'original' ? r.size : '720p',
     quality: r.quality === 'high' ? 'high' : 'standard',
-    background: r.background === 'black' ? 'black' : 'white',
+    background: r.background === 'black' ? 'black' : r.background === 'transparent' ? 'transparent' : 'white',
   };
 }
 

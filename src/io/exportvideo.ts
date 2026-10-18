@@ -21,12 +21,13 @@ export async function videoSupport(plan: VideoPlan): Promise<VideoSupport> {
     try {
       if (await canEncodeVideo(codec, {
         width: plan.width, height: plan.height, frameRate: plan.fps,
-        quality: new Quality({ bitrate: plan.bitrate }), alpha: 'discard', latencyMode: 'quality',
+        quality: new Quality({ bitrate: plan.bitrate }), alpha: plan.options.background === 'transparent' ? 'keep' : 'discard', latencyMode: 'quality',
       })) return { codec, message: '' };
     } catch {
       // A driver can reject a configuration even when its codec is advertised.
     }
   }
+  if (plan.options.background === 'transparent') return { codec: null, message: 'This browser cannot make a see-through video. Use Animated PNG or PNG frames for transparency, or pick a background.' };
   return { codec: null, message: `This browser cannot make ${plan.options.format === 'mp4' ? 'MP4' : 'WebM'} at these settings. Try a smaller size or the other format, or export a PNG sequence.` };
 }
 
@@ -93,7 +94,7 @@ export async function exportVideo(
     });
     const source = new CanvasSource(canvas, {
       codec: support.codec, quality: new Quality({ bitrate: plan.bitrate }),
-      alpha: 'discard', latencyMode: 'quality', keyFrameInterval: 2,
+      alpha: plan.options.background === 'transparent' ? 'keep' : 'discard', latencyMode: 'quality', keyFrameInterval: 2,
     });
     output.addVideoTrack(source, { frameRate: plan.fps });
     const audio = voices.length ? new AudioBufferSource({ codec: audioCodec, bitrate: 128000 }) : null;
@@ -116,8 +117,11 @@ export async function exportVideo(
         }
         check();
         g.setTransform(1, 0, 0, 1, 0, 0);
-        g.fillStyle = plan.options.background === 'black' ? '#000000' : '#ffffff';
-        g.fillRect(0, 0, plan.width, plan.height);
+        if (plan.options.background === 'transparent') g.clearRect(0, 0, plan.width, plan.height);
+        else {
+          g.fillStyle = plan.options.background === 'black' ? '#000000' : '#ffffff';
+          g.fillRect(0, 0, plan.width, plan.height);
+        }
         g.setTransform(plan.scale, 0, 0, plan.scale, plan.x, plan.y);
         g.imageSmoothingQuality = 'high';
         drawComp(g, project, plan.comp, frame, { backgrounds: true, export: true });

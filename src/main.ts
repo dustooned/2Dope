@@ -440,7 +440,13 @@ let exporter: ExportUI | null = null;
 const videoExporter = new VideoExportUI(app, (message) => files?.toast(message), audioPlayback.bank);
 // Share: the last mode (preview the movie, check it, make it, save or send it)
 let onShareChange = (): void => {};
-const share = new ShareView(app, { sounds: audioPlayback.bank, moreFormats: () => showExportHub(), onOpenChange: () => onShareChange() });
+const share = new ShareView(app, {
+  sounds: audioPlayback.bank,
+  board: () => openBoardExport(app, (m) => files?.toast(m)),
+  blender: () => void exportForBlender(),
+  backup: () => void files?.exportProject(),
+  onOpenChange: () => onShareChange(),
+});
 const quick = new Quick(app, $('#quickbar'), {
   exportPng: () => void app.exportPNG(),
   saveFile: () => void files?.exportProject(),
