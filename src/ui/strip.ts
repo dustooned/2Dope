@@ -249,6 +249,8 @@ export class Strip {
     extra(this.fpsSel);
     for (const b of edit.querySelectorAll('button')) if (/^(Split|Select)/.test(b.textContent?.trim() ?? '')) extra(b);
     extra(this.lockBtn);
+    // the flipbook is its own mode (Flip): its button waits under More here
+    extra(this.flipBtn);
     extra(this.playBtn); // Play lives on the tracks bar
     extra(zoom);
     const more = btn('More \u22ef', 'More timeline tools: layer, frame count, fps, split, select, scrub lock, zoom', () => {

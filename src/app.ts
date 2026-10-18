@@ -26,6 +26,7 @@ import { clipGroups, drawClipGroup, drawComp, drawLayerAround, drawLayersAround 
 import { drawMotionOverlay } from './view/overlay';
 import {
   addAfter,
+  commonHold,
   adjustHolds,
   drawingAt,
   duplicateAt,
@@ -3557,6 +3558,52 @@ export class App {
   }
 
   /** Make each selected drawing last N frames (1s, 2s, 3s...). Never deletes a drawing. */
+  /** The hold (frames) of the selected drawings, or the current one; null when they differ. */
+  get currentHold(): number | null {
+    return commonHold(this.project.exposures, this.targets);
+  }
+
+  /** The role mark of the current drawing (key, breakdown, inbetween), if any. */
+  get currentRole(): Role | null {
+    const at = locate(this.project.exposures, this.lf);
+    return at ? this.project.drawing(this.project.exposures[at.index]!.drawing).role : null;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Timing mode is for timing and review: the canvas never draws. A drag scrubs through the shot
+  // (one finger, the pen or the mouse), a tap plays or pauses; two fingers still pan and zoom.
+
+  get timingOnly(): boolean {
+    return this.workspace === 'time';
+  }
+
+  private tscrub: { id: number; x: number; f0: number; moved: boolean } | null = null;
+
+  private beginTimeScrub(e: PointerEvent): void {
+    this.tscrub = { id: e.pointerId, x: e.clientX, f0: this.frame, moved: false };
+  }
+
+  private moveTimeScrub(e: PointerEvent): void {
+    const d = this.tscrub;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    if (!d.moved && Math.abs(dx) < 8) return;
+    if (!d.moved) {
+      d.moved = true;
+      this.beginScrub();
+    }
+    const f = Math.max(0, Math.min(this.compEnd - 1, d.f0 + Math.round(dx / 14)));
+    if (f !== this.frame) this.setFrame(f);
+  }
+
+  private endTimeScrub(cancel: boolean): void {
+    const d = this.tscrub;
+    this.tscrub = null;
+    if (!d) return;
+    if (d.moved) this.endScrub();
+    else if (!cancel) this.togglePlay();
+  }
+
   setExposure(n: number): void {
     this.editTimeline(n === 1 ? 'Exposure on ones' : `Exposure on ${n}s`, (ex) => ({ ex: setHolds(ex, this.targets, n), frame: this.lf }), true);
   }
@@ -4111,7 +4158,12 @@ export class App {
         this.editor.gestureEnd(true);
         this.motionPointer = null;
       }
+      if (this.tscrub && this.tscrub.id !== e.pointerId) this.endTimeScrub(true);
       this.armHold(e);
+      if (this.touches.size === 1 && this.timingOnly) {
+        this.beginTimeScrub(e);
+        return;
+      }
       if (this.touches.size === 1 && this.workspace === 'motion') {
         if (this.motionDown(e)) return;
       } else if (this.touches.size === 1 && this.fingerPaint) {
@@ -4145,6 +4197,10 @@ export class App {
     if (e.button !== 0) return;
     if (this.workspace === 'motion') {
       this.motionDown(e);
+      return;
+    }
+    if (this.timingOnly) {
+      this.beginTimeScrub(e);
       return;
     }
     this.beginStroke(e);
@@ -4323,6 +4379,7 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    if (this.tscrub && e.pointerId === this.tscrub.id) return this.moveTimeScrub(e);
     if (this.guideDrag && e.pointerId === this.guideDrag.id) return this.moveGuideDrag(e);
     if (this.smudge && e.pointerId === this.smudge.id) return this.moveSmudge(e);
     const hd = this.ve?.hdrag;
@@ -4439,6 +4496,7 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (this.tscrub && e.pointerId === this.tscrub.id) this.endTimeScrub(cancelled);
     if (this.guideDrag && e.pointerId === this.guideDrag.id) { this.guideDrag = null; return; }
     if (this.smudge && e.pointerId === this.smudge.id) return this.endSmudge(cancelled);
     const hd = this.ve?.hdrag;

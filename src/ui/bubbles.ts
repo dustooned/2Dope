@@ -40,7 +40,7 @@ export interface BubbleHooks {
 }
 
 type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'flip' | 'onion' | 'layers'
-  | 'smudge' | 'adjust' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
+  | 'smudge' | 'adjust' | 'insert' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
 /**
  * Bubbles: a simpler way around the app. Mode bubbles (Draw, Animate, Move, Story) at the top left,
@@ -268,10 +268,11 @@ export class Bubbles {
   }
 
   private toolsFor(ws: Workspace): [ToolKey, string, string][] {
-    if (this.flipOn) return [['brush', 'Brush', 'brush'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
     const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso'], ['adjust', 'Adjust: hue, saturation, brightness, blur', 'adjust']];
+    // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
-    if (ws === 'time') return [['flip', 'Flipbook', 'flipbook'], ['onion', 'Onion', 'onion'], ['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', ''], ['layers', 'Layers', 'layers']];
+    // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
+    if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
     if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard', 'export']];
     if (ws === 'motion') return [['addlayer', 'New drawing layer', 'plus'], ['camera', 'Add a camera', 'camera'], ['group', 'Group the selected layers', 'layers'], ['split', 'Split at the playhead', 'scissors'], ['autokey', 'Auto-key: every change writes a keyframe', 'key'], ['look', 'Look through the camera', 'eye']];
     return [];
@@ -305,6 +306,7 @@ export class Bubbles {
         else this.layersOpen = !this.layersOpen;
         break;
       case 'flip': a.flipToBlank(); break;
+      case 'insert': a.insertBlank('after'); break;
       case 'onion': a.toggleOnion(); break;
       case 'panel': if (!a.board) a.createBoard(); else a.addPanel(); break;
       case 'images': this.hooks.story?.images(); break;
@@ -434,7 +436,7 @@ export class Bubbles {
     const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
     const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
-    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit].join('|');
+    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', ws === 'board' ? a.playing : '', this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, a.drawing.vectors.length, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.currentHold, a.currentRole, a.lf].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws && !flip));
     this.modes.querySelector('[data-mode="flip"]')?.setAttribute('aria-pressed', String(flip));
@@ -467,6 +469,17 @@ export class Bubbles {
     if (shape) add(this.chip('Edit shape', 'Change what the stroke snapped to, or keep your own stroke', false, (b) => this.hooks.editShape!(b), 'editpoints'));
     if (editing) {
       add(...this.widthControls());
+    } else if (ws === 'time' && !this.layersOpen) {
+      // holds: how many frames the drawing stays (tap a number); marks; frame by frame
+      const hold = a.currentHold;
+      for (const n of [1, 2, 3, 4]) add(this.chip(`${n}s`, `Hold the drawing for ${n} frame${n > 1 ? 's' : ''} (on ${['ones', 'twos', 'threes', 'fours'][n - 1]})`, hold === n, () => a.setExposure(n)));
+      add(this.chip('\u2212', 'One frame shorter', false, () => a.changeHold(-1)));
+      add(el('span', { class: 'bub-hint bub-hold' }, hold === null ? 'mixed' : `${hold} f`));
+      add(this.chip('+', 'One frame longer', false, () => a.changeHold(1)));
+      add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
+      for (const [r, label, title] of [['key', 'K', 'Mark as a key drawing'], ['breakdown', 'B', 'Mark as a breakdown'], ['inbetween', 'I', 'Mark as an inbetween']] as const) add(this.chip(label, title, a.currentRole === r, () => a.setRole(r)));
+      add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
+      add(this.chip('\u25c0', 'Previous frame', false, () => a.prevFrame()), this.chip('\u25b6', 'Next frame', false, () => a.nextFrame()));
     } else if (this.layersOpen && (ws === 'draw' || ws === 'time') && !xp) {
       // tight layer control: only this cel's linked layers, front first; tap one to draw on it
       const me = a.project.isPlaceholder ? '' : a.project.activeLayer;
@@ -501,10 +514,7 @@ export class Bubbles {
         lbl,
         this.chip('Stronger', 'Carry more paint', false, () => { a.smudgeStrength = Math.min(1, a.smudgeStrength + 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thicker'),
       );
-    } else if (flip) {
-      if (cur === 'brush' || cur === 'eraser') add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)));
-      if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
-    } else if ((ws === 'draw' || ws === 'time') && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
+    } else if (ws === 'draw' && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
       add(
         this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)),
         this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')),
@@ -571,12 +581,6 @@ export class Bubbles {
         add(this.chip('Delete key', 'Delete the selected keys', false, () => a.editor.deleteKeys(), 'trash'));
       }
       add(this.chip('Key at start', 'The first key also keeps the old value at frame 0, so motion begins at once', a.editor.keyAtStart, () => { a.editor.keyAtStart = !a.editor.keyAtStart; a.editor.onChange(); }));
-    } else if (ws === 'time') {
-      add(
-        this.chip('New page', 'A fresh blank page after the last drawing', a.blankPage, () => a.flipToBlank()),
-        this.chip('◀', 'Previous frame', false, () => a.prevFrame()),
-        this.chip('▶', 'Next frame', false, () => a.nextFrame()),
-      );
     }
     this.ctx.hidden = !this.ctx.querySelector(':scope > :not(.scroll-arrow)');
   }

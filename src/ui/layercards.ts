@@ -172,7 +172,9 @@ export class LayerCards {
         b.addEventListener('click', () => { fn(); this.addOpen = false; this.sig = ''; this.update(); });
         menu.append(b);
       };
-      choice('Animation', 'flipbook', 'A layer you animate frame by frame', () => app.addDrawLayer());
+      // in Flip (the flipbook) a new layer is part of every page: same frames, its own drawing
+      if (document.body.classList.contains('flipmode')) choice('Layer', 'flipbook', 'A new layer on every page of the flipbook (same frames, its own drawing)', () => app.addCelLayer());
+      else choice('Animation', 'flipbook', 'A layer you animate frame by frame', () => app.addDrawLayer());
       choice('Background', 'gallery', 'One drawing behind everything, for the whole shot', () => app.addStillLayer('background'));
       choice('Object', 'draw', 'One drawing above this layer, for the whole shot (a prop, a sign, a set piece)', () => app.addStillLayer('object'));
       choice('Media', 'gallery', 'Bring in a picture, movie or sound: each becomes its own layer from frame 1', () => app.pickMedia?.());

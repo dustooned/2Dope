@@ -100,7 +100,9 @@ export class XSheet {
 
   private readonly dropLine: HTMLElement;
   /** The press being tracked: pending (could be a tap, a scroll or a hold), selecting a range, lifted (held), or moving the lifted block. */
-  private press: { id: number; x: number; y: number; type: string; mode: 'pending' | 'select' | 'lift' | 'moving'; canSelect: boolean; timer: number; to: number | null } | null = null;
+  private press: { id: number; x: number; y: number; type: string; mode: 'pending' | 'select' | 'lift' | 'moving'; canSelect: boolean; timer: number; to: number | null; numTap?: HTMLElement } | null = null;
+  /** Sliding on a hold number: the drawing, where the finger started, the hold before and now. */
+  private holdSlide: { id: number; index: number; x: number; len0: number; len: number; moved: boolean; badge: HTMLElement } | null = null;
   private lastHold = 0;
 
   show(on: boolean): void {
@@ -142,6 +144,16 @@ export class XSheet {
         this.editNote(row);
         return;
       }
+      // the hold number: slide sideways to change it, tap it to type it
+      const badge = (e.target as HTMLElement).closest<HTMLElement>('.xs-hold');
+      if (badge) {
+        e.stopPropagation();
+        const index = Number(row.dataset.exp);
+        const len = app.project.exposures[index]?.length ?? 1;
+        this.holdSlide = { id: e.pointerId, index, x: e.clientX, len0: len, len, moved: false, badge };
+        try { badge.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+        return;
+      }
       const frame = Number(row.dataset.frame);
       const index = Number(row.dataset.exp);
       this.body.focus({ preventScroll: true });
@@ -159,11 +171,23 @@ export class XSheet {
       }
       app.setLayerFrame(frame);
       const canSelect = e.pointerType !== 'touch' || !!(e.target as HTMLElement).closest('.xs-fno');
-      const press = { id: e.pointerId, x: e.clientX, y: e.clientY, type: e.pointerType, mode: 'pending' as const, canSelect, timer: 0, to: null };
+      // a tap on the number of a drawing that was already selected: change which drawing shows
+      const numTap = inSel && row.dataset.start === '1' && !!(e.target as HTMLElement).closest('.xs-cell') ? row : undefined;
+      const press = { id: e.pointerId, x: e.clientX, y: e.clientY, type: e.pointerType, mode: 'pending' as const, canSelect, timer: 0, to: null, numTap };
       press.timer = window.setTimeout(() => this.lift(), HOLD_MS);
       this.press = press;
     });
     this.body.addEventListener('pointermove', (e) => {
+      const hs = this.holdSlide;
+      if (hs && e.pointerId === hs.id) {
+        const dx = e.clientX - hs.x;
+        if (!hs.moved && Math.abs(dx) < 6) return;
+        hs.moved = true;
+        hs.len = Math.max(1, Math.min(99, hs.len0 + Math.round(dx / 14)));
+        hs.badge.textContent = String(hs.len);
+        hs.badge.classList.add('sliding');
+        return;
+      }
       const p = this.press;
       if (!p || e.pointerId !== p.id) return;
       const moved = Math.hypot(e.clientX - p.x, e.clientY - p.y) > HOLD_SLOP;
@@ -181,8 +205,28 @@ export class XSheet {
       }
     });
     this.body.addEventListener('pointerup', (e) => {
+      const hs = this.holdSlide;
+      if (hs && e.pointerId === hs.id) {
+        this.holdSlide = null;
+        hs.badge.classList.remove('sliding');
+        if (hs.moved) {
+          if (hs.len !== hs.len0) {
+            app.setSelection([hs.index]);
+            app.setExposure(hs.len);
+          }
+          this.signature = '';
+          this.update();
+        } else this.editHold(hs.index, hs.badge);
+        return;
+      }
       const p = this.press;
       if (!p || e.pointerId !== p.id) return;
+      if (p.mode === 'pending' && p.numTap) {
+        const row = p.numTap;
+        this.endPress(true);
+        this.editCell(row);
+        return;
+      }
       if (p.mode === 'lift') {
         this.endPress(true);
         showContextMenu(e.clientX, e.clientY, frameMenu(this.app));
@@ -192,7 +236,10 @@ export class XSheet {
       this.endPress(true);
       if (to !== null) app.moveSelectionTo(to);
     });
-    this.body.addEventListener('pointercancel', () => this.endPress(true));
+    this.body.addEventListener('pointercancel', () => {
+      if (this.holdSlide) { this.holdSlide = null; this.signature = ''; this.update(); }
+      this.endPress(true);
+    });
     // keep the page from scrolling while a lifted block or a range is being dragged
     this.body.addEventListener(
       'touchmove',
@@ -381,6 +428,46 @@ export class XSheet {
     input.addEventListener('blur', () => finish(true));
   }
 
+  /** Tap a hold number: a small editor with - and + and the number (Enter or tapping away keeps it). */
+  private editHold(index: number, badge: HTMLElement): void {
+    if (this.editing) return;
+    const len = this.app.project.exposures[index]?.length ?? 1;
+    const box = el('span', { class: 'xs-holdedit' });
+    const input = el('input', { type: 'number', inputmode: 'numeric', min: '1', max: '99', step: '1', 'aria-label': 'Hold in frames', class: 'xs-input' });
+    input.value = String(len);
+    const step = (d: number) => { input.value = String(Math.max(1, Math.min(99, (Number(input.value) || len) + d))); input.focus(); };
+    const minus = el('button', { type: 'button', 'aria-label': 'One frame shorter' }, '\u2212');
+    const plus = el('button', { type: 'button', 'aria-label': 'One frame longer' }, '+');
+    for (const [b, d] of [[minus, -1], [plus, 1]] as const) {
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); step(d); });
+    }
+    box.append(minus, input, plus);
+    this.editing = input;
+    badge.replaceWith(box);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = (commit: boolean) => {
+      if (done) return;
+      done = true;
+      this.editing = null;
+      const n = Math.round(Number(input.value));
+      if (commit && Number.isInteger(n) && n >= 1 && n <= 99 && n !== len) {
+        this.app.setSelection([index]);
+        this.app.setExposure(n);
+      }
+      this.signature = '';
+      this.update();
+      this.body.focus();
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') finish(true);
+      else if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => setTimeout(() => { if (!box.contains(document.activeElement)) finish(true); }, 0));
+  }
+
   private editNote(row: HTMLElement): void {
     const noteEl = row.querySelector<HTMLElement>('.xs-note');
     if (!noteEl || this.editing) return;
@@ -464,6 +551,7 @@ export class XSheet {
     this.head.replaceChildren(
       el('span', { class: 'xs-fno' }, 'Frame'),
       el('span', { class: 'xs-cell', title: 'Drawing number' }, p.name === 'Untitled' ? 'Drawing' : p.name.slice(0, 12)),
+      el('span', { class: 'xs-holdcol', title: 'How many frames the drawing stays: slide sideways or tap to change' }, 'Hold'),
       el('span', { class: 'xs-note' }, `Notes · ${p.fps} fps`),
     );
     const frag = document.createDocumentFragment();
@@ -479,7 +567,9 @@ export class XSheet {
         });
         const cell = el('span', { class: `xs-cell${k === 0 ? '' : ' hold'}${d.role ? ` role-text-${d.role}` : ''}`, 'data-num': String(d.num) });
         if (k === 0) cell.textContent = String(d.num);
-        row.append(el('span', { class: 'xs-fno' }, frameLabel(frame, p.fps, this.format)), cell, el('span', { class: 'xs-note' }, k === 0 ? (e.note ?? '') : ''));
+        const holdCell = el('span', { class: 'xs-holdcol' });
+        if (k === 0) holdCell.append(el('button', { type: 'button', class: 'xs-hold', title: `Held ${e.length} frame${e.length === 1 ? '' : 's'}: slide sideways to change, or tap to type`, 'aria-label': `Hold ${e.length} frames` }, String(e.length)));
+        row.append(el('span', { class: 'xs-fno' }, frameLabel(frame, p.fps, this.format)), cell, holdCell, el('span', { class: 'xs-note' }, k === 0 ? (e.note ?? '') : ''));
         frag.append(row);
       }
     });
