@@ -1,3 +1,4 @@
+import { decorate } from './icons';
 import type { App } from '../app';
 import { FRAME_FORMATS, frameLabel, isSecondBoundary, type FrameFormat } from '../core/timecode';
 import { blockDropIndex, commonHold, startOf, totalFrames } from '../core/timeline';
@@ -68,21 +69,27 @@ export class XSheet {
 
     // touch actions on the selection (the same ones are in the press-and-hold menu)
     const acts = el('div', { class: 'xs-acts', role: 'toolbar', 'aria-label': 'Frame actions' });
-    const act = (label: string, title: string, run: () => unknown, cls = '') => {
-      const b = el('button', { type: 'button', title, class: cls }, label);
+    // icons in small groups: add, copy, move, delete (holds are in the Hold row above)
+    let group = el('div', { class: 'xs-group' });
+    acts.append(group);
+    const act = (label: string, icon: string, title: string, run: () => unknown, cls = '') => {
+      const b = el('button', { type: 'button', title, class: `icon-only ${cls}`, 'aria-label': label }, label);
+      decorate(b, icon);
       b.addEventListener('click', () => void run());
-      acts.append(b);
+      group.append(b);
     };
-    act('+↑', 'Insert a blank drawing before the selection', () => app.insertBlank('before'));
-    act('+↓', 'Insert a blank drawing after the selection (N)', () => app.insertBlank('after'));
-    act('Dup', 'Duplicate the selected drawings (D)', () => app.duplicateSelection());
-    act('Copy', 'Copy the selected drawings (Ctrl+C)', () => app.copySelection());
-    act('Paste', 'Paste after the selection, showing the same drawings (Ctrl+V)', () => app.paste());
-    act('↑', 'Move the selection earlier (Alt+↑)', () => app.moveSelection(-1));
-    act('↓', 'Move the selection later (Alt+↓)', () => app.moveSelection(1));
-    act('−', 'One frame shorter (−)', () => app.changeHold(-1));
-    act('+', 'One frame longer (=)', () => app.changeHold(1));
-    act('Delete', 'Delete the selected drawings (Delete)', () => app.deleteFrame(), 'danger');
+    const gap = () => { group = el('div', { class: 'xs-group' }); acts.append(group); };
+    act('Blank before', 'insbefore', 'Insert a blank drawing before the selection', () => app.insertBlank('before'));
+    act('Blank after', 'insafter', 'Insert a blank drawing after the selection (N)', () => app.insertBlank('after'));
+    gap();
+    act('Duplicate', 'copy', 'Duplicate the selected drawings (D)', () => app.duplicateSelection());
+    act('Copy', 'layers', 'Copy the selected drawings (Ctrl+C)', () => app.copySelection());
+    act('Paste', 'paste', 'Paste after the selection, showing the same drawings (Ctrl+V)', () => app.paste());
+    gap();
+    act('Earlier', 'up', 'Move the selection earlier (Alt+\u2191)', () => app.moveSelection(-1));
+    act('Later', 'down', 'Move the selection later (Alt+\u2193)', () => app.moveSelection(1));
+    gap();
+    act('Delete', 'trash', 'Delete the selected drawings (Delete)', () => app.deleteFrame(), 'danger');
 
     this.head = el('div', { class: 'xs-head' });
     this.body = el('div', { class: 'xs-body', tabindex: '0', 'data-own-keys': '', 'aria-label': 'Exposure sheet' });

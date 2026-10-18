@@ -159,6 +159,7 @@ export class Strip {
     }
 
     const onion = el('div', { class: 'group' });
+    onion.append(el('span', { class: 'name' }, 'Onion'));
     this.onionBtn = btn('Onion', 'Onion skin on/off (O)', () => app.toggleOnion());
     const count = (label: string, title: string, get: () => number, set: (n: number) => void) => {
       const sel = el('select', { 'aria-label': title, title });
@@ -546,6 +547,9 @@ export class Strip {
     const common = commonHold(p.exposures, targets);
     this.expLabel.textContent = targets.length === 0 ? '-' : common === null ? 'mixed' : `${common}`;
     this.expLabel.title = `${targets.length} drawing${targets.length === 1 ? '' : 's'} ${app.selection.length ? 'selected' : '(current)'}`;
+    // the box itself shows the hold (type over it to change it)
+    if (document.activeElement !== this.expInput) { this.expInput.value = common === null ? '' : String(common); this.expInput.placeholder = common === null ? 'mixed' : ''; }
+    this.expLabel.hidden = true;
     setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(p.fps);

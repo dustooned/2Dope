@@ -1910,6 +1910,51 @@ export class App {
     );
   }
 
+  /** Fill layer (Procreate): the current drawing's FILL becomes the colour, everywhere. One undo step. */
+  fillDrawing(): void {
+    if (this.live || this.blankPage) return;
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    const c = planeCanvas(d, 'fill');
+    const g = c.getContext('2d')!;
+    const full = { x: 0, y: 0, w: this.docW, h: this.docH };
+    const before = g.getImageData(0, 0, this.docW, this.docH);
+    const color = this.color;
+    this.history.push(
+      {
+        label: 'Fill layer',
+        drawings: [d],
+        do: () => { g.fillStyle = color; g.fillRect(0, 0, this.docW, this.docH); this.touch(d); },
+        undo: () => { putPixels(c, full, before); this.touch(d); },
+      },
+      false,
+    );
+  }
+
+  /** Mirror the current drawing (Line, Fill and vector lines). Mirroring twice puts it back. */
+  flipDrawing(axis: 'h' | 'v'): void {
+    if (this.live || this.blankPage) return;
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    const w = this.docW, h = this.docH;
+    const mirror = () => {
+      for (const c of [d.line, d.fill]) {
+        if (!c) continue;
+        const tmp = makeCanvas(w, h);
+        tmp.getContext('2d')!.drawImage(c, 0, 0);
+        const g = c.getContext('2d')!;
+        g.save();
+        g.clearRect(0, 0, w, h);
+        g.setTransform(axis === 'h' ? -1 : 1, 0, 0, axis === 'v' ? -1 : 1, axis === 'h' ? w : 0, axis === 'v' ? h : 0);
+        g.drawImage(tmp, 0, 0);
+        g.restore();
+      }
+      d.vectors = d.vectors.map((v) => ({ ...v, points: v.points.map((p) => ({ ...p, x: axis === 'h' ? w - p.x : p.x, y: axis === 'v' ? h - p.y : p.y })) }));
+      this.touch(d);
+    };
+    this.history.push({ label: axis === 'h' ? 'Flip drawing left to right' : 'Flip drawing top to bottom', drawings: [d], do: mirror, undo: mirror }, false);
+  }
+
   /** Replace the whole project (open, restore, new). Clears undo and per-project view state. */
   loadProject(p: Project): void {
     this.cancelTransform();

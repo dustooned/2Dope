@@ -87,7 +87,27 @@ export class Bubbles {
       this.modes.append(b);
     }
     this.modes.append(this.modeName);
-    this.levelBtn.addEventListener('click', () => this.setLevel(LEVELS[(LEVELS.indexOf(this.level) + 1) % LEVELS.length]!));
+    // the interface level: a small menu that says what each choice shows (not a blind cycle)
+    const menu = el('div', { class: 'bub-levelmenu', role: 'menu', hidden: '' });
+    const choices: [UiLevel, string, string][] = [
+      ['clean', 'Focus', 'Just the canvas and your tools'],
+      ['simple', 'Simple', 'Modes, tools and the timeline'],
+      ['full', 'Full', 'Every control, the classic layout'],
+    ];
+    const fill = () => {
+      menu.replaceChildren(...choices.map(([id, name, what]) => {
+        const b = el('button', { type: 'button', role: 'menuitemradio', 'aria-checked': String(this.level === id) });
+        b.append(el('strong', {}, name), el('span', {}, what));
+        b.addEventListener('click', () => { menu.hidden = true; this.setLevel(id); });
+        return b;
+      }));
+    };
+    this.levelBtn.addEventListener('click', () => { fill(); menu.hidden = !menu.hidden; });
+    window.addEventListener('pointerdown', (e) => {
+      if (menu.hidden || menu.contains(e.target as Node) || this.levelBtn.contains(e.target as Node)) return;
+      menu.hidden = true;
+    }, true);
+    stage.append(menu);
     stage.append(this.modes, this.tools, this.ctx);
     // inside the stage, so it never sits on a side panel
     stage.append(this.levelBtn);
@@ -124,7 +144,7 @@ export class Bubbles {
     this.level = l;
     for (const x of LEVELS) document.body.classList.toggle(`ui-${x}`, x === l);
     this.levelBtn.textContent = l === 'clean' ? '○' : l === 'simple' ? '◐' : '●';
-    this.levelBtn.title = `Interface: ${l}. Tap for ${LEVELS[(LEVELS.indexOf(l) + 1) % LEVELS.length]}.`;
+    this.levelBtn.title = `Interface: ${l === 'clean' ? 'Focus' : l === 'simple' ? 'Simple' : 'Full'}. Tap to choose how much shows.`;
     this.levelBtn.setAttribute('aria-label', this.levelBtn.title);
     if (remember) {
       try { localStorage.setItem(LEVEL_KEY, l); } catch { /* optional */ }

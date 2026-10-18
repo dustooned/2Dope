@@ -4078,6 +4078,23 @@ body.ws-motion .audio-tracks { display: none !important; }
 /* Adjust sliders in the context bar */
 .bub-slider { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; height: 34px; border-radius: 17px; background: var(--panel-2); font-size: 12px; color: var(--ink, #ddd); white-space: nowrap; }
 .bub-slider input[type=range] { width: 72px; accent-color: #ff5a8a; touch-action: none; }
+/* X-sheet frame actions: icon groups */
+.xs-acts { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.xs-group { display: inline-flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--panel-2); }
+.xs-group button { min-width: 40px; min-height: 38px; padding: 0 8px; }
+.xs-group button.danger { color: #ff6b6b; }
+/* layer options: switches and icon tiles */
+.lc-switch { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 40px; padding: 0 10px; border-radius: 10px; background: transparent; border: 0; color: inherit; font: inherit; text-align: left; }
+.lc-switch:hover { background: var(--panel-2); }
+.lc-switch-knob { position: relative; width: 38px; height: 22px; border-radius: 11px; background: #4a4a56; transition: background .15s; flex: 0 0 auto; }
+.lc-switch-knob::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.lc-switch.on .lc-switch-knob { background: #ff5a8a; }
+.lc-switch.on .lc-switch-knob::after { transform: translateX(16px); }
+.lc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+.lc-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 56px; padding: 6px 2px; border-radius: 12px; background: var(--panel-2); border: 0; color: inherit; font-size: 11px; line-height: 1.1; }
+.lc-tile .ico { width: 20px; height: 20px; }
+.lc-tile.danger { color: #ff6b6b; }
+.lc-tile:active { transform: scale(.96); }
 .bub-slider .bub-num { min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; opacity: .8; }
 .tracks-add { min-height: 40px; }
 .audio-card { position: fixed; z-index: 60; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); max-height: 70dvh; overflow: auto; padding: 0 14px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px #0008; }
@@ -4112,7 +4129,14 @@ body.ws-motion .audio-tracks { display: none !important; }
 /* levels: full = the classic layout; simple = bubbles instead of the bars; clean = canvas and modes only */
 body.ui-full .bub-modes, body.ui-full .bub-tools, body.ui-full .bub-ctx { display: none !important; }
 body.ui-simple:not(.quick) .topbar, body.ui-clean:not(.quick) .topbar, body.ui-simple .focusbar, body.ui-clean .focusbar { display: none !important; }
-body.ui-clean .bub-tools, body.ui-clean .bub-ctx, body.ui-clean .sidebar .vslider { display: none !important; }
+/* Focus: just the canvas and your tools (modes and the timeline step aside) */
+body.ui-clean .bub-modes { display: none !important; }
+.bub-levelmenu { position: absolute; z-index: 61; top: 56px; right: 8px; display: flex; flex-direction: column; gap: 2px; width: 240px; padding: 6px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0, 0, 0, .45); }
+.bub-levelmenu[hidden] { display: none; }
+.bub-levelmenu button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 10px; border-radius: 10px; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; }
+.bub-levelmenu button span { font-size: 11px; opacity: .7; }
+.bub-levelmenu button[aria-checked="true"] { background: color-mix(in srgb, #ff5a8a 22%, transparent); }
+.bub-levelmenu button:hover { background: var(--panel-2); }
 body.ui-clean:not(.quick) #strip, body.ui-clean:not(.quick) #board, body.ui-clean:not(.quick) #motion, body.ui-clean .tracks-handle, body.ui-clean .audio-tracks, body.ui-clean #splitter { display: none !important; }
 body.quick .bub-modes, body.quick .bub-tools, body.quick .bub-ctx, body.ui-hidden .bub-modes, body.ui-hidden .bub-tools, body.ui-hidden .bub-ctx, body.ui-hidden .bub-level { display: none !important; }
 @media (max-width: 700px) {
@@ -4217,3 +4241,9 @@ body.ui-simple .motion [data-dup], body.ui-clean .motion [data-dup] { display: n
 
 /* simple screen: the canvas sidebar sits below the bubble row (the menu button is above it) */
 body:not(.ui-full) .sidebar { top: var(--side-top, 72px); transform: none; max-height: calc(100% - var(--side-top, 72px) - 10px); }
+
+/* small phones: Draw's tools fit one row */
+@media (max-width: 480px) { .bub-tools { gap: 3px; } .bub-tools .bub { width: 36px; height: 36px; min-height: 36px; } .bub-tools .bub .ico { width: 20px; height: 20px; } }
+/* the canvas hint starts right of the sidebar */
+.stats { left: 70px; }
+.timing-controls button { white-space: nowrap; }

@@ -300,50 +300,48 @@ export class LayerCards {
     bl.addEventListener('change', () => { app.editor.edit('Blend mode', (c) => { const x = c.layers.find((y) => y.id === l.id); if (x) x.blend = bl.value as BlendMode; }); this.sig = ''; this.update(); });
     blRow.append(el('span', {}, 'Blend'), bl);
     box.append(opRow, blRow);
-    const opt = (label: string, icon: string, title: string, fn: () => void | Promise<void>, danger = false) => {
-      const b = el('button', { type: 'button', class: `lc-opt${danger ? ' danger' : ''}`, title }, label);
-      decorate(b, icon);
-      b.addEventListener('click', () => void fn());
-      box.append(b);
-    };
-    if (l.kind === 'drawings' && !l.guide) {
-      opt(app.plane === 'line' ? 'Paint Fill' : 'Paint Line', app.plane === 'line' ? 'fillplane' : 'lineplane', 'Switch what brushes paint on: LINE (ink, on top) or FILL (colour, under)', () => { app.setPlane(app.plane === 'line' ? 'fill' : 'line'); this.sig = ''; this.update(); });
-      opt('Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => { app.addCelLayer(); this.menuFor = null; this.sig = ''; this.update(); });
-    }
-    if (l.kind === 'drawings' && !l.guide) {
-      const flag = (label: string, title: string, key: 'clip' | 'alphaLock') => {
-        const on = l[key] === true;
-        const b = el('button', { type: 'button', class: `lc-opt${on ? ' on' : ''}`, title, 'aria-pressed': String(on) }, label);
-        b.addEventListener('click', () => {
-          app.editor.edit(on ? `${label} off` : label, (c) => { const x = c.layers.find((y) => y.id === l.id); if (x && x.kind === 'drawings') { if (on) delete x[key]; else x[key] = true; } });
-          this.sig = '';
-          this.update();
-        });
+    const drawn = l.kind === 'drawings' && !l.guide;
+    if (drawn) {
+      // what the layer does: switches, so on and off read at a glance
+      const sw = (label: string, title: string, on: boolean, fn: () => void) => {
+        const b = el('button', { type: 'button', class: `lc-switch${on ? ' on' : ''}`, role: 'switch', 'aria-checked': String(on), title });
+        b.append(el('span', { class: 'lc-switch-name' }, label), el('span', { class: 'lc-switch-knob', 'aria-hidden': 'true' }));
+        b.addEventListener('click', () => { fn(); this.sig = ''; this.update(); });
         box.append(b);
       };
-      flag('Clipping mask', 'Show this layer only where the layer below has paint', 'clip');
-      flag('Alpha Lock', 'Brushes change only pixels that already have paint', 'alphaLock');
-      const ref = l.reference === true;
-      const rb = el('button', { type: 'button', class: `lc-opt${ref ? ' on' : ''}`, title: 'Fill and ColorDrop on any layer use this layer\u2019s lines as their edges (one Reference layer per shot)', 'aria-pressed': String(ref) }, 'Reference');
-      rb.addEventListener('click', () => { app.setReference(l.id, !ref); this.sig = ''; this.update(); });
-      box.append(rb);
+      const flip = (key: 'clip' | 'alphaLock', label: string) => () => app.editor.edit(l[key] ? `${label} off` : label, (c) => { const x = c.layers.find((y) => y.id === l.id); if (x && x.kind === 'drawings') { if (x[key]) delete x[key]; else x[key] = true; } });
+      sw('Alpha Lock', 'Brushes change only pixels that already have paint', l.alphaLock === true, flip('alphaLock', 'Alpha Lock'));
+      sw('Clipping mask', 'Show this layer only where the layer below has paint', l.clip === true, flip('clip', 'Clipping mask'));
+      sw('Reference', 'Fill and ColorDrop on any layer use this layer\u2019s lines as their edges (one per shot)', l.reference === true, () => app.setReference(l.id, !l.reference));
     }
-    if (l.kind === 'drawings' && !l.guide) opt('Merge down', 'collapseall', 'Flatten this layer into the one below (same frames and placement)', async () => { if (await app.mergeDown(l.id)) { this.menuFor = null; } this.sig = ''; this.update(); });
-    opt('Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', async () => { await app.duplicateLayer(l.id); this.menuFor = null; this.sig = ''; this.update(); });
-    opt('Rename', 'draw', 'Rename this layer', async () => {
+    // actions: icon tiles
+    const grid = el('div', { class: 'lc-grid' });
+    const tile = (label: string, icon: string, title: string, fn: () => unknown, danger = false, close = false) => {
+      const b = el('button', { type: 'button', class: `lc-tile${danger ? ' danger' : ''}`, title }, label);
+      decorate(b, icon);
+      b.addEventListener('click', () => void (async () => { await fn(); if (close) this.menuFor = null; this.sig = ''; this.update(); })());
+      grid.append(b);
+    };
+    if (drawn) {
+      tile('Fill', 'fill', 'Fill this drawing with the current colour (on FILL, under the ink)', () => app.fillDrawing());
+      tile('Clear', 'eraser', 'Clear this drawing: Line, Fill and vector lines (you can undo)', () => app.clearFrame());
+      tile('Flip \u2194', 'fliph', 'Mirror this drawing left to right', () => app.flipDrawing('h'));
+      tile('Flip \u2195', 'flipv', 'Mirror this drawing top to bottom', () => app.flipDrawing('v'));
+      tile('Merge', 'collapseall', 'Merge down: flatten this layer into the one below (same frames and placement)', () => app.mergeDown(l.id), false, true);
+      tile('Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => app.addCelLayer(), false, true);
+    }
+    tile('Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', () => app.duplicateLayer(l.id), false, true);
+    tile('Rename', 'draw', 'Rename this layer', async () => {
       const n = await askText('Layer name', l.name, 'Rename');
       if (n !== null) app.editor.rename(l.id, n);
-      this.sig = '';
-      this.update();
     });
-    opt(l.locked ? 'Unlock' : 'Lock', 'lock', l.locked ? 'Allow drawing on it again' : 'Stop drawing on it', () => { app.editor.setFlag(l.id, 'locked', !l.locked); this.update(); });
-    opt('Delete', 'trash', 'Delete this layer (you can undo)', async () => {
-      if (!(await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true))) return;
+    tile(l.locked ? 'Unlock' : 'Lock', 'lock', l.locked ? 'Allow drawing on it again' : 'Stop drawing on it', () => app.editor.setFlag(l.id, 'locked', !l.locked));
+    tile('Delete', 'trash', 'Delete this layer (you can undo)', async () => {
+      if (!(await confirmBox(`Delete \u201c${l.name}\u201d?`, 'You can undo this.', 'Delete', true))) return;
       app.editor.deleteLayers([l.id]);
       this.menuFor = null;
-      this.sig = '';
-      this.update();
     }, true);
+    box.append(grid);
     return box;
   }
 }
