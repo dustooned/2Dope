@@ -21,7 +21,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
  */
 export class Quick {
   on = false;
-  private readonly bar: HTMLElement;
   private readonly more: HTMLElement;
   private readonly toolBtns = new Map<Tool, HTMLButtonElement>();
   private readonly playBtn: HTMLButtonElement;
@@ -40,7 +39,6 @@ export class Quick {
     host: HTMLElement,
     private readonly actions: { exportPng: () => void; saveFile: () => void; exportSeq: () => void },
   ) {
-    this.bar = host;
     host.classList.add('quickbar');
     host.setAttribute('role', 'toolbar');
     host.setAttribute('aria-label', 'Quick Animate');

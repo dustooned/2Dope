@@ -1054,7 +1054,7 @@ export class MotionPanel {
       case 'colour': {
         const c = await pickBox<number>(
           'Colour',
-          LABELS.map((col, i) => ({ label: i === 0 ? 'None' : `Colour ${i}`, value: i })),
+          LABELS.map((_, i) => ({ label: i === 0 ? 'None' : `Colour ${i}`, value: i })),
         );
         if (c !== undefined) ed.setLabel(l.id, c);
         break;
