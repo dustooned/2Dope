@@ -4517,3 +4517,7 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 /* flipbook: a track being dragged to a new place */
 .flip-eye { touch-action: none; }
 .flip-track.lifting { z-index: 3; opacity: .9; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); transition: none; }
+/* the flipbook strip zoomed far out: no pictures in the frames, just their colour */
+.flip-grid.thin .flip-cel canvas, .flip-grid.thin .flip-hold, .flip-grid.thin .flip-role { display: none; }
+.flip-grid.thin .flip-cel { border-width: 1px; border-radius: 3px; }
+.flip-ruler span { width: auto; }

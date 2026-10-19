@@ -659,6 +659,7 @@ app.history.onChange = chain(app.history.onChange, () => layerCards.update());
 flipMode.onChange = () => { layerCards.close(); bubbles.update(); strip.update(); setTimeout(() => app.refit(), 60); };
 app.onToolChange = chain(app.onToolChange, () => flipMode.update());
 // Motion (and anywhere else): open a drawing layer frame by frame in Draw's flipbook
+app.onFlipKey = (e) => flipMode.onKey(e);
 app.openFlipbook = (id) => {
   if (app.workspace !== 'draw') app.setWorkspace('draw');
   if (id) app.pickLayer(id);

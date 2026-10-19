@@ -10,7 +10,9 @@ const KEY = '2dope.draw.view';
 /** The mini flipbook: floating (with where it was), or docked at the bottom. */
 const MINI_KEY = '2dope.flip.mini';
 /** One frame of time on the strip, and one track row (Procreate Dreams shows three at a time). */
+/** A frame's width on the strip at the start (pinch, Alt+= / Alt+− or a double-tap on the ruler zoom it). */
 const CELL = 44;
+const CELL_MIN = 4, CELL_MAX = 140;
 const ROW = 50;
 const LABEL = 46;
 /** Track colours (the same tags as Motion and the rails), and how they read in a menu. */
@@ -48,6 +50,8 @@ export class FlipMode {
   private readonly grid = el('div', { class: 'flip-grid' });
   private readonly playhead = el('div', { class: 'flip-playhead', 'aria-hidden': 'true' });
   private playing: boolean | null = null;
+  /** How wide one frame is on the strip (zoom). */
+  private cell = CELL;
   /** Floating mini flipbook (its top-left in the stage), or null when docked at the bottom. */
   private mini: { x: number; y: number } | null = null;
   /** Set while a swipe or trim is under way: the strip does not scroll itself then. */
@@ -151,16 +155,24 @@ export class FlipMode {
     const app = this.app;
     const p = app.project;
     this.grid.replaceChildren(this.playhead);
-    this.grid.style.width = `${LABEL + len * CELL + CELL}px`;
+    this.grid.style.width = `${LABEL + len * this.cell + this.cell}px`;
     // a ruler: frame numbers every frame, seconds stand out
     const ruler = el('div', { class: 'flip-ruler', 'aria-hidden': 'true' });
     const fps = app.project.fps || 24;
+    // zoomed far out the numbers thin out (every 2, 3, 6... frames, then whole seconds) so they
+    // never overlap; the steps divide a second, so the seconds always keep their number
+    const steps = [...Array.from({ length: fps }, (_, k) => k + 1).filter((n) => fps % n === 0), fps * 2, fps * 5, fps * 10];
+    const every = steps.find((n) => n * this.cell >= 26) ?? fps * 20;
     for (let f = 0; f < len; f++) {
+      if (f % every) continue;
       const t = el('span', { class: f % fps === 0 ? 'sec' : '' }, String(f + 1));
-      t.style.left = `${LABEL + f * CELL}px`;
+      t.style.left = `${LABEL + f * this.cell}px`;
+      t.style.width = `${Math.max(this.cell, 22)}px`;
       ruler.append(t);
     }
     this.grid.append(ruler);
+    this.grid.classList.toggle('thin', this.cell < 24);
+    this.playhead.style.width = `${this.cell}px`;
     for (const l of tracks) {
       const row = el('div', { class: `flip-track${l.id === p.activeLayer ? ' active' : ''}${l.visible ? '' : ' off'}`, 'data-id': l.id });
       const eye = el('button', { type: 'button', class: 'flip-eye', 'aria-pressed': String(l.visible), title: `${l.name}: tap to ${l.visible ? 'hide' : 'show'}, hold for track options`, 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}` });
@@ -175,8 +187,8 @@ export class FlipMode {
       let start = l.start;
       l.exposures.forEach((e, i) => {
         const c = el('div', { class: 'flip-cel', 'data-i': String(i), 'data-start': String(start), 'data-len': String(e.length) });
-        c.style.left = `${start * CELL}px`;
-        c.style.width = `${e.length * CELL - 3}px`;
+        c.style.left = `${start * this.cell}px`;
+        c.style.width = `${e.length * this.cell - 3}px`;
         const d = p.drawing(e.drawing);
         const t = d.thumb;
         if (t) {
@@ -207,6 +219,116 @@ export class FlipMode {
       if (stage) stage.style.setProperty('--flip-h', this.mini ? '0px' : `${h + 16}px`);
       this.app.refit();
     });
+  }
+
+  /** Zoom the strip: `cell` px per frame, keeping `frame` (default the playhead) where it is on screen. */
+  zoomTo(cell: number, frame = this.app.frame): void {
+    const s = this.scroll;
+    const before = LABEL + frame * this.cell - s.scrollLeft;
+    this.cell = Math.max(CELL_MIN, Math.min(CELL_MAX, cell));
+    this.sig = '';
+    this.update();
+    s.scrollLeft = Math.max(0, LABEL + frame * this.cell - before);
+  }
+
+  /** The whole shot on the strip (a quick pinch, Alt+0). */
+  zoomFit(): void {
+    const len = Math.max(1, this.app.compEnd);
+    this.cell = Math.max(CELL_MIN, Math.min(CELL_MAX, (this.scroll.clientWidth - LABEL - 12) / len));
+    this.sig = '';
+    this.update();
+    this.scroll.scrollLeft = 0;
+  }
+
+  /** Put the playhead in the middle of the strip. */
+  centre(): void {
+    const s = this.scroll;
+    s.scrollLeft = Math.max(0, LABEL + this.app.frame * this.cell - s.clientWidth / 2);
+  }
+
+  /**
+   * Flipbook hotkeys (after Procreate Dreams' commands). Returns true when the key was used.
+   * Only while the flipbook is showing; typing in a box never reaches here.
+   */
+  onKey(e: KeyboardEvent): boolean {
+    const app = this.app;
+    const mod = e.ctrlKey || e.metaKey;
+    const tracks = this.tracks();
+    const at = tracks.findIndex((l) => l.id === app.project.activeLayer);
+    const goTrack = (i: number) => { const l = tracks[Math.max(0, Math.min(tracks.length - 1, i))]; if (l && l.id !== app.project.activeLayer) app.pickLayer(l.id); };
+    const fps = app.project.fps || 24;
+    switch (e.code) {
+      case 'KeyN':
+        if (mod) return false;
+        if (e.shiftKey) app.addFlipTrack();
+        else app.flipAddFrame(true);
+        return true;
+      case 'ArrowUp':
+      case 'ArrowDown': {
+        const up = e.code === 'ArrowUp';
+        if (mod) { goTrack(up ? 0 : tracks.length - 1); return true; }
+        if (e.shiftKey && !e.altKey) { goTrack(at + (up ? -1 : 1)); return true; }
+        return false;
+      }
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        // one second at a time (a scrub lock keeps Shift + arrows for flipping back home)
+        if (!e.shiftKey || e.altKey || mod || app.lockFrame !== null) return false;
+        app.setFrame(Math.max(0, Math.min(app.compEnd - 1, app.frame + (e.code === 'ArrowRight' ? fps : -fps))));
+        return true;
+      case 'Home':
+        app.setLayerFrame(0);
+        return true;
+      case 'End':
+        app.setLayerFrame(app.project.length - 1);
+        return true;
+      case 'KeyS':
+        if (mod) return false;
+        void app.splitHold();
+        return true;
+      case 'Equal':
+        if (!e.altKey) return false;
+        this.zoomTo(this.cell * 1.4);
+        return true;
+      case 'Minus':
+        if (!e.altKey) return false;
+        this.zoomTo(this.cell / 1.4);
+        return true;
+      case 'KeyF':
+        // Shift+F fills the drawing to the end of the shot (F alone still fits the page)
+        if (!e.shiftKey || mod || e.altKey) return false;
+        app.setSelection([]);
+        app.fillDuration();
+        return true;
+      case 'Digit0':
+        if (!e.altKey) return false;
+        this.zoomFit();
+        return true;
+      case 'KeyV': {
+        if (mod) return false;
+        const l = tracks[at];
+        if (l) app.editor.setFlag(l.id, 'visible', !l.visible);
+        return true;
+      }
+      case 'F2': {
+        const l = tracks[at];
+        if (l) void askText('Track name', l.name, 'Rename').then((n) => { if (n !== null) app.editor.rename(l.id, n); });
+        return true;
+      }
+      case 'KeyM': {
+        if (mod) return false;
+        const cur = this.grid.querySelector<HTMLElement>('.flip-cel.on') ?? this.playhead;
+        const r = cur.getBoundingClientRect();
+        const l = tracks[at];
+        if (l) showContextMenu(r.left + 10, r.top + 10, this.frameItems(l));
+        return true;
+      }
+      case 'KeyC':
+        if (mod) return false;
+        this.centre();
+        return true;
+    }
+    return false;
   }
 
   /** Float (at a place in the stage) or dock the flipbook. */
@@ -283,7 +405,7 @@ export class FlipMode {
     const app = this.app;
     const f = app.frame;
     this.count.textContent = `${Math.min(f + 1, len)} / ${len}`;
-    this.playhead.style.left = `${LABEL + f * CELL}px`;
+    this.playhead.style.left = `${LABEL + f * this.cell}px`;
     const activeId = app.project.activeLayer;
     for (const row of this.grid.querySelectorAll<HTMLElement>('.flip-track')) {
       const mine = row.dataset.id === activeId;
@@ -299,9 +421,9 @@ export class FlipMode {
     }
     if (!this.dragging) {
       // keep the playhead in view (centred while playing, nearest otherwise)
-      const x = LABEL + f * CELL, w = this.scroll.clientWidth;
+      const x = LABEL + f * this.cell, w = this.scroll.clientWidth;
       const left = this.scroll.scrollLeft;
-      if (app.playing || x < left + LABEL + CELL || x > left + w - CELL * 2) this.scroll.scrollLeft = Math.max(0, x - w / 2);
+      if (app.playing || x < left + LABEL + this.cell || x > left + w - this.cell * 2) this.scroll.scrollLeft = Math.max(0, x - w / 2);
     }
   }
 
@@ -311,7 +433,7 @@ export class FlipMode {
     const layer = rowEl ? this.tracks().find((l) => l.id === rowEl.dataset.id) : undefined;
     if (!rowEl || !layer) return null;
     const r = this.grid.getBoundingClientRect();
-    const frame = Math.max(0, Math.min(this.app.compEnd - 1, Math.floor((x - r.left - LABEL) / CELL)));
+    const frame = Math.max(0, Math.min(this.app.compEnd - 1, Math.floor((x - r.left - LABEL) / this.cell)));
     return { layer, frame };
   }
 
@@ -329,15 +451,56 @@ export class FlipMode {
     /** The frame under a point of the strip (on the ruler or any track). */
     const frameAt = (x: number) => {
       const r = this.grid.getBoundingClientRect();
-      return Math.max(0, Math.min(this.app.compEnd - 1, Math.floor((x - r.left - LABEL) / CELL)));
+      return Math.max(0, Math.min(this.app.compEnd - 1, Math.floor((x - r.left - LABEL) / this.cell)));
     };
     const onRuler = (y: number) => y - this.grid.getBoundingClientRect().top < 20;
+    // two fingers on the strip: pinch to zoom time (a quick pinch fits the whole shot)
+    const fingers = new Map<number, number>();
+    let pinch: { d0: number; cell0: number; t0: number; frame: number } | null = null;
+    const spread = () => { const xs = [...fingers.values()]; return Math.abs(xs[0]! - xs[1]!); };
     s.addEventListener('pointerdown', (e) => {
-      if ((e.target as HTMLElement).closest('.flip-eye, .flip-trim') || !e.isPrimary || e.button > 0) return;
+      if (e.pointerType === 'touch') fingers.set(e.pointerId, e.clientX);
+      if (fingers.size === 2) {
+        if (start?.mode === 'scrub' || start?.mode === 'ruler') this.app.endScrub();
+        start = null;
+        const xs = [...fingers.values()];
+        pinch = { d0: Math.max(20, spread()), cell0: this.cell, t0: e.timeStamp, frame: frameAt((xs[0]! + xs[1]!) / 2) };
+        // (the strip may rebuild while pinching: nothing is held under the fingers)
+        this.dragged = true;
+      }
+    });
+    s.addEventListener('pointermove', (e) => {
+      if (!fingers.has(e.pointerId)) return;
+      fingers.set(e.pointerId, e.clientX);
+      if (pinch && fingers.size === 2) this.zoomTo(pinch.cell0 * (Math.max(20, spread()) / pinch.d0), pinch.frame);
+    });
+    const lift = (e: PointerEvent) => {
+      if (!fingers.delete(e.pointerId) || !pinch) return;
+      if (fingers.size < 2) {
+        const p = pinch;
+        pinch = null;
+        // a fast pinch in: the whole shot
+        if (e.timeStamp - p.t0 < 300 && this.cell < p.cell0 * 0.8) this.zoomFit();
+      }
+    };
+    s.addEventListener('pointerup', lift);
+    s.addEventListener('pointercancel', lift);
+    let rulerTap = 0;
+    s.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('.flip-eye, .flip-trim') || !e.isPrimary || e.button > 0 || pinch) return;
       start = { x: e.clientX, y: e.clientY, id: e.pointerId, frame: this.app.frame, mode: '', lastX: e.clientX, lastT: e.timeStamp, acc: 0 };
       this.dragged = false;
       // the frame numbers are a timeline ruler: touch it and the playhead jumps there and follows
       if (onRuler(e.clientY)) {
+        // a double-tap on the ruler zooms in there (Procreate Dreams' double-tap to focus)
+        if (e.timeStamp - rulerTap < 320) {
+          rulerTap = 0;
+          start = null;
+          this.dragged = true;
+          this.zoomTo(this.cell * 1.8, frameAt(e.clientX));
+          return;
+        }
+        rulerTap = e.timeStamp;
         start.mode = 'ruler';
         this.dragging = this.dragged = true;
         try { s.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
@@ -351,6 +514,9 @@ export class FlipMode {
       if (start.mode === 'ruler') {
         const f = frameAt(e.clientX);
         if (f !== this.app.frame) this.app.setFrame(f);
+        start.acc = (e.clientX - start.lastX) / Math.max(1, e.timeStamp - start.lastT); // speed, px per ms
+        start.lastX = e.clientX;
+        start.lastT = e.timeStamp;
         return;
       }
       if (!start.mode) {
@@ -370,15 +536,20 @@ export class FlipMode {
         start.acc += step * gain;
         start.lastX = e.clientX;
         start.lastT = e.timeStamp;
-        const f = Math.max(0, Math.min(this.app.compEnd - 1, start.frame - Math.round(start.acc / CELL)));
+        const f = Math.max(0, Math.min(this.app.compEnd - 1, start.frame - Math.round(start.acc / this.cell)));
         if (f !== this.app.frame) this.app.setFrame(f);
-        const x = LABEL + f * CELL;
+        const x = LABEL + f * this.cell;
         s.scrollLeft = Math.max(0, x - s.clientWidth / 2);
       }
     });
     const end = (e: PointerEvent) => {
       if (!start || e.pointerId !== start.id) return;
       if (start.mode === 'scrub' || start.mode === 'ruler') this.app.endScrub();
+      // a quick flick of the playhead to the left: play from the start
+      if (start.mode === 'ruler' && start.acc < -1.5 && e.clientX - start.x < -60) {
+        this.app.setFrame(0);
+        if (!this.app.playing) this.app.togglePlay();
+      }
       start = null;
       this.dragging = false;
     };
@@ -504,18 +675,35 @@ export class FlipMode {
       this.dragging = this.dragged = true;
       h.setPointerCapture(e.pointerId);
       const x0 = e.clientX;
+      // Free Trim (Procreate Dreams): another finger down, or Alt, and the next drawing gives or
+      // takes the frames, so everything after it stays where it is
+      let free = false;
+      const other = (ev: PointerEvent) => { if (ev.pointerId !== e.pointerId) free = true; };
+      window.addEventListener('pointerdown', other, true);
+      const next0 = before[i + 1]?.length ?? 0;
       const move = (ev: PointerEvent) => {
-        const n = Math.max(1, len0 + Math.round((ev.clientX - x0) / CELL));
-        if (n === (after[i]?.length ?? len0)) return;
-        after = before.map((x, k) => (k === i ? { ...x, length: n } : x));
-        cell.style.width = `${n * CELL - 3}px`;
+        let n = Math.max(1, len0 + Math.round((ev.clientX - x0) / this.cell));
+        const roll = (free || ev.altKey) && next0 > 0;
+        if (roll) n = Math.min(n, len0 + next0 - 1);
+        if (n === (after[i]?.length ?? len0) && roll === (after[i + 1]?.length !== next0)) return;
+        after = before.map((x, k) => (k === i ? { ...x, length: n } : roll && k === i + 1 ? { ...x, length: next0 - (n - len0) } : x));
+        cell.style.width = `${n * this.cell - 3}px`;
         cell.dataset.len = String(n);
+        // free trim: the next drawing starts later (or earlier) and ends where it did
+        const next = cell.parentElement?.querySelector<HTMLElement>(`.flip-cel[data-i="${i + 1}"]`);
+        if (next) {
+          const len = after[i + 1]!.length;
+          const at = Number(cell.dataset.start) + n;
+          next.style.left = `${at * this.cell}px`;
+          next.style.width = `${len * this.cell - 3}px`;
+        }
         app.previewExposures(after);
       };
       const up = () => {
         h.removeEventListener('pointermove', move);
         h.removeEventListener('pointerup', up);
         h.removeEventListener('pointercancel', up);
+        window.removeEventListener('pointerdown', other, true);
         this.dragging = false;
         swallowNextClick();
         app.commitExposures('Frame duration', before, after);

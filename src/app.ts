@@ -3627,6 +3627,8 @@ export class App {
     const comp = this.project.comp;
     const layer = comp.layers.find((l) => l.id === layerId);
     if (!layer) return null;
+    // what undo brings back: after a live drag preview the layer already holds `after`
+    const undoTo = (): Layer[] => structuredClone(comp.layers.map((l) => (l.id === layerId ? ({ ...l, exposures: before } as Layer) : l)));
     // An edit at a layer's very end pushes nothing (nothing of it comes after). The board is
     // different: adding a panel after the last one, or retiming the last panel, must reach the
     // animation drawn in step with it (layers that ended where the board ended).
@@ -3643,7 +3645,7 @@ export class App {
         if (l.id !== b.id) return l;
         return { ...l, exposures: rippleExposures(b.exposures, oldEnd - b.start + Math.min(0, ep.delta), ep.delta) } as Layer;
       });
-      return { before: structuredClone(comp.layers), after: structuredClone(layers), durBefore: comp.duration, durAfter: comp.duration };
+      return { before: undoTo(), after: structuredClone(layers), durBefore: comp.duration, durAfter: comp.duration };
     }
     const temp: Comp = { ...comp, layers: comp.layers.map((l) => (l.id === layerId ? ({ ...l, exposures: after } as Layer) : l)) };
     const r = rippleComp(temp, this.project.comps, layerId, layer.start + ep.at, ep.delta);
@@ -3661,7 +3663,7 @@ export class App {
     }
     const others = r.layers.some((l, i) => l !== temp.layers[i] && l.id !== layerId);
     if (!others && r.duration === comp.duration) return null;
-    return { before: structuredClone(comp.layers), after: r.layers, durBefore: comp.duration, durAfter: r.duration };
+    return { before: undoTo(), after: r.layers, durBefore: comp.duration, durAfter: r.duration };
   }
 
   private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, keepSelection = false): void {
@@ -3820,6 +3822,9 @@ export class App {
     });
     if (none) this.onNotice?.('This drawing already reaches the end of the shot.');
   }
+
+  /** The flipbook's own hotkeys (set by the UI): true when it used the key. */
+  onFlipKey: ((e: KeyboardEvent) => boolean) | null = null;
 
   /** Open a drawings layer in Draw's flipbook (set by the UI). */
   openFlipbook: ((layerId?: string) => void) | null = null;
@@ -5214,6 +5219,11 @@ export class App {
       else void this.paste(e.shiftKey);
       return;
     }
+    // Ctrl+↑ / ↓ in the flipbook: top / bottom track
+    if (mod && this.flipbookView && (e.code === 'ArrowUp' || e.code === 'ArrowDown') && this.onFlipKey?.(e)) {
+      e.preventDefault();
+      return;
+    }
     if (mod) return;
     if (this.ve && (e.code === 'Escape' || e.code === 'Enter')) {
       this.exitPointEdit();
@@ -5232,6 +5242,10 @@ export class App {
     if (e.altKey && this.workspace !== 'motion' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
       e.preventDefault();
       this.moveSelection(e.code === 'ArrowLeft' ? -1 : 1);
+      return;
+    }
+    if (this.flipbookView && this.onFlipKey?.(e)) {
+      e.preventDefault();
       return;
     }
     if (['Space', 'KeyR', 'KeyZ'].includes(e.code)) {

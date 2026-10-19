@@ -82,9 +82,13 @@ export const MANUAL: ManualSection[] = [
         keys: [
           ['Swipe the tracks left or right', 'Move through time (left goes forward). A quick swipe goes further', 'scrub'],
           ['Tap or drag the frame numbers', 'Jump the playhead there; drag and it follows your finger', 'scrub'],
+          ['Flick the frame numbers to the left', 'Back to frame 1 and play', 'scrub'],
+          ['Pinch the tracks', 'Zoom time in or out. A quick pinch in shows the whole shot', 'pinch'],
+          ['Double-tap the frame numbers', 'Zoom in there', 'tap2'],
           ['Tap a frame', 'Go there and draw on that track. Tap the current frame again for its options', 'tap2'],
           ['Press and hold a frame', 'Frame options: duplicate, insert, split, fill to the end, hold length, copy, paste, clear, delete', 'hold'],
-          ['Drag the pink handle on the current frame', 'Make it last more or fewer frames', 'scrub'],
+          ['Drag the pink handle on the current frame', 'Make it last more or fewer frames; the frames after it move along', 'scrub'],
+          ['Drag the pink handle with a second finger down (or Alt)', 'Free trim: the next drawing gives or takes the frames, so everything after it stays put', 'scrub'],
           ['Tap a track’s box', 'Hide or show the track. Hold it for track options; drag it up or down to reorder', 'hold'],
           ['Drag the bar on top of the flipbook', 'Float a mini flipbook anywhere; drag it to the bottom or double-tap the bar to dock it', 'pinch'],
         ],
@@ -342,6 +346,23 @@ export const MANUAL: ManualSection[] = [
           ['?', 'This manual'],
         ],
       },
+      'In the flipbook (Draw), these work too:',
+      {
+        keys: [
+          ['N, Shift+N', 'New frame after the drawing you are on, new track above'],
+          ['Shift+↑ ↓', 'Track above / below'],
+          ['Ctrl+↑ ↓', 'Top / bottom track'],
+          ['Shift+← →', 'Back / forward one second'],
+          ['Home, End', 'First / last frame'],
+          ['S', 'Split the hold at the playhead'],
+          ['Shift+F', 'Fill the drawing to the end of the shot (1 makes it one frame again)'],
+          ['V', 'Show / hide the track'],
+          ['F2', 'Rename the track'],
+          ['M', 'Frame options'],
+          ['C', 'Put the playhead in the middle'],
+          ['Alt+= , Alt+− , Alt+0', 'Zoom time in, out, whole shot'],
+        ],
+      },
     ],
   },
 ];
@@ -354,6 +375,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-19', title: 'Flipbook hotkeys and gestures', items: ['Pinch the flipbook to zoom time; a quick pinch in shows the whole shot, and a double-tap on the frame numbers zooms in there. Zoomed far out, frames show as colour and the numbers thin out.', 'Flick the frame numbers to the left to go back to frame 1 and play.', 'Free trim: drag the pink handle with a second finger down (or Alt) and the next drawing gives or takes the frames, so the rest of the track stays put.', 'Keys in the flipbook, after Procreate Dreams: Shift+N new track, Shift+↑↓ change track, Shift+←→ a second, Home / End, S split, Shift+F fill to the end, V hide, F2 rename, M frame options, C centre, Alt+= / Alt+− / Alt+0 zoom.'] },
   { date: '2026-10-19', title: 'A new manual', items: ['The manual is rewritten for how 2Dope works now: the five modes (Story, Draw, Timing, Motion, Share), the flipbook, layers and paint stacks, notes, effects, brushes and collections, Reference, bringing in art from other programs, and handing in.', 'Touch gestures has every gesture in one place: on the page, in the flipbook, and in Layers, Effects, Brushes, the X-sheet, Motion and Reference.', 'Share and export\u2026 in the menu, and Share in the Full top bar, now open Share (the same screen as the Share mode).'] },
   { date: '2026-10-19', title: 'Flipbook: scrubbing and new frames', items: ['The frame numbers above the tracks are a ruler: tap one to jump there, or drag along it and the playhead follows your finger. Swiping the tracks still moves through time, and a quick swipe now goes much further.', '+ Frame adds the new drawing right after the current one ends (after its whole hold). Hold + Frame to end the hold at the playhead instead.', 'A new track starts as one frame at frame 1. Drawing past the end of a track makes a new frame right there, with the previous drawing held up to it.'] },
   { date: '2026-10-19', title: 'Brush collections', items: ['Fixed: with many brushes (after an import) the cards no longer squeeze together; the list scrolls with a finger or the mouse wheel, and so does a long list of collections.', 'The brush library has collections of your own (like Procreate brush sets): tap \uff0b New, and hold a collection to rename or delete it (its brushes go back to My brushes, nothing is lost).', 'Drag a brush sideways onto a collection to move it there; a built-in brush is copied instead. Hold a brush for Move to, Copy to (also into a new collection), Duplicate, Rename and Delete.', 'An imported brush set (.brushset or .abr with several brushes) gets a collection named after the file. Saving a brush while a collection is open saves it there.'] },
