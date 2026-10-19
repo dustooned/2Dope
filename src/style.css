@@ -4517,3 +4517,6 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 .bl-cats { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
 .bl-cats button { flex: 0 0 auto; }
 @media (max-width: 600px) { .bl-cats { overflow-y: hidden; touch-action: pan-x; } }
+/* flipbook: a track being dragged to a new place */
+.flip-eye { touch-action: none; }
+.flip-track.lifting { z-index: 3; opacity: .9; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); transition: none; }

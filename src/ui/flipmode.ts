@@ -71,7 +71,7 @@ export class FlipMode {
     const prev = btn('Previous drawing', 'Previous drawing (hold: the first frame)', 'prev', () => this.app.prevDrawing(), () => this.app.setLayerFrame(0), 'flip-btn flip-icon', '');
     const next = btn('Next drawing', 'Next drawing (hold: the last frame)', 'next', () => this.app.nextDrawing(), () => this.app.setLayerFrame(this.app.project.length - 1), 'flip-btn flip-icon', '');
     const add = btn('Frame', 'Add a frame after this one. On a held drawing the hold ends here; hold the button to add after the whole hold.', 'plus', () => this.app.flipAddFrame(false), () => this.app.flipAddFrame(true), 'flip-btn flip-add');
-    const track = btn('Track', 'Add a track: a new drawing layer above this one, with its own frames', 'layers', () => this.app.addDrawLayer(), undefined, 'flip-btn flip-adv');
+    const track = btn('Track', 'Add a track right above this one, from frame 1 (drag a track\u2019s box up or down to reorder)', 'layers', () => this.app.addFlipTrack(), undefined, 'flip-btn flip-adv');
     const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
     onion.classList.add('flip-onion');
     const fit = btn('Fit', 'Fit the page to the screen', 'fit', () => this.app.fit(), undefined, 'flip-btn flip-icon flip-adv', '');
@@ -168,7 +168,8 @@ export class FlipMode {
       if (l.clip) row.classList.add('clip');
       if (l.mask) row.classList.add('masked');
       eye.append(el('span', { class: 'flip-check', 'aria-hidden': 'true' }, l.visible ? '✓' : ''), el('span', { class: 'flip-name' }, l.name));
-      eye.addEventListener('click', () => app.editor.setFlag(l.id, 'visible', !l.visible));
+      eye.addEventListener('click', () => { if (this.dragged) { this.dragged = false; return; } app.editor.setFlag(l.id, 'visible', !l.visible); });
+      this.wireTrackDrag(eye, row, l.id);
       attachContextMenu(eye, () => this.trackMenu(l, eye));
       const cells = el('div', { class: 'flip-cells' });
       let start = l.start;
@@ -418,10 +419,49 @@ export class FlipMode {
       { sep: true },
       { label: 'Rename…', run: async () => { const n = await askText('Track name', l.name, 'Rename'); if (n !== null) ed.rename(l.id, n); } },
       { label: '✨ Effects…', run: () => app.openEffects?.(l.id) },
+      { label: '\u2191 Move up', run: () => app.moveTrack(l.id, -1) },
+      { label: '\u2193 Move down', run: () => app.moveTrack(l.id, 1) },
       { label: 'Duplicate track', run: () => void app.duplicateLayer(l.id) },
       { label: 'All layer options…', run: () => { app.pickLayer(l.id); app.openLayers?.(anchor); } },
       { label: 'Delete track', danger: true, run: async () => { if (await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true)) ed.deleteLayers([l.id]); } },
     ];
+  }
+
+  /** Drag a track's box up or down to move the track (the row follows the finger). */
+  private wireTrackDrag(eye: HTMLElement, row: HTMLElement, id: string): void {
+    eye.addEventListener('pointerdown', (e) => {
+      if (e.button > 0) return;
+      const y0 = e.clientY;
+      let moving = false;
+      const move = (ev: PointerEvent) => {
+        const dy = ev.clientY - y0;
+        if (!moving && Math.abs(dy) < 10) return;
+        if (!moving) {
+          moving = true;
+          this.dragging = this.dragged = true;
+          try { eye.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+          row.classList.add('lifting');
+        }
+        row.style.transform = `translateY(${dy}px)`;
+      };
+      const up = (ev: PointerEvent) => {
+        eye.removeEventListener('pointermove', move);
+        eye.removeEventListener('pointerup', up);
+        eye.removeEventListener('pointercancel', up);
+        row.style.transform = '';
+        row.classList.remove('lifting');
+        this.dragging = false;
+        if (!moving) return;
+        swallowNextClick();
+        const steps = Math.round((ev.clientY - y0) / ROW);
+        if (steps) this.app.moveTrack(id, steps);
+        this.sig = '';
+        this.update();
+      };
+      eye.addEventListener('pointermove', move);
+      eye.addEventListener('pointerup', up);
+      eye.addEventListener('pointercancel', up);
+    });
   }
 
   /** The handle on the current frame's right edge: drag to hold it for more or fewer frames. */

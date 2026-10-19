@@ -2940,6 +2940,46 @@ export class App {
   }
 
   /**
+   * The flipbook's + Track (Procreate Dreams): a new drawing track right above the one you draw
+   * on, from frame 1, holding one blank drawing for the whole shot (draw on it anywhere; + Frame
+   * makes new drawings). You draw on it straight away. One undo step.
+   */
+  addFlipTrack(): void {
+    if (this.live || this.strokeActive) return;
+    const p = this.project;
+    const id = p.newId('L');
+    const above = p.isPlaceholder ? null : p.activeLayer;
+    const n = this.drawLayers().filter((l) => !l.guide).length + 1;
+    const length = Math.max(1, this.compEnd);
+    this.editor.edit('Add track', (cc) => {
+      const made = drawingsLayer(id, `Track ${n}`, [{ drawing: p.newDrawing().id, length }], p.width, p.height, cc.width, cc.height);
+      made.start = 0;
+      made.in = 0;
+      made.out = null;
+      const at = above ? cc.layers.findIndex((l) => l.id === above) : -1;
+      cc.layers.splice(at >= 0 ? at : 0, 0, made);
+    });
+    this.focusLayer(id);
+    this.editor.select(id);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** Move a flipbook track up (-1) or down (+1) past the next track (other layers are stepped over). */
+  moveTrack(id: string, steps: number): void {
+    const tracks = this.drawLayers().filter((l) => !l.guide);
+    const i = tracks.findIndex((l) => l.id === id);
+    const j = Math.max(0, Math.min(tracks.length - 1, i + steps));
+    if (i < 0 || i === j) return;
+    const target = this.project.comp.layers.indexOf(tracks[j]!);
+    this.editor.moveTo(id, target);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /**
    * A notes layer on top (for a teacher's or a classmate's corrections): drawn in red, shown fully
    * while you work, never exported. One drawing held for the whole shot; + Frame in the flipbook
    * gives a frame its own note.
