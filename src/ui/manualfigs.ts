@@ -34,18 +34,18 @@ export function glyphSvg(name: string): string {
 
 /** Larger pictures for sections. */
 export const FIGURES: Record<string, () => string> = {
-  // the four workspaces, left to right
+  // the five modes, left to right
   workspaces: () =>
     svg(
       320,
       70,
-      ['Board', 'Draw', 'Time', 'Motion']
+      ['Story', 'Draw', 'Timing', 'Motion', 'Share']
         .map((n, i) => {
-          const x = 8 + i * 78;
-          return `<rect x="${x}" y="12" width="64" height="36" rx="6" ${i === 1 ? `stroke="${A}"` : ''}/>${txt(x + 32, 34, n)}${i < 3 ? `<path d="M${x + 67} 30h8M${x + 72} 27l3 3-3 3" stroke="${M}"/>` : ''}`;
+          const x = 6 + i * 63;
+          return `<rect x="${x}" y="12" width="52" height="36" rx="6" ${i === 1 ? `stroke="${A}"` : ''}/>${txt(x + 26, 34, n)}${i < 4 ? `<path d="M${x + 54} 30h7M${x + 58} 27l3 3-3 3" stroke="${M}"/>` : ''}`;
         })
-        .join('') + txt(160, 64, 'plan → draw → time → put together', M),
-      'The four workspaces: Board, Draw, Time, Motion',
+        .join('') + txt(160, 64, 'plan → draw → time → put together → share', M),
+      'The five modes: Story, Draw, Timing, Motion, Share',
     ),
   // a rough stroke held still snaps to a clean shape, then the end is dragged
   quickshape: () =>

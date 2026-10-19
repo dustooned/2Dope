@@ -1,7 +1,6 @@
 import { setEffectCacheBudget } from './view/effects';
 import { EffectsPanel } from './ui/effectspanel';
 import { scrollArrows } from './ui/scrollarrows';
-import { openExportHub } from './ui/exporthub';
 import { openBoardExport } from './ui/boardexport';
 import './style.css';
 import { AudioPlayback } from './audio';
@@ -558,7 +557,8 @@ const menuActions: Record<string, () => void> = {
   reference: () => reference.toggle(),
   panel: () => setPanel(!document.body.classList.contains('panel-open')),
   bar: toggleBar,
-  'export-hub': () => showExportHub(),
+  // one place to make files: Share (the menu item and the Share mode open the same screen)
+  'export-hub': () => share.show(),
   'export-seq': () => exporter?.open(),
   'export-video': () => videoExporter.open(),
   blender: () => void exportForBlender(),
@@ -658,7 +658,7 @@ app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
 flipMode.onChange = () => { layerCards.close(); bubbles.update(); strip.update(); setTimeout(() => app.refit(), 60); };
 app.onToolChange = chain(app.onToolChange, () => flipMode.update());
-// Motion (and anywhere else): open a drawing layer frame by frame in Flip
+// Motion (and anywhere else): open a drawing layer frame by frame in Draw's flipbook
 app.openFlipbook = (id) => {
   if (app.workspace !== 'draw') app.setWorkspace('draw');
   if (id) app.pickLayer(id);
@@ -760,7 +760,7 @@ document.querySelectorAll('[data-file="new"]').forEach((b) =>
   }),
 );
 if (import.meta.env.DEV) (window as unknown as { __gallery: Gallery }).__gallery = gallery;
-$('#export-seq').addEventListener('click', showExportHub);
+$('#export-seq').addEventListener('click', () => share.show());
 $('#focus-export').addEventListener('click', () => share.show());
 if (import.meta.env.DEV) (window as unknown as { __export: ExportUI }).__export = exporter;
 await files.start();
@@ -798,10 +798,3 @@ function resetUi(): void {
   files?.toast('Screen reset to the starting layout. Your work is unchanged.');
 }
 
-function showExportHub(): void {
-  openExportHub(app, {
-    video: () => videoExporter.open(), sequence: () => exporter?.open(),
-    backup: () => void files?.exportProject(), blender: () => void exportForBlender(),
-    board: () => openBoardExport(app, m => files?.toast(m)),
-  });
-}

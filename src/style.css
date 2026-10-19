@@ -4040,9 +4040,6 @@ body:not(.panel-open) #panel { display: none; }
 body.ws-motion #focus-tools, body.ws-time #focus-tools, body.ws-motion #panel-toggle { display: none; }
 body.quick .focusbar, body.ui-hidden .focusbar { display: none; }
 .motion-extra summary { cursor: pointer; padding: 6px 10px; min-height: 32px; font-size: 12px; }
-.export-hub { width: min(540px, calc(100vw - 24px)); max-height: 88dvh; overflow-y: auto; }
-.export-hub > button { display: block; width: 100%; margin: 7px 0; min-height: 42px; text-align: left; }
-.export-hub > img { display: block; max-width: 100%; max-height: 42dvh; margin: 12px auto; }
 .export-hub p { line-height: 1.5; }
 @media (max-width: 600px) { #focus-context { display: none; } .focusbar { padding-left: 8px; } #panel-toggle { display: inline-flex !important; } }
 

@@ -33,7 +33,7 @@ export interface BubbleHooks {
   story?: { view(): 'panels' | 'timeline' | 'split'; setView(v: 'panels' | 'timeline' | 'split'): void; images(): void; exportBoard(): void };
   /** Motion actions the bubbles reach. */
   motion?: { group(): void; split(): void };
-  /** Flip: the beginner drawing-only mode (a sub-mode of Draw). */
+  /** Draw's bottom view: the flipbook (on) or the timeline. */
   flip?: { on(): boolean; set(on: boolean): void };
   /** Share: the last mode, preview and make the movie. */
   share?: { open(): boolean; show(): void };

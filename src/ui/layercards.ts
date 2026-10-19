@@ -264,7 +264,6 @@ export class LayerCards {
         b.addEventListener('click', () => { fn(); this.addOpen = false; this.sig = ''; this.update(); });
         menu.append(b);
       };
-      // in Flip (the flipbook) a new layer is part of every page: same frames, its own drawing
       choice('Animation', 'flipbook', 'A layer you animate frame by frame (a new track in the flipbook)', () => app.addDrawLayer());
       choice('Background', 'gallery', 'One drawing behind everything, for the whole shot', () => app.addStillLayer('background'));
       choice('Object', 'draw', 'One drawing above this layer, for the whole shot (a prop, a sign, a set piece)', () => app.addStillLayer('object'));

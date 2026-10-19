@@ -3821,7 +3821,7 @@ export class App {
     if (none) this.onNotice?.('This drawing already reaches the end of the shot.');
   }
 
-  /** Open a drawings layer in Flip (set by the UI). */
+  /** Open a drawings layer in Draw's flipbook (set by the UI). */
   openFlipbook: ((layerId?: string) => void) | null = null;
 
   duplicateFrame(): void {
