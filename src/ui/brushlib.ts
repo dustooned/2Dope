@@ -3,7 +3,7 @@ import { loadGrain, loadTip } from '../brush/raster';
 import { loadBrushes, saveBrushes } from '../io/brushstore';
 import type { App } from '../app';
 import { cloneBrush, PRESETS, type BrushSettings } from '../core/brush';
-import { CATEGORIES, categoryOf, isBuiltIn, readBrush, uniqueName, type BrushCategory } from '../core/brushlib';
+import { addSet, allCategories, categoryOf, forget, isBuiltIn, moveTo, readBrush, readSets, removeSet, renamedIn, renameSet, uniqueName, type BrushCategory, type BrushSets } from '../core/brushlib';
 import type { StrokePoint, StrokeRecord } from '../core/stroke';
 import { strokeLength } from '../core/stroke';
 import { dabsForStroke } from '../brush/dabs';
@@ -14,6 +14,8 @@ import { askText, confirmBox } from './dialogs';
 
 const MINE_KEY = '2dope.brushes.mine';
 const CAT_KEY = '2dope.brushes.category';
+/** Your brush collections (Procreate brush sets) and which brushes are in them. */
+const SETS_KEY = '2dope.brushes.sets';
 const PW = 220;
 const PH = 54;
 
@@ -28,7 +30,9 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
  * The brush library (Procreate Dreams style): categories on the left, brushes as cards with a
  * live stroke preview on the right. Tap a card to draw with it; double-tap to open all its
  * settings (the Brush Studio). Save the brush you tuned into My brushes; hold a card to
- * duplicate, rename or delete. Opens by tapping the active Brush / Vector / Eraser tool again.
+ * duplicate, rename, delete, or move or copy it to a collection. Make your own collections (＋ New)
+ * and drag a brush sideways onto one to move it there (a built-in brush is copied). Opens by
+ * tapping the active Brush / Vector / Eraser tool again.
  */
 export class BrushLibrary {
   private readonly root = el('div', { class: 'brushlib', role: 'dialog', 'aria-label': 'Brush library', hidden: '' });
@@ -37,6 +41,9 @@ export class BrushLibrary {
   private anchor: HTMLElement | null = null;
   private cat: BrushCategory;
   private mine: BrushSettings[];
+  private sets: BrushSets = (() => { try { return readSets(JSON.parse(localStorage.getItem(SETS_KEY) ?? 'null')); } catch { return readSets(null); } })();
+  /** The click after a drag does not also pick the brush. */
+  private dragged = false;
   private readonly engine = new RasterEngine(PW, PH);
   private lastTap = { name: '', at: 0 };
 
@@ -55,10 +62,10 @@ export class BrushLibrary {
         } else if (this.mine.length) this.saveMine();
       })
       .catch(() => { /* localStorage stays the store */ });
-    let c: BrushCategory = categoryOf(app.brush.name, this.mine);
+    let c: BrushCategory = categoryOf(app.brush.name, this.mine, this.sets);
     try {
       const saved = localStorage.getItem(CAT_KEY);
-      if (CATEGORIES.some((x) => x.id === saved)) c = saved as BrushCategory;
+      if (allCategories(this.sets).some((x) => x.id === saved)) c = saved as BrushCategory;
     } catch {
       // default category
     }
@@ -94,12 +101,23 @@ export class BrushLibrary {
       const b = this.find(name);
       if (!b) return null;
       const own = !isBuiltIn(name);
+      const here = categoryOf(name, this.mine, this.sets);
+      // where a brush can go: My brushes and your collections
+      const places = allCategories(this.sets).filter((c) => c.own || c.id === 'mine');
       return [
         { label: 'Use this brush', run: () => this.use(b) },
         { label: 'Open in Studio', run: () => this.studio(b) },
         { label: 'Duplicate', run: () => this.add({ ...cloneBrush(b), name: uniqueName(`${name} copy`, this.names()) }) },
-        ...(own ? [{ label: 'Rename…', run: () => void this.rename(b) }, { sep: true as const }, { label: 'Delete', run: () => void this.remove(b), danger: true }] : []),
+        ...(own && places.length > 1 ? [{ title: 'Move to' }, { chips: places.filter((c) => c.id !== here).map((c) => ({ label: c.label, run: () => this.moveBrush(name, c.id) })) }] : []),
+        { title: 'Copy to' },
+        { chips: [...places.map((c) => ({ label: c.label, run: () => this.copyBrush(b, c.id) })), { label: '\uff0b New collection', run: () => void this.newSet([b], true) }] },
+        ...(own ? [{ sep: true as const }, { label: 'Rename…', run: () => void this.rename(b) }, { label: 'Delete', run: () => void this.remove(b), danger: true }] : []),
       ];
+    });
+    this.wireDrag();
+    attachContextMenu(this.cats, ({ target }) => {
+      const t = (target as HTMLElement).closest<HTMLElement>('[data-cat]');
+      return t && t.dataset.own === '1' ? this.setMenu(t.dataset.cat!) : null;
     });
     window.addEventListener(
       'pointerdown',
@@ -195,7 +213,9 @@ export class BrushLibrary {
   private async importFiles(files: File[]): Promise<void> {
     let added = 0, round = 0, grained = 0, failed = 0, full = 0;
     const names: string[] = [];
+    let lastSet: string | null = null;
     for (const f of files) {
+      const before = names.length;
       try {
         if (f.size > 256 * 1024 * 1024) throw new BrushImportError(`${f.name} is too large to bring in.`);
         const found = await readBrushFile(new Uint8Array(await f.arrayBuffer()), f.name);
@@ -217,21 +237,138 @@ export class BrushLibrary {
       } catch (e) {
         this.app.onNotice?.(e instanceof BrushImportError ? e.message : `${f.name} could not be read as a brush file.`);
       }
+      // a brush set (several brushes in one file) gets a collection named after the file
+      const got = names.slice(before);
+      if (got.length > 1) {
+        const id = `set${Date.now().toString(36)}${before}`;
+        this.setSets(moveTo(addSet(this.sets, f.name.replace(/\.[a-z0-9]+$/i, ''), id), got, id));
+        lastSet = id;
+      }
     }
     if (!added) return;
     this.saveMine();
-    this.cat = 'mine';
+    this.cat = lastSet ?? 'mine';
     this.render();
     const bits = [round ? `${round} with the round tip` : '', grained ? `${grained} with their grain` : '', failed ? `${failed} tip picture${failed === 1 ? '' : 's'} could not be read` : '', full ? `${full} left out (My brushes is full)` : ''].filter(Boolean);
     this.app.onNotice?.(`${added} brush${added === 1 ? '' : 'es'} added to My brushes${bits.length ? ` (${bits.join(', ')})` : ''}. Close to the originals, not identical: wet mixing and dual brushes are not carried over.`);
     setTimeout(() => this.render(), 300); // previews again once the tips have decoded
   }
 
-  private add(b: BrushSettings): void {
+  private add(b: BrushSettings, into: BrushCategory = this.sets.sets.some((s) => s.id === this.cat) ? this.cat : 'mine'): void {
     this.mine = [...this.mine, b];
     this.saveMine();
-    this.cat = 'mine';
+    if (into !== 'mine') this.setSets(moveTo(this.sets, [b.name], into));
+    this.cat = into;
     this.use(b);
+  }
+
+  private setSets(s: BrushSets): void {
+    this.sets = s;
+    try { localStorage.setItem(SETS_KEY, JSON.stringify(s)); } catch { /* not remembered */ }
+  }
+
+  /** Move one of your brushes to a collection (or back to My brushes). */
+  private moveBrush(name: string, to: BrushCategory): void {
+    this.setSets(moveTo(this.sets, [name], to));
+    this.render();
+    this.app.onNotice?.(`Moved \u201c${name}\u201d to ${allCategories(this.sets).find((c) => c.id === to)?.label ?? 'My brushes'}.`);
+  }
+
+  /** A copy of a brush (yours or built in) in a collection. */
+  private copyBrush(b: BrushSettings, to: BrushCategory): void {
+    const copy = { ...cloneBrush(b), name: uniqueName(isBuiltIn(b.name) ? b.name : `${b.name} copy`, this.names()) };
+    this.mine = [...this.mine, copy];
+    this.saveMine();
+    this.setSets(moveTo(this.sets, [copy.name], to));
+    this.render();
+    this.app.onNotice?.(`Copied to ${allCategories(this.sets).find((c) => c.id === to)?.label ?? 'My brushes'} as \u201c${copy.name}\u201d.`);
+  }
+
+  /** A new collection; with brushes, they go in (copied when `copy`, or when built in). */
+  private async newSet(brushes: BrushSettings[] = [], copy = false): Promise<void> {
+    const name = await askText('New collection', 'My brushes 2', 'Make it');
+    if (name === null) return;
+    const id = `set${Date.now().toString(36)}`;
+    this.setSets(addSet(this.sets, name, id));
+    for (const b of brushes) {
+      if (copy || isBuiltIn(b.name)) this.copyBrush(b, id);
+      else this.setSets(moveTo(this.sets, [b.name], id));
+    }
+    this.cat = id;
+    this.render();
+  }
+
+  /** The menu of one of your collections: rename or delete it. */
+  private setMenu(id: string): import('./contextmenu').CtxItem[] | null {
+    const s = this.sets.sets.find((x) => x.id === id);
+    if (!s) return null;
+    return [
+      { title: s.name },
+      { label: 'Rename…', run: async () => { const n = await askText('Rename collection', s.name, 'Rename'); if (n !== null) { this.setSets(renameSet(this.sets, id, n)); this.render(); } } },
+      { label: 'Delete collection (its brushes go to My brushes)', danger: true, run: async () => {
+        if (!(await confirmBox(`Delete the collection \u201c${s.name}\u201d?`, 'Its brushes are kept: they go back to My brushes.', 'Delete', true))) return;
+        this.setSets(removeSet(this.sets, id));
+        if (this.cat === id) this.cat = 'mine';
+        this.render();
+      } },
+    ];
+  }
+
+  /**
+   * Drag a brush card sideways onto a collection: yours move, built-in ones are copied. A mostly
+   * up-and-down move is the list scrolling, so it is left alone.
+   */
+  private wireDrag(): void {
+    let s: { x: number; y: number; id: number; name: string; card: HTMLElement } | null = null;
+    let ghost: HTMLElement | null = null;
+    let over: HTMLElement | null = null;
+    const end = () => {
+      ghost?.remove();
+      ghost = null;
+      over?.classList.remove('drop');
+      over = null;
+      s = null;
+    };
+    this.list.addEventListener('pointerdown', (e) => {
+      const card = (e.target as HTMLElement).closest<HTMLElement>('.bl-card');
+      if (!card || e.button > 0) return;
+      s = { x: e.clientX, y: e.clientY, id: e.pointerId, name: card.dataset.name!, card };
+      this.dragged = false;
+    });
+    this.list.addEventListener('pointermove', (e) => {
+      if (!s || e.pointerId !== s.id) return;
+      const dx = e.clientX - s.x, dy = e.clientY - s.y;
+      if (!ghost) {
+        if (Math.abs(dx) < 14 || Math.abs(dx) < Math.abs(dy) * 1.2) { if (Math.abs(dy) > 14) end(); return; }
+        ghost = s.card.cloneNode(true) as HTMLElement;
+        ghost.classList.add('bl-ghost');
+        document.body.append(ghost);
+        try { this.list.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+        this.dragged = true;
+      }
+      ghost.style.left = `${e.clientX - 40}px`;
+      ghost.style.top = `${e.clientY - 20}px`;
+      ghost.hidden = true;
+      const t = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>('[data-cat]') ?? null;
+      ghost.hidden = false;
+      const ok = !!t && (t.dataset.own === '1' || t.dataset.cat === 'mine');
+      if (over !== t) { over?.classList.remove('drop'); over = ok ? t : null; over?.classList.add('drop'); }
+    });
+    const up = (e: PointerEvent) => {
+      if (!s || e.pointerId !== s.id) return;
+      const name = s.name, target = over?.dataset.cat;
+      const was = !!ghost;
+      end();
+      if (!was || !target) return;
+      const b = this.find(name);
+      if (!b) return;
+      if (isBuiltIn(name)) this.copyBrush(b, target);
+      else if (categoryOf(name, this.mine, this.sets) !== target) this.moveBrush(name, target);
+    };
+    this.list.addEventListener('pointerup', up);
+    this.list.addEventListener('pointercancel', () => end());
+    // the click that ends a drag is not a pick
+    this.list.addEventListener('click', (e) => { if (this.dragged) { e.stopPropagation(); e.preventDefault(); this.dragged = false; } }, true);
   }
 
   private async saveCurrent(): Promise<void> {
@@ -255,6 +392,7 @@ export class BrushLibrary {
     const next = uniqueName(name, this.names());
     this.mine = this.mine.map((x) => (x.name === b.name ? { ...x, name: next } : x));
     this.saveMine();
+    this.setSets(renamedIn(this.sets, b.name, next));
     if (this.app.brush.name === b.name) this.app.setBrush({ ...cloneBrush(this.app.brush), name: next });
     this.render();
   }
@@ -263,6 +401,7 @@ export class BrushLibrary {
     if (!(await confirmBox(`Delete “${b.name}”?`, 'It is removed from My brushes on this device. Drawings made with it are not changed.', 'Delete', true))) return;
     this.mine = this.mine.filter((x) => x.name !== b.name);
     this.saveMine();
+    this.setSets(forget(this.sets, b.name));
     this.render();
   }
 
@@ -278,10 +417,13 @@ export class BrushLibrary {
 
   private render(): void {
     if (this.root.hidden) return;
+    if (!allCategories(this.sets).some((c) => c.id === this.cat)) this.cat = 'mine';
+    const newSet = el('button', { type: 'button', class: 'bl-new', title: 'A new collection for your brushes (like a Procreate brush set)' }, '\uff0b New');
+    newSet.addEventListener('click', () => void this.newSet());
     this.cats.replaceChildren(
-      ...CATEGORIES.map((c) => {
-        const count = this.all().filter((b) => categoryOf(b.name, this.mine) === c.id).length;
-        const b = el('button', { type: 'button', role: 'tab', 'aria-selected': String(c.id === this.cat) }, c.label);
+      ...allCategories(this.sets).map((c) => {
+        const count = this.all().filter((b) => categoryOf(b.name, this.mine, this.sets) === c.id).length;
+        const b = el('button', { type: 'button', role: 'tab', 'aria-selected': String(c.id === this.cat), 'data-cat': c.id, 'data-own': c.own ? '1' : '0', title: c.own ? 'Your collection: hold for rename or delete; drop a brush here to move it in' : c.id === 'mine' ? 'Your brushes; drop a brush here to move it back' : c.label }, c.label);
         b.append(el('span', { class: 'bl-count' }, String(count)));
         b.addEventListener('click', () => {
           this.cat = c.id;
@@ -294,8 +436,9 @@ export class BrushLibrary {
         });
         return b;
       }),
+      newSet,
     );
-    const shown = this.all().filter((b) => categoryOf(b.name, this.mine) === this.cat);
+    const shown = this.all().filter((b) => categoryOf(b.name, this.mine, this.sets) === this.cat);
     const cur = this.app.brush.name;
     this.list.replaceChildren(
       ...(shown.length

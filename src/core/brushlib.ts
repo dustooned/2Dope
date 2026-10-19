@@ -1,7 +1,10 @@
 import { cloneBrush, PRESETS, type BrushSettings } from './brush';
 
-/** Brush library categories (Procreate Dreams style). "Mine" holds the brushes you saved. */
-export type BrushCategory = 'sketch' | 'ink' | 'paint' | 'mine';
+/**
+ * Brush library categories (Procreate Dreams style). "Mine" holds the brushes you saved; your own
+ * collections (brush sets) have ids of their own.
+ */
+export type BrushCategory = string;
 
 export const CATEGORIES: { id: BrushCategory; label: string }[] = [
   { id: 'sketch', label: '✏️ Sketching' },
@@ -23,9 +26,78 @@ const BUILT_IN: Record<string, BrushCategory> = {
   'Soft Airbrush': 'paint',
 };
 
-export function categoryOf(name: string, mine: readonly BrushSettings[]): BrushCategory {
-  if (mine.some((b) => b.name === name)) return 'mine';
+export function categoryOf(name: string, mine: readonly BrushSettings[], sets?: BrushSets): BrushCategory {
+  if (mine.some((b) => b.name === name)) {
+    const at = sets?.where[name];
+    return at && sets!.sets.some((s) => s.id === at) ? at : 'mine';
+  }
   return BUILT_IN[name] ?? 'paint';
+}
+
+/** Your own brush collections, and which collection each of your brushes is in (by name). */
+export interface BrushSets {
+  sets: { id: string; name: string }[];
+  where: Record<string, string>;
+}
+
+export const NO_SETS: BrushSets = { sets: [], where: {} };
+
+/** Every category to show: the built-in ones, My brushes, then your collections. */
+export function allCategories(sets: BrushSets): { id: BrushCategory; label: string; own: boolean }[] {
+  return [...CATEGORIES.map((c) => ({ ...c, own: false })), ...sets.sets.map((s) => ({ id: s.id, label: `\ud83d\udcc1 ${s.name}`, own: true }))];
+}
+
+/** A new collection (its id is new; the name is kept short). */
+export function addSet(sets: BrushSets, name: string, id: string): BrushSets {
+  return { sets: [...sets.sets, { id, name: name.trim().slice(0, 30) || 'Brushes' }], where: { ...sets.where } };
+}
+
+/** Put brushes in a collection ('mine' takes them out of any). */
+export function moveTo(sets: BrushSets, names: string[], id: BrushCategory): BrushSets {
+  const where = { ...sets.where };
+  for (const n of names) {
+    if (id === 'mine' || !sets.sets.some((s) => s.id === id)) delete where[n];
+    else where[n] = id;
+  }
+  return { sets: sets.sets, where };
+}
+
+/** A brush was renamed: it stays where it was. */
+export function renamedIn(sets: BrushSets, from: string, to: string): BrushSets {
+  if (!(from in sets.where)) return sets;
+  const where = { ...sets.where };
+  where[to] = where[from]!;
+  delete where[from];
+  return { sets: sets.sets, where };
+}
+
+/** A brush was deleted. */
+export function forget(sets: BrushSets, name: string): BrushSets {
+  if (!(name in sets.where)) return sets;
+  const where = { ...sets.where };
+  delete where[name];
+  return { sets: sets.sets, where };
+}
+
+/** A collection deleted: its brushes go back to My brushes (they are not deleted). */
+export function removeSet(sets: BrushSets, id: string): BrushSets {
+  const where: Record<string, string> = {};
+  for (const [n, s] of Object.entries(sets.where)) if (s !== id) where[n] = s;
+  return { sets: sets.sets.filter((s) => s.id !== id), where };
+}
+
+export function renameSet(sets: BrushSets, id: string, name: string): BrushSets {
+  return { sets: sets.sets.map((s) => (s.id === id ? { ...s, name: name.trim().slice(0, 30) || s.name } : s)), where: sets.where };
+}
+
+/** Collections read back from storage (bad entries dropped). */
+export function readSets(v: unknown): BrushSets {
+  if (!v || typeof v !== 'object') return NO_SETS;
+  const o = v as { sets?: unknown; where?: unknown };
+  const sets = Array.isArray(o.sets) ? o.sets.filter((s): s is { id: string; name: string } => !!s && typeof s.id === 'string' && typeof s.name === 'string').slice(0, 50) : [];
+  const where: Record<string, string> = {};
+  if (o.where && typeof o.where === 'object') for (const [n, s] of Object.entries(o.where as Record<string, unknown>)) if (typeof s === 'string' && sets.some((x) => x.id === s)) where[n] = s;
+  return { sets, where };
 }
 
 export function isBuiltIn(name: string): boolean {

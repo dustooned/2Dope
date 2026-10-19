@@ -4504,3 +4504,8 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 .flip-track.clip .flip-eye::after { content: '\21b3'; position: absolute; left: 3px; top: 2px; font-size: 10px; color: var(--muted); }
 .flip-track.masked .flip-eye::before { content: '\25d0'; position: absolute; right: 3px; top: 2px; font-size: 9px; color: var(--muted); }
 .flip-eye { position: sticky; }
+/* brush collections: a drop target lights up; the card being dragged follows the finger */
+.bl-cats button.drop { outline: 2px dashed var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 20%, var(--panel-2)); }
+.bl-new { opacity: .8; font-size: 12px; }
+.bl-ghost { position: fixed; z-index: 90; width: 180px; pointer-events: none; opacity: .85; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); border-radius: 12px; }
+.bl-card { touch-action: pan-y; }
