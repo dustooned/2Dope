@@ -4509,3 +4509,11 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 .bl-new { opacity: .8; font-size: 12px; }
 .bl-ghost { position: fixed; z-index: 90; width: 180px; pointer-events: none; opacity: .85; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); border-radius: 12px; }
 .bl-card { touch-action: pan-y; }
+/* brush library: cards keep their size and the list scrolls (with a finger too), however many
+   brushes come in; the collections column scrolls on its own when there are many of them */
+.bl-list { touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; padding-right: 2px; }
+.bl-card { flex: 0 0 auto; }
+.bl-preview { flex: 0 0 auto; }
+.bl-cats { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.bl-cats button { flex: 0 0 auto; }
+@media (max-width: 600px) { .bl-cats { overflow-y: hidden; touch-action: pan-x; } }
