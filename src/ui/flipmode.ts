@@ -70,7 +70,7 @@ export class FlipMode {
     this.play.addEventListener('click', () => this.app.togglePlay());
     const prev = btn('Previous drawing', 'Previous drawing (hold: the first frame)', 'prev', () => this.app.prevDrawing(), () => this.app.setLayerFrame(0), 'flip-btn flip-icon', '');
     const next = btn('Next drawing', 'Next drawing (hold: the last frame)', 'next', () => this.app.nextDrawing(), () => this.app.setLayerFrame(this.app.project.length - 1), 'flip-btn flip-icon', '');
-    const add = btn('Frame', 'Add a frame after this one. On a held drawing the hold ends here; hold the button to add after the whole hold.', 'plus', () => this.app.flipAddFrame(false), () => this.app.flipAddFrame(true), 'flip-btn flip-add');
+    const add = btn('Frame', 'Add a frame right after this drawing (after its whole hold). Hold the button to end the hold here instead.', 'plus', () => this.app.flipAddFrame(true), () => this.app.flipAddFrame(false), 'flip-btn flip-add');
     const track = btn('Track', 'Add a track right above this one, from frame 1 (drag a track\u2019s box up or down to reorder)', 'layers', () => this.app.addFlipTrack(), undefined, 'flip-btn flip-adv');
     const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
     onion.classList.add('flip-onion');
@@ -325,15 +325,34 @@ export class FlipMode {
 
   private wireStrip(): void {
     const s = this.scroll;
-    let start: { x: number; y: number; id: number; frame: number; mode: '' | 'scrub' | 'scroll' } | null = null;
+    let start: { x: number; y: number; id: number; frame: number; mode: '' | 'scrub' | 'scroll' | 'ruler'; lastX: number; lastT: number; acc: number } | null = null;
+    /** The frame under a point of the strip (on the ruler or any track). */
+    const frameAt = (x: number) => {
+      const r = this.grid.getBoundingClientRect();
+      return Math.max(0, Math.min(this.app.compEnd - 1, Math.floor((x - r.left - LABEL) / CELL)));
+    };
+    const onRuler = (y: number) => y - this.grid.getBoundingClientRect().top < 20;
     s.addEventListener('pointerdown', (e) => {
       if ((e.target as HTMLElement).closest('.flip-eye, .flip-trim') || !e.isPrimary || e.button > 0) return;
-      start = { x: e.clientX, y: e.clientY, id: e.pointerId, frame: this.app.frame, mode: '' };
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId, frame: this.app.frame, mode: '', lastX: e.clientX, lastT: e.timeStamp, acc: 0 };
       this.dragged = false;
+      // the frame numbers are a timeline ruler: touch it and the playhead jumps there and follows
+      if (onRuler(e.clientY)) {
+        start.mode = 'ruler';
+        this.dragging = this.dragged = true;
+        try { s.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+        this.app.beginScrub();
+        this.app.setFrame(frameAt(e.clientX));
+      }
     });
     s.addEventListener('pointermove', (e) => {
       if (!start || e.pointerId !== start.id) return;
       const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (start.mode === 'ruler') {
+        const f = frameAt(e.clientX);
+        if (f !== this.app.frame) this.app.setFrame(f);
+        return;
+      }
       if (!start.mode) {
         if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
           start.mode = 'scrub';
@@ -343,8 +362,15 @@ export class FlipMode {
         } else if (Math.abs(dy) > 8) start.mode = 'scroll';
       }
       if (start.mode === 'scrub') {
-        // swipe left to go forward in time, right to go back (the strip moves under your finger)
-        const f = Math.max(0, Math.min(this.app.compEnd - 1, start.frame - Math.round(dx / CELL)));
+        // swipe left to go forward in time, right to go back (the strip moves under your finger);
+        // a quick swipe goes further, as in Procreate Dreams
+        const step = e.clientX - start.lastX, dt = Math.max(1, e.timeStamp - start.lastT);
+        const speed = Math.abs(step) / dt; // px per ms
+        const gain = speed > 0.9 ? Math.min(6, 1 + (speed - 0.9) * 3) : 1;
+        start.acc += step * gain;
+        start.lastX = e.clientX;
+        start.lastT = e.timeStamp;
+        const f = Math.max(0, Math.min(this.app.compEnd - 1, start.frame - Math.round(start.acc / CELL)));
         if (f !== this.app.frame) this.app.setFrame(f);
         const x = LABEL + f * CELL;
         s.scrollLeft = Math.max(0, x - s.clientWidth / 2);
@@ -352,7 +378,7 @@ export class FlipMode {
     });
     const end = (e: PointerEvent) => {
       if (!start || e.pointerId !== start.id) return;
-      if (start.mode === 'scrub') this.app.endScrub();
+      if (start.mode === 'scrub' || start.mode === 'ruler') this.app.endScrub();
       start = null;
       this.dragging = false;
     };

@@ -2765,8 +2765,13 @@ export class App {
    * Layers that show at full strength while you draw, whatever Others says: in the flipbook every
    * track (as in Procreate Dreams), otherwise the stack you paint in (linked art / paint layers).
    */
+  /** Draw's bottom view is the flipbook (set by the UI). */
+  get flipbookView(): boolean {
+    return this.workspace === 'draw' && document.body.classList.contains('flipmode');
+  }
+
   get alwaysShown(): DrawingsLayer[] {
-    if (this.workspace === 'draw' && document.body.classList.contains('flipmode')) return this.drawLayers().filter((l) => !l.guide && l.visible);
+    if (this.flipbookView) return this.drawLayers().filter((l) => !l.guide && l.visible);
     return this.celLayers;
   }
 
@@ -2941,8 +2946,8 @@ export class App {
 
   /**
    * The flipbook's + Track (Procreate Dreams): a new drawing track right above the one you draw
-   * on, from frame 1, holding one blank drawing for the whole shot (draw on it anywhere; + Frame
-   * makes new drawings). You draw on it straight away. One undo step.
+   * on, starting with one blank frame at frame 1. + Frame adds the next drawing after it, and
+   * drawing past its end makes a frame there. You draw on it straight away. One undo step.
    */
   addFlipTrack(): void {
     if (this.live || this.strokeActive) return;
@@ -2950,9 +2955,8 @@ export class App {
     const id = p.newId('L');
     const above = p.isPlaceholder ? null : p.activeLayer;
     const n = this.drawLayers().filter((l) => !l.guide).length + 1;
-    const length = Math.max(1, this.compEnd);
     this.editor.edit('Add track', (cc) => {
-      const made = drawingsLayer(id, `Track ${n}`, [{ drawing: p.newDrawing().id, length }], p.width, p.height, cc.width, cc.height);
+      const made = drawingsLayer(id, `Track ${n}`, [{ drawing: p.newDrawing().id, length: 1 }], p.width, p.height, cc.width, cc.height);
       made.start = 0;
       made.in = 0;
       made.out = null;
@@ -4211,6 +4215,20 @@ export class App {
       if (tool === 'eraser') return; // nothing to erase on a blank page
       this.blankPage = false;
       this.addFrame();
+    }
+    // the flipbook: drawing past the end of a track makes a new frame right here (the drawing
+    // before it holds up to it), so a new drawing comes after the last frame of the previous one
+    if (tool !== 'eraser' && !this.editingMask && this.flipbookView && !this.project.isPlaceholder) {
+      const l = this.project.layer;
+      const total = this.project.length;
+      const at = this.layerFrame;
+      if (l.kind === 'drawings' && !l.still && !l.guide && at >= total) {
+        const d = this.project.newDrawing();
+        this.editTimeline('New frame', (old) => {
+          const last = old[old.length - 1]!;
+          return { ex: [...old.slice(0, -1), { ...last, length: last.length + (at - total) }, { drawing: d.id, length: 1 }], frame: at, selection: [] };
+        });
+      }
     }
     // drawing on a comp's placeholder makes it a real layer of that comp
     if (this.project.isPlaceholder) {
