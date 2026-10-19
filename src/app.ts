@@ -2761,6 +2761,15 @@ export class App {
     return this.project.newDrawing().id;
   }
 
+  /**
+   * Layers that show at full strength while you draw, whatever Others says: in the flipbook every
+   * track (as in Procreate Dreams), otherwise the stack you paint in (linked art / paint layers).
+   */
+  get alwaysShown(): DrawingsLayer[] {
+    if (this.workspace === 'draw' && document.body.classList.contains('flipmode')) return this.drawLayers().filter((l) => !l.guide && l.visible);
+    return this.celLayers;
+  }
+
   /** The layers linked to the one you draw on (itself included), front first. */
   get celLayers(): DrawingsLayer[] {
     if (this.project.isPlaceholder) return [];
@@ -5370,7 +5379,7 @@ export class App {
     const activeId = this.project.layer.id;
     const others = this.showLayers ? this.otherAlpha : 0;
     // the other layers of this stack (a background's paint layers, a drawing's art layers) always show
-    const keep = new Set(this.celLayers.map((l) => l.id).filter((id) => id !== activeId));
+    const keep = new Set(this.alwaysShown.map((l) => l.id).filter((id) => id !== activeId));
     // notes (draw-over corrections) always show, whatever Others and the storyboard slider say
     const hasNotes = comp.layers.some((l) => l.notes && l.visible);
     const around = others > 0 || this.boardAlpha > 0 || keep.size > 0 || hasNotes;
@@ -5595,7 +5604,7 @@ export class App {
       if (d) out.add(d);
     }
     // the rest of this stack shows even with Others hidden
-    for (const m of this.celLayers) {
+    for (const m of this.alwaysShown) {
       const id = drawingAt(m.exposures, ((this.frame - m.start) % Math.max(1, totalFrames(m.exposures)) + Math.max(1, totalFrames(m.exposures))) % Math.max(1, totalFrames(m.exposures)));
       const d = id ? p.drawings.get(id) : undefined;
       if (d) out.add(d);

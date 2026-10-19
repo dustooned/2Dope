@@ -4499,3 +4499,8 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 .share-stamp { border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px 8px; margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .share-stamp legend { font-size: 12px; font-weight: 700; padding: 0 4px; }
 .share-stamp [hidden] { display: none !important; }
+/* flipbook track tags: a colour stripe, and marks for a clipped or masked track */
+.flip-track .flip-eye, .flip-track .flip-eye[aria-pressed] { border-left: 4px solid var(--tag, transparent) !important; }
+.flip-track.clip .flip-eye::after { content: '\21b3'; position: absolute; left: 3px; top: 2px; font-size: 10px; color: var(--muted); }
+.flip-track.masked .flip-eye::before { content: '\25d0'; position: absolute; right: 3px; top: 2px; font-size: 9px; color: var(--muted); }
+.flip-eye { position: sticky; }

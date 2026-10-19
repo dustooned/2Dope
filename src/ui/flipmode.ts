@@ -1,6 +1,7 @@
 import type { App } from '../app';
-import type { DrawingsLayer } from '../core/comp';
+import type { BlendMode, DrawingsLayer } from '../core/comp';
 import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick, type CtxItem } from './contextmenu';
+import { askText, confirmBox } from './dialogs';
 import { frameMenu } from './framemenu';
 import { decorate } from './icons';
 
@@ -12,6 +13,10 @@ const MINI_KEY = '2dope.flip.mini';
 const CELL = 44;
 const ROW = 50;
 const LABEL = 46;
+/** Track colours (the same tags as Motion and the rails), and how they read in a menu. */
+const TAGS = ['#9a9aa8', '#ff5a8a', '#ffd24a', '#4aa3ff', '#4ade80', '#c084fc', '#fb923c'];
+const TAG_DOTS = ['\u26aa', '\ud83d\udd34', '\ud83d\udfe1', '\ud83d\udd35', '\ud83d\udfe2', '\ud83d\udfe3', '\ud83d\udfe0'];
+const BLENDS: [BlendMode, string][] = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['add', 'Add']];
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -132,7 +137,7 @@ export class FlipMode {
     const p = app.project;
     const tracks = this.tracks();
     const len = Math.max(1, app.compEnd);
-    const sig = `${len}|${p.activeLayer}|` + tracks.map((l) => `${l.id}:${l.visible}:${l.start}:${l.name}:` + l.exposures.map((e) => `${e.drawing}.${e.length}.${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
+    const sig = `${len}|${p.activeLayer}|${app.editingMask}|` + tracks.map((l) => `${l.id}:${l.visible}:${l.start}:${l.name}:${l.label ?? 0}:${l.clip ? 1 : 0}:${l.mask ?? ''}:${l.blend}:` + l.exposures.map((e) => `${e.drawing}.${e.length}.${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
     // mid-drag the strip is not rebuilt: that would pull the handle out from under the finger
     if (sig !== this.sig && !this.dragging) {
       this.sig = sig;
@@ -159,6 +164,9 @@ export class FlipMode {
     for (const l of tracks) {
       const row = el('div', { class: `flip-track${l.id === p.activeLayer ? ' active' : ''}${l.visible ? '' : ' off'}`, 'data-id': l.id });
       const eye = el('button', { type: 'button', class: 'flip-eye', 'aria-pressed': String(l.visible), title: `${l.name}: tap to ${l.visible ? 'hide' : 'show'}, hold for track options`, 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}` });
+      if (l.label) eye.style.setProperty('--tag', TAGS[l.label % TAGS.length]!);
+      if (l.clip) row.classList.add('clip');
+      if (l.mask) row.classList.add('masked');
       eye.append(el('span', { class: 'flip-check', 'aria-hidden': 'true' }, l.visible ? '✓' : ''), el('span', { class: 'flip-name' }, l.name));
       eye.addEventListener('click', () => app.editor.setFlag(l.id, 'visible', !l.visible));
       attachContextMenu(eye, () => this.trackMenu(l, eye));
@@ -377,15 +385,42 @@ export class FlipMode {
     return frameMenu(this.app, [{ sep: true }, { label: `Track options (${layer.name})…`, run: () => this.app.openLayers?.(this.row) }]);
   }
 
+  /**
+   * Track options (Procreate Dreams): show, opacity, blend, a colour tag, clipping mask, a mask to
+   * paint, name, effects, duplicate and delete. Every change is one undo step.
+   */
   private trackMenu(l: DrawingsLayer, anchor: HTMLElement): CtxItem[] {
     const app = this.app;
+    const ed = app.editor;
+    const op = Math.round(Number(ed.valueNow(l, 'opacity')));
+    const set = (label: string, fn: (x: DrawingsLayer) => void) => ed.edit(label, (c) => { const x = c.layers.find((y) => y.id === l.id); if (x && x.kind === 'drawings') fn(x); });
+    // the mask belongs to the track you draw on: go to this one first
+    const mine = (fn: () => void) => () => { if (l.id !== app.project.activeLayer) app.pickLayer(l.id); fn(); };
+    const painting = app.editingMask && l.id === app.project.activeLayer;
     return [
       { title: l.name },
       { label: 'Draw on this track', run: () => app.pickLayer(l.id), disabled: l.id === app.project.activeLayer },
-      { label: l.visible ? 'Hide' : 'Show', run: () => app.editor.setFlag(l.id, 'visible', !l.visible) },
-      { label: 'Track options (opacity, blend, clip, mask, name)…', run: () => { app.pickLayer(l.id); app.openLayers?.(anchor); } },
+      { label: l.visible ? 'Hide' : 'Show', run: () => ed.setFlag(l.id, 'visible', !l.visible) },
+      { title: `Opacity · ${op}%` },
+      { chips: [25, 50, 75, 100].map((v) => ({ label: `${v}%`, on: op === v, run: () => ed.setValue(l.id, 'opacity', v, 'Track opacity') })) },
+      { title: 'Blend' },
+      { chips: BLENDS.map(([b, name]) => ({ label: name, on: l.blend === b, run: () => set(`Blend ${name.toLowerCase()}`, (x) => { x.blend = b; }) })) },
+      { title: 'Colour' },
+      { chips: TAG_DOTS.map((dot, i) => ({ label: dot, title: i ? 'Colour tag' : 'No colour', on: (l.label ?? 0) === i, run: () => ed.setLabel(l.id, i) })) },
+      { sep: true },
+      { label: 'Clipping mask (show only over the track below)', checked: l.clip === true, run: () => set(l.clip ? 'Clipping mask off' : 'Clipping mask', (x) => { x.clip = !x.clip; }) },
+      ...(l.mask
+        ? [
+            { label: 'Paint the mask (paint hides, eraser shows)', checked: painting, run: mine(() => app.setMaskEditing(!painting)) },
+            { label: 'Delete the mask', run: mine(() => app.deleteMask()) },
+          ]
+        : [{ label: 'Add a mask (paint to hide parts of this track)', run: mine(() => app.addMask()) }]),
+      { sep: true },
+      { label: 'Rename…', run: async () => { const n = await askText('Track name', l.name, 'Rename'); if (n !== null) ed.rename(l.id, n); } },
       { label: '✨ Effects…', run: () => app.openEffects?.(l.id) },
       { label: 'Duplicate track', run: () => void app.duplicateLayer(l.id) },
+      { label: 'All layer options…', run: () => { app.pickLayer(l.id); app.openLayers?.(anchor); } },
+      { label: 'Delete track', danger: true, run: async () => { if (await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true)) ed.deleteLayers([l.id]); } },
     ];
   }
 
