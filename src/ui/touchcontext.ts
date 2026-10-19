@@ -55,6 +55,12 @@ export function guardTouchContextMenus(root: EventTarget, canvas: EventTarget, n
     // Safari and Windows touch browsers may synthesize their menu independently of pointerdown.
     // Cancel the native multi-touch default, not the Pointer Events used by undo/pinch/redo.
     if ((event as TouchEvent).touches.length >= 2) event.preventDefault();
+    // The pencil on iPad: no Scribble, text loupe or double-tap zoom may claim (and delay or
+    // cancel) a stroke. Pointer Events still arrive.
+    else if (stylus(event as TouchEvent)) event.preventDefault();
+  };
+  const touchMove = (event: Event) => {
+    if (event.cancelable && stylus(event as TouchEvent)) event.preventDefault();
   };
   root.addEventListener('pointerdown', down, true);
   root.addEventListener('pointerup', up, true);
@@ -62,6 +68,7 @@ export function guardTouchContextMenus(root: EventTarget, canvas: EventTarget, n
   root.addEventListener('contextmenu', menu, true);
   root.addEventListener('keydown', key, true);
   canvas.addEventListener('touchstart', touchStart, { passive: false });
+  canvas.addEventListener('touchmove', touchMove, { passive: false });
   return () => {
     root.removeEventListener('pointerdown', down, { capture: true });
     root.removeEventListener('pointerup', up, { capture: true });
@@ -69,5 +76,12 @@ export function guardTouchContextMenus(root: EventTarget, canvas: EventTarget, n
     root.removeEventListener('contextmenu', menu, { capture: true });
     root.removeEventListener('keydown', key, { capture: true });
     canvas.removeEventListener('touchstart', touchStart);
+    canvas.removeEventListener('touchmove', touchMove);
   };
+}
+
+/** True when a touch event comes from a stylus (Apple Pencil reports touchType 'stylus'). */
+function stylus(e: TouchEvent): boolean {
+  for (const t of Array.from(e.changedTouches ?? [])) if ((t as Touch & { touchType?: string }).touchType === 'stylus') return true;
+  return false;
 }

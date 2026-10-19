@@ -343,7 +343,7 @@ export class App {
 
   /** True while a stroke is being drawn (autosave waits for it to end). */
   get strokeActive(): boolean {
-    return this.live !== null || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null;
+    return this.live !== null || this.waits.length > 0 || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null;
   }
 
   get viewW(): number {
@@ -4242,8 +4242,12 @@ export class App {
     }
     // editing a mask: brushes hide, the eraser reveals (the mask drawing's paint is what hides)
     const drawing = this.editingMask ? this.maskDrawing! : this.drawing;
-    // Its pixels are still coming back (a few ms after changing frame): ignore this touch.
-    if (!this.residency.isReady(drawing)) return;
+    // Its pixels are still coming back (just after changing frame, most often on iPad): keep the
+    // pencil's points and start the stroke the moment they are live, so no stroke is lost
+    if (!this.residency.isReady(drawing)) {
+      this.waitForPixels(e, drawing);
+      return;
+    }
     const plane: Plane = tool === 'pen' || this.editingMask ? 'line' : this.plane;
     const canvas = planeCanvas(drawing, plane);
     this.raster.bind(canvas);
@@ -4280,6 +4284,38 @@ export class App {
     this.feed(first);
     this.armShape(e);
     this.onStrokeState(true);
+  }
+
+  /** Strokes that began on a drawing whose pixels were still loading, oldest first. */
+  private waits: { id: number; drawing: Drawing; down: PointerEvent; moves: PointerEvent[]; up: boolean }[] = [];
+
+  /** The waiting stroke this pointer is still drawing, if any. */
+  private get waiting(): (typeof this.waits)[number] | undefined {
+    return this.waits.find((w) => !w.up);
+  }
+
+  private waitForPixels(e: PointerEvent, drawing: Drawing): void {
+    // a pen-up that never came: that stroke is finished
+    for (const o of this.waits) o.up = true;
+    const w = { id: e.pointerId, drawing, down: penSnapshot(e), moves: [] as PointerEvent[], up: false };
+    this.waits.push(w);
+    // (strokes on the same drawing replay in the order they were drawn: the same load resolves them)
+    void this.residency.ensure(drawing).then(() => {
+      const i = this.waits.indexOf(w);
+      if (i < 0) return;
+      this.waits.splice(i, 1);
+      // the frame changed meanwhile: that stroke was not meant for this page any more
+      if ((this.editingMask ? this.maskDrawing : this.drawing) !== drawing || !this.residency.isReady(drawing)) return;
+      this.beginStroke(w.down);
+      const live = this.live;
+      if (!live || live.pointerId !== w.id) return;
+      for (const m of w.moves) {
+        this.armShape(m);
+        this.feed(this.toPoint(m, live.t0));
+      }
+      if (w.up) this.endStroke();
+      this.requestRender();
+    });
   }
 
   private feed(p: StrokePoint): void {
@@ -4430,7 +4466,7 @@ export class App {
     // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
-      if ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
+      if ((this.live && e.pointerId === this.live.pointerId) || (this.waiting && e.pointerId === this.waiting.id) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
     window.addEventListener('pointercancel', (e) => lifted(e, true));
@@ -4590,6 +4626,7 @@ export class App {
     if (!isTouch && this.live && this.live.pointerId !== e.pointerId) this.endStroke();
     if (isTouch) {
       // Palm rejection: while the pen draws, fingers are ignored.
+      if (this.waiting && this.waiting.id !== e.pointerId && this.waiting.down.pointerType === 'pen') return;
       if (this.live && this.live.record && this.live.pointerId !== e.pointerId) {
         if (this.liveIsTouch()) {
           // A second finger while finger-painting means "navigate": drop the stroke.
@@ -4913,6 +4950,11 @@ export class App {
       this.redrawShape(e.shiftKey);
       return;
     }
+    if (this.waiting && e.pointerId === this.waiting.id) {
+      const events = e.getCoalescedEvents?.() ?? [];
+      for (const ev of events.length ? events : [e]) this.waiting.moves.push(penSnapshot(ev));
+      return;
+    }
     if (this.live && e.pointerId === this.live.pointerId) {
       this.armShape(e);
       const events = e.getCoalescedEvents?.() ?? [];
@@ -5006,6 +5048,12 @@ export class App {
     if (this.motionPointer === e.pointerId) {
       this.motionPointer = null;
       this.editor.gestureEnd(cancelled && e.pointerType !== 'pen');
+    }
+    if (this.waiting && e.pointerId === this.waiting.id) {
+      // (a pen's cancel still keeps its stroke, as below)
+      const w = this.waiting;
+      if (cancelled && e.pointerType !== 'pen') this.waits.splice(this.waits.indexOf(w), 1);
+      else w.up = true;
     }
     if (this.live && e.pointerId === this.live.pointerId) {
       this.endStroke(cancelled && e.pointerType !== 'pen');
@@ -5811,4 +5859,18 @@ function boxOf(mask: Uint8Array, w: number, h: number): Area | null {
 /** The corners of an area's box (its outline on screen when the mask itself is the selection). */
 function boxPoints(a: { x0: number; y0: number; x1: number; y1: number }): [number, number][] {
   return [[a.x0, a.y0], [a.x1 + 1, a.y0], [a.x1 + 1, a.y1 + 1], [a.x0, a.y1 + 1]];
+}
+
+/**
+ * What a stroke needs from a pointer event, kept after the event is gone (a stroke waiting for its
+ * drawing's pixels replays these).
+ */
+function penSnapshot(e: PointerEvent): PointerEvent {
+  const x = e as PointerEvent & { altitudeAngle?: number; azimuthAngle?: number };
+  return {
+    pointerId: e.pointerId, pointerType: e.pointerType, isPrimary: e.isPrimary, button: e.button, buttons: e.buttons,
+    clientX: e.clientX, clientY: e.clientY, pressure: e.pressure, tiltX: e.tiltX, tiltY: e.tiltY,
+    altitudeAngle: x.altitudeAngle, azimuthAngle: x.azimuthAngle, altKey: e.altKey, shiftKey: e.shiftKey, timeStamp: e.timeStamp,
+    getCoalescedEvents: () => [], getPredictedEvents: () => [],
+  } as unknown as PointerEvent;
 }
