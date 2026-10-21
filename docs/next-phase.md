@@ -199,6 +199,39 @@ Missing, in order of value for students:
 First up, small and high-value: 3, 5, 7. Bigger: 1 and 2, which are what make it feel like
 Dreams. Then 6, 4, 8, 9, 10, 11.
 
+### What Dreams' own app package confirms (checked 2026-10-21)
+
+From the English UI text and file names in a local Dreams 1.0.11 package (read with REA and a
+script; reference only, nothing copied into 2Dope):
+
+- **Rail gestures:** pinch to zoom the timeline, a **three-finger swipe to stretch time or
+  track height**, a quick pinch to fit the whole movie, a **double-tap to focus in**, and a
+  **flick to send the timeline away** for more drawing room. Two- and three-finger taps undo
+  and redo. → Add the three-finger stretch and the flick-away to the rail design; 2Dope's mini
+  flipbook handle is our flick-away.
+- **Settings students can change:** whether a finger can edit the timeline (vs pencil only),
+  whether pinch also rotates the stage, and whether the undo/redo gestures are on. → Add
+  these three to Preferences → Gestures.
+- **Tracks:** add, duplicate, cut/copy/paste tracks, **solo and mute**, show/hide, groups,
+  "convert layers to tracks", and timeline **content** blocks (split, group, lock, rename).
+  → It matches our track plan; add **Convert layers to tracks** for the Draw → Animate handoff.
+- **Timing:** Trim start, Trim end, **Free Trim**, Fill duration, hold frame length,
+  **Snapping** (a toggle), Loop and **Bounce** playback. → Add Bounce (ping-pong) to the play
+  range.
+- **Flipbook is a mode you open on a piece of content** (not on text, video, audio, a group
+  or an empty spot), with a Close Flipbook. → It matches our "double-tap to edit" model.
+- **Keyframes:** ease in, out, in-and-out, with "set all easings" at once, plus warp and
+  distort keyframes. → Add "set all easings" to Motion.
+- **Performing** records move, scale, rotate, opacity, hue, saturation, brightness, blur,
+  sharpen, noise, warp, distort and volume live. → Performance recording should cover more
+  than transforms: start with move, scale, rotate and opacity.
+- **Onion skin:** number of frames, opacity, separate forward and backward colours, and a
+  "blend primary frame" option. → It matches the onion popover plan.
+- **Stage and Backstage:** the area outside the frame can be shown or hidden. → Add a
+  Backstage toggle to the View panel (useful for pans that start off-screen).
+- **Onboarding** is five short videos: welcome, draw, gestures, keyframe, perform. → Our
+  first-run tips can follow the same five topics.
+
 ## Procreate tools in both Draw and Animate
 
 Draw and Animate share **one tool engine**: the same brushes, smudge, eraser, selection,
@@ -227,6 +260,45 @@ only adds the rail and its buttons. Procreate's toolset, as the checklist to aud
   tap redo, three-finger swipe down for Copy & Paste, four-finger tap Focus, touch-and-hold
   eyedropper, a quick pinch to fit. A **Gesture controls** page in Actions → Preferences lets
   students change them, as Procreate does.
+
+### What Procreate's own app package confirms (checked 2026-10-21)
+
+From the English UI text and file names in a local Procreate 5.4.9 package (read with REA and a
+script; reference only, nothing copied into 2Dope):
+
+- **Gesture controls are a matrix.** Each action (Smudge, Erase, Assisted drawing, Eyedropper,
+  QuickShape, QuickMenu, Full Screen, Clear layer, Copy & Paste, Layer select, Clone) can be
+  triggered by any of: a finger touch, a **⎇ modifier button** (the square on the sidebar) +
+  touch, touch and hold, a four-finger tap, a three-finger swipe down, or Apple Pencil double-tap,
+  each with a delay setting (Eyedropper Delay, QuickShape Delay, Rapid undo delay). → Build
+  Preferences → Gestures the same way: one row per action, one trigger each, and conflicts flagged.
+  The ⎇ button is the "modify" square in our left sidebar.
+- **Pencil hover:** hovering the Pencil with a finger on the screen changes brush opacity, and a
+  pinch changes brush size. → Add this where the browser reports hover (`pointermove` with
+  pen and no buttons), as an option.
+- **Interface preferences:** dark or light, a **right-hand interface** (the sidebar on the
+  other side), the **Size & Opacity sidebar**, **auto-hide the interface** after a delay
+  while drawing, and **"Fit canvas inside the interface"** (the canvas fits in the free space,
+  or under the bars). → Add the last two to the View panel; they solve "the UI covers my
+  drawing".
+- **Pocket layouts** (the phone version) have their own small layouts and keyboards. → It confirms
+  Lite as a separate, smaller layout of the same app, not just hidden buttons.
+- **Drawing Assist, Page Assist, Animation Assist.** Animation Assist is Procreate's small
+  timeline, with onion frames, onion opacity, onion colours and a **per-frame colour palette**.
+  → Per-frame palettes are a nice extra for Animate (colour scripts).
+- **Palettes:** palette from an image, import, and copy to a new palette. Harmony picker modes.
+  → Add "Palette from image" to the colour popover (great for matching a reference).
+- **Selection:** feathering, add to and subtract from, invert, save and load selections, and
+  selection mask visibility.
+- **Transform:** uniform, non-uniform (freeform), distort, warp and advanced (mesh), with
+  **Magnetics** and snapping in degree steps. → Magnetics belongs in our transform popover.
+- **Liquify modes and Clone** (with clone lock and finger or Pencil choice).
+- **Time-lapse:** recording quality, on for new documents, export as a video, and disable it per
+  document. → It matches the time-lapse plan, plus a per-project off switch for privacy.
+- **Canvas:** crop and resize, resample, canvas info, presets and custom sizes. → It matches
+  the Actions → Canvas plan.
+- **Pressure & Smoothing** is an app-wide page (pressure curve, sensitivity, StreamLine
+  amount and pressure, stabilisation), with a reset. → One page in Preferences, not per brush.
 
 ## Painterly animation
 
