@@ -608,6 +608,52 @@ Lite is for phones and older tablets. It uses the same zones with fewer things i
 11. **Accessibility basics.** Contrast that passes WCAG AA in light and dark, visible
     keyboard focus, labels for screen readers, and touch targets of at least 44 px.
 
+## Ideas from the app packages
+
+**Simpler to use (go into Phase 2, the layout):**
+
+1. **A modifier button (⎇) for touch.** It's the square in the left sidebar. Hold it and touch
+   the canvas for the eyedropper. Held during a drag, it does what Alt or a second finger does
+   today: free trim, a perfect QuickShape, keeping a layer pinned. One on-screen key gives
+   tablet users every modifier trick without a keyboard. Gesture controls can assign other
+   actions to it.
+2. **Auto-hide the interface while drawing.** Bars and the sidebar fade during a stroke and come
+   back after a short delay (Preferences: off, 0.5 s, 1 s, 2 s). On by default in Focus.
+3. **"Fit canvas inside the interface"** (View panel). The canvas fits in the free space,
+   or uses the whole screen under the bars. This replaces the per-bar CSS offsets
+   (`--top-clear`, `--fit-top`, `--flip-h`, `--tools-bottom`) that cause the "fit doesn't clear
+   the toolbar" bugs: one function measures the free rectangle.
+4. **Timeline editing with the pencil only** (option, Dreams). When on, fingers on the rail
+   only scroll and zoom, and resting hands can't move or trim frames.
+
+**Features (go into Phases 3, 5, 6 and 8):**
+
+5. **Convert layers to tracks.** A layered Draw picture becomes one track per layer in Animate,
+   in one tap. It's the Draw → Animate handoff (Phase 3).
+6. **Fill layer.** A solid-colour layer, filling the canvas, that takes its colour from a swatch.
+   It's the simplest background (Phase 5).
+7. **Colour per frame or scene.** A palette attached to a frame or a Story scene (Procreate's
+   per-frame palette). It gives a colour script in Story and keeps characters consistent in
+   Animate (Phase 6).
+8. **Sample projects.** Two or three small projects in the gallery: a bouncing ball, a walk
+   cycle and a short storyboard. They're open to explore and copy, and teach faster than the
+   manual (Phase 8).
+9. **A few bundled fonts** with open licences (OFL) for text layers and Story captions, so titles
+   look the same on every school iPad (Phase 5, with Text).
+10. **Small animated tips, not videos.** The five first-run topics (welcome, draw, gestures,
+    keyframes, perform), each as a short animated demo drawn by the app or a small looping
+    animation. Dreams uses about 58 MB of video for this; we stay light, especially in Lite
+    (Phase 8).
+
+**Bigger, later (Phase 9):**
+
+11. **GPU compositing.** Both apps composite on the GPU (Metal). Once the rail is done, run a
+    trial of WebGL2 (WebGPU where Safari supports it) for layer compositing and effects, keeping
+    Canvas 2D as the fallback, and measure it on an iPad. Painted frames, many tracks and live
+    effects are where Canvas 2D will run out.
+
+Further digging into the packages isn't planned: the UI text and layouts were the useful part.
+
 ## Roadmap (each step its own commit, with tests and the build each time)
 
 **Phase 1: make what's there behave**
@@ -626,6 +672,8 @@ Lite is for phones and older tablets. It uses the same zones with fewer things i
    panel. Simple / Advanced switch, Focus view.
 6. The redundancy audit ("One home per action"), the Actions menu, the shared panel component,
    motion and size tokens, the icon rule, and the smooth-UI rules (update, don't rebuild).
+6b. The ⎇ modifier button, auto-hide while drawing, one "free rectangle" fit in place of the CSS
+    offsets, and pencil-only timeline editing (Ideas 1–4).
 
 **Phase 3: the split**
 
@@ -634,6 +682,7 @@ Lite is for phones and older tablets. It uses the same zones with fewer things i
    Animate.
 8. Track types (Plain, Ink & Paint, Painted) in `io/schema.ts`.
 9. Pictures and the Pictures shelf; static picture tracks; migrate old background stacks.
+   Convert layers to tracks.
 
 **Phase 4: the rail**
 
@@ -643,13 +692,13 @@ Lite is for phones and older tablets. It uses the same zones with fewer things i
 **Phase 5: Draw like Procreate**
 11. The Procreate layers panel in Draw; Advanced docked panels.
 12. Tool gaps from the checklist (adjustments, selection modes, transform modes, text,
-    colour tabs, Reference layers), one at a time.
+    colour tabs, Reference layers, Fill layer, Text with bundled fonts), one at a time.
 13. QuickMenu, recent brushes and colours, ColorDrop, hold to select the layer, brushes that
     remember their size, tapping a tool again for its library, gesture controls.
 
 **Phase 6: Animate like Dreams**
 
-14. Quick wins: play range, animate on 2s and 3s, the onion popover.
+14. Quick wins: play range, animate on 2s and 3s, the onion popover, colour per frame or scene.
 15. Performance recording, then keyframes in Animate.
 16. Cycles, draw while it plays, track groups, snapping, audio scrub, a quick camera.
 
@@ -662,8 +711,12 @@ Lite is for phones and older tablets. It uses the same zones with fewer things i
 **Phase 8: finishing**
 
 20. Painterly animation (painted frames, paint over the last frame, lightbox, boiling grain).
-21. Lite pass, time-lapse replay, Gallery stacks, search, help on hold, the first-run screen,
-    class presets.
+21. Lite pass, time-lapse replay, Gallery stacks, search, help on hold, the first-run screen
+    with animated tips, class presets, sample projects.
+
+**Phase 9: performance**
+
+22. GPU compositing trial (WebGL2, then WebGPU), with Canvas 2D as the fallback, measured on an iPad.
 
 Every phase: update the manual and UPDATES. Every phase that touches input or layout: a test
 in the browser on a separate origin, and an iPad pass (Pencil, memory, Lite) before pushing.
