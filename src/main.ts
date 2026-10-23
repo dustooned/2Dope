@@ -25,6 +25,7 @@ import { MotionPanel } from './ui/motion';
 import { Splitter } from './ui/splitter';
 import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
+import { QuickMenu } from './ui/quickmenu';
 import { LayerCards } from './ui/layercards';
 import { FlipMode } from './ui/flipmode';
 import { ReferenceWindow } from './ui/reference';
@@ -39,7 +40,7 @@ import { LayersPopover } from './ui/layerspop';
 import { BoardPanel } from './ui/board';
 import { ColorPanel } from './ui/colorpanel';
 import { BrushLibrary } from './ui/brushlib';
-import { showContextMenu } from './ui/contextmenu';
+import { showContextMenu, closeContextMenu } from './ui/contextmenu';
 import { SHAPE_CHOICES } from './core/quickshape';
 import { hasNewUpdates, openManual } from './ui/manual';
 
@@ -71,6 +72,15 @@ const syncTools = () => {
   rippleBtn.setAttribute('aria-pressed', String(app.ripple));
   for (const b of partButtons) b.setAttribute('aria-pressed', String(app.partVisible(b.dataset.partEye === 'fill' ? 'fill' : 'line')));
   const selectOn = app.tool === 'fill' && app.fillMode === 'lasso';
+  const currentTool = app.adjusting ? 'adjust' : selectOn ? 'select' : app.smudging && app.tool === 'brush' ? 'smudge' : app.tool;
+  const painting = app.workspace === 'draw' || app.workspace === 'animate';
+  for (const b of [...toolButtons, ...toolXButtons]) {
+    const key = (b.dataset.tool ?? b.dataset.toolX) as keyof typeof app.studentUI.tools;
+    b.classList.toggle('student-control-hidden', painting && !app.studentUI.tools[key] && key !== currentTool);
+  }
+  document.querySelector('.colorchip')?.classList.toggle('student-control-hidden', painting && !app.studentUI.tools.color);
+  for (const b of planeButtons) b.classList.toggle('student-control-hidden', painting && !app.studentUI.controls.planes);
+  const fingerControl = document.querySelector<HTMLInputElement>('#finger'); if (fingerControl) fingerControl.checked = app.fingerPaint;
   for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool && !(b.dataset.tool === 'brush' && app.smudging) && !(b.dataset.tool === 'fill' && selectOn) && !app.adjusting));
   for (const b of toolXButtons) {
     const k = b.dataset.toolX;
@@ -82,7 +92,7 @@ const syncTools = () => {
   const selection = app.tool === 'fill' && app.fillMode === 'lasso';
   const path = app.editor.crumbs().map((c) => c.comp.name).join(' › ');
   const drawing = app.blankPage ? 'Blank page' : `Drawing ${app.drawing.num}`;
-  const target = app.editingMask ? 'Mask' : selection ? 'Area selection' : plane === 'fill' ? 'Fill' : 'Line';
+  const target = app.editingMask ? 'Mask' : selection ? 'Area selection' : app.inkPaint.enabled && plane === 'line' && (app.tool === 'brush' || app.tool === 'pen') && !app.smudging ? 'Ink & Paint' : plane === 'fill' ? 'Fill' : 'Line';
   const warning = layer.locked ? ' · Locked' : !layer.visible || !app.partVisible(plane) ? ' · Hidden' : '';
   // the simple screen says only where you paint (the comp path only inside a group)
   const simple = !document.body.classList.contains('ui-full');
@@ -234,7 +244,8 @@ app.onToolChange = chain(app.onToolChange, () => layersPop.update());
 syncColor();
 
 const finger = $<HTMLInputElement>('#finger');
-finger.addEventListener('change', () => (app.fingerPaint = finger.checked));
+finger.checked = app.fingerPaint;
+finger.addEventListener('change', () => app.setFingerPaint(finger.checked));
 
 // Live input readout: useful while tuning pen feel on real devices.
 const statsEl = $('#stats');
@@ -552,7 +563,9 @@ try {
 } catch {
   // no storage: no hint
 }
+let openSettings = (): void => {};
 const menuActions: Record<string, () => void> = {
+  settings: () => openSettings(),
   manual: () => showManual(),
   updates: () => showManual('updates'),
   quick: () => quick.toggle(),
@@ -719,6 +732,19 @@ app.onProjectLoaded = () => {
   xsheet.reset();
   quick.update();
 };
+const closeForQuickMenu = () => { setMenu(false); colorPanel.close(); brushLib.close(); layerCards.close(); layersPop.close(); closeContextMenu(); };
+const quickMenu = new QuickMenu(app, $('#stage'), $<HTMLCanvasElement>('#canvas'), {
+  beforeOpen: closeForQuickMenu,
+  colour: anchor => colorPanel.toggle(anchor),
+  brushes: anchor => brushLib.toggle(anchor),
+  layers: anchor => layerCards.toggle(anchor),
+  assets: () => artworkUI.library.show(),
+});
+openSettings = () => { closeForQuickMenu(); quickMenu.close(false); quickMenu.settings.show(dock); };
+{
+  const changed = flipMode.onChange;
+  flipMode.onChange = () => { changed(); quickMenu.update(); };
+}
 // ---------------------------------------------------------------------------------------------
 // Device profile: Lite (phones, older tablets) or Full. See core/device.ts.
 
@@ -755,6 +781,7 @@ app.fit();
 const { store, persistent } = await openStore();
 audioPlayback.bank.source = (path) => store.getAsset(path);
 files = new FileUI(app, store, persistent);
+artworkUI.library.openProject = file => files!.importFile(file);
 app.onDocChanged = chain(app.onDocChanged, () => audioPlayback.invalidate());
 app.onDocChanged = chain(app.onDocChanged, () => reference.refresh());
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;

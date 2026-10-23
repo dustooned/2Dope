@@ -9,6 +9,8 @@ import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './context
 import { frameMenu } from './framemenu';
 import { AssetClipDrag } from './assetclipdrag';
 import { AssetClipPreviews } from './assetclippreviews';
+import { PlaybackRangeControl, markPlaybackRange } from './playbackrange';
+import { PlaybackRangeGesture } from './playbackrangegesture';
 
 const THUMB_W = 56;
 const THUMB_H = 32;
@@ -59,6 +61,8 @@ export class Strip {
   private readonly expLabel: HTMLElement;
   private readonly expInput: HTMLInputElement;
   private readonly playBtn: HTMLButtonElement;
+  private readonly range: PlaybackRangeControl;
+  private rangeGesture?: PlaybackRangeGesture;
   private readonly fpsSel: HTMLSelectElement;
   private readonly onionBtn: HTMLButtonElement;
   private readonly keysBtn: HTMLButtonElement;
@@ -105,6 +109,7 @@ export class Strip {
       return autoIcon(b);
     };
     this.playBtn = btn('Play', 'Play / pause (Enter or tap Space)', () => app.togglePlay(), 'play');
+    this.range = new PlaybackRangeControl(app);
     this.frameLabel = el('span', { class: 'readout frame-readout', role: 'button', tabindex: '0', title: 'Frame / length. Tap to show frames, seconds + frames, or timecode.' });
     this.frameLabel.addEventListener('click', () => app.cycleTimeFormat());
     this.fpsSel = el('select', { 'aria-label': 'Frames per second', title: 'Frames per second' });
@@ -118,6 +123,7 @@ export class Strip {
       btn('⏮', 'Previous drawing (↓)', () => app.prevDrawing()),
       btn('◀', 'Previous frame (←)', () => app.prevFrame()),
       this.playBtn,
+      this.range.button,
       btn('▶', 'Next frame (→)', () => app.nextFrame()),
       btn('⏭', 'Next drawing (↑)', () => app.nextDrawing()),
     );
@@ -495,6 +501,7 @@ export class Strip {
     };
     this.track.addEventListener('pointerup', (e) => finish(e, false));
     this.track.addEventListener('pointercancel', (e) => finish(e, true));
+    this.rangeGesture = new PlaybackRangeGesture(app, this.track, () => ({ parent: this.inner, cell: this.cell, origin: app.project.layer.start, offset: 0 }), () => { this.drag = null; });
     this.track.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       if (Date.now() - this.lastHold < 1000) return; // the hold already opened it
@@ -543,6 +550,8 @@ export class Strip {
   /** Call when the frame, selection or timeline changes. Rebuilds blocks only when needed. */
   update(): void {
     const app = this.app;
+    this.range.update();
+    this.rangeGesture?.update();
     const p = app.project;
     const sel = new Set(app.selection);
     const sig =
@@ -553,6 +562,7 @@ export class Strip {
       this.rebuild();
     }
     const cell = this.cell;
+    markPlaybackRange(app, this.inner, cell, p.layer.start);
     setLabel(this.layerChip, app.project.isPlaceholder ? 'New layer' : app.project.layer.name);
     this.frameLabel.textContent = app.blankPage ? `new · ${app.fmtDur(p.length)}` : app.workspace === 'animate' ? `${app.fmt(app.frame)} / ${app.fmtDur(app.compEnd)}` : `${app.fmt(app.lf)} / ${app.fmtDur(p.length)}`;
     this.drawEditLine();

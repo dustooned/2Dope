@@ -4,11 +4,12 @@ import { ArtworkAssets } from './assets';
 import { Project } from './project';
 import { History } from './history';
 import { CompEditor } from '../compedit';
-import { compLength, compLayer, newComp, layerEnd } from './comp';
+import { compLength, compLayer, drawingsLayer, newComp, layerEnd } from './comp';
 import { staticProp, LINEAR } from './anim';
 import { referencedKeys } from './residency';
 import { compFile, compsFromFile, parseProjectFile, stringifyProjectFile, SCHEMA, FORMAT } from '../io/schema';
 import type { App, Workspace } from '../app';
+import type { ArtworkPackage } from '../io/artwork';
 
 function rig() {
   const p = new Project(64, 64);
@@ -27,6 +28,80 @@ function rig() {
   return { a, p, assets: new ArtworkAssets(app) };
 }
 describe('local artwork assets', () => {
+  function libraryPackage(): ArtworkPackage {
+    const source = new Project(64, 64); source.comp.name = 'Library sky'; source.comp.asset = true;
+    const child = newComp('c2', 'Clouds', 64, 64, 6), d = source.newDrawing(), mask = source.newDrawing();
+    const l = drawingsLayer('L2', 'Cloud paint', [{ drawing: d.id, length: 2 }, { drawing: d.id, length: 4 }], 64, 64);
+    l.mask = mask.id; l.cel = 'cel1'; child.layers.push(l); child.pins.push({ layer: l.id, prop: 'opacity' });
+    child.audio = [{ id: 'a1', asset: 'sound1', name: 'Wind', start: 0, trimIn: 0, trimOut: 1, gain: 1, muted: false, link: { layer: l.id, drawing: d.id, occurrence: 0, offset: 0 } }];
+    const nested = compLayer('L3', 'Clouds', child, source.comp); nested.overrides = { 'L2:opacity': staticProp(75) };
+    source.comp.layers.push(nested, compLayer('L4', 'Clouds again', child, source.comp)); source.comps.set(child.id, child);
+    return { file: { format: FORMAT, schema: SCHEMA, savedBy: 'test', name: 'Library sky', created: new Date().toISOString(), modified: new Date().toISOString(), canvas: { width: 64, height: 64 }, fps: 12, main: source.main, folders: {}, comps: Object.fromEntries([...source.comps].map(([id, c]) => [id, compFile(c)])),
+      drawings: Object.fromEntries([...source.drawings].map(([id, d]) => [id, { num: d.num, line: id === 'd2' ? 'assets/ink.png' : null, fill: null, vectors: [] }])),
+      sounds: { sound1: { name: 'Wind', path: 'assets/wind.wav', duration: 1 } } }, assets: new Map([['assets/ink.png', new Uint8Array([1, 2])], ['assets/wind.wav', new Uint8Array([3, 4])]]) };
+  }
+  it('adds independent library source graphs with fresh references and one document Undo', () => {
+    const { a, p, assets } = rig(), bundle = libraryPackage(); a.frame = 7;
+    p.newDrawing(); p.newDrawing(); // Incoming ids also exist in the target drawing pool.
+    p.sounds.set('sound1', { name: 'Existing', path: 'assets/old.wav', duration: 1, bytes: new Uint8Array([9]) });
+    const id = assets.addPackage(bundle)!;
+    expect(id).not.toBe(p.main); expect(p.activeComp).toBe(p.main); expect(a.frame).toBe(7); expect(a.workspace).toBe('animate');
+    const root = p.comps.get(id)!, nested = root.layers.find(l => l.kind === 'comp')!;
+    if (nested.kind !== 'comp') throw new Error('Missing comp');
+    const child = p.comps.get(nested.comp)!, paint = child.layers[0]!;
+    if (paint.kind !== 'drawings') throw new Error('Missing paint');
+    expect(root.layers.filter(l => l.kind === 'comp').map(l => l.kind === 'comp' ? l.comp : '')).toEqual([child.id, child.id]);
+    expect(paint.exposures.map(e => e.length)).toEqual([2, 4]); expect(paint.exposures[0]!.drawing).not.toBe('d2');
+    expect(paint.mask).not.toBe('d3'); expect(child.pins[0]!.layer).toBe(paint.id);
+    expect(Object.keys(nested.overrides)).toEqual([`${paint.id}:opacity`]);
+    expect(child.audio![0]!.link?.drawing).toBe(paint.exposures[0]!.drawing);
+    expect(child.audio![0]!.asset).not.toBe('sound1'); expect(p.sounds.get('sound1')!.name).toBe('Existing');
+    const drawing = p.drawing(paint.exposures[0]!.drawing);
+    expect([...drawing.parked!.line!.bytes!]).toEqual([1, 2]);
+    expect(drawing.parked!.line!.key).toBeNull(); expect(drawing.saved).toBeNull();
+    bundle.assets.get('assets/ink.png')![0] = 9; expect(drawing.parked!.line!.bytes![0]).toBe(1);
+    expect(a.history.peekUndo()?.label).toBe('Add artwork from My Assets'); expect(a.history.peekUndo()?.drawings?.length).toBe(3);
+    a.history.undo(); expect(p.comps.size).toBe(1); a.history.redo(); expect(p.comps.get(id)?.asset).toBe(true);
+    const second = assets.addPackage(libraryPackage())!; expect(second).not.toBe(id); expect(p.comps.get(second)!.name).not.toBe(root.name);
+  });
+  it('rejects busy, incompatible and incomplete imports before allocating document objects', () => {
+    const { a, p, assets } = rig(), bundle = libraryPackage(), before = p.drawings.size;
+    a.playing = true; expect(assets.addPackage(bundle)).toBeNull(); a.playing = false;
+    a.strokeActive = true; expect(assets.addPackage(bundle)).toBeNull(); a.strokeActive = false;
+    bundle.file.canvas.width = 32; expect(() => assets.addPackage(bundle)).toThrow('original size'); bundle.file.canvas.width = 64;
+    bundle.assets.delete('assets/ink.png'); expect(() => assets.addPackage(bundle)).toThrow('missing');
+    expect(p.drawings.size).toBe(before); expect(p.comps.size).toBe(1); expect(a.history.canUndo).toBe(false);
+  });
+  it('treats a standalone artwork main as its project rather than an unfinished source session', () => {
+    const { p, assets } = rig(); p.comp.asset = true; expect(assets.editing).toBe(false);
+  });
+  it('resumes the source layer and frame without changing the shot return position or history', () => {
+    const {a,p,assets}=rig();p.comp.duration=24;a.frame=5;
+    const id=assets.create('Sky')!,layer=drawingsLayer(p.newId('L'),'Clouds',[{drawing:p.newDrawing().id,length:24}],64,64);
+    p.comp.layers.push(layer);p.activeLayer=layer.id;a.frame=9;a.history.clear();
+    assets.done();expect([p.activeComp,a.frame,a.workspace]).toEqual([p.main,5,'animate']);
+    assets.open(id);expect([p.activeComp,p.activeLayer,a.frame]).toEqual([id,layer.id,9]);
+    assets.done();expect([p.activeComp,a.frame]).toEqual([p.main,5]);expect(a.history.canUndo).toBe(false);
+  });
+  it('keeps separate positions when switching sources directly', () => {
+    const {a,p,assets}=rig(),first=assets.create('Sky')!;p.comp.duration=20;a.frame=6;
+    const second=assets.create('Clouds')!;p.comp.duration=20;a.frame=11;
+    assets.open(first);expect(a.frame).toBe(6);assets.open(second);expect(a.frame).toBe(11);
+    assets.done();expect(p.activeComp).toBe(p.main);
+  });
+  it('clamps shortened source timing and falls back when the remembered layer was removed', () => {
+    const {a,p,assets}=rig(),id=assets.create('Sky')!,source=p.comp;
+    const layer=drawingsLayer(p.newId('L'),'Clouds',[{drawing:p.newDrawing().id,length:20}],64,64);
+    source.layers.push(layer);source.duration=20;p.activeLayer=layer.id;a.frame=18;assets.done();
+    source.duration=3;assets.open(id);expect([p.activeLayer,a.frame]).toEqual([layer.id,2]);assets.done();
+    source.layers=source.layers.filter(l=>l.id!==layer.id);assets.open(id);
+    expect([p.activeLayer,a.frame]).toEqual([source.layers[0]!.id,0]);
+  });
+  it('does not reuse a remembered source position in another project with the same ids', () => {
+    const {a,p,assets}=rig(),first=assets.create('Sky')!;p.comp.duration=20;a.frame=12;assets.done();
+    const other=new Project(64,64);a.project=other;const second=assets.create('New sky')!;
+    expect(second).toBe(first);expect([a.project.activeLayer,a.frame]).toEqual([other.comp.layers[0]!.id,0]);
+  });
   it('replaces only one source with one Undo, keeping timing, transform keys, parent, name and sibling links',()=>{
     const {a,p,assets}=rig(),sky=assets.create('Sky')!;assets.place(sky);assets.place(sky);
     const target=p.comp.layers.find(l=>l.kind==='comp')!;

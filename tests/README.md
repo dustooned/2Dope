@@ -1,5 +1,79 @@
 # Browser rendering checks
 
+## Ink & Paint / Auto Paint
+
+Open `/tests/inkpaint.html` on an isolated origin. Twenty-seven assertions on Full-profile desktop
+use the real App, pen-style input sampled along paths, Bubbles/Sidebar/painting controls, History,
+FileUI/MemoryStore autosave, PNG decode, ordinary portable project import and the shared compositor.
+They check opt-in/colours, open/closed raster and vector outlines, combined Undo/Redo and one edit
+notification, exact preservation of old opaque/translucent paint, selections, masks/mask editing,
+deferred strokes over a parked mask, Undo/Redo after simulated valid PNG parking, lock/Alpha Lock,
+cancelled/predicted input, erasing/smudging/direct Fill, QuickShape replacement, Full HD total
+commit cost and Lite's pixel limit. Lite skips the Full HD timing case. Only temporary MemoryStore
+projects are used and preference keys are restored; no existing project library is opened.
+`/tests/inkpaint-responsive.html?size=phone` uses a real 390×844 iframe; `tablet` uses 1024×768,
+and `landscape` uses 768×390. Run separately to avoid overlapping view/colour preferences.
+Unit tests compare scanline detection against an independent pixel-flood oracle over randomized
+maps and measure Lite/Full page sizes. Scripted desktop events do not verify physical Pencil/Safari
+latency or memory. The implementation has no automatic gap closing or other-layer boundary reads.
+
+## QuickMenu and App settings
+
+Open `/tests/quickmenu.html` on an isolated origin. Thirty-four assertions use the actual App,
+painting workspace/Flipbook, Bubbles, Sidebar, Colour panel, pen-style pointer input and history.
+They cover corrupted preference fallback, reachable ring/edge controls, no canvas-view/history
+changes from menus/settings, Q/repeat/Escape/arrows/Tab, draft Cancel/Apply/default reset, six-slot
+order and saved device choices, real stroke pixels and Undo/Redo, existing panel callbacks and
+popover handoff, full-hold New frame, consumed outside taps, locked layers, tool/plane routing,
+live-stroke refusal, playback Pause, Draw/Animate reuse, obsolete menu cancellation and hidden/
+empty-slot recovery and the configurable Ink & Paint toggle. It opens no project library/autosave and restores its preference keys.
+The wrapper `/tests/quickmenu-responsive.html?size=phone` uses a real 390×844 iframe; `tablet`
+uses 1024×768 and `landscape` uses 768×390. Run one at a time to avoid preference overlap.
+Check Menu → App settings and preference survival after reloading in the built app separately.
+Physical touch/Pencil/Safari are not verified by scripted desktop pointer events.
+
+## My Assets: snapshots, sharing and cross-project copies
+
+Open `/tests/artworklibrary.html` on an isolated origin. Thirty-four assertions use the actual App,
+Assets/My Assets dialogs, FileUI and project autosave in a MemoryStore, plus a uniquely named
+disposable IndexedDB artwork database. They cover a layered four-frame source, independent
+snapshots/readback, vectors/masks, reachable 44px actions, imports to another project, Undo/Redo,
+actual frame pixels, Animate placement/return, original-project deletion, complete normal project
+capture, different-size native project opening, saving an artwork main, storage errors, shared
+file import/rejection and project-change races. Management checks cover metadata-only word search,
+no results/clear/focus, cancel/rename with a fresh store connection and portable readback,
+44px Manage actions, removal/restore failures, recovery after shelf closure, future-copy naming
+without renaming existing artwork and rejection of stale rename dialogs. The fixture restores view preferences and removes
+only its own temporary artwork database. No existing project library is opened. Repeat at phone,
+tablet and short-landscape sizes. Verify native shelf controls and downloading separately.
+The wrapper `/tests/artworklibrary-responsive.html?size=phone` uses a real 390×844 iframe;
+`size=tablet` uses 1024×768 and `size=landscape` uses 768×390. Run one at a time, since each
+fixture temporarily changes/restores the same origin's view preferences.
+
+## Multi-frame artwork in Flipbook
+
+Open `/tests/flipbooksource.html` on an isolated development origin. Twenty-six assertions use
+the actual App, Flipbook, Assets, Sidebar, Bubbles and Strip/Tracks. They paint three source
+drawings, change holds with owned keys, Undo/Redo, navigate drawings, scroll controls with Play
+still visible, play/loop the source, return to the Animate shot while playing, resume the source,
+select a lower track in a five-track source, retain it when the list resizes, and check short-screen fitting and linked animation
+pixels at the source frame rate. Repeat at phone, tablet and short-landscape sizes. It opens no
+project library/autosave and restores view/brush/colour preferences. Playback waits for real frame
+events and tolerates background-tab RAF throttling. Check native keyboard/pointer behavior in
+production separately; physical iPad/Pencil/Safari feel remains unverified.
+
+## Integrated background → Assets → Animate workflow
+
+Open `/tests/paintingworkflow.html` on an isolated development origin. Twenty assertions combine
+actual Assets, Layers, Brushes, Colour, Sidebar, Bubbles, Strip/Tracks and the canvas. Checks cover
+shelf creation, still-background selection, brush/colour/size/opacity/plane choices, real Fill
+pixels and Undo/Redo, a held QuickShape and its drawing/plane ownership, shot return, placement,
+source layer/frame resumption, linked counts, repainting through the shot compositor and Clips
+rails. Repeat at phone, tablet and short-landscape sizes. It opens no project library/autosave;
+the brush library reads its ordinary device store, and view/brush/colour preferences are restored.
+Separately check native controls in production. Physical Pencil feel, iPad Safari and persistence
+of editing positions are not claimed; source positions deliberately last only for the session.
+
 ## Brush size and opacity
 
 Open `/tests/brushcontrols.html` on an isolated development origin. Twenty-six assertions use the
@@ -160,3 +234,30 @@ This fixture uses no project library/autosave; it saves and restores only the lo
 keys it exercises. Existing naming/copy/replacement/timing fixtures now open Options before
 accessing the tucked controls. Check the built app for real rail content, scrolling timing fields
 with picker/Done fixed, and layout handles at the edges. Physical touch/Pencil/Safari remain separate.
+## Student profiles
+
+Student profiles: `studentprofiles.html` uses real App/Bubbles/QuickMenu settings and portable
+capture. `studentprofiles-responsive.html?size=phone|tablet|landscape` checks actual 390×844,
+1024×768 and 768×390 iframe viewports. It covers staged create/rename/delete, Apply/Cancel,
+profile switching and updates, visibility and active-tool recovery (including Focus/Animate),
+behavior options, device persistence, fixed settings actions, invalid names, storage failure,
+show-all recovery and unchanged document History/content. `core/studentprefs.test.ts` covers
+validation, defaults, bounded profile counts, name/id handling and independent snapshots. These
+fixtures isolate their preference keys; native built-app checks cover reload and the Full interface.
+
+## Playback range
+
+`playbackrange.html` runs the real App, Flipbook, Strip/Tracks, Motion and in-memory FileUI.
+`playbackrange-responsive.html?size=phone|tablet|landscape` runs one isolated real iframe viewport
+at 390×844, 1024×768 or 768×390. It covers inclusive bounds, field validation, focus/cancel,
+unchanged edits, one document notification, Undo/Redo, seeks/clock/fps, single-frame loops,
+shortened duration recovery, ruler placement, separate source/shot intervals, replaced comp
+objects, autosave/portable import, stale drafts and whole-animation recovery. A deterministic
+AudioContext substitute checks the real queue's nonzero loop samples and stopping queued sound;
+it does not establish audible output or iPad Safari timing. Unit tests in `core/playback.test.ts`
+cover the pure clock/bounds, schema compatibility/rejection and mixer/export sampling.
+The same browser fixture also checks the optional ruler gesture: settings Apply/Cancel and
+device persistence without document changes, quick-drag scrubbing, hold preview/forward/reverse/
+single-frame commit, Undo/Redo, pointer/Escape/blur/resize/second-pointer cancellation, disabling,
+Clips layer-origin conversion and project replacement. Tests dispatch touch PointerEvents through
+the actual ruler handlers; they do not verify physical Pencil/touch browser gesture arbitration.

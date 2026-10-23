@@ -1,5 +1,27 @@
 # The .2dope project format (schema 3)
 
+Student profiles are device preferences, not project fields. `2dope.student.profiles` stores a
+version-1 list of named settings snapshots plus the last applied profile id; `2dope.student.ui`
+stores current tool/control visibility, and `2dope.student.fingerPaint` stores finger drawing.
+Profiles include current interface level, QuickMenu, range gesture, QuickShape and Ink & Paint
+switches via their existing preference keys. They are not serialized into `.2dope` or My Assets
+archives, do not rename/modify artwork and do not require a project schema migration.
+
+Comps may contain `playbackRange: { start: 4, end: 8 }`: zero-based inclusive start and
+exclusive end, so the UI shows frames 5–8. Omission means whole-animation preview. Edges are
+integers, `0 <= start < end <= 1000000`; malformed supplied intervals are rejected. Valid saved
+edges may exceed a shortened comp's current length: preview clamps at runtime without changing
+the saved values. The optional field is additive under schema 3, round-trips through archives,
+autosave and My Assets, and affects only live preview, never comp duration, nested placement
+timing, frame-image rendering or export ranges. Each comp has an independent interval.
+The optional ruler gesture is a device preference (`2dope.playback.rangeGesture`, boolean,
+default false). It is not written into the project; completed gestures set the same comp interval.
+
+Ink & Paint uses the same existing Line PNG, Fill PNG and vector records. Its combined Undo
+is runtime command state; the resulting artwork autosaves and archives normally, including in
+My Assets. The opt-in mode and separate ink colour are device preferences (`2dope.inkpaint`),
+not fields in project.json. Opening an older file requires no migration.
+
 A `.2dope` file is a ZIP archive:
 
 ```
@@ -102,7 +124,36 @@ initially. All comps' referenced drawings are saved, including sources with no p
 The marker is additive in schema 3; missing/unknown values mean an ordinary comp. Older builds
 can read the underlying comps and placements but may discard the shelf marker when resaving.
 Source editing location and return navigation are session state, not file fields. Opening a
-project starts in its main shot. There is no external file path or cross-project asset link.
+project starts in its main shot. There is no external file path or live cross-project asset link.
+
+### My Assets snapshots (2026-10-23)
+
+My Assets stores standalone schema-3 `.2dope` archives in a separate IndexedDB database,
+`2dope-artwork` version 1. `cards` holds thumbnail/size/layer/frame metadata; `packages` holds
+archive bytes by card ID. Both are written atomically. Project garbage collection does not touch
+these archives. There is no external path, new project schema field or live link between projects.
+
+Library search reads card names only. Rename updates the card in one transaction; the frozen
+archive bytes stay unchanged. `libraryArtwork` applies the current card name to the archive's
+project/root comp when adding a copy, opening a project or writing a portable download. This
+keeps shared files and future copies consistent with the shelf without rewriting large packages
+for a name edit. Removal reads and deletes the card/package records atomically. The UI retains
+one complete removed entry in memory for Undo until the next successful removal or page reload;
+restore writes both records atomically, retaining the entry for retry if storage fails. These
+library operations do not enter the project's drawing History or alter placed artwork.
+
+Each archive is rooted at its artwork comp (`main`, with `asset: true`) and contains only its
+reachable source graph, drawings/masks and audio assets. Folder links are cleared. Capture uses
+the normal synchronous project snapshot and complete archive asset collection; missing images
+or sounds refuse the save. A main comp marked as artwork opens as an ordinary editable project,
+rather than a source session waiting for Done. It can be saved back as a new library snapshot.
+
+Add copy requires the current project's drawing canvas dimensions to match. It remaps comp,
+layer, drawing, cel, sound and audio-clip IDs, internal parents/pins/overrides and audio panel links.
+PNG and sound bytes travel with the copy, without relying on the original project's asset pool.
+Only the imported root appears as a source in that project's Assets shelf. One History command
+adds/removes the copied comp graph; drawing/audio pool objects survive Undo for Redo, like other
+project commands. Open as project offers native-size editing for different canvas dimensions.
 
 Make independent gives one placement a copied comp graph and fresh drawing IDs. Line/Fill PNG
 assets may share content-addressed keys while unchanged; each drawing decodes into its own

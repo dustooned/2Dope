@@ -200,6 +200,8 @@ export type Layer = DrawingsLayer | CompLayer | CameraLayer | NullLayer;
 export type LayerKind = Layer['kind'];
 
 export interface Comp {
+  /** Preview loop only; does not change duration, nested playback or exports. */
+  playbackRange?: import('./playback').PlaybackRange;
   /** Reusable local artwork; instances reference this comp instead of flattening its layers. */
   asset?: boolean;
   /** Audio clips use this comp's clock; independent of drawing-layer visibility. */

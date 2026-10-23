@@ -2,14 +2,18 @@ import type { App, Workspace } from '../app';
 import { compLayer, compLength, drawingsLayer, layerEnd, newComp } from './comp';
 import type { Parked, Project } from './project';
 import { artworkDrawings, artworkGraph, copyArtworkGraph, snapshotArtwork } from './assetcopy';
+import type { ArtworkPackage } from '../io/artwork';
+import { loadProjectFile } from '../io/projectio';
+import { MAX_COMPS, MAX_DRAWINGS, MAX_VECTORS, validateProjectFile } from '../io/schema';
 
 /** Assets are normal editable comps. Placement and source changes use existing History commands. */
 export class ArtworkAssets {
   private origin: { project: Project; comp: string; layer: string; frame: number; workspace: Workspace } | null = null;
   private switching = false;
+  private readonly positions = new WeakMap<Project, Map<string, { layer: string; frame: number }>>();
   copying = false;
   constructor(private app: App) {}
-  get editing(): boolean { return this.app.project.comp.asset === true; }
+  get editing(): boolean { return this.app.project.activeComp !== this.app.project.main && this.app.project.comp.asset === true; }
   list() { return [...this.app.project.comps.values()].filter(c => c.asset && c.id !== this.app.project.main); }
 
   create(name: string): string | null {
@@ -29,17 +33,21 @@ export class ArtworkAssets {
   open(id: string): boolean {
     const a = this.app, p = a.project, c = p.comps.get(id);
     if (a.strokeActive || !c?.asset || id === p.main) return false;
+    this.rememberPosition();
     if (!this.editing || this.origin?.project !== p) this.origin = {
       project: p, comp: p.activeComp, layer: p.activeLayer, frame: a.frame, workspace: a.workspace,
     };
     a.setWorkspace('draw');
-    this.switchTo(id, c.layers.find(l => l.kind === 'drawings')?.id, 0);
+    const position = this.positions.get(p)?.get(id);
+    const layer = c.layers.find(l => l.kind === 'drawings' && l.id === position?.layer);
+    this.switchTo(id, layer?.id ?? c.layers.find(l => l.kind === 'drawings')?.id, layer ? position!.frame : 0);
     return true;
   }
 
   done(animate = false): void {
     const a = this.app, p = a.project;
     if (this.switching || a.strokeActive || !this.editing) return;
+    this.rememberPosition();
     const origin = this.origin?.project === p ? this.origin : null;
     const target = origin && p.comps.has(origin.comp) && !p.comps.get(origin.comp)?.asset ? origin.comp : p.main;
     this.origin = null;
@@ -61,6 +69,60 @@ export class ArtworkAssets {
     a.setArrangeAssets(true, l.id);
     a.requestRender(); a.onFrameChange();
     return true;
+  }
+
+  /** Adopt an independent library snapshot; document Undo removes all its source comps together. */
+  addPackage(bundle: ArtworkPackage): string | null {
+    const a = this.app, p = a.project;
+    if (a.strokeActive || a.playing || this.copying) return null;
+    const file = validateProjectFile(bundle.file);
+    if (!file.comps[file.main]?.asset) throw new Error('Choose a saved artwork source.');
+    if (file.canvas.width !== p.width || file.canvas.height !== p.height)
+      throw new Error(`This artwork uses a ${file.canvas.width}×${file.canvas.height} canvas. Open it as a project to keep its original size.`);
+    // Validate bytes before allocating anything. Keep every hidden exposure and mask.
+    for (const d of Object.values(file.drawings)) for (const path of [d.line, d.fill])
+      if (path && !bundle.assets.get(path)?.length) throw new Error('An artwork image is missing.');
+    for (const sound of Object.values(file.sounds ?? {}))
+      if (!bundle.assets.get(sound.path)?.length) throw new Error('An artwork sound is missing.');
+    const from = loadProjectFile(file).project, graph = artworkGraph(from, file.main, false);
+    const ids = new Set<string>(), soundIds = new Set<string>();
+    for (const c of graph) {
+      for (const l of c.layers) if (l.kind === 'drawings') {
+        l.exposures.forEach(e => ids.add(e.drawing)); if (l.mask) ids.add(l.mask);
+      }
+      for (const clip of c.audio ?? []) soundIds.add(clip.asset);
+    }
+    const used = [...p.usedDrawings()];
+    if (p.comps.size + graph.length > MAX_COMPS || used.length + ids.size > MAX_DRAWINGS)
+      throw new Error('This artwork would exceed the project size limit.');
+    const vectors = used.reduce((n, id) => n + (p.drawings.get(id)?.vectors.length ?? 0), 0) +
+      [...ids].reduce((n, id) => n + from.drawing(id).vectors.length, 0);
+    if (vectors > MAX_VECTORS) throw new Error('This artwork would exceed the project vector stroke limit.');
+    const usedSounds = new Set([...p.comps.values()].flatMap(c => (c.audio ?? []).map(s => s.asset)));
+    if (usedSounds.size + soundIds.size > 64) throw new Error('This artwork would exceed the project audio limit.');
+    const drawings = new Map<string, string>();
+    for (const id of ids) {
+      const d = from.drawing(id), f = file.drawings[id]!;
+      // Incoming keys are not yet in this project's store. Null keeps residency from treating
+      // decoded pixels as already saved; the first autosave stores/hash-addresses these bytes.
+      const plane = (path: string | null) => path ? { key: null, bytes: bundle.assets.get(path)!.slice() } : null;
+      drawings.set(id, p.cloneStoredDrawing(d, { rev: 0, line: plane(f.line), fill: plane(f.fill) }).id);
+    }
+    const placeholder = compLayer('library', '', from.comp, p.comp);
+    const copy = copyArtworkGraph(p, graph, file.main, drawings, placeholder, true);
+    const sounds = new Map<string, string>(); let nextSound = 1;
+    for (const id of soundIds) {
+      let fresh: string; do { fresh = `sound${nextSound++}`; } while (p.sounds.has(fresh));
+      const sound = from.sounds.get(id)!;
+      p.sounds.set(fresh, { ...sound, bytes: bundle.assets.get(sound.path)!.slice() }); sounds.set(id, fresh);
+    }
+    for (const c of copy.comps) {
+      c.folder = null; c.asset = c.id === copy.root;
+      for (const clip of c.audio ?? []) clip.asset = sounds.get(clip.asset)!;
+    }
+    a.editor.editProject('Add artwork from My Assets', () => { for (const c of copy.comps) p.comps.set(c.id, c); });
+    const cmd = a.history.peekUndo(); if (cmd) cmd.drawings = [...drawings.values()].map(id => p.drawing(id));
+    return copy.root;
   }
 
   /** Names are metadata edits; preserve links, pixels, timing and all instance-specific names. */
@@ -159,6 +221,14 @@ export class ArtworkAssets {
       });
       return copy.root;
     } finally { this.copying = false; }
+  }
+
+  private rememberPosition(): void {
+    if (!this.editing) return;
+    const a = this.app, p = a.project;
+    let positions = this.positions.get(p);
+    if (!positions) { positions = new Map(); this.positions.set(p, positions); }
+    positions.set(p.activeComp, { layer: p.activeLayer, frame: a.frame });
   }
 
   private switchTo(id: string, layer: string | undefined, frame: number): void {

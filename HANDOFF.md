@@ -2,6 +2,516 @@
 
 ## Current state (2026-10-23) — read this first
 
+**Latest step: final release cleanup; user authorized commit and push to main.**
+App settings now keeps Student profiles first and groups Visible tools and controls, Drawing
+options, QuickMenu and Gestures into collapsible sections. QuickMenu Customize opens its section
+directly. Profile guidance distinguishes updating the selected profile from saving a separate
+setup. Updated `src/ui/settings.ts`, manual/UPDATES and test-document headings; no model or file
+format changes in this cleanup. All accumulated My Assets, QuickMenu, Ink & Paint, playback-range,
+gesture and student-profile work since 086c7da is included in this release.
+
+Fresh cleanup verification: **57 files / 470 unit tests passed**, strict TypeScript and production
+build passed, and staged diff check passed after trimming extra fixture EOF blank lines. The
+existing large-bundle warning remains. Fresh browser release checks: student profiles **28/0
+each** at phone and landscape sizes, QuickMenu **34/0**, playback range/gesture **50/0** at tablet,
+My Assets **34/0**, Ink & Paint **27/0**, and integrated painting workflow **20/0**: **221 assertions**.
+Native built-app review on isolated `127.0.0.1:5205` confirmed all four settings groups initially
+collapsed, the saved Background painting profile retained, and QuickMenu Customize directly
+opening its section; Cancel returned without applying changes. Screenshot:
+`../artifacts/release-settings-cleanup.png`. Tests do not clear user project storage. Physical
+iPad/Pencil/Safari and audible output remain separate checks; older deferred Clips/view fixture
+failures remain deferred. Release commit/push is authorized; verify Pages for the exact pushed SHA.
+
+### Previous step: student tool profiles
+
+**Student tool profiles, implemented after 086c7da.**
+The user requested tool/setting choices and named profiles in App settings. Built Student profiles
+with a chooser, profile name, Save as new profile, Rename and Delete. Profile selection previews
+its values; all profile/setup mutations stay in the dialog draft until Apply settings. Applying
+updates the selected named profile; Cancel/Close/Escape discard the complete draft. Current setup
+handles unnamed/customized preferences. Names are trimmed/collapsed, limited to 40 characters and
+unique ignoring case; up to 20 profiles. Profile write failure leaves the draft open, live settings
+and persisted profiles unchanged. Status/errors stay in the fixed footer beside Apply/Cancel.
+
+Visible tools and controls chooses painting tools, Line/Fill, Ink & Paint, symmetry and guides.
+Drawing options holds Focus/Simple/Full, automatic Ink & Paint, QuickShape and finger drawing.
+Profiles also capture the existing QuickMenu slots/edge/button and playback-range gesture. These
+are device setups, not student accounts or feature permissions. Shortcuts/QuickMenu remain
+available. Brush cannot be hidden; a hidden active tool remains visible until switched away,
+including Focus. Guide-edit completion controls are retained. Show all tools and controls resets
+visibility as a draft. App settings itself remains reachable. No brushes/colours/device limits,
+document modes, project pixels, schema or exports are included in a profile.
+
+`core/studentprefs.ts` owns validated catalogs/setup/profile data. App loads student visibility,
+finger preference and existing interface level; Bubbles shares that interface state via an App
+callback and filters floating painting tools/options. Main filters classic Full toolbar controls
+from the same state and synchronizes the finger menu checkbox. Active-tool recovery applies to
+the painting toolbar at all levels. Settings only invokes changed setters, so QuickMenu-only edits
+do not refit the canvas. Opening refuses active strokes/transforms/adjustments and pauses playback.
+QuickMenu Customize focuses its section; normal App settings opens at Student profiles.
+
+New device keys: `2dope.student.ui`, `2dope.student.profiles` (version 1),
+`2dope.student.fingerPaint`. Existing QuickMenu/range/QuickShape/Ink & Paint/interface keys remain
+live preference sources. Profile snapshots are outside Project/History and all portable artwork.
+No-op Apply does not add drawing history; profile tests verified zero document notifications.
+
+Changed this step: new `core/studentprefs.ts` and unit tests, student profile browser fixture,
+responsive wrapper and HTML pages; updated App, Bubbles, App settings, QuickMenu, main/index,
+CSS, manual/UPDATES, architecture/format/roadmap/test docs. Existing QuickMenu/range fixtures now
+isolate the added preference keys. All earlier user/Claude work preserved. No commit/push/deploy.
+
+Fresh verification: **57 files / 470 unit tests passed**, strict TypeScript/production build and
+diff check passed; existing large-bundle warning remains. Real-App student profile checks **28/0
+each** at 390×844, 1024×768 and 768×390 = **84 assertions**: create/rename/delete staging,
+Apply/Cancel, switching/update, independent snapshots, Draw/Animate/Focus visibility, active-tool
+recovery, options/QuickMenu, device persistence, fixed actions, names, storage failure, show-all
+and unchanged document/portable capture. Existing QuickMenu **34/0**, integrated painting workflow
+**20/0** at 898×910, and range/gesture workflow **50/0** at 1024×768: **188 browser assertions
+passed this step**. Physical iPad/Pencil/gesture arbitration remains unverified.
+
+Native built review on isolated `127.0.0.1:5205`: created Background painting with Vector/Smudge
+and Line/Fill controls hidden, saved/applied, reloaded and verified the selected profile. Updated
+its interface to Full and confirmed painting controls retained those visibility choices; reload
+retained Full, the profile name and checkboxes. The classic top bar remains hidden by the existing
+painting workspace layout, so the visible Full-level review used its floating painting controls.
+Screenshot: `../artifacts/student-profiles-native.png`. The test profile remains only on the
+isolated review origin. Tests used separate origins without clearing user project storage.
+
+**Next:** user direction for further profile options or repeat-cycle authoring. Physical device
+review remains pending; old deferred Clips/view failures stay deferred.
+
+### Previous step: optional playback-range gesture
+
+**Optional playback-range gesture, uncommitted after 086c7da.**
+The user requested a gesture option. Menu → App settings → Gestures now offers **Hold ruler to
+set playback range**, default off. Apply settings saves the boolean device preference
+`2dope.playback.rangeGesture`; Cancel discards the draft. QuickMenu preferences remain separate,
+and Restore QuickMenu defaults does not reset gestures. Range dialogs include a short settings hint.
+
+In Flipbook or Clips/Timing, hold still on the frame-number ruler for the existing 450ms hold
+threshold, then drag in either direction and lift. A dashed ruler band and a Loop start–end hint
+preview inclusive bounds; a stationary hold selects one frame. Pointer-up calls the existing
+App range command once, with normal Undo/autosave. The preview does not mutate the document.
+Quick ruler drags retain scrubbing and native pinch bookkeeping stays active. Drawing/row gestures
+are not reassigned. Whole animation remains in Range; the gesture does not change export scope.
+
+`ui/playbackrangegesture.ts` shares the input lifecycle across FlipMode and Strip, with callbacks
+to end their native scrub state after activation (without snapping scrub-lock home). It rejects
+stale project/comp/layer/workspace/length/zoom or changed range owners. Escape, extra fingers,
+pointer cancel/lost capture, blur/hidden, resize and disabling the preference cancel the preview.
+Pointer cleanup handles releases outside the ruler. Ruler-only touch-action/user-select/callout
+rules support touch holds while retaining other row interactions. Saved range ruler bands exclude
+the transient preview so frame notifications cannot remove it.
+
+Changed this step: new `ui/playbackrangegesture.ts`; updated core playback preference/test,
+App, App settings, range dialog/band selector, FlipMode/Strip integration, CSS, playback-range
+browser fixture, manual/UPDATES, architecture/format/roadmap/test docs. Earlier dirty work preserved.
+No dependency/project schema change, commit, push, deploy or recording feature.
+
+Fresh verification: **56 files / 464 unit tests passed**, strict TypeScript/production build and
+diff check passed (existing bundle-size warning). Expanded real-App range/gesture browser fixture
+**50/0 each** at actual 390×844, 1024×768 and 768×390 iframe viewports = **150 assertions**.
+Existing QuickMenu/App settings fixture **34/0** at 898×910: **184 browser assertions passed**.
+These cover device-only Apply/Cancel, ordinary scrub, hold preview/commit/Undo/Redo, reverse and
+single-frame ranges, interruption paths, Clips layer offsets and project replacement, alongside
+the prior range/audio/archive checks. An initial run while editing had four first-hold assertions
+fail; fresh final-handler runs passed at all three sizes. Desktop scripted touch PointerEvents
+do not establish physical Pencil/iPad Safari hold, pinch or callout behavior.
+
+Native built app on isolated `127.0.0.1:5205`: enabled the checkbox through Menu → App settings,
+applied, reloaded and reopened settings; it remained enabled. Screenshot:
+`../artifacts/playback-range-gesture-settings.png`. Native physical hold-and-drag was not tested.
+Only separate test/review origins were used; existing user project origins were untouched.
+
+**Next:** physical touch/Pencil review of hold-versus-scrub/pinch; repeat-cycle authoring remains
+a separate proposed feature requiring user direction. Prior deferred fixtures remain deferred.
+
+### Previous step: playback range
+
+**Playback range, uncommitted after 086c7da.**
+The user approved playback range. Built Range controls in Draw/Animate Flipbook, Clips/Timing
+and Motion using a shared `ui/playbackrange.ts` native dialog. Start/End are inclusive UI frame
+numbers; Use current sets either edge. Apply validates whole frames and commits one History
+command/document notification; Cancel/Escape discards the draft; Whole animation clears it.
+Unchanged Apply is a no-op. Opening pauses playback and restores focus on close. Stale dialogs
+close on project/comp/workspace/length changes. Controls have 44px targets and match existing UI.
+
+`Comp.playbackRange` is optional zero-based `[start,end)` metadata. `core/playback.ts` clamps
+preview bounds against current comp length without overwriting saved edges, so restoring a
+shortened duration restores the range. App Play from outside begins at the range start; Play
+inside resumes there. Paused scrubbing remains unrestricted. One-frame ranges work. The shared
+clock, seek/fps clock rebasing and residency look-ahead use the same bounds. Flipbook and Clips
+rulers outline the interval (Clips accounts for the active layer start). Sources and shots keep
+independent ranges; nested placements, content duration and exports retain normal timing.
+
+The audio queue includes both edges in its restart key and uses a nonzero loop origin in
+`mixSound`, so queued chunks crossing an edge sample the selected section. Scrub audition and
+exports retain their existing full-comp/default sampling. `io/schema.ts` validates and copies
+the additive optional comp field under schema 3; autosave, portable files and My Assets captures
+preserve it. Range Undo resolves the comp by id rather than retaining a potentially stale object.
+
+Changed this step: new `core/playback.ts`, unit tests, shared range UI and four browser fixture
+files; updated App, audio/mixer, comp/schema, FlipMode/Strip/Motion, CSS, manual/UPDATES,
+architecture/format/roadmap/test docs. All earlier user/Claude changes preserved. No commit/push.
+
+Fresh verification: **56 files / 463 unit tests passed**, strict TypeScript/production build
+passed (existing chunk-size warning), and diff check passed. New browser fixture **31/0 each**
+at actual iframe viewports 390×844, 1024×768 and 768×390 = **93 passing assertions**, including
+clock/seek/fps/single-frame edges, validation/cancellation/focus/layout, Undo/Redo/no-op,
+shortened duration, source independence, ruler origins, autosave/portable import, replacement
+comp objects and stale dialogs. A deterministic AudioContext substitute exercises real queued
+mix samples/stop behavior without playing sound. Existing integrated painting workflow **20/0**
+at 898×910: **113 browser assertions passed this step**. No audible-output or physical Pencil/
+iPad Safari claim. User-deferred Clips/view fixture failures remain recorded below.
+
+Native production review on isolated `127.0.0.1:5205`: created a named 720p/24-frame review shot,
+set frames 5–12 with Enter, played/paused inside the interval, reloaded and verified the saved
+range, cancelled a changed draft with Escape, and switched to Clips with the same range. Screenshot:
+`../artifacts/playback-range-native.png`. Normal user origins were untouched. Browser connection
+to the sandbox server was blocked; an approved external local review server resolved it. Only
+test-created browser tabs were used. The review shot remains on the isolated production origin.
+
+**Next:** repeat-cycle authoring is a separate proposed next feature, requiring user approval.
+Physical Pencil/iPad review of the existing drawing/Ink & Paint workflows remains outstanding;
+do not expand auto-fill gaps/references/page limits or resume deferred fixtures implicitly.
+
+### Previous step: first Ink & Paint / Auto Paint workflow
+
+**First Ink & Paint / Auto Paint workflow, uncommitted after 086c7da.**
+The user said Go after My Assets and customizable QuickMenu. Built optional Ink & Paint in
+Draw/Animate Options, also assignable to QuickMenu. Switching it on selects Line with Brush or
+Vector; Ink has its own editable colour and the main Colour supplies solid automatic paint.
+It starts off. On/off and ink colour use device-only `2dope.inkpaint`; ordinary project/asset
+Line, Fill and editable vectors remain unchanged, with no new schema/dependency.
+
+`fill/autopaint.ts` uses the difference between before/after border-connected empty pixels:
+newly enclosed regions only, threshold 24, no gap closing, no selection/page edge as a wall and
+two pixels of growth only beneath actual ink. It is tested against a separate pixel-flood oracle
+over 150 randomized small maps. `App.inkAlpha` reconstructs before-ink from the existing raster
+commit patch and old vector list after pen-up. No page scan delays pen-down/live ink. Automatic
+paint filters selections, fully hidden layer-mask pixels and any existing nonzero Fill alpha,
+preserving opaque/translucent paint exactly. It uses only the current drawing, not other layers.
+
+`recordInk` prepares the paint patch before History/autosave notification, with one command for
+closing ink plus Fill. Redo restores captured pixels rather than re-detecting under new settings.
+QuickShape replacement undoes/replaces the associated paint through the same path. Layer masks
+use the existing queued input/Residency decode path before pixels are read. Eraser, Smudge,
+direct Fill painting, mask editing and Alpha Lock do not trigger automatic colour. Cancelled/
+blurred/hidden/interrupted pen input keeps the existing ink policy while suppressing Auto Paint.
+
+Work is bounded to **921,600 page pixels in Lite** and **4,194,304 in Full**. Oversize enable is
+refused; an already enabled preference on an oversize page retains ink and reports skipped paint.
+The feature remains opt-in. No workers, automatic gaps, gradients, all-layer references or new
+track types were added. Standalone autosave/archives/My Assets keep the resulting editable data.
+
+Changed this step: new `fill/autopaint.ts`, its unit tests, `ui/inkpaint.browser.ts`, responsive
+wrapper and two HTML fixtures; updated `app.ts`, Bubbles, QuickMenu action catalog/UI, main target
+label, CSS, manual/UPDATES, architecture/format/roadmap/test docs. QuickMenu and integrated painting
+fixtures now isolate the Ink & Paint preference; QuickMenu verifies the new assignable toggle.
+Earlier user/Claude changes are preserved. No commit/push/deploy or recording feature.
+
+Fresh checks: **55 files / 457 unit tests passed**, strict TypeScript/production build and diff
+check passed; existing large-chunk warning remains. The full unit run measured topology at 62 ms
+for 1280×720, 131 ms for 1920×1080 and 106 ms for 2048×2048 on this desktop (JIT/load varies).
+The direct real-App browser workflow passed 25 initial assertions, including a Full HD committed
+stroke plus paint in 118 ms. Final responsive/residency checks passed **81 assertions**: 27 each
+at real iframe viewports 390×844, 1024×768 and 768×390. These add decoded parked-mask input and
+parked drawing Undo/Redo, with all colour/selection/mask/cancel/QuickShape/archive checks intact.
+The phone/tablet runs measured total Full HD committed stroke plus paint at 110 ms. The separate
+QuickMenu regression passed **34/0**, including the assignable Ink & Paint toggle; the existing
+integrated Draw → Assets → Animate painting workflow passed **20/0**, for **135 browser assertions
+passed this step** (81 + 34 + 20). Browser test
+callbacks use real App input, PNG/compositor/history and in-memory FileUI/autosave, without opening
+the user's project library. Test preferences are restored. Background browser timer throttling
+slowed the inactive landscape fixture; bringing its page forward completed it. A few browser
+state reads timed out then recovered; no failed check is being counted as passed.
+These desktop timings do not establish physical iPad/Pencil/Safari performance or memory readiness.
+
+Native built app, isolated 127.0.0.1:5201: created Ink Paint review, chose red Paint and separate
+dark Ink, then drew three brush edges. The open outline stayed empty; closing it filled the
+region. Ctrl-Z removed the closing line and its paint; Ctrl-Shift-Z restored both. Done, normal
+autosave/reload, Assets → Edit reopened the same painted source, with mode/colour preferences
+retained. Screenshot: `../artifacts/ink-paint-native.png`. A preliminary vector mouse-drag review
+entered the existing hold/point-edit workflow, so the final native closure used Pixel Ink Brush;
+vector/QuickShape behavior is covered by the real-App scripted fixture. User origins 5197/5200
+were untouched. Native test source remains only on the isolated review origin.
+
+**Next:** review the bounded automatic-paint workflow with real student drawings and physical
+Pencil input before expanding gap closing, references or page sizes. Those expansions are later
+decisions. The earlier user-deferred Clips/view fixture failures remain recorded below.
+
+### Previous step: customizable QuickMenu and App settings
+
+**Customizable QuickMenu and App settings, uncommitted after 086c7da.**
+The user requested QuickMenu customization in app settings. Built the six-action ring for Draw
+and Animate with an explicit edge button and Q, plus Menu → App settings → QuickMenu. Settings
+choose six actions (clockwise from top), a left/right button edge and show/hide. Apply saves
+`2dope.quickmenu` localStorage; Cancel discards the draft, and Restore defaults waits for Apply.
+These preferences are device-only, independent of project/schema/History. Empty/repeated actions
+are allowed, unknown stored actions repair per slot, and bad JSON falls back to defaults. Q keeps
+the menu available when the button is hidden; all-empty rings focus Customize for recovery.
+
+QuickMenu routes to the existing App tools, Undo/Redo, full-hold frame creation, duplicate/frame
+navigation, view and playback, and existing Colour/Brushes/Layers/My Assets panels. Playback keeps
+Pause accessible while edits/navigation disable. A backdrop consumes outside taps, focus returns
+to canvas, Q/Escape/arrows/Tab work without leaking keys, and menus close on frame/layer/comp/
+project/workspace changes, stroke input, blur, hidden page or resize. It avoids live strokes and
+locked-layer New frame. The opener measures clear space around existing painting controls without
+moving/refitting the canvas. Existing popovers dismiss before opening. This is separate from the
+older Quick Animate view (`ui/quick.ts`); finger canvas holds retain their existing behavior.
+
+Changed this step: new `core/quickmenu.ts`, `core/quickmenu.test.ts`, `ui/quickmenu.ts`,
+`ui/settings.ts`, `ui/quickmenu.browser.ts`, `ui/quickmenu-responsive.browser.ts`,
+`tests/quickmenu.html` and responsive wrapper; updated `main.ts`, `index.html`, CSS,
+manual/UPDATES, architecture/roadmap/test docs and this handoff. All preceding uncommitted work
+is preserved. No dependency, .2dope schema or persistence/export change; no commit/push/deploy.
+
+Fresh checks: **54 files / 448 unit tests passed**, strict TypeScript/production build and diff
+check passed. Existing large-chunk warning remains. **99 browser assertions passed**: 33 each at
+real iframe viewports 390×844, 1024×768 and 768×390 on isolated localhost:5202. The actual App/
+painting/Flipbook/Sidebar/Bubbles/Colour fixture covers settings drafts, persistence serialization,
+ring/edge targets, keys/focus/outside taps, view/history preservation, real Line pixels and Undo/
+Redo, full-hold New frame, popover handoff, callback routing, plane/tool compatibility, locked-layer
+guards, stroke refusal, shared playback/Pause, Draw/Animate and stale-menu cancellation, hidden/
+empty recovery and defaults. It opens no project library/autosave and restores its preferences.
+
+Native built-app review on isolated 127.0.0.1:5201: Menu → App settings opened the six selectors.
+Changed Action 3 to Colour, Action 6 to My Assets and edge to Left; Apply then reload retained
+these choices. Native Q opened the saved ring, Colour opened the real picker, Q replaced the
+picker with QuickMenu, and My Assets opened the existing device collection. No document edits
+were needed. Evidence: `../artifacts/quickmenu-settings.png` (all six settings) and
+`../artifacts/quickmenu-customized.png` (the saved ring). Test/native tabs were closed after checks;
+user origins 5197/5200 were untouched. Physical iPad/Pencil/Safari and arbitrary crowded layouts
+remain unverified. The earlier user-deferred Clips/view fixture failures are still recorded below.
+
+**Immediate next feature: Ink & Paint / Auto Paint**, per `docs/next-phase.md`: detect only newly
+enclosed regions after committed ink, preserve existing paint, honor selections/masks/residency,
+and combine closing line plus automatic fill into one Undo. Test large-page/Lite cost before
+enabling broadly. Recording is excluded. QuickMenu customization and My Assets are now built.
+
+### Previous step: My Assets library management
+
+**My Assets library management, uncommitted after 086c7da.**
+The user confirmed this order: **My Assets → QuickMenu → Ink & Paint**, with recording still
+excluded. Finished the library management pass before moving on to QuickMenu. Name search works
+on card metadata, supports multiple case-insensitive words, displays counts/no-match recovery and
+keeps Clear/search at 44px. Manage folds Rename and Remove under each saved card. Renaming changes
+only the saved card; `libraryArtwork` supplies the new project/root name to future copies,
+opened projects and portable downloads. Existing project artwork and frozen stored bytes remain
+independent. Removal atomically reads/deletes both records; one full entry stays in memory for
+Undo last removal until another successful removal or page reload. Closing/reopening the shelf
+keeps Undo. A failed restore keeps its bytes for retry. Library edits do not enter project History.
+IndexedDB version and project schema are unchanged. No commit/push.
+
+Changed this step: `io/artworkstore.ts`, `io/artwork.ts`, their existing artwork unit test,
+`ui/artworklibrary.ts`, its browser fixture, CSS, manual/UPDATES and architecture/format/roadmap/
+test docs. Previous uncommitted work is preserved. Fresh unit checks: **53 files / 445 tests**
+passed; strict TypeScript/production build and diff check passed (existing chunk-size warning).
+**102 browser assertions passed:** 34 each at real iframe viewports 390×844, 1024×768 and 768×390
+on isolated localhost:5202. These include the previous complete storage/reuse/autosave suite plus
+search without package reads, no-match/Clear/focus, cancel/rename/fresh-connection/portable names,
+44px Manage actions after scrolling, failed removal, failed restore/retry, Undo after shelf
+closure, independent copy names and stale rename-dialog rejection. The fixture deletes only its
+disposable artwork DB and restores preferences. Physical iPad/Pencil/Safari remain unverified.
+
+Native built-app review on isolated 127.0.0.1:5201: searched Flipbook review (1 of 2), expanded
+Manage, renamed to Flipbook library review, removed it, saw the fixed removal Undo, restored it,
+and renamed it back. The project kept its independent Flipbook review source. Screenshot:
+`../artifacts/my-assets-management.png`. User origins 5197/5200 were untouched. Fresh test/native
+tabs were closed after checking; no viewport emulation or storage-clearing shortcut was used.
+
+**Immediate next feature: QuickMenu, then Ink & Paint / Auto Paint.** Use a small explicit
+on-canvas opener plus keyboard access; the proposed six actions/configuration are recorded in
+`docs/next-phase.md`. Preserve Draw/Animate's shared state and canvas view. Quick Animate in
+`ui/quick.ts` is an existing simplified workspace and is separate from the requested QuickMenu.
+Auto Paint remains unimplemented: detect only newly enclosed areas after committed ink, preserve
+existing paint and combine line plus fill into one Undo. No motion/performance recording.
+The earlier short-screen Clips/view investigation remains deferred by the user.
+
+### Previous step: first cross-project My Assets library
+
+**First cross-project My Assets library, uncommitted after 086c7da.**
+The user approved Assets and Ink & Paint, explicitly excluded motion/performance recording, and
+deferred the older short-screen Clips/view fixture investigation. Built My Assets first; Auto
+Paint remains the next approved feature direction, not an implemented feature of this step.
+
+Assets → Save stores an independent source snapshot in My Assets, available in other projects
+on this browser/device. The library has previews, Add copy, Open as project, Download and Import
+artwork file. Sources keep editable layers, frames/holds, Line/Fill, vectors, masks, internal
+comp sharing, parents/pins/overrides and audio links. The current project's sources/placements
+still use their existing live links. Library snapshots do not update when a project is edited.
+
+`io/artwork.ts` captures only the reachable graph into an ordinary complete schema-3 `.2dope`
+archive; missing images/sounds fail the save. `io/artworkstore.ts` atomically writes card/package
+records in separate `2dope-artwork` IndexedDB v1 storage, independent of project asset GC.
+`view/artworkpreview.ts` decodes first-frame drawings for the stored preview, then releases them.
+`ArtworkAssets.addPackage` adopts compatible-size sources with fresh IDs and complete byte data
+through one project History command. Incoming image refs intentionally have null stored keys
+until autosave writes them; otherwise a preview decode can incorrectly mark foreign keys saved.
+Sounds get fresh pool IDs and source fps is retained. Undo removes the copied comp graph; Redo
+keeps its pool drawings available. No project schema bump, external path or dependency added.
+
+**First-version limits:** Add copy requires matching drawing canvas dimensions. Open as project
+uses FileUI import and normal autosave to preserve native size, flushing the previous project.
+An asset-marked main comp is an editable project rather than a pending source session, and
+Assets → Save current artwork can save another snapshot. No resizing/cropping, live links across
+projects, library search/folders/deletion, or automatic updating/replacing of saved snapshots.
+Download provides a portable backup/share file; storage stays local to this browser origin.
+
+Changed this step: new `io/artwork.ts`, `io/artwork.test.ts`, `io/artworkstore.ts`,
+`view/artworkpreview.ts`, `ui/artworklibrary.ts`, `ui/artworklibrary.browser.ts`,
+`ui/artworklibrary-responsive.browser.ts`, `tests/artworklibrary.html` and responsive wrapper;
+updated `core/assets.ts`, its tests, `core/assetcopy.ts`, `ui/artworkassets.ts`, `main.ts`, CSS,
+manual/UPDATES, format/architecture/roadmap/test docs and this handoff. Earlier uncommitted
+source-position/QuickShape/Flipbook work below is preserved.
+
+Checks this turn: **53 files / 443 unit tests passed**, strict TypeScript/production build and
+diff check. The existing large-chunk warning remains. Eight new unit cases cover complete source
+graphs, hidden exposures/masks/audio, capture-time metadata, missing/corrupt packages, immutable
+store copies, import ID collisions/internal references/Undo, incompatible sizes/busy guards and
+standalone artwork mains. **86 browser assertions passed**: 22 My Assets checks each at real
+iframe viewports 390×844, 1024×768 and 768×390 (66), plus the existing 20 integrated painting
+checks at 1467×633. The My Assets fixture uses actual FileUI/autosave with an in-memory project
+store and a uniquely named disposable IndexedDB artwork database. It clears only its own project
+image pool before import to catch foreign-key/autosave errors, checks PNG/frame pixels and normal
+archive capture, original-project deletion, native-size opening, quota failure, portable import,
+stale async reads and Save re-enabling after Add copy. Short screens scroll the shelf body while
+navigation stays reachable. Fixtures restore preferences and delete only their own artwork DB.
+
+Native Brave 127.0.0.1:5201: saved Workflow landscape (1280×720, 2 layers) and Flipbook review
+(3 layers, 14 frames) to My Assets. Fresh app loading showed both saved snapshots and previews.
+Open Workflow landscape as project created a separate normal autosaved artwork project with its
+two layers; Assets exposed Save current artwork. Add copy of Flipbook review imported its three
+layers/14 frames with Edit focused. Native Escape/Ctrl-Z removed it (Assets 0); Ctrl-Shift-Z
+restored it (Assets 1). Screenshot: `../artifacts/my-assets-library.png`.
+
+Browser emulation and download-event APIs stalled/reset the browser tool; fresh tabs and separate
+iframe wrappers completed the responsive checks instead. The native download's emitted file was
+not retrieved/verified; package serialization/readback and shared-file import were verified by
+unit/browser fixtures. Older stalled agent tabs from this and the preceding review could not be
+reclaimed through the tool; cleanup of those tabs/old viewport overrides remains unconfirmed.
+Final phone/tablet/landscape, painting-regression and native walkthrough tabs were closed; the
+remaining stale ids observed were 377726962, 377726959, 377726956, 377726952 and 377726949.
+User origins 5197/5200 and their project storage were not touched. Physical iPad/Pencil/Safari,
+large-library quota/performance and live cross-project sharing are not verified. No commit/push.
+
+**Next after QuickMenu:** Ink & Paint / Auto Paint, following the requirements in
+`docs/next-phase.md`: detect only newly enclosed areas after committed ink, preserve existing
+paint, and combine line plus automatic paint into one Undo. Recording is excluded. The user
+deferred the older Clips/view fixture failures; keep their record below without blocking feature
+planning or silently claiming they passed.
+
+### Earlier multi-frame Flipbook review
+
+**Latest step: multi-frame artwork source / Flipbook review, uncommitted after 086c7da.**
+Reviewed a three-drawing source, held frames, playback, source Done/re-entry and multiple tracks
+on phone/tablet/short screens. `FlipMode` now keeps Play/Pause outside scrolling actions, uses
+44px button targets, caps the track list at one row on short screens, and reveals the selected
+track on selection or panel resize. A row ResizeObserver updates `--flip-h` and uses existing
+refit behavior. Deferred build measurements ignore hidden rows rather than publishing 16px.
+On short screens at least 420px wide, the expanded compact Brush recovery button stays beside
+the Tools/Options recovery column; native testing found that it could cover Tools before this.
+Manual folds and panned/zoomed views retain their existing behavior.
+
+Duration handles now expose actual frame counts and own arrow/Shift/Home/Enter/Escape keys.
+Arrows adjust one frame, Shift ten, Home one; Enter/Escape returns to canvas. Tap/drag focuses
+the handle and rebuilds restore that focus. Keyboard changes preview then commit through the
+same exposure History as pointer trimming. New holds cap at one million frames; previously
+longer holds can be shortened and Undo still restores them. No schema/dependency changes.
+Shared source playback, comp frame rates, linked rendering and source/shot return were retained.
+
+Changed this step: `ui/flipmode.ts`, CSS, manual/UPDATES, architecture/roadmap/test docs and this
+handoff; new `tests/flipbooksource.html` and `ui/flipbooksource.browser.ts`.
+Prior source-position/QuickShape fixes and integrated painting fixture remain uncommitted below.
+
+Checks this turn: **52 files / 435 unit tests passed**, strict TypeScript/production build and
+diff check. Existing large-chunk warning remains. **78 new browser assertions passed** at isolated
+origin 5202: 26 each at 354×767, 931×698 and 698×354 CSS. The actual App/Assets/Flipbook/Sidebar/
+Bubbles/Strip fixture paints red/green/blue frames, changes holds, checks focus/Undo/Redo, keeps
+Play hit-testable while actions scroll, observes source playback looping, returns to Animate
+frame 7 while playing, resumes the stopped source frame, checks five-track selection/resize,
+recovery-button hit testing, measured fitting and linked pixels with source fps 6 / shot fps 24.
+The existing integrated painting workflow also passed its 20 phone assertions this turn.
+Fixtures open no project library/autosave and restore their view/brush/colour preferences.
+
+Additional check with unresolved failures: the existing `tests/paintinglayout.html` at 698×354
+reported 14 passed / 2 failed (full Tracks canvas floor and Editor recovery budget) before its
+Flipbook section. A temporary two-RAF settle experiment reported 13 / 3, additionally failing
+Draw fold/view recovery; starting preferences may be involved, but that is not established.
+An attempted clean-preference rerun could not be read after browser automation timed out.
+Temporary edits to that fixture were reverted. Do not count this fixture as passed or assume
+all short-screen Clips/view-preservation behavior is verified. Main Flipbook fixture's 78
+assertions and native checks above completed before this interruption.
+
+Production Brave 5201: native duration tap + Right + Shift/Right changed 1 → 2 → 12 with focus;
+Escape focused canvas, Ctrl/Z restored 2 and Ctrl/Shift/Z restored 12. Painted three source
+drawings, played the source, and Done stopped playback and restored the shot with canvas focus.
+Created three source tracks; selecting Paint layer brought its row into the compact strip.
+Tools/Options/Brush recovery toggles worked through native clicks after the overlap fix.
+Evidence: `../artifacts/flipbook-source-phone.png` (phone with tools open) and
+`../artifacts/flipbook-source-short-screen.png` (short screen with controls folded).
+Short landscape still has little physical canvas height; use folds/Canvas view for painting.
+Physical iPad/Pencil/Safari feel and long-project performance remain unverified.
+Final browser cleanup was attempted, but automation timed out twice (including inventory after
+the tool kernel reset), so viewport reset/tab closure could not be confirmed. Last known agent
+tabs were production 5201 (`377726949`) and fixture 5202 (`377726952`) in Brave browser 3. User
+origins 5197/5200 and their project storage were not touched.
+No commit/push/deploy this step.
+
+**Immediate next task (proposed; await user authorization):** reproduce the short-screen Clips
+canvas-budget and Draw fold/view fixture failures on a responsive browser, with clean isolated
+preferences; verify/finish browser cleanup. Then review save/reopen with animated sources and
+multiple linked placements, including Undo followed by save. Full rail rewrite,
+advanced docking, cross-project sharing and Auto Paint remain separate.
+
+### Earlier integrated painting review
+
+**Latest step: integrated painting/source-return review, uncommitted after checkpoint 086c7da.**
+Reviewed New asset → Layers/Background → Colour/Brushes/size/opacity → paint → Done → Assets/Place
+→ Animate/Edit source. Re-entry reset to the first paint layer rather than the background being
+edited. `ArtworkAssets` now remembers the outgoing source's layer/frame on Done or direct source
+switches, in session-only WeakMap state keyed by Project. Re-entry validates the remembered layer;
+missing layers fall back to the first drawing/frame zero, and existing comp-clock bounds clamp a
+shortened source. Source settings, shot/layer/frame/workspace return and document History remain
+shared and unchanged. Editing positions are deliberately not persisted or added to the schema.
+
+Native painting also exposed Edit shape remaining available after source Done while the last
+history command still belonged to that source. `App.shapeEditable` now requires the current
+editing drawing and plane, including mask drawing/Line when editing a mask. This hides the stale
+control and rejects a stale `swapShape` action without touching the old source. Returning to the
+same unchanged drawing/plane can resume its shape. No dependencies or stroke algorithms changed.
+
+Changed this step: `core/assets.ts`, `core/assets.test.ts`, `app.ts`, manual/UPDATES,
+architecture/roadmap/test docs and this handoff; new `tests/paintingworkflow.html` and
+`ui/paintingworkflow.browser.ts`.
+
+Checks this turn: **52 files / 435 unit tests passed**, strict TypeScript/production build and
+diff check. Four new unit cases cover layer/frame/shot return with no history, direct source
+switches, removed-layer/shortened-clock fallback and isolation between projects with reused ids.
+Existing large-chunk warning remains. **90 browser assertions passed** at isolated origin 5202:
+20 integrated checks each at 354×767, 931×698 and 698×354 CSS (60), plus the existing 30 navigation
+checks at phone size. The new fixture combines actual Assets, Layers, Colour, Brushes, Sidebar,
+Bubbles, Strip/Tracks and canvas: real opacity/Fill pixels and Undo/Redo, held QuickShape ownership,
+rejected stale actions, restored background/frame 9, linked placement counts, shared repainting
+through the shot compositor, Clips rails and shelf return without extra document history.
+No project library/autosave is opened; brush store reads and view/brush/colour preferences use the
+same isolated fixture conventions and preferences are restored. Native input remains separate.
+
+Production Brave 5201: created Workflow landscape via the shelf, added a still Background, filled
+it blue, painted a peak, returned and placed it in Animate. Before the fix, Edit source selected
+the empty Paint layer; source Done also left Edit shape available from the previous drawing.
+After rebuilding, native Background selection → Space on source Done → shelf Edit with Enter
+restored Background, still painting Line, with Updates 1 placement. Phone/tablet evidence:
+`../artifacts/source-resume-phone.png` and `../artifacts/source-resume-tablet.png`. Native Done
+returned canvas focus; viewport override reset and active test tab closed. Physical iPad/Pencil/
+Safari feel and long-project performance remain unverified. No commit/push/deploy this step.
+
+**Immediate next task (proposed; await user authorization):** review source entry/return in
+Flipbook, including short screens and playback, with a multi-frame artwork asset. Full rail
+rewrite, advanced docking, cross-project sharing and Auto Paint remain separate.
+
+### Earlier release checkpoint
+
 **Release checkpoint (2026-10-23):** the user requested publishing the accumulated Draw/Animate,
 project-local Assets, source/placement editing, rendering and painting-control work. This checkpoint
 includes the dated implementation/test records below, browser fixtures and Claude entry guidance.

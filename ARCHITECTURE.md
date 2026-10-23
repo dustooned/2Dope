@@ -2,6 +2,105 @@
 
 Current code map reviewed 2026-10-14. See `HANDOFF.md` for the checked baseline and open work.
 
+Student profiles (2026-10-23): `core/studentprefs.ts` owns tool/control catalogs and bounded,
+validated device setup/profile snapshots (20 unique profiles, 40-character names). Settings drafts
+profile creation/selection/rename/deletion and visibility, interface level, QuickMenu, range gesture,
+Ink & Paint, QuickShape and finger input together; only Apply writes profiles and calls existing
+App preference setters. Failed profile writes retain the draft without changing live settings.
+No-op setters are avoided so QuickMenu-only edits do not refit the canvas. App holds `studentUI`
+and the shared interface level; Bubbles synchronizes its level through an App callback. Bubbles
+filters painting tools/options and keeps hidden active tools available, including Focus; main.ts
+filters the Full toolbar through the same visibility state. Brush is always enabled and editor
+completion controls stay available. Settings refuses active drawing/transform/adjustment edits.
+`2dope.student.ui`, `2dope.student.profiles` and `2dope.student.fingerPaint` are localStorage
+preferences, outside the project model/History; existing QuickMenu/gesture/QuickShape/Ink & Paint
+keys remain their runtime preference sources. Profiles capture snapshots of those preferences,
+not tool permissions, artwork, brushes, colours, device memory mode or account identity.
+
+Playback range (2026-10-23): `core/playback.ts` resolves optional `Comp.playbackRange` into the
+current comp length and wraps the shared App playback clock/look-ahead. Stored zero-based
+`[start,end)` edges survive duration shortening; preview clamps without mutating them. App's
+range command resolves its target by comp id for Undo/Redo, pauses playback and notifies autosave.
+`ui/playbackrange.ts` supplies one native dialog/control implementation for FlipMode, Strip and
+Motion, with inclusive frame numbers, current-frame setters, validation, cancellation and whole
+animation recovery. Flipbook/Clips ruler bands are view-only. The audio queue includes both edges
+in its identity and mixes through the same nonzero loop origin. Normal export and nested-comp
+timing do not use preview ranges. `io/schema.ts` validates/copies the additive optional comp field
+without a schema bump; normal project and artwork captures preserve it.
+
+Range gesture: `ui/playbackrangegesture.ts` observes ruler pointer input in FlipMode/Strip and
+takes over stationary holds after the existing 450ms threshold. Before activation, native scrub
+and pinch handlers retain input; after activation the native scrub state is cleared, a separate
+dashed band/status previews the bounds, and pointer-up calls the same `App.setPlaybackRange` once.
+The preview never mutates the comp. Blur/hidden/Escape/cancel/lost capture, multiple pointers,
+resize, disabled settings and stale project/comp/layer/view/length/zoom invalidate it. Native
+pinch bookkeeping remains active. `App.rangeGestureEnabled` strictly reads a boolean from
+`2dope.playback.rangeGesture`; App settings → Gestures drafts this device preference alongside
+QuickMenu, outside document History. Ruler-only touch-action preserves drawing and row gestures.
+
+Ink & Paint (2026-10-23): `fill/autopaint.ts` computes the difference between border-connected
+empty pixels before/after committed ink, using bounded scanline floods and no gap closing.
+It grows only two pixels beneath actual ink, never across transparent pixels. `App.inkAlpha`
+reconstructs pre-stroke raster pixels from the existing commit patch and old vector list after
+pen-up, avoiding a page scan at stroke start. `automaticPaint` excludes existing Fill alpha,
+out-of-selection and fully masked pixels. `recordInk` groups the saved fill patch with the ink
+command before notifying History/autosave; redo replays exact pixels rather than detection.
+QuickShape replacement uses the same path. Required layer masks use the existing deferred pixel
+input queue; cancelled/blurred strokes keep the existing ink policy with automatic paint suppressed.
+`2dope.inkpaint` holds optional device preferences; Bubbles exposes the mode and ink/paint colours,
+and QuickMenu can toggle it. Line/Fill, project schema and residency/history paths stay shared.
+Work caps are 921,600 pixels Lite and 4,194,304 Full; unsupported pages retain ink with a notice.
+
+QuickMenu (2026-10-23): `core/quickmenu.ts` owns the six-action preference defaults/catalog and
+validation. `ui/quickmenu.ts` overlays the ring on Draw/Animate, routes actions to existing App/UI
+commands, scopes open actions to the current project/comp/layer/frame and closes on navigation,
+stroke input, blur or viewport changes. A backdrop consumes outside taps; Q/Escape/arrows/Tab keep
+keyboard recovery. Its edge button finds space around visible painting controls without refitting
+the canvas. Playback keeps Pause accessible and disables editing/navigation actions. `ui/settings.ts`
+provides Menu → App settings with a QuickMenu draft, six action selectors, edge/visibility controls,
+Apply/Cancel and Restore defaults. `main.ts` wires the existing Colour/Brushes/Layers/My Assets
+panels and dismisses old popovers before opening. `2dope.quickmenu` localStorage is device-only,
+outside document History and .2dope schema. Q still works when the edge button is hidden; empty
+slots focus Customize for recovery. `ui/quick.ts` remains the separate older Quick Animate view.
+
+My Assets (2026-10-23): `io/artwork.ts` captures only a source's reachable graph as a complete
+normal `.2dope` archive, validating references and refusing missing bytes. `io/artworkstore.ts`
+keeps atomic card/package snapshots in a separate `2dope-artwork` IndexedDB database, beyond
+project asset GC. `view/artworkpreview.ts` decodes only first-frame drawings for a stored preview.
+`ArtworkAssets.addPackage` imports compatible-size graphs with fresh references and parked image
+bytes through one existing project History command; `core/assetcopy.ts` remaps nested references.
+Sounds receive independent pool IDs. `ui/artworklibrary.ts` owns My Assets, download/import and
+native-size Open as project. `main.ts` routes project opening through FileUI so current work is
+flushed and the incoming project enters normal autosave. Asset-marked main comps are standalone
+projects, with Save current artwork, rather than pending source sessions. Saving snapshots is
+separate from document History. Add copy never rescales or crops incompatible drawing pages.
+Library management: name search filters metadata in `ui/artworklibrary.ts`; Manage folds Rename
+and Remove away from reuse actions. `ArtworkStore.rename` changes only the card, while
+`io/artwork.ts:libraryArtwork` applies that name to future copies, opened projects and exported
+archives. Atomic `ArtworkStore.remove` returns the full deleted snapshot for one session-only
+removal Undo, independent of document History. The removal survives shelf closure, while failed
+restores retain its retry data. No library schema/dependency change.
+
+Flipbook source review (2026-10-23): `FlipMode` keeps Play outside its scrolling actions and uses
+44px button targets. CSS caps the track list at one row on short screens; active-track changes
+reveal that row without changing the comp clock, including after resize. Short landscape keeps
+the compact Brush recovery button beside the Tools/Options recovery column. Row ResizeObserver publishes the measured
+`--flip-h` and refits only an already fitted canvas. Deferred build measurements ignore hidden
+rows. Duration handles expose actual frame values and own their arrow/Shift/Home/Enter/Escape
+keys. Keyboard edits preview then commit through existing exposure History, like pointer trims;
+both cap new holds at one million frames (existing longer holds can still be shortened).
+`tests/flipbooksource.html` exercises actual painting, holds/Undo, source playback/return,
+multi-track scrolling and source-rate animation through the linked shot compositor.
+
+Integrated painting loop (2026-10-23): `ArtworkAssets` keeps a WeakMap keyed by Project of
+per-source layer/frame positions. Done and direct source switches remember the outgoing position;
+open validates its layer and reuses the existing bounded comp clock. Missing layers fall back to
+the first drawing layer/frame zero. This session state adds no document History/schema fields.
+`App.shapeEditable` requires the current editing drawing and plane, including the mask drawing
+and Line when editing a mask; stale `swapShape` calls are rejected by that existing guard.
+`tests/paintingworkflow.html` combines actual Assets, Layers, Colour, Brushes, Sidebar, Bubbles,
+Strip/Tracks and canvas to check painting, Undo, QuickShape ownership and linked source returns.
+
 Brush controls (2026-10-23): `Sidebar` adds visible Size/Opacity labels, pixel/percent values,
 numeric ARIA values with range/orientation/value text, and wider slider/button targets. Size uses
 the existing squared mapping over 1–500px (matching canvas size shortcuts); opacity spans 0–100%.

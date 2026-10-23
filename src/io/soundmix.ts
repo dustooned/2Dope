@@ -48,14 +48,14 @@ export function soundVoices(project: Pick<Project, 'comps'>, compId: string): So
 }
 
 /** Bounded mixer shared by live playback and export. Linear sampling and hard peak limiting. */
-export function mixSound(voices: SoundVoice[], bank: Pick<SoundBank, 'get'>, at: number, samples: number, rate: number, loopSeconds?: number): [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] {
+export function mixSound(voices: SoundVoice[], bank: Pick<SoundBank, 'get'>, at: number, samples: number, rate: number, loopSeconds?: number, loopStart = 0): [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] {
   const left = new Float32Array(samples), right = new Float32Array(samples);
   for (const voice of voices) {
     const buffer = bank.get(voice.asset); if (!buffer) throw new Error('Audio is still loading. Try playback again.');
     const a = buffer.getChannelData(0), b = buffer.getChannelData(Math.min(1, buffer.numberOfChannels - 1));
     for (let i = 0; i < samples; i++) {
       const t = at + i / rate;
-      const time = voice.sourceTime(loopSeconds ? mod(t, loopSeconds) : t); if (time === null) continue;
+      const time = voice.sourceTime(loopSeconds ? loopStart + mod(t - loopStart, loopSeconds) : t); if (time === null) continue;
       const pos = time * buffer.sampleRate, index = Math.floor(pos), frac = pos - index;
       const l = (a[index] ?? 0) * (1 - frac) + (a[index + 1] ?? 0) * frac;
       const r = (b[index] ?? 0) * (1 - frac) + (b[index + 1] ?? 0) * frac;

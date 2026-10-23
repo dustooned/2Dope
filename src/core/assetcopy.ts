@@ -5,7 +5,7 @@ import { encodePng, isBlank } from '../io/codec';
 import { MAX_COMPS, MAX_DRAWINGS, MAX_VECTORS } from '../io/schema';
 
 /** One source graph, including hidden frames and masks. Shared children remain shared inside the copy. */
-export function artworkGraph(p: Project, root: string): Comp[] {
+export function artworkGraph(p: Project, root: string, copying = true): Comp[] {
   const found = new Map<string, Comp>(), visiting = new Set<string>();
   const visit = (id: string) => {
     if (visiting.has(id)) throw new Error('This artwork contains a circular source link.');
@@ -17,7 +17,7 @@ export function artworkGraph(p: Project, root: string): Comp[] {
     visiting.delete(id); found.set(id, c);
   };
   visit(root);
-  if (p.comps.size + found.size > MAX_COMPS) throw new Error(`This copy would exceed the project limit of ${MAX_COMPS} comps.`);
+  if (copying && p.comps.size + found.size > MAX_COMPS) throw new Error(`This copy would exceed the project limit of ${MAX_COMPS} comps.`);
   return [...found.values()];
 }
 
@@ -57,7 +57,7 @@ export async function snapshotArtwork(d: Drawing, residency: Pick<Residency, 'pi
 }
 
 /** Allocate metadata only after snapshots and race checks have succeeded. */
-export function copyArtworkGraph(p: Project, graph: Comp[], root: string, drawings: Map<string, string>, placement: CompLayer): { comps: Comp[]; root: string; overrides: CompLayer['overrides'] } {
+export function copyArtworkGraph(p: Project, graph: Comp[], root: string, drawings: Map<string, string>, placement: CompLayer, preserveNames = false): { comps: Comp[]; root: string; overrides: CompLayer['overrides'] } {
   const used = new Set<string>([...p.comps.keys(), ...p.folders.map(f => f.id)]);
   for (const c of p.comps.values()) {
     for (const l of c.layers) { used.add(l.id); if (l.kind === 'drawings' && l.cel) used.add(l.cel); }
@@ -76,7 +76,7 @@ export function copyArtworkGraph(p: Project, graph: Comp[], root: string, drawin
   const comps = graph.map(source => {
     const c = structuredClone(source), ids = layerIds.get(source.id)!;
     c.id = compIds.get(source.id)!;
-    let suffix = ' copy', n = 2;
+    let suffix = preserveNames && !names.has(source.name) ? '' : ' copy', n = 2;
     while (names.has(`${source.name.slice(0, 80 - suffix.length)}${suffix}`)) suffix = ` copy ${n++}`;
     c.name = `${source.name.slice(0, 80 - suffix.length)}${suffix}`; names.add(c.name);
     c.pins.forEach(pin => { pin.layer = ids.get(pin.layer) ?? pin.layer; });

@@ -1,10 +1,41 @@
 # Next phase: a balanced, simpler UI, with Draw split from Animate
 
+Student profiles are built (2026-10-23): App settings can save up to 20 named device-local setups
+with tool/control visibility, Focus/Simple/Full, drawing options, QuickMenu and range gesture.
+Selection, creation, rename/deletion and setup edits are drafts until Apply. Brush/App settings
+remain available, active tools remain visible until switched away, and Show all tools restores
+visibility. The same choices filter floating and Full painting toolbars. This is an interface
+preference system, not account management or feature permissions. Project files are unchanged.
+
+**Approved order (2026-10-23): My Assets → QuickMenu → Ink & Paint. Motion/performance recording is
+excluded from the current plan.** My Assets' first version now saves device-local snapshots,
+adds independent editable copies across same-size projects, downloads/imports standalone artwork
+files and opens different-size artwork as a native-size project. It preserves source layers and
+frames; live cross-project linking and canvas-size conversion remain later decisions.
+The library now also offers name search and Manage → Rename / Remove with Undo. Renames apply
+to future copies, opened projects and downloads, preserving artwork already used in projects.
+QuickMenu is now built with six configurable actions, a left/right edge button and Q keyboard
+access in Draw/Animate. Menu → App settings → QuickMenu saves its action slots, button edge and
+visibility on this device; Customize opens the same settings from the ring. Apply/Cancel and
+Restore defaults keep preference edits separate from the document. The first Ink & Paint / Auto
+Paint implementation is now built: opt-in on Line, editable ink plus selected paint colour,
+conservative newly enclosed regions, separate planes and combined Undo. See HANDOFF.md for checks.
+
+Playback range is now built (2026-10-23): Range in Flipbook, Clips/Timing and Motion opens
+inclusive Start/End fields with Use current, Apply/Cancel and Whole animation. Each shot/source
+saves its own preview interval with Undo/autosave; audio and visual playback use the same edges.
+Ruler bands show the range in Flipbook/Clips. Preview-only ranges do not trim content or exports.
+Repeat-cycle authoring remains a separate future step; motion/performance recording stays excluded.
+The optional hold-and-drag range gesture is available in App settings → Gestures. It starts off;
+Flipbook/Clips ruler holds preview a range and lifting commits through the same range command.
+Quick ruler drags continue scrubbing. General gesture remapping remains a later feature.
+
 Implementation status (2026-10-23, release checkpoint): the rendering consistency fix and first
 Draw/Animate workspace layouts are built. Draw offers Canvas/Flipbook; Animate offers
 Flipbook/Clips with simplified tools and recoverable control handles. Clips currently reuses
 the exposure timeline. The first project-local Assets shelf and layered source/linked-placement
-editing loop are built, including autosave and standalone archives. Cross-project sharing,
+editing loop are built, including autosave and standalone archives. The My Assets snapshot library
+and portable artwork sharing are now built. Live cross-project linking,
 advanced docking and the new rail remain planned. See HANDOFF.md for actual checks and gaps.
 
 Asset UI polish now includes an edge panel with artwork previews, compact icon controls and
@@ -58,9 +89,17 @@ independently. Studio, double-tap, imports and collection behavior remain availa
 Brush size/opacity controls now show labels and pixel/percent values with larger touch targets.
 Touch retains slider focus, arrows use actual units, Enter/Escape return to drawing, and a short
 usable canvas gets a compact row. Brush settings remain separate from drawing Undo.
-Next bounded slice (proposal for user authorization): review the full Draw → paint background →
-Assets → Animate placement loop with these controls together, fixing any remaining navigation or
-layout friction before expanding the interface.
+The integrated painting/Assets/Animate review now preserves each source's layer/frame on Done
+and re-entry during the session. QuickShape editing is scoped to the current drawing and plane,
+so the old source's action is unavailable after returning to the shot or switching paint targets.
+The multi-frame Flipbook source review is now built: persistent Play/Pause beside scrolling
+44px actions, a one-row track list on short screens, active-track reveal, measured panel height
+and keyboard/accessible hold editing through the existing timing history. Source playback and
+Done/resume continue to use the shared clock. See HANDOFF.md for checks and remaining device gaps.
+
+Ink & Paint / Auto Paint now has its first implementation, with conservative newly
+enclosed-region detection and a single Undo for line plus paint. Motion/performance recording is excluded. The
+user deferred the existing short-screen Clips/view fixture investigation; retain it in HANDOFF.md.
 Targeted iPad/Pencil checks of the complete asset loop remain necessary before claiming device readiness.
 This is not authorization for the full rail rewrite.
 
@@ -95,7 +134,7 @@ available to Animate in the same project as soon as it is created: add/place it,
 Draw to change it or add layers, and return to Animate with edits preserved. Start with assets
 inside the project/local library and package their data in `.2dope` backups. Do not depend on
 watching OS folders or asking students to export/reimport for each change. Cross-project asset
-files/import are a later extension. Preserve source layers and animation when reusing an asset;
+files/import are now available through My Assets snapshots. Preserve source layers and animation when reusing an asset;
 linked placements share edits, while an explicit Make independent copy is a separate action.
 
 **Controls:** the canvas stays central in both modes. Toolbars, menus, layers, colour and the
@@ -241,9 +280,12 @@ pick a colour, undo, hide a layer, play, change opacity, fill, add a track, expo
 taps today and aim for one or two each. Anything that takes more needs a gesture, a shortcut or a
 better default. Ideas, roughly in order of payoff:
 
-1. **QuickMenu (as in Procreate).** Press and hold with a finger, or tap a corner, and a ring
-   of six actions appears under it. Students choose which six (defaults: undo, redo, eraser,
-   eyedropper, new frame, flip view).
+1. **QuickMenu (first version built 2026-10-23).** An explicit edge button or Q opens a ring
+   of six actions in Draw and Animate. Students choose all six in Menu → App settings → QuickMenu
+   (defaults: Undo, Redo, Eraser, Eyedropper, New frame, Flip view), as well as the button's edge and
+   visibility. Q stays available with the button hidden. Settings are local device preferences,
+   with Apply/Cancel and Restore defaults. Canvas holds retain their existing drawing/navigation
+   behavior; a hold-to-open gesture remains a later consideration.
 2. **Recent brushes and colours.** The last five brushes sit at the top of the brush popover,
    and the last eight colours under the colour dot. Most work uses three brushes.
 3. **Colour drop.** Drag the colour dot onto the canvas to fill (hold to adjust the threshold),
@@ -450,9 +492,17 @@ Implementation requirements:
 - Include raster and vector outlines, shapes closed across multiple strokes, cancelled strokes,
   undo/redo and save/reopen in verification. Gap closing needs a conservative, explicit rule.
 
-Noted for later at the user's request. Initial proposed default: black ink and the selected
+Approved after My Assets and QuickMenu on 2026-10-23. Initial proposed default: black ink and the selected
 colour for automatic paint; both colours remain editable. The user expressed no strong colour
-preference. Auto Paint is **not implemented yet** and does not block the Draw/Animate asset loop.
+preference. Auto Paint's first version is **implemented**, opt-in through Options or a configured
+QuickMenu action. It uses only the active drawing's raster/vector ink, a fixed alpha barrier of 24,
+no gap closing, and before/after border connectivity. Existing paint is retained byte-for-byte;
+selections limit painting without serving as walls, and fully masked pixels are excluded. Ink,
+paint and QuickShape replacements use one History command. Detection runs after the committed
+stroke, with no pre-stroke page scan, and is capped at 1280×720 page pixels in Lite and 2048×2048
+in Full. Cancelled input, mask editing, erasing, smudging and Alpha Lock do not trigger paint.
+The on/off and ink-colour preferences are device-only; normal Line/Fill files need no schema change.
+Other-layer references, gap closing, gradient automatic paint and worker-based scanning remain later work.
 
 ## Track types: Ink & Paint, Plain, Painted
 
@@ -878,8 +928,8 @@ These can ship before Phase 1 or alongside it; each is small and visible to stud
 
 **Phase 6: Animate like Dreams**
 
-14. Quick wins: play range, animate on 2s and 3s, the onion popover, colour per frame or scene.
-15. Performance recording, then keyframes in Animate.
+14. Quick wins: play range (first version built 2026-10-23), animate on 2s and 3s, the onion popover, colour per frame or scene.
+15. Keyframes in Animate. Performance recording was excluded by the user on 2026-10-23.
 16. Cycles, draw while it plays, track groups, snapping, audio scrub, a quick camera.
 
 **Phase 7: Story**

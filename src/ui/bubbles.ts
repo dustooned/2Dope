@@ -6,6 +6,7 @@ import type { App, Workspace } from '../app';
 import type { Tool } from '../core/stroke';
 import type { XParams } from '../core/selxform';
 import { decorate } from './icons';
+import { STUDENT_TOOLS, type StudentTool } from '../core/studentprefs';
 
 export type UiLevel = 'clean' | 'simple' | 'full';
 const LEVEL_KEY = '2dope.ui.level';
@@ -134,10 +135,9 @@ export class Bubbles {
     stage.append(this.modes, this.tools, this.ctx);
     // inside the stage, so it never sits on a side panel
     stage.append(this.levelBtn);
-    try {
-      const v = localStorage.getItem(LEVEL_KEY);
-      if (v === 'clean' || v === 'simple' || v === 'full') this.level = v;
-    } catch { /* default */ }
+    this.level = app.interfaceLevel;
+    const levelChanged = app.onInterfaceLevelChange;
+    app.onInterfaceLevelChange = () => { levelChanged(); this.setLevel(app.interfaceLevel); };
     this.setLevel(this.level, false);
     window.addEventListener('resize', () => setTimeout(() => this.measure(), 0));
   }
@@ -183,6 +183,7 @@ export class Bubbles {
 
   setLevel(l: UiLevel, remember = true): void {
     this.level = l;
+    this.app.interfaceLevel = l;
     for (const x of LEVELS) document.body.classList.toggle(`ui-${x}`, x === l);
     this.levelBtn.textContent = l === 'clean' ? '○' : l === 'simple' ? '◐' : '●';
     this.levelBtn.title = `Interface: ${l === 'clean' ? 'Focus' : l === 'simple' ? 'Simple' : 'Full'}. Tap to choose how much shows; hold to reset the screen.`;
@@ -278,11 +279,12 @@ export class Bubbles {
     return !!this.hooks.flip?.on() && (this.app.workspace === 'draw' || this.app.workspace === 'animate');
   }
 
-  private toolsFor(ws: Workspace): [ToolKey, string, string][] {
+  private toolsFor(ws: Workspace, expanded = false): [ToolKey, string, string][] {
     const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso'], ['adjust', 'Adjust: hue, saturation, brightness, blur', 'adjust']];
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
+    if (expanded && (ws === 'draw' || ws === 'animate')) return [...draw, ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'gallery']];
     if ((ws === 'draw' || ws === 'animate') && this.level === 'clean') return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', '']];
     if (ws === 'animate' && this.level !== 'full' && !this.moreTools) return [draw[0]!, draw[3]!, draw[4]!, draw[5]!, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['more', 'More tools', 'gear']];
     if (ws === 'animate') return [...draw, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'gallery'], ['more', 'Fewer tools', 'gear']];
@@ -474,12 +476,18 @@ export class Bubbles {
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws));
     this.modeName.textContent = { animate: 'Animate', draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
-    if (sig === this.sig) return;
-    this.sig = sig;
+    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}`;
+    if (paintingSig === this.sig) return;
+    this.sig = paintingSig;
 
     // tool bubbles for this mode
     this.tools.replaceChildren();
-    for (const [k, label0, icon0] of this.toolsFor(ws)) {
+    const tools = this.toolsFor(ws);
+    if ((ws === 'draw' || ws === 'animate') && !tools.some(([k]) => k === cur) && STUDENT_TOOLS.some(([id]) => id === cur) && !a.studentUI.tools[cur as StudentTool]) {
+      const active = this.toolsFor(ws, true).find(([k]) => k === cur); if (active) tools.push(active);
+    }
+    for (const [k, label0, icon0] of tools) {
+      if ((ws === 'draw' || ws === 'animate') && STUDENT_TOOLS.some(([id]) => id === k) && !a.studentUI.tools[k as StudentTool] && k !== cur) continue;
       const pause = k === 'play' && a.playing;
       const label = pause ? 'Pause' : label0, icon = pause ? 'pause' : icon0;
       const b = icon ? this.bubble(label, icon, label) : el('button', { type: 'button', class: 'bub bub-color', title: 'Colour', 'aria-label': 'Colour' });
@@ -551,13 +559,17 @@ export class Bubbles {
         this.chip('Stronger', 'Carry more paint', false, () => { a.smudgeStrength = Math.min(1, a.smudgeStrength + 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thicker'),
       );
     } else if ((ws === 'draw' || ws === 'animate') && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
-      add(
-        this.chip('\ud83d\udd8c\ufe0f Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)),
-        this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')),
-        this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')),
-        this.symmetryChip(),
-        ...this.guideChips(),
-      );
+      if (a.studentUI.controls.inkPaint) add(this.chip('Ink & Paint', a.autoPaintSupported ? 'Ink & Paint: fill newly closed areas after inking. Existing paint stays.' : 'Ink & Paint: this page exceeds the automatic paint limit for this device.', a.inkPaint.enabled, () => a.setInkPaint(!a.inkPaint.enabled), 'fillplane'));
+      if (a.inkPaint.enabled && a.studentUI.controls.inkPaint) {
+        const ink = el('label', { class: 'ink-paint-colour', title: 'Ink colour (automatic paint uses the main Colour)' }, 'Ink');
+        const input = el('input', { type: 'color', 'aria-label': 'Ink colour', value: a.inkPaint.ink });
+        input.addEventListener('change', () => a.setInkColor(input.value)); ink.append(input); add(ink);
+        add(this.chip('Paint colour', `Automatic paint: ${a.color}. Choose paint colour.`, false, b => this.hooks.colorPanel(b), 'fillplane'));
+      }
+      add(this.chip('\ud83d\udd8c\ufe0f Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)));
+      if (a.studentUI.controls.planes) add(this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')), this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
+      if (a.studentUI.controls.symmetry) add(this.symmetryChip());
+      if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
       if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
     } else if (cur === 'fill') {
       // a gradient just filled: drag its handles on the canvas, then keep it or put it back

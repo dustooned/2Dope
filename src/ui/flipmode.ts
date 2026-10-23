@@ -5,8 +5,10 @@ import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick, type Ctx
 import { askText, confirmBox } from './dialogs';
 import { frameMenu } from './framemenu';
 import { decorate } from './icons';
+import { PlaybackRangeControl, markPlaybackRange } from './playbackrange';
+import { PlaybackRangeGesture } from './playbackrangegesture';
 
-/** Draw's bottom view: 'flipbook' (the default) or 'timeline'. (The old Flip mode's key is not read.) */
+/** Draw's saved Canvas/Flipbook view. (The old Flip mode's key is not read.) */
 const KEY = '2dope.draw.view';
 /** The mini flipbook: floating (with where it was), or docked at the bottom. */
 const MINI_KEY = '2dope.flip.mini';
@@ -33,10 +35,10 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
  * every frame of time for up to three tracks (the shot's drawing layers, front first), with held
  * drawings spanning their frames. Swipe the strip to move through time, tap a frame to go there,
  * tap it again (or press and hold) for its options, and drag the handle on the current frame to
- * make it hold longer. + Frame adds a page after this frame (on a held drawing it ends the hold
- * here; hold the button to add after the whole hold). It is Draw's default view; Timeline swaps in
- * the traditional strip, and the Focus level always shows the flipbook. Everything edits the same
- * layers and timing that Timing and Motion show.
+ * make it hold longer. + Frame adds a page after the whole hold; hold the button to end the hold
+ * here instead. Draw offers Canvas/Flipbook, Animate offers Flipbook/Clips. Short screens show
+ * one track row with vertical scrolling; up to three fit on taller screens. Everything edits
+ * the same layers and timing that Timing and Motion show.
  */
 export class FlipMode {
   readonly row = el('div', { class: 'flip-row', role: 'region', 'aria-label': 'Flipbook' });
@@ -46,12 +48,15 @@ export class FlipMode {
   onChange: () => void = () => {};
   // the header's buttons stay the same elements while playing, so a tap on Pause is never lost
   private readonly head = el('div', { class: 'flip-head', role: 'toolbar', 'aria-label': 'Flipbook controls' });
+  private readonly actions = el('div', { class: 'flip-actions' });
   private readonly play = el('button', { type: 'button', class: 'flip-btn' });
   private readonly count = el('span', { class: 'flip-count', 'aria-live': 'off' });
   private readonly scroll = el('div', { class: 'flip-scroll' });
   private readonly grid = el('div', { class: 'flip-grid' });
   private readonly playhead = el('div', { class: 'flip-playhead', 'aria-hidden': 'true' });
   private playing: boolean | null = null;
+  private readonly range: PlaybackRangeControl;
+  private rangeGesture?: PlaybackRangeGesture;
   /** How wide one frame is on the strip (zoom). */
   private cell = CELL;
   /** Floating mini flipbook (its top-left in the stage), or null when docked at the bottom. */
@@ -59,8 +64,10 @@ export class FlipMode {
   /** Set while a swipe or trim is under way: the strip does not scroll itself then. */
   private dragging = false;
   private dragged = false;
+  private activeTrack = '';
 
   constructor(private readonly app: App, stage: HTMLElement) {
+    this.range = new PlaybackRangeControl(app); this.range.button.classList.add('flip-btn');
     const btn = (label: string, title: string, icon: string, run: () => void, hold?: () => void, cls = 'flip-btn', show = label) => {
       const b = el('button', { type: 'button', class: cls, title, 'aria-label': label }, show);
       decorate(b, icon);
@@ -81,7 +88,8 @@ export class FlipMode {
     const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
     onion.classList.add('flip-onion');
     const fit = btn('Fit', 'Fit the page to the screen', 'fit', () => this.app.fit(), undefined, 'flip-btn flip-icon flip-adv', '');
-    this.head.append(this.play, prev, this.count, next, add, onion, track, fit, done);
+    this.actions.append(prev, this.count, next, this.range.button, add, onion, track, fit, done);
+    this.head.append(this.play, this.actions);
     this.grid.append(this.playhead);
     this.scroll.append(this.grid);
     // the handle (Procreate Dreams): drag it up to float a mini flipbook, back down to dock it
@@ -89,6 +97,13 @@ export class FlipMode {
     handle.append(el('span', { class: 'flip-handle-bar', 'aria-hidden': 'true' }));
     this.row.append(handle, this.head, this.scroll);
     stage.append(this.row);
+    // Short-screen CSS changes the visible tracks without rebuilding the document.
+    new ResizeObserver(() => {
+      if (this.row.hidden) return;
+      stage.style.setProperty('--flip-h', this.mini ? '0px' : `${this.row.offsetHeight + 16}px`);
+      this.revealActiveTrack();
+      app.refit();
+    }).observe(this.row);
     this.wireStrip();
     this.wireHandle(handle, stage);
     try { const m = JSON.parse(localStorage.getItem(MINI_KEY) ?? 'null'); if (m && Number.isFinite(m.x)) this.mini = m; } catch { /* docked */ }
@@ -126,6 +141,8 @@ export class FlipMode {
 
   update(): void {
     const app = this.app;
+    this.range.update();
+    this.rangeGesture?.update();
     const shown = this.shown;
     if (document.body.classList.contains('flipmode') !== shown) {
       document.body.classList.toggle('flipmode', shown);
@@ -155,6 +172,7 @@ export class FlipMode {
       this.build(tracks, len);
     }
     this.mark(len);
+    markPlaybackRange(app, this.grid, this.cell, 0, LABEL);
   }
 
   /** The strip: one row per track, each drawing a cell as wide as it is held. */
@@ -217,10 +235,11 @@ export class FlipMode {
       this.grid.append(row);
     }
     // the strip shows three tracks at a time (the rest scroll); the mini one shows the track you draw on
-    this.scroll.style.maxHeight = this.mini ? `${22 + ROW + 2}px` : `${22 + Math.min(3, Math.max(1, tracks.length)) * ROW + 2}px`;
+    this.scroll.style.setProperty('--flip-tracks-height', this.mini ? `${22 + ROW + 2}px` : `${22 + Math.min(3, Math.max(1, tracks.length)) * ROW + 2}px`);
     this.placeMini();
     // the page fits above the docked panel (a floating one leaves the page its full height)
     requestAnimationFrame(() => {
+      if (this.row.hidden) return;
       const h = this.row.offsetHeight;
       const stage = this.row.parentElement;
       if (stage) stage.style.setProperty('--flip-h', this.mini ? '0px' : `${h + 16}px`);
@@ -414,6 +433,11 @@ export class FlipMode {
     this.count.textContent = `${Math.min(f + 1, len)} / ${len}`;
     this.playhead.style.left = `${LABEL + f * this.cell}px`;
     const activeId = app.project.activeLayer;
+    const activeTrack = `${app.project.activeComp}:${activeId}`;
+    if (this.activeTrack !== activeTrack) {
+      this.activeTrack = activeTrack;
+      this.revealActiveTrack();
+    }
     for (const row of this.grid.querySelectorAll<HTMLElement>('.flip-track')) {
       const mine = row.dataset.id === activeId;
       for (const c of row.querySelectorAll<HTMLElement>('.flip-cel')) {
@@ -432,6 +456,12 @@ export class FlipMode {
       const left = this.scroll.scrollLeft;
       if (app.playing || x < left + LABEL + this.cell || x > left + w - this.cell * 2) this.scroll.scrollLeft = Math.max(0, x - w / 2);
     }
+  }
+
+  private revealActiveTrack(): void {
+    const row = [...this.grid.querySelectorAll<HTMLElement>('.flip-track')].find(r => r.dataset.id === this.app.project.activeLayer);
+    if (row && (row.offsetTop < this.scroll.scrollTop || row.offsetTop + ROW > this.scroll.scrollTop + this.scroll.clientHeight))
+      this.scroll.scrollTop = Math.max(0, row.offsetTop + ROW - this.scroll.clientHeight);
   }
 
   /** The frame under a point of the strip, and its track. */
@@ -562,6 +592,9 @@ export class FlipMode {
     };
     s.addEventListener('pointerup', end);
     s.addEventListener('pointercancel', end);
+    this.rangeGesture = new PlaybackRangeGesture(this.app, s, () => ({ parent: this.grid, cell: this.cell, origin: 0, offset: LABEL }), () => {
+      start = null; rulerTap = 0; this.dragging = false; this.dragged = true;
+    });
     // tap: go to that frame; tap the current frame again for its options
     s.addEventListener('click', (e) => {
       if (this.dragged) { this.dragged = false; return; }
@@ -670,10 +703,30 @@ export class FlipMode {
 
   /** The handle on the current frame's right edge: drag to hold it for more or fewer frames. */
   private trimHandle(cell: HTMLElement): HTMLElement {
-    const h = el('div', { class: 'flip-trim', title: 'Drag to show this drawing for more or fewer frames', role: 'slider', 'aria-label': 'Frame duration' });
+    const length = Number(cell.dataset.len);
+    const h = el('div', { class: 'flip-trim', title: 'Drag or use arrow keys to change the number of frames', role: 'slider', tabindex: '0', 'data-own-keys': '', 'aria-label': 'Frame duration', 'aria-orientation': 'horizontal', 'aria-valuemin': '1', 'aria-valuemax': String(Math.max(1000000, length)), 'aria-valuenow': String(length), 'aria-valuetext': `${length} frame${length === 1 ? '' : 's'}` });
+    h.addEventListener('keydown', e => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); this.app.focusCanvas(); return; }
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(e.key)) return;
+      e.preventDefault();
+      const app = this.app;
+      if (app.strokeActive || app.playing) return;
+      const i = Number(cell.dataset.i), before = app.project.exposures, current = before[i];
+      if (!current) return;
+      const delta = (e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 1) * (e.shiftKey ? 10 : 1);
+      const n = e.key === 'Home' ? 1 : Math.max(1, Math.min(Math.max(1000000, current.length), current.length + delta));
+      if (n === current.length) return;
+      const after = before.map((x, k) => k === i ? { ...x, length: n } : x);
+      app.previewExposures(after);
+      app.commitExposures('Frame duration', before, after);
+      this.sig = ''; this.update();
+      this.grid.querySelector<HTMLElement>('.flip-cel.on .flip-trim')?.focus({ preventScroll: true });
+    });
     h.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       e.preventDefault();
+      h.focus({ preventScroll: true });
       const app = this.app;
       const i = Number(cell.dataset.i);
       const before = app.project.exposures;
@@ -689,13 +742,15 @@ export class FlipMode {
       window.addEventListener('pointerdown', other, true);
       const next0 = before[i + 1]?.length ?? 0;
       const move = (ev: PointerEvent) => {
-        let n = Math.max(1, len0 + Math.round((ev.clientX - x0) / this.cell));
+        let n = Math.max(1, Math.min(Math.max(1000000, len0), len0 + Math.round((ev.clientX - x0) / this.cell)));
         const roll = (free || ev.altKey) && next0 > 0;
         if (roll) n = Math.min(n, len0 + next0 - 1);
         if (n === (after[i]?.length ?? len0) && roll === (after[i + 1]?.length !== next0)) return;
         after = before.map((x, k) => (k === i ? { ...x, length: n } : roll && k === i + 1 ? { ...x, length: next0 - (n - len0) } : x));
         cell.style.width = `${n * this.cell - 3}px`;
         cell.dataset.len = String(n);
+        h.setAttribute('aria-valuenow', String(n));
+        h.setAttribute('aria-valuetext', `${n} frame${n === 1 ? '' : 's'}`);
         // free trim: the next drawing starts later (or earlier) and ends where it did
         const next = cell.parentElement?.querySelector<HTMLElement>(`.flip-cel[data-i="${i + 1}"]`);
         if (next) {
@@ -707,6 +762,7 @@ export class FlipMode {
         app.previewExposures(after);
       };
       const up = () => {
+        const focused = document.activeElement === h;
         h.removeEventListener('pointermove', move);
         h.removeEventListener('pointerup', up);
         h.removeEventListener('pointercancel', up);
@@ -716,6 +772,7 @@ export class FlipMode {
         app.commitExposures('Frame duration', before, after);
         this.sig = '';
         this.update();
+        if (focused) this.grid.querySelector<HTMLElement>('.flip-cel.on .flip-trim')?.focus({ preventScroll: true });
       };
       h.addEventListener('pointermove', move);
       h.addEventListener('pointerup', up);

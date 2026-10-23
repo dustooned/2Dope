@@ -11,7 +11,7 @@ export class AudioPlayback {
   private key = '';
   private queued = 0;
   private voices: SoundVoice[] = [];
-  private origin = { t: 0, f: 0, fps: 12, len: 1 };
+  private origin = { t: 0, f: 0, fps: 12, len: 1, start: 0 };
   private starting = false;
   private project: App['project'] | null = null;
   private auditioned = -1;
@@ -43,8 +43,9 @@ export class AudioPlayback {
       if (this.nodes.size || this.starting) this.stop();
       return;
     }
-    const key = `${c.id}:${c.fps}:${app.compEnd}`;
-    const expected = this.context ? (this.origin.f + (this.context.currentTime - this.origin.t) * this.origin.fps) % this.origin.len : -10;
+    const range = app.playbackRange;
+    const key = `${c.id}:${c.fps}:${range.start}:${range.end}`;
+    const expected = this.context ? this.origin.start + ((this.origin.f - this.origin.start + (this.context.currentTime - this.origin.t) * this.origin.fps) % this.origin.len + this.origin.len) % this.origin.len : -10;
     const restart = this.project !== p || this.key !== key || (!this.starting && Math.abs(expected - app.frame) > 1.5);
     if (restart) {
       this.stop(); this.project = p; this.key = key; this.starting = true;
@@ -56,7 +57,8 @@ export class AudioPlayback {
       void Promise.all([...new Set(this.voices.map(v => v.asset))].map(id => this.bank.load(p, id))).then(() => {
         if (generation !== this.generation || !app.playing || app.project !== p || p.comp.id !== c.id) return;
         this.starting = false;
-        this.origin = { t: ctx.currentTime + 0.015, f: app.frame, fps: c.fps, len: app.compEnd };
+        const range = app.playbackRange;
+        this.origin = { t: ctx.currentTime + 0.015, f: app.frame, fps: c.fps, len: range.end - range.start, start: range.start };
         this.fillQueue();
       }).catch(e => {
         if (generation !== this.generation) return;
@@ -87,7 +89,7 @@ export class AudioPlayback {
   private fillQueue(): void {
     const ctx = this.context!;
     while (this.origin.t + this.queued < ctx.currentTime + 0.4) {
-      const data = mixSound(this.voices, this.bank, this.origin.f / this.origin.fps + this.queued, Math.round(SOUND_RATE / 4), SOUND_RATE, this.origin.len / this.origin.fps);
+      const data = mixSound(this.voices, this.bank, this.origin.f / this.origin.fps + this.queued, Math.round(SOUND_RATE / 4), SOUND_RATE, this.origin.len / this.origin.fps, this.origin.start / this.origin.fps);
       const buffer = ctx.createBuffer(2, data[0].length, SOUND_RATE);
       buffer.copyToChannel(data[0], 0); buffer.copyToChannel(data[1], 1);
       const source = ctx.createBufferSource(); source.buffer = buffer; source.connect(ctx.destination);

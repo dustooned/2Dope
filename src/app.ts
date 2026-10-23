@@ -5,7 +5,8 @@ import { loadGrain, loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
-import { History } from './core/history';
+import { History, type Command } from './core/history';
+import { AUTO_PAINT_KEY, autoPaintLimit, newlyEnclosed, readInkPaint } from './fill/autopaint';
 import { newSeed } from './core/rng';
 import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type Tool } from './core/stroke';
 import { DabWalker } from './brush/dabs';
@@ -19,6 +20,8 @@ import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
+import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type InterfaceLevel } from './core/studentprefs';
 import { staticProp, valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { guardTouchContextMenus } from './ui/touchcontext';
@@ -120,6 +123,7 @@ interface FillEntry {
 }
 
 interface LiveStroke {
+  autoPaint?: AutoPaintStroke;
   record: StrokeRecord;
   /** The drawing being painted (fixed for the whole stroke). */
   drawing: Drawing;
@@ -139,6 +143,8 @@ interface LiveStroke {
   /** Set once QuickShape snapped the stroke: the recognised shape and the pen point at the snap. */
   shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; profile: number[]; raw: StrokePoint[] };
 }
+
+interface AutoPaintStroke { color: string; selection: Uint8Array | null; mask: Drawing | null }
 
 interface TouchInfo {
   x: number;
@@ -310,7 +316,38 @@ export class App {
   /** Which pixel plane brushes and the eraser write to. Fill always sits under line. */
   plane: Plane = 'line';
   fillOptions: FillOptions = { ...DEFAULT_FILL, ...(loadJSON<Partial<FillOptions>>(FILL_KEY) ?? {}) };
-  fingerPaint = false;
+  /** Optional combined workflow. Existing Line/Fill pixels and file schema are unchanged. */
+  inkPaint = readInkPaint(loadJSON<unknown>(AUTO_PAINT_KEY));
+  get autoPaintSupported(): boolean { return this.docW * this.docH <= autoPaintLimit(this.device.lite); }
+  setInkPaint(enabled: boolean): void {
+    if (this.strokeActive) return;
+    if (enabled && !this.autoPaintSupported) { this.onNotice?.(`Auto Paint supports up to ${autoPaintLimit(this.device.lite).toLocaleString()} pixels on this device. Use a smaller canvas.`); return; }
+    this.inkPaint.enabled = enabled;
+    if (enabled) { this.setSmudging(false); this.setPlane('line'); if (this.tool !== 'brush' && this.tool !== 'pen') this.setTool('brush'); }
+    saveJSON(AUTO_PAINT_KEY, this.inkPaint); this.onToolChange();
+  }
+  setInkColor(ink: string): void {
+    if (this.strokeActive || !/^#[0-9a-f]{6}$/i.test(ink)) return;
+    this.inkPaint.ink = ink; saveJSON(AUTO_PAINT_KEY, this.inkPaint); this.onToolChange();
+  }
+  fingerPaint = loadJSON<unknown>(FINGER_PAINT_KEY) === true;
+  studentUI = readStudentUI(loadJSON<unknown>(STUDENT_UI_KEY));
+  interfaceLevel: InterfaceLevel = (() => { try { const v = localStorage.getItem('2dope.ui.level'); return v === 'clean' || v === 'full' ? v : 'simple'; } catch { return 'simple'; } })();
+  onInterfaceLevelChange: () => void = () => {};
+  setStudentUI(value: StudentUI): void {
+    if (this.strokeActive) return;
+    this.studentUI = readStudentUI(value); saveJSON(STUDENT_UI_KEY, this.studentUI); this.onToolChange();
+  }
+  setInterfaceLevel(level: InterfaceLevel): void {
+    if (this.strokeActive) return;
+    this.interfaceLevel = level;
+    try { localStorage.setItem('2dope.ui.level', level); } catch { /* session preference */ }
+    this.onInterfaceLevelChange();
+  }
+  setFingerPaint(enabled: boolean): void {
+    if (this.strokeActive) return;
+    this.fingerPaint = enabled; saveJSON(FINGER_PAINT_KEY, enabled); this.onToolChange();
+  }
   uiHidden = false;
 
   readonly stats: InputStats = { pointerType: '-', pressure: 0, tilt: 0, hz: 0, coalesced: 1 };
@@ -479,14 +516,15 @@ export class App {
    * The last snapped shape while it can still be changed (Edit shape): the hand-drawn points, the
    * stroke it became and its undo step. Cleared by any other stroke or edit.
    */
-  lastShape: { raw: StrokePoint[]; choice: ShapeChoice | 'stroke'; rec: StrokeRecord; drawing: Drawing; plane: Plane; canvas: HTMLCanvasElement; cmd: ReturnType<History['peekUndo']> } | null = null;
+  lastShape: { raw: StrokePoint[]; choice: ShapeChoice | 'stroke'; rec: StrokeRecord; drawing: Drawing; plane: Plane; canvas: HTMLCanvasElement; cmd: ReturnType<History['peekUndo']>; autoPaint?: AutoPaintStroke } | null = null;
   /** Main shows or hides the Edit shape button. */
   onShapeChange: () => void = () => {};
 
   /** Is the Edit shape menu still valid (nothing done since the snap)? */
   get shapeEditable(): boolean {
     const s = this.lastShape;
-    return !!s && !this.live && this.history.peekUndo() === s.cmd && this.project.drawings.get(s.drawing.id) === s.drawing;
+    return !!s && !this.live && this.history.peekUndo() === s.cmd && this.project.drawings.get(s.drawing.id) === s.drawing &&
+      (this.editingMask ? this.maskDrawing : this.drawing) === s.drawing && (this.editingMask ? 'line' : this.plane) === s.plane;
   }
 
   /**
@@ -501,6 +539,9 @@ export class App {
       return;
     }
     if (choice === s.choice) return;
+    if (s.autoPaint?.mask && !this.residency.isReady(s.autoPaint.mask)) {
+      void this.residency.ensure(s.autoPaint.mask); this.onNotice?.('Loading the layer mask. Try Edit shape again in a moment.'); return;
+    }
     let pts: StrokePoint[];
     const last = s.raw[s.raw.length - 1]!;
     if (choice === 'stroke') pts = s.raw.map((q) => ({ ...q }));
@@ -518,13 +559,15 @@ export class App {
     // take the old shape away, then commit the new one
     this.history.undo();
     const d = s.drawing;
+    const oldVectors = d.vectors;
     const rec: StrokeRecord = { ...s.rec, id: newStrokeId(), points: pts };
     const label = choice === 'stroke' ? 'Keep my stroke' : (SHAPE_CHOICES.find((c) => c.id === choice)?.label ?? choice).replace(/^\S+\s/, '');
     if (rec.tool === 'pen') {
       const id = rec.id;
       const copies = this.symmetryVectors(rec);
       const ids = new Set([id, ...copies.map((c) => c.id)]);
-      this.history.push(
+      d.vectors = [...d.vectors, rec, ...copies];
+      this.recordInk(
         {
           label: `Vector ${label.toLowerCase()}`,
           drawings: [d],
@@ -537,7 +580,7 @@ export class App {
             this.touch(d);
           },
         },
-        false,
+        d, s.autoPaint, oldVectors,
       );
     } else {
       this.raster.bind(s.canvas);
@@ -547,7 +590,7 @@ export class App {
       const c = this.raster.commit(false);
       if (c) {
         const canvas = s.canvas;
-        this.history.push({
+        this.recordInk({
           label,
           drawings: [d],
           do: () => {
@@ -558,8 +601,7 @@ export class App {
             putPixels(canvas, c.rect, c.before);
             this.touch(d);
           },
-        });
-        this.touch(d);
+        }, d, s.autoPaint, oldVectors, c);
       }
     }
     s.rec = rec;
@@ -2144,6 +2186,53 @@ export class App {
     return prepareFill(alpha, this.docW, this.docH, this.fillOptions);
   }
 
+  /** Compare only committed current-drawing ink, reconstructing pre-stroke raster pixels. */
+  private inkAlpha(d: Drawing, vectors: StrokeRecord[], before?: { rect: Rect; before: ImageData }): Uint8Array {
+    this.fillScratch ??= makeCanvas(this.docW, this.docH);
+    const g = this.fillScratch.getContext('2d', { willReadFrequently: true })!;
+    g.clearRect(0, 0, this.docW, this.docH); g.drawImage(d.line, 0, 0);
+    if (before) g.putImageData(before.before, before.rect.x, before.rect.y);
+    for (const v of vectors) drawVectorStroke(g, v, this.lengthOf(v));
+    const rgba = g.getImageData(0, 0, this.docW, this.docH).data, alpha = new Uint8Array(this.docW * this.docH);
+    for (let i = 0; i < alpha.length; i++) alpha[i] = rgba[i * 4 + 3]!;
+    return alpha;
+  }
+
+  private automaticPaint(d: Drawing, ctx: AutoPaintStroke, oldVectors: StrokeRecord[], raster?: { rect: Rect; before: ImageData }): FillEntry | null {
+    if (!this.autoPaintSupported) throw new Error('This page exceeds the Auto Paint limit for this device. Ink was kept; use a smaller canvas for automatic paint.');
+    const beforeAlpha = this.inkAlpha(d, oldVectors, raster), afterAlpha = this.inkAlpha(d, d.vectors);
+    const area = newlyEnclosed(beforeAlpha, afterAlpha, this.docW, this.docH);
+    if (!area) return null;
+    if (ctx.mask && !this.residency.isReady(ctx.mask)) throw new Error('The layer mask is still loading. Ink was kept; automatic paint was skipped.');
+    const mask = ctx.mask ? this.inkAlpha(ctx.mask, ctx.mask.vectors) : null;
+    const rect = { x: area.x0, y: area.y0, w: area.x1 - area.x0 + 1, h: area.y1 - area.y0 + 1 };
+    const before = d.fill?.getContext('2d')!.getImageData(rect.x, rect.y, rect.w, rect.h) ?? new ImageData(rect.w, rect.h);
+    const after = new ImageData(new Uint8ClampedArray(before.data), rect.w, rect.h), rgb = this.rgbOf(ctx.color);
+    let count = 0;
+    for (let y = 0; y < rect.h; y++) for (let x = 0; x < rect.w; x++) {
+      const i = (rect.y + y) * this.docW + rect.x + x, o = (y * rect.w + x) * 4;
+      if (!area.mask[i] || (ctx.selection && !ctx.selection[i]) || mask?.[i] === 255 || before.data[o + 3]! > 0) continue;
+      after.data[o] = (rgb >> 16) & 255; after.data[o + 1] = (rgb >> 8) & 255; after.data[o + 2] = rgb & 255; after.data[o + 3] = 255; count++;
+    }
+    if (!count) return null;
+    const target = planeCanvas(d, 'fill'); putPixels(target, rect, after);
+    return { d, target, rect, before, after };
+  }
+
+  /** Both planes are final before History/autosave is notified. Redo never reruns detection. */
+  private recordInk(cmd: Command, d: Drawing, ctx: AutoPaintStroke | undefined, oldVectors: StrokeRecord[], raster?: { rect: Rect; before: ImageData }): void {
+    let fill: FillEntry | null = null;
+    if (ctx) try { fill = this.automaticPaint(d, ctx, oldVectors, raster); }
+    catch (e) { this.onNotice?.(e instanceof Error ? e.message : 'Automatic paint could not finish. Ink was kept.'); }
+    const patch = fill;
+    this.history.push(patch ? {
+      label: 'Ink & Paint', drawings: [d],
+      do: () => { putPixels(patch.target, patch.rect, patch.after); cmd.do(); },
+      undo: () => { putPixels(patch.target, patch.rect, patch.before); cmd.undo(); },
+    } : cmd);
+    this.touch(d);
+  }
+
   /** The current drawing's fill map, reused while its lines stay the same. */
   private fillMapFor(d: Drawing): FillMap {
     const key = `${JSON.stringify(this.fillOptions)}|${d.vectors.length}|${this.referDrawings(this.frame)
@@ -2725,6 +2814,35 @@ export class App {
   /** The comp's length in frames: what playback loops over. */
   get compEnd(): number {
     return Math.max(1, compLength(this.project.comp, this.project.comps));
+  }
+
+  /** Saved edges are clamped for preview only, so Undo of a shortening restores the full range. */
+  get playbackRange(): PlaybackRange { return playbackBounds(this.project.comp.playbackRange, this.compEnd); }
+
+  /** Optional hold-and-drag ruler gesture, remembered on this device rather than in artwork. */
+  rangeGestureEnabled = readRangeGesture(loadJSON<unknown>(RANGE_GESTURE_KEY));
+  setRangeGestureEnabled(enabled: boolean): void {
+    if (this.strokeActive) return;
+    this.rangeGestureEnabled = enabled; saveJSON(RANGE_GESTURE_KEY, enabled); this.onFrameChange();
+  }
+
+  setPlaybackRange(range: PlaybackRange | null): boolean {
+    if (this.strokeActive) return false;
+    if (range && (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0 || range.end <= range.start || range.end > Math.min(1_000_000, this.compEnd))) return false;
+    const project = this.project, c = project.comp, before = c.playbackRange ? { ...c.playbackRange } : undefined;
+    const after = range ? { ...range } : undefined;
+    if (before?.start === after?.start && before?.end === after?.end) return true;
+    if (this.playing) this.togglePlay();
+    const apply = (value: PlaybackRange | undefined) => {
+      // CompEditor snapshots can replace comp objects while keeping their ids.
+      const target = project.comps.get(c.id); if (!target) return;
+      if (value) target.playbackRange = { ...value }; else delete target.playbackRange;
+      if (this.playing) this.togglePlay();
+      this.playClock = { t0: performance.now(), f0: this.frame };
+      this.onFrameChange(); this.onDocChanged();
+    };
+    this.history.push({ label: range ? 'Playback range' : 'Whole animation', do: () => apply(after), undo: () => apply(before) }, false);
+    return true;
   }
 
   get drawing(): Drawing {
@@ -3462,7 +3580,9 @@ export class App {
     if (this.strokeActive) return;
     this.leaveBlankPage();
     const len = this.compEnd;
-    const next = ((Math.round(f) % len) + len) % len;
+    let next = ((Math.round(f) % len) + len) % len;
+    const range = this.playbackRange;
+    if (this.playing && (next < range.start || next >= range.end)) next = range.start;
     if (next === this.frame) return;
     this.spatial = null;
     this.frame = next;
@@ -3501,6 +3621,10 @@ export class App {
     if (this.strokeActive) return;
     this.leaveBlankPage();
     this.playing = !this.playing;
+    const range = this.playbackRange;
+    if (this.playing && (this.frame < range.start || this.frame >= range.end)) {
+      this.frame = range.start; this.requestRender();
+    }
     this.playClock = { t0: performance.now(), f0: this.frame };
     this.onFrameChange();
   }
@@ -3556,8 +3680,7 @@ export class App {
   }
 
   private tickPlayback(now: number): void {
-    const len = this.compEnd;
-    const f = (this.playClock.f0 + Math.floor(((now - this.playClock.t0) * this.project.fps) / 1000)) % len;
+    const f = loopFrame(this.playClock.f0 + Math.floor(((now - this.playClock.t0) * this.project.fps) / 1000), this.playbackRange);
     if (f !== this.frame) {
       this.frame = f;
       this.requestRender();
@@ -4310,13 +4433,16 @@ export class App {
       return;
     }
     const plane: Plane = tool === 'pen' || this.editingMask ? 'line' : this.plane;
+    const combined = this.inkPaint.enabled && isPaintingWorkspace(this.workspace) && !this.editingMask && plane === 'line' && (tool === 'brush' || tool === 'pen');
+    const mask = combined && this.project.layer.mask ? this.project.drawings.get(this.project.layer.mask) ?? null : null;
+    if (mask && !this.residency.isReady(mask)) { this.waitForPixels(e, drawing, mask); return; }
     const canvas = planeCanvas(drawing, plane);
     this.raster.bind(canvas);
     const record: StrokeRecord = {
       id: newStrokeId(),
       tool,
       brush: tool === 'pen' ? (({ tipImage: _t, grainImage: _g, ...rest }) => rest)(cloneBrush(this.brush)) : cloneBrush(this.brush),
-      color: this.color,
+      color: combined ? this.inkPaint.ink : this.color,
       seed: newSeed(),
       points: [],
       ...(this.symmetry !== 'off' ? { sym: { mode: this.symmetry, cx: this.docW / 2, cy: this.docH / 2 } } : {}),
@@ -4324,6 +4450,7 @@ export class App {
     const t0 = e.timeStamp;
     const first = this.toPoint(e, t0);
     this.live = {
+      ...(combined && !this.project.layer.alphaLock ? { autoPaint: { color: this.color, selection: this.spatialSelection?.mask.slice() ?? null, mask } } : {}),
       record,
       drawing,
       canvas,
@@ -4348,20 +4475,20 @@ export class App {
   }
 
   /** Strokes that began on a drawing whose pixels were still loading, oldest first. */
-  private waits: { id: number; drawing: Drawing; down: PointerEvent; moves: PointerEvent[]; up: boolean }[] = [];
+  private waits: { id: number; drawing: Drawing; down: PointerEvent; moves: PointerEvent[]; up: boolean; cancelled: boolean }[] = [];
 
   /** The waiting stroke this pointer is still drawing, if any. */
   private get waiting(): (typeof this.waits)[number] | undefined {
     return this.waits.find((w) => !w.up);
   }
 
-  private waitForPixels(e: PointerEvent, drawing: Drawing): void {
+  private waitForPixels(e: PointerEvent, drawing: Drawing, mask?: Drawing): void {
     // a pen-up that never came: that stroke is finished
     for (const o of this.waits) o.up = true;
-    const w = { id: e.pointerId, drawing, down: penSnapshot(e), moves: [] as PointerEvent[], up: false };
+    const w = { id: e.pointerId, drawing, down: penSnapshot(e), moves: [] as PointerEvent[], up: false, cancelled: false };
     this.waits.push(w);
     // (strokes on the same drawing replay in the order they were drawn: the same load resolves them)
-    void this.residency.ensure(drawing).then(() => {
+    void Promise.all([this.residency.ensure(drawing), ...(mask ? [this.residency.ensure(mask)] : [])]).then(() => {
       const i = this.waits.indexOf(w);
       if (i < 0) return;
       this.waits.splice(i, 1);
@@ -4374,7 +4501,7 @@ export class App {
         this.armShape(m);
         this.feed(this.toPoint(m, live.t0));
       }
-      if (w.up) this.endStroke();
+      if (w.up) this.endStroke(false, !w.cancelled);
       this.requestRender();
     });
   }
@@ -4400,7 +4527,7 @@ export class App {
     if (live.record.tool !== 'pen') this.raster.addDabs(live.walker.push(q));
   }
 
-  private endStroke(cancel = false): void {
+  private endStroke(cancel = false, automatic = true): void {
     const live = this.live;
     if (!live) return;
     this.live = null;
@@ -4408,6 +4535,7 @@ export class App {
     this.shapeTimer = 0;
     this.onStrokeState(false);
     const rec = live.record;
+    if (!automatic) live.autoPaint = undefined;
     if (cancel) {
       if (rec.tool !== 'pen') this.raster.cancel();
       this.requestRender();
@@ -4423,11 +4551,13 @@ export class App {
     const post = rec.tool === 'eraser' || live.shape ? 0 : (rec.brush.postSmooth ?? 0);
     if (post > 0) rec.points = smoothStroke(rec.points, post);
     const d = live.drawing;
+    const oldVectors = d.vectors;
     if (rec.tool === 'pen') {
       const id = rec.id;
       const copies = this.symmetryVectors(rec);
       const ids = new Set([id, ...copies.map((c) => c.id)]);
-      this.history.push(
+      d.vectors = [...d.vectors, rec, ...copies];
+      this.recordInk(
         {
           label: live.shape ? `Vector ${SHAPE_NAMES[live.shape.base.kind].toLowerCase()}` : 'Vector stroke',
           drawings: [d],
@@ -4440,7 +4570,7 @@ export class App {
             this.touch(d);
           },
         },
-        false,
+        d, live.autoPaint, oldVectors,
       );
     } else {
       const c = this.raster.commit(post > 0);
@@ -4458,7 +4588,7 @@ export class App {
       const vAfter = rec.tool === 'eraser' && live.plane === 'line' ? eraseVectors(d.vectors, rec.points, rec.brush.size / 2, this.vectorErase) : null;
       if (vAfter) d.vectors = vAfter;
       if (c || vAfter) {
-        this.history.push({
+        this.recordInk({
           label: rec.tool === 'eraser' ? 'Erase' : live.shape ? SHAPE_NAMES[live.shape.base.kind] : 'Brush stroke',
           drawings: [d],
           do: () => {
@@ -4471,12 +4601,11 @@ export class App {
             if (vAfter) d.vectors = vBefore;
             this.touch(d);
           },
-        });
-        this.touch(d);
+        }, d, live.autoPaint, oldVectors, c ?? undefined);
       }
     }
     // a snapped shape can be changed from the Edit shape button until something else happens
-    this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo() } : null;
+    this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo(), autoPaint: live.autoPaint } : null;
     this.onShapeChange();
     // a vector line snapped by holding: show its points straight away (can be turned off)
     if (live.shape && rec.tool === 'pen' && this.pointsAfterHold) this.enterPointEdit(rec.id);
@@ -4522,7 +4651,7 @@ export class App {
       if (this.fillG) this.endFill(true);
       this.held.clear();
       this.endScrub();
-      this.endStroke();
+      this.endStroke(false, false);
     });
     // The pen can lift off the canvas without the canvas hearing it (capture refused, pen-up
     // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
@@ -4542,7 +4671,7 @@ export class App {
       if (document.hidden) {
         if (this.motionPointer !== null) { this.editor.gestureEnd(true); this.motionPointer = null; }
         if (this.fillG) this.endFill(true);
-        this.endStroke();
+        this.endStroke(false, false);
       }
     });
   }
@@ -4689,7 +4818,7 @@ export class App {
     }
     // A new pen or mouse press while an old stroke is still open (its pen-up never arrived):
     // finish the old stroke first, so nothing stays stuck and frames keep responding.
-    if (!isTouch && this.live && this.live.pointerId !== e.pointerId) this.endStroke();
+    if (!isTouch && this.live && this.live.pointerId !== e.pointerId) this.endStroke(false, false);
     if (isTouch) {
       // Palm rejection: while the pen draws, fingers are ignored.
       if (this.waiting && this.waiting.id !== e.pointerId && this.waiting.down.pointerType === 'pen') return;
@@ -5137,10 +5266,10 @@ export class App {
       // (a pen's cancel still keeps its stroke, as below)
       const w = this.waiting;
       if (cancelled && e.pointerType !== 'pen') this.waits.splice(this.waits.indexOf(w), 1);
-      else w.up = true;
+      else { w.up = true; w.cancelled = cancelled; }
     }
     if (this.live && e.pointerId === this.live.pointerId) {
-      this.endStroke(cancelled && e.pointerType !== 'pen');
+      this.endStroke(cancelled && e.pointerType !== 'pen', !cancelled);
     }
     if (this.nav && e.pointerId === this.nav.pointerId) this.nav = null;
     if (this.touches.has(e.pointerId)) {
@@ -5780,8 +5909,8 @@ export class App {
           if (d) out.add(d);
         }
       if (this.playing) {
-        const len = this.compEnd;
-        for (let i = 1; i <= Math.ceil(p.fps * 1.5) && i < len; i++) add((this.frame + i) % len);
+        const range = this.playbackRange;
+        for (let i = 1; i <= Math.ceil(p.fps * 1.5) && i < range.end - range.start; i++) add(loopFrame(this.frame + i, range));
       }
       return [...out];
     }
@@ -5821,9 +5950,10 @@ export class App {
     }
     if (this.playing) {
       const ahead = Math.ceil(p.fps * 1.5);
-      const len = p.length;
-      for (let i = 1; i <= ahead && i < len; i++) {
-        const id = drawingAt(p.exposures, (this.lf + i) % len);
+      const range = this.playbackRange;
+      for (let i = 1; i <= ahead && i < range.end - range.start; i++) {
+        const lf = loopFrame(this.frame + i, range) - p.layer.start;
+        const id = drawingAt(p.exposures, lf);
         if (id) out.add(p.drawing(id));
       }
     }

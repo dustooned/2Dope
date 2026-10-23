@@ -137,6 +137,8 @@ export interface LayerFile {
 }
 
 export interface CompFile {
+  /** Optional preview loop, 0-based [start, end). */
+  playbackRange?: { start: number; end: number };
   asset?: boolean;
   audio?: SoundClip[];
   name: string;
@@ -553,7 +555,16 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     });
     for (const ly of layers) if (ly.parent && (!layerIds.has(ly.parent) || ly.parent === ly.id)) ly.parent = null;
     const bg = c.background;
+    let playbackRange: CompFile['playbackRange'];
+    if (c.playbackRange !== undefined) {
+      if (!isObj(c.playbackRange)) throw new SchemaError(`comp ${id} playback range must be an interval`);
+      const start = int(c.playbackRange.start, 'playback range start', 0, MAX_FRAMES - 1);
+      const end = int(c.playbackRange.end, 'playback range end', 1, MAX_FRAMES);
+      if (end <= start) throw new SchemaError('playback range end must follow its start');
+      playbackRange = { start, end };
+    }
     comps[id] = {
+      ...(playbackRange ? { playbackRange } : {}),
       name: str(c.name ?? 'Comp', `comp ${id} name`),
       ...(c.asset === true ? { asset: true } : {}),
       width: cw,
@@ -726,6 +737,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
     });
     out.set(id, {
       id,
+      ...(c.playbackRange ? { playbackRange: { ...c.playbackRange } } : {}),
       name: c.name,
       ...(c.asset ? { asset: true } : {}),
       width: c.width,
@@ -745,6 +757,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
 /** A comp as written in files. */
 export function compFile(c: Comp): CompFile {
   const out: CompFile = {
+    ...(c.playbackRange ? { playbackRange: { ...c.playbackRange } } : {}),
     ...(c.asset ? { asset: true } : {}),
     name: c.name,
     width: c.width,
