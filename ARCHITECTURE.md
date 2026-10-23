@@ -2,6 +2,20 @@
 
 Current code map reviewed 2026-10-14. See `HANDOFF.md` for the checked baseline and open work.
 
+Raster brush feel (2026-10-23): `brush/dabs.ts` supplies a smooth finite-slope taper with a
+brush-diameter run-up for wide tips, subpixel ends and a final stamp at the recorded endpoint.
+Zero-length finished taps retain their mark. `RasterEngine.commit` rebuilds start/end tapers
+and resets the per-dab colour index before replay. Vector outline algorithms are unchanged,
+so existing saved vector records retain their rendering. Raster edits remain stored pixels.
+Grain is paper-aligned but applied per stamp into the normal/shading coverage buffers; pressure
+and overlap can fill paper valleys, then stroke opacity composites once. One cached pattern per
+stroke and the existing scratch plane keep work inside clipped stamp bounds without extra
+document-sized buffers or per-stamp pixel reads. Predicted textured stamps stay preview-only.
+Image-tip brightness is decoded before letterboxing, full-roundness image tips honor rotation,
+and conservative rotated bounds cover commit/Undo. Colour sprites use mask identity keys rather
+than image-string suffixes. `Textured Paint` is a Painting preset using the existing settings.
+`tests/brushfeel.html` shows seeded samples and checks pixels plus real App pen input/History.
+
 Student profiles (2026-10-23): `core/studentprefs.ts` owns tool/control catalogs and bounded,
 validated device setup/profile snapshots (20 unique profiles, 40-character names). Settings drafts
 profile creation/selection/rename/deletion and visibility, interface level, QuickMenu, range gesture,

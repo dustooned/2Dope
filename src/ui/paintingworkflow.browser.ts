@@ -48,7 +48,7 @@ try{
   click('Layers');click('New layer',document.querySelector('.layercards')!);click('Background',document.querySelector('.layercards')!);await settle();
   const background=app.project.activeLayer,drawing=app.drawing;app.project.comp.duration=16;app.setFrame(9);
   check('Layers creates and selects a still background within the source',app.project.layer.kind==='drawings'&&app.project.layer.still===true&&background!==app.project.comp.layers[0]!.id);
-  click('Close layers');click('🖌️ Brushes',options());const category=document.querySelector<HTMLButtonElement>('.bl-cats [data-cat="ink"]')!;category.click();click('Pixel Ink',document.querySelector('.brushlib')!);click('Done choosing brush');
+  click('Close layers');click('Brushes',options());const category=document.querySelector<HTMLButtonElement>('.bl-cats [data-cat="ink"]')!;category.click();click('Pixel Ink',document.querySelector('.brushlib')!);click('Done choosing brush');
   click('Colour');click('Palette colour #3a86ff');click('Done choosing colour');click('Fill',options());
   const size=root.querySelector<HTMLElement>('[data-slider="size"]')!,opacity=root.querySelector<HTMLElement>('[data-slider="opacity"]')!;size.focus();key(size,'Home');key(size,'ArrowUp',true);key(size,'ArrowUp');opacity.focus();key(opacity,'End');key(opacity,'ArrowDown',true);key(opacity,'Enter');
   check('Brush/colour/size/opacity controls keep the background and Fill selected',app.brush.name==='Pixel Ink'&&app.brush.size===12&&app.brush.opacity===.9&&app.color==='#3a86ff'&&app.project.activeLayer===background&&app.plane==='fill'&&app.tool==='brush'&&document.activeElement===canvas);

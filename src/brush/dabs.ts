@@ -10,6 +10,8 @@ export interface Dab {
   size: number;
   /** Coverage 0..1 for this dab. */
   alpha: number;
+  /** Pen pressure, retained for paint deposition through the paper texture. */
+  pressure: number;
   /** Radians. */
   angle: number;
   roundness: number;
@@ -19,6 +21,23 @@ export interface Dab {
 
 /** Speed (px/ms) that counts as "fast" (1.0) for speed dynamics. */
 const FAST = 3;
+
+/** A smooth, finite-slope taper. Large tips need enough run-up to avoid a blunt cap;
+ * on short strokes the two tapers meet without inflating a wide blob in the middle. */
+export function taperAt(brush: BrushSettings, distance: number, totalLength = Infinity, diameter = brush.size): number {
+  if (totalLength <= 1e-6) return 1; // a tap is a brush mark, not a zero-length hairline
+  const start = brush.taperStart > 0 ? Math.max(brush.taperStart, diameter) : 0;
+  const end = brush.taperEnd > 0 ? Math.max(brush.taperEnd, diameter) : 0;
+  const ease = (x: number) => Math.sin(Math.max(0, Math.min(1, x)) * Math.PI / 2);
+  return Math.min(start ? ease(distance / start) : 1, end && Number.isFinite(totalLength) ? ease((totalLength - distance) / end) : 1);
+}
+
+/** Conservative bounds also cover the corners of rotating image tips. */
+export function dabBounds(d: Dab): { x0: number; y0: number; x1: number; y1: number } {
+  const c = Math.abs(Math.cos(d.angle)), s = Math.abs(Math.sin(d.angle)), r = d.size / 2;
+  const rx = r * (c + d.roundness * s) + 2, ry = r * (s + d.roundness * c) + 2;
+  return { x0: d.x - rx, y0: d.y - ry, x1: d.x + rx, y1: d.y + ry };
+}
 
 /**
  * Walks stabilized points and emits dabs at the brush spacing. Incremental: feed points in any
@@ -93,18 +112,14 @@ export class DabWalker {
     return out;
   }
 
-  private spacingFor(size: number): number {
-    return Math.max(0.35, this.brush.spacing * Math.max(size, 1));
+  /** Close a tapered stroke at its actual last point, even between regular stamp positions. */
+  finish(): Dab[] {
+    if (!this.prev || !Number.isFinite(this.totalLength) || this.brush.taperEnd <= 0 || this.traveled <= 1e-6) return [];
+    return [this.make(this.prev, this.traveled)];
   }
 
-  private taper(distance: number): number {
-    const b = this.brush;
-    let f = 1;
-    if (b.taperStart > 0) f = Math.min(f, Math.sqrt(Math.min(1, distance / b.taperStart)));
-    if (b.taperEnd > 0 && Number.isFinite(this.totalLength)) {
-      f = Math.min(f, Math.sqrt(Math.max(0, Math.min(1, (this.totalLength - distance) / b.taperEnd))));
-    }
-    return Math.max(0.04, f);
+  private spacingFor(size: number): number {
+    return Math.max(0.35, this.brush.spacing * Math.max(size, 1));
   }
 
   private make(p: StrokePoint, distance = 0): Dab {
@@ -113,9 +128,10 @@ export class DabWalker {
     const s: InputSample = { pressure: p.pressure, tilt: tiltAmount(p), speed: this.speed };
     const ts = b.tiltShade;
     const shade = shadeAmount(ts, p.tiltX, p.tiltY);
+    const diameter = b.size * (1 + (ts.size - 1) * shade);
     const size = Math.max(
       0.5,
-      b.size * evalDynamic(b.sizeDyn, s, hash01(this.seed, i, 1)) * this.taper(distance) * (1 + (ts.size - 1) * shade),
+      diameter * evalDynamic(b.sizeDyn, s, hash01(this.seed, i, 1)) * taperAt(b, distance, this.totalLength, diameter),
     );
     const alpha =
       b.flow *
@@ -139,7 +155,7 @@ export class DabWalker {
       angle += diff * shade;
       roundness += (ts.roundness - roundness) * shade;
     }
-    return { x, y, size, alpha, angle, roundness, shade };
+    return { x, y, size, alpha, pressure: Math.max(0, Math.min(1, p.pressure)), angle, roundness, shade };
   }
 }
 
@@ -148,5 +164,6 @@ export function dabsForStroke(brush: BrushSettings, seed: number, points: Stroke
   const w = new DabWalker(brush, seed, totalLength);
   const out: Dab[] = [];
   for (const p of points) out.push(...w.push(p));
+  out.push(...w.finish());
   return out;
 }

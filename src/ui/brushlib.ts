@@ -83,9 +83,11 @@ export class BrushLibrary {
     this.done.addEventListener('click', () => this.close(true));
     head.append(identity, this.done);
     const actions = el('div', { class: 'bl-actions' });
-    const save = el('button', { type: 'button', class: 'primary', title: 'Save the brush you are using (with your changes) into My brushes' }, '＋ Save brush');
+    const save = el('button', { type: 'button', class: 'primary', title: 'Save the brush you are using (with your changes) into My brushes' }, 'Save brush');
+    decorate(save, 'plus');
     save.addEventListener('click', () => void this.saveCurrent());
-    const studio = el('button', { type: 'button', title: 'Every setting of this brush (Brush Studio)' }, '⚙ Studio');
+    const studio = el('button', { type: 'button', title: 'Every setting of this brush (Brush Studio)' }, 'Studio');
+    decorate(studio, 'gear');
     studio.addEventListener('click', () => {
       this.close();
       this.openStudio();
@@ -98,7 +100,8 @@ export class BrushLibrary {
       picker.value = '';
       if (files.length) void this.importFiles(files);
     });
-    const imp = el('button', { type: 'button', title: 'Bring in brushes from Procreate (.brushset, .brush) or Photoshop (.abr)' }, '\u2913 Import');
+    const imp = el('button', { type: 'button', title: 'Bring in brushes from Procreate (.brushset, .brush) or Photoshop (.abr)' }, 'Import');
+    decorate(imp, 'import');
     imp.addEventListener('click', () => picker.click());
     actions.append(imp, studio, save, picker);
     const main = el('div', { class: 'bl-main' });
@@ -456,12 +459,14 @@ export class BrushLibrary {
     this.current.textContent = `${this.app.brush.name} · ${tool} · ${this.app.plane === 'line' ? 'Line' : 'Fill'}`;
     this.current.title = this.current.textContent;
     if (!allCategories(this.sets).some((c) => c.id === this.cat)) this.cat = 'mine';
-    const newSet = el('button', { type: 'button', class: 'bl-new', title: 'A new collection for your brushes (like a Procreate brush set)' }, '\uff0b New');
+    const newSet = el('button', { type: 'button', class: 'bl-new', title: 'A new collection for your brushes (like a Procreate brush set)' }, 'New');
+    decorate(newSet, 'plus');
     newSet.addEventListener('click', () => void this.newSet());
     this.cats.replaceChildren(
       ...allCategories(this.sets).map((c) => {
         const count = this.all().filter((b) => categoryOf(b.name, this.mine, this.sets) === c.id).length;
         const b = el('button', { type: 'button', role: 'tab', 'aria-selected': String(c.id === this.cat), 'data-cat': c.id, 'data-own': c.own ? '1' : '0', title: c.own ? 'Your collection: hold for rename or delete; drop a brush here to move it in' : c.id === 'mine' ? 'Your brushes; drop a brush here to move it back' : c.label }, c.label);
+        decorate(b, c.own ? 'folder' : c.id === 'sketch' ? 'draw' : c.id === 'ink' ? 'pen' : c.id === 'paint' ? 'brush' : 'brushes');
         b.append(el('span', { class: 'bl-count' }, String(count)));
         b.addEventListener('click', () => {
           this.cat = c.id;

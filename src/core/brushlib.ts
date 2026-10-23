@@ -7,10 +7,10 @@ import { cloneBrush, PRESETS, type BrushSettings } from './brush';
 export type BrushCategory = string;
 
 export const CATEGORIES: { id: BrushCategory; label: string }[] = [
-  { id: 'sketch', label: '✏️ Sketching' },
-  { id: 'ink', label: '🖋️ Inking' },
-  { id: 'paint', label: '🖌️ Painting' },
-  { id: 'mine', label: '⭐ My brushes' },
+  { id: 'sketch', label: 'Sketching' },
+  { id: 'ink', label: 'Inking' },
+  { id: 'paint', label: 'Painting' },
+  { id: 'mine', label: 'My brushes' },
 ];
 
 /** Where each built-in brush lives. */
@@ -23,6 +23,7 @@ const BUILT_IN: Record<string, BrushCategory> = {
   'Fine Liner': 'ink',
   'Pixel Ink': 'ink',
   Marker: 'paint',
+  'Textured Paint': 'paint',
   'Soft Airbrush': 'paint',
 };
 
@@ -44,7 +45,7 @@ export const NO_SETS: BrushSets = { sets: [], where: {} };
 
 /** Every category to show: the built-in ones, My brushes, then your collections. */
 export function allCategories(sets: BrushSets): { id: BrushCategory; label: string; own: boolean }[] {
-  return [...CATEGORIES.map((c) => ({ ...c, own: false })), ...sets.sets.map((s) => ({ id: s.id, label: `\ud83d\udcc1 ${s.name}`, own: true }))];
+  return [...CATEGORIES.map((c) => ({ ...c, own: false })), ...sets.sets.map((s) => ({ id: s.id, label: s.name, own: true }))];
 }
 
 /** A new collection (its id is new; the name is kept short). */

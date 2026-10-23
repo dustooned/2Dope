@@ -78,7 +78,7 @@ export interface BrushSettings {
   flowDyn: Dynamic;
   /** Perpendicular scatter as a multiple of the dab size. */
   scatter: number;
-  /** Paper grain strength 0..1 (removes coverage through a paper-aligned noise texture). */
+  /** Paper grain strength 0..1 (each dab deposits pigment through the paper texture). */
   grain: number;
   /** Grain texture scale (1 = 256 px tile). */
   grainScale: number;
@@ -285,6 +285,23 @@ export const PRESETS: BrushSettings[] = [
     grain: 0.5,
     grainScale: 0.5,
     tiltShade: { enabled: true, threshold: 30, size: 5, opacity: 0.35, roundness: 0.25, hardness: 0.05, grain: 0.85 },
+  },
+  {
+    ...base,
+    name: 'Textured Paint',
+    size: 48,
+    hardness: 0.7,
+    spacing: 0.12,
+    opacity: 1,
+    flow: 0.28,
+    sizeDyn: dyn('pressure', 0.35, 1),
+    opacityDyn: dyn('pressure', 0.2, 1),
+    grain: 0.7,
+    grainScale: 0.4,
+    taperStart: 12,
+    taperEnd: 20,
+    smoothing: 0.2,
+    tiltShade: NO_TILT_SHADE,
   },
   {
     ...base,

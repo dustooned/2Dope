@@ -121,6 +121,7 @@ export class QuickMenu {
     const a = this.app;
     for (const b of this.popup!.querySelectorAll<HTMLButtonElement>('[data-quick-action]')) {
       const id = b.dataset.quickAction as QuickAction; b.disabled = !this.available(id);
+      if (id === 'play' && b.dataset.icon !== (a.playing ? 'pause' : 'play')) decorate(b, a.playing ? 'pause' : 'play');
       if (['brush', 'eraser', 'pen', 'smudge', 'onion', 'play', 'inkPaint'].includes(id)) b.setAttribute('aria-pressed', String(id === 'inkPaint' ? a.inkPaint.enabled : id === 'smudge' ? a.smudging : id === 'onion' ? a.onion.enabled : id === 'play' ? a.playing : a.tool === id && !a.smudging));
     }
   }

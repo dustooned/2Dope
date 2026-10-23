@@ -343,7 +343,7 @@ export class ArtworkAssetsUI {
     collections.append(button('My Assets', 'gallery', () => this.showLibrary())); collections.hidden = !!replacement;
     const artworkProject = project.activeComp === project.main && project.comp.asset;
     if (artworkProject && !replacement) {
-      const save = button('Save current artwork', 'gallery', () => void this.saveToLibrary(project.main, save));
+      const save = button('Save current artwork', 'save', () => void this.saveToLibrary(project.main, save));
       save.disabled = this.app.playing || this.library.busy; collections.append(save);
     }
     const body = element('div', 'artwork-body');
@@ -387,7 +387,7 @@ export class ArtworkAssetsUI {
         actions.append(action('Edit', 'draw', () => this.openSource(c.id), `Edit ${c.name}`), action('Place', 'plus', () => { this.assets.place(c.id); this.placedPicker.focus(); }, `Place ${c.name}`));
         const rename=action('Rename','draw',()=>void this.renameSource(c.id),`Rename source ${c.name}`);
         rename.disabled=this.app.playing;actions.append(rename);
-        const save = button('Save', 'gallery', () => void this.saveToLibrary(c.id, save), `Save ${c.name} to My Assets`);
+        const save = button('Save', 'save', () => void this.saveToLibrary(c.id, save), `Save ${c.name} to My Assets`);
         save.disabled = this.app.playing || this.library.busy; actions.append(save);
       }
       card.append(thumb, info, actions); grid.append(card); previews.push({comp:c, canvas});

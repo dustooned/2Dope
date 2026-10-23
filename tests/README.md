@@ -234,6 +234,18 @@ This fixture uses no project library/autosave; it saves and restores only the lo
 keys it exercises. Existing naming/copy/replacement/timing fixtures now open Options before
 accessing the tucked controls. Check the built app for real rail content, scrolling timing fields
 with picker/Done fixed, and layout handles at the edges. Physical touch/Pencil/Safari remain separate.
+## Raster taper and textured paint
+
+Open `/tests/brushfeel.html` on an isolated development origin. Its 23 browser checks cover
+pressure-dependent texture, pigment building within/across strokes, opacity ceilings, exact
+live/commit pixels, seeded replay after post-correction, preview-only prediction, fine broad-brush
+tips (including tilted shading), taps/short flicks, image-tip brightness and rotation, rotated Undo bounds, textured erasing,
+real App pen-style Fill input and exact Undo/Redo, plus a bounded desktop 720p performance check.
+The page displays four seeded swatches for visual review. It uses no project library/autosave and
+restores the device preferences it exercises. Seven `brush/dabs.test.ts` unit cases check taper
+geometry, untapered marks, endpoint placement, pressure/interpolation and rotated bounds.
+Desktop synthetic input does not establish physical Pencil feel or iPad Safari performance.
+
 ## Student profiles
 
 Student profiles: `studentprofiles.html` uses real App/Bubbles/QuickMenu settings and portable

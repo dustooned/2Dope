@@ -2,7 +2,79 @@
 
 ## Current state (2026-10-23) — read this first
 
-**Latest step: final release cleanup; user authorized commit and push to main.**
+**Latest step: raster taper and textured paint release, including the preceding UI icon cleanup.**
+The user authorized committing and pushing these checked changes to main on 2026-10-23.
+The user chose brush feel over Procreate parity work. Raster tapers now use a smooth finite-slope
+profile with enough length for wide brush tips, a subpixel end stamp at the recorded endpoint,
+and a visible full-sized mark for finished taps. Short flicks do not inflate into broad blobs.
+Start-only tapers also rebuild on commit. Existing vector outline code and saved raster pixels
+are unchanged; no project/brush format fields or migration were added.
+
+Grain now modulates each dab before it accumulates in the coverage buffers, instead of punching
+a fixed texture out of the finished stroke. Light pressure retains texture, stronger pressure
+and overlapping passes fill paper valleys, and stroke opacity remains the final ceiling. This
+reuses the existing scratch plane and cached paper patterns, clipping work per stamp with no
+additional document-sized canvases or per-stamp readbacks. Prediction remains preview-only.
+Also fixed image-tip rotation at full roundness, grayscale decoding before letterboxing,
+rotated commit/Undo bounds, collision-prone colour-tip cache keys, and colour-jitter index reset
+when taper/post-correction replays a stroke. Added **Textured Paint** to Brushes → Painting.
+
+Changed this step: `brush/dabs.ts`, `brush/raster.ts`, `core/brush.ts`, the painting category
+mapping in `core/brushlib.ts`, new `brush/dabs.test.ts`, `brush/feel.browser.ts` and
+`tests/brushfeel.html`, manual/UPDATES, architecture and test docs. The previous icon cleanup is
+preserved. Fresh verification: **58 files / 477 unit tests**, strict TypeScript/production build
+and diff check passed (existing bundle-size warning remains). New brush-feel fixture **23/0**,
+brush return **24/0**, Ink & Paint **27/0**, integrated painting workflow **20/0**: **94 browser
+assertions** on isolated `127.0.0.1:5211`. A long 720p textured stroke measured about 46–63ms on
+this desktop. An earlier brush-return attempt lost its context menu while the viewport changed;
+the stable rerun passed all 24 checks. No app change was made to bypass that fixture.
+
+Built preview on isolated `127.0.0.1:5212`: chose Textured Paint from Painting, confirmed its
+48px Brush/Line identity and return to canvas, drew real mouse strokes with an overlapping pass,
+and visually checked tapered tips, texture and coverage buildup. Reload retained the strokes,
+Textured Paint selection and 48px size. Test-only artwork remains on
+that origin; user project storage was not cleared. Samples/screenshots:
+`../artifacts/brush-taper-textured-paint.png`, `textured-paint-preset.png`,
+`textured-paint-native-strokes.png`. Release prepared for the requested main push; verify Pages
+for the exact pushed SHA. Physical iPad/Pencil feel and Safari
+performance remain unverified; earlier deferred Clips/view fixture failures remain deferred.
+
+**Next:** user review of Textured Paint and tapered strokes on the intended stylus/device.
+
+### Previous step: UI icon cleanup
+
+**UI icon cleanup, implemented after published release 94bd127.**
+Replaced the main emoji/generic placeholders with the existing 24px current-colour SVG system.
+Brushes and its category/collection tabs, Import/Studio/Save/New actions, Reference modes/navigation/
+eyedropper/close, and Flipbook in Clips and Motion now use shared icons. Added distinct Ink & Paint,
+palette, playback range, reset rotation, import, download, save and folder icons; Settings uses a
+cog. QuickMenu reuses these icons and changes its Play icon to Pause during playback. Range labels
+and selected frame numbers remain visible in the Simple strip/navigation toolbar after icon updates.
+Effects has plain text names, SVG add/close/more controls and 44px close/more targets. Reference
+buttons also have 44px minimum targets. Kept accessible labels/tooltips and existing action paths.
+
+Changed: `src/ui/icons.ts`, Bubbles, BrushLibrary, Reference, Strip, Motion, PlaybackRangeControl,
+QuickMenu, ArtworkAssets/ArtworkLibrary, EffectsPanel, core brush category/QuickMenu presentation
+catalogs, index/CSS, manual/UPDATES and brushreturn/paintingworkflow fixture label selectors.
+This is presentation work; project data, category IDs, preferences and History behavior are unchanged.
+
+Fresh verification: **57 files / 470 unit tests**, strict TypeScript/production build and diff check
+passed; existing large-bundle warning remains. Browser checks on isolated `127.0.0.1:5209`:
+Brush return **24/0**, phone QuickMenu **34/0**, phone range/gesture **50/0**, integrated painting
+workflow **20/0** = **128 assertions**. Built-app review on isolated `127.0.0.1:5210` checked brush
+categories and actions, Reference mode switching/all header targets, saving a source to My Assets
+and its import/download icons, Motion Flipbook/Range, and Effects add/more/Escape/close. Verified
+Reference and Effects targets at least 44px, and labels/icons remain intact after reload.
+Screenshots: `../artifacts/ui-icons-brush-library.png`, `ui-icons-reference.png`, `ui-icons-assets.png`,
+`ui-icons-effects.png`. Test projects/preferences remain only on isolated review origins. User project
+storage was not cleared. No commit or push this step. Physical iPad/Pencil/Safari review remains pending;
+older deferred Clips/view fixture failures stay deferred.
+
+**Next:** user review of the icon cleanup; follow their direction for publishing or further work.
+
+### Previous step: published release cleanup (94bd127)
+
+**Final release cleanup, committed/pushed to main as 94bd127; Pages build/deploy succeeded.**
 App settings now keeps Student profiles first and groups Visible tools and controls, Drawing
 options, QuickMenu and Gestures into collapsible sections. QuickMenu Customize opens its section
 directly. Profile guidance distinguishes updating the selected profile from saving a separate
@@ -20,7 +92,8 @@ collapsed, the saved Background painting profile retained, and QuickMenu Customi
 opening its section; Cancel returned without applying changes. Screenshot:
 `../artifacts/release-settings-cleanup.png`. Tests do not clear user project storage. Physical
 iPad/Pencil/Safari and audible output remain separate checks; older deferred Clips/view fixture
-failures remain deferred. Release commit/push is authorized; verify Pages for the exact pushed SHA.
+failures remain deferred. Pages run 40029682128 succeeded for exact SHA
+`94bd127a1b6cf0f9d066f78fb21ea8fa46901e8c`; the public site served the new cleanup/profile text.
 
 ### Previous step: student tool profiles
 

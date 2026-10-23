@@ -3,7 +3,7 @@ import type { StrokeRecord } from '../core/stroke';
 import { hash01 } from '../core/rng';
 import { jitterColor, mixColor } from '../core/color';
 import { strokeLength } from '../core/stroke';
-import { dabsForStroke, type Dab } from './dabs';
+import { dabBounds, dabsForStroke, type Dab } from './dabs';
 
 export function makeCanvas(w: number, h: number): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -73,6 +73,8 @@ export function tipSprite(hardness: number, color: string): HTMLCanvasElement {
 // until then the round tip stands in.
 const tipMasks = new Map<string, HTMLCanvasElement | 'loading' | 'failed'>();
 const tipColored = new Map<string, HTMLCanvasElement>();
+const tipIds = new WeakMap<HTMLCanvasElement, number>();
+let nextTipId = 0;
 
 /** Decode an image tip (cached). Resolves when it can be drawn with. */
 export function loadTip(url: string): Promise<void> {
@@ -82,11 +84,13 @@ export function loadTip(url: string): Promise<void> {
   return new Promise<void>((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const c = makeCanvas(TIP, TIP);
+      // Inspect the source without transparent letterboxing: an opaque rectangular grayscale
+      // tip still uses brightness, even though its final square sprite has transparent margins.
+      const scale = Math.min(TIP / img.width, TIP / img.height);
+      const c = makeCanvas(Math.max(1, Math.round(img.width * scale)), Math.max(1, Math.round(img.height * scale)));
       const g = ctx2d(c);
-      const s = Math.min(TIP / img.width, TIP / img.height);
-      g.drawImage(img, (TIP - img.width * s) / 2, (TIP - img.height * s) / 2, img.width * s, img.height * s);
-      const d = g.getImageData(0, 0, TIP, TIP);
+      g.drawImage(img, 0, 0, c.width, c.height);
+      const d = g.getImageData(0, 0, c.width, c.height);
       // no transparency in the picture: brightness is the paint (white paints, black does not)
       let opaque = true;
       for (let i = 3; i < d.data.length; i += 4) if (d.data[i]! < 250) { opaque = false; break; }
@@ -96,7 +100,9 @@ export function loadTip(url: string): Promise<void> {
         d.data[i + 3] = a;
       }
       g.putImageData(d, 0, 0);
-      tipMasks.set(url, c);
+      const mask = makeCanvas(TIP, TIP);
+      ctx2d(mask).drawImage(c, (TIP - c.width) / 2, (TIP - c.height) / 2);
+      tipMasks.set(url, mask);
       resolve();
     };
     img.onerror = () => { tipMasks.set(url, 'failed'); resolve(); };
@@ -111,7 +117,9 @@ export function imageTipSprite(url: string, color: string): HTMLCanvasElement | 
     if (!mask) void loadTip(url);
     return null;
   }
-  const key = `${url.length}:${url.slice(-48)}|${color}`;
+  let id = tipIds.get(mask);
+  if (id === undefined) { id = ++nextTipId; tipIds.set(mask, id); }
+  const key = `${id}|${color}`;
   const hit = tipColored.get(key);
   if (hit) return hit;
   if (tipColored.size > 600) tipColored.clear();
@@ -142,7 +150,7 @@ function withAlpha(hex: string, a: number): string {
 export function drawDab(ctx: CanvasRenderingContext2D, dab: Dab, tip: HTMLCanvasElement, alphaScale = 1): void {
   const r = dab.size / 2;
   ctx.globalAlpha = Math.min(1, dab.alpha * alphaScale);
-  if (dab.roundness >= 0.999) {
+  if (dab.roundness >= 0.999 && Math.abs(dab.angle % (Math.PI * 2)) < 1e-6) {
     ctx.drawImage(tip, dab.x - r, dab.y - r, dab.size, dab.size);
     return;
   }
@@ -229,18 +237,11 @@ function grainFor(url: string | undefined): HTMLCanvasElement {
   return grainCanvas();
 }
 
-/** Remove coverage through the paper grain (canvas-aligned, so texture stays put across strokes). */
-function applyGrain(g: CanvasRenderingContext2D, r: Rect, strength: number, scale: number, image?: string): void {
-  if (strength <= 0) return;
+/** One paper-aligned pattern per stroke, reused by all its stamps. */
+function paperPattern(g: CanvasRenderingContext2D, scale: number, image?: string): CanvasPattern | null {
   const pat = g.createPattern(grainFor(image), 'repeat');
-  if (!pat) return;
-  pat.setTransform(new DOMMatrix().scale(scale, scale));
-  g.save();
-  g.globalCompositeOperation = 'destination-out';
-  g.globalAlpha = Math.min(1, strength);
-  g.fillStyle = pat;
-  g.fillRect(r.x, r.y, r.w, r.h);
-  g.restore();
+  pat?.setTransform(new DOMMatrix().scale(Math.max(0.05, scale)));
+  return pat;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -253,7 +254,7 @@ export interface StrokeCommit {
 
 /**
  * Raster painting onto one bound canvas (the current drawing). A stroke renders its dabs into
- * buffers (coverage builds up with flow), then composites once onto the canvas at the stroke
+ * buffers (textured coverage builds up per dab with flow), then composites once onto the canvas at the stroke
  * opacity (Photoshop-style Opacity vs Flow). Tilt-shaded dabs go to a second buffer with a soft
  * tip and their own, stronger grain. While a stroke is live, `displaySource()` returns what the
  * screen should show for the bound canvas.
@@ -278,6 +279,8 @@ export class RasterEngine {
   private dabIndex = 0;
   /** Wet mix: the canvas as the stroke began (the colour the brush picks up). */
   private pullFrom: Uint8ClampedArray | null = null;
+  private paper: CanvasPattern | null = null;
+  private shadePaper: CanvasPattern | null = null;
 
   constructor(
     public width: number,
@@ -337,6 +340,9 @@ export class RasterEngine {
     const pull = record.tool === 'eraser' ? 0 : (b.wetPull ?? 0);
     this.dabColour = (varies && !b.strokeColor) || pull > 0;
     this.pullFrom = pull > 0 ? ctx2d(this.target).getImageData(0, 0, this.width, this.height).data : null;
+    const scratch = ctx2d(this.scratch);
+    this.paper = b.grain > 0 ? paperPattern(scratch, b.grainScale, b.grainImage) : null;
+    this.shadePaper = b.tiltShade.enabled && b.tiltShade.grain > 0 ? paperPattern(scratch, b.grainScale) : null;
     this.tip = this.tipIn(color);
     this.shadeTip = tipSprite(record.brush.tiltShade.hardness, color);
     this.hasShade = false;
@@ -364,9 +370,9 @@ export class RasterEngine {
         }
         tip = this.tipIn(c);
       }
-      if (d.shade < 1) drawDab(this.bctx, d, tip, 1 - d.shade);
+      if (d.shade < 1) this.stamp(this.bctx, d, tip, b.grain, this.paper, 1 - d.shade);
       if (d.shade > 0) {
-        drawDab(this.sctx, d, this.shadeTip, d.shade);
+        this.stamp(this.sctx, d, this.shadeTip, b.tiltShade.grain, this.shadePaper, d.shade);
         this.hasShade = true;
       }
       this.grow(d);
@@ -375,29 +381,57 @@ export class RasterEngine {
     this.sctx.globalAlpha = 1;
   }
 
+  /** Deposit textured paint per dab, so overlap can fill the paper valleys within a stroke.
+   * A firmer press lays down more paint; even the darkest grain can gradually take pigment.
+   * Reuse the existing scratch plane and touch only this stamp's clipped rectangle. */
+  private stamp(ctx: CanvasRenderingContext2D, d: Dab, tip: HTMLCanvasElement, grain: number, paper: CanvasPattern | null, alphaScale = 1): void {
+    if (grain <= 0 || !paper) { drawDab(ctx, d, tip, alphaScale); return; }
+    const r = this.clip(dabBounds(d));
+    if (!r) return;
+    const s = ctx2d(this.scratch);
+    s.clearRect(r.x, r.y, r.w, r.h);
+    drawDab(s, d, tip, alphaScale);
+    s.save();
+    s.globalCompositeOperation = 'destination-out';
+    s.globalAlpha = Math.min(0.95, grain) * (1 - 0.25 * d.pressure);
+    s.fillStyle = paper;
+    s.fillRect(r.x, r.y, r.w, r.h);
+    s.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(this.scratch, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+    ctx.restore();
+  }
+
   /** Draw extra, temporary dabs (predicted input) straight onto a display context. */
   drawGhost(ctx: CanvasRenderingContext2D, dabs: Dab[]): void {
     if (!this.tip || !this.shadeTip || !this.record || this.record.tool === 'eraser') return;
-    for (const d of mirrored(dabs, this.record)) drawDab(ctx, d, d.shade > 0.5 ? this.shadeTip : this.tip, this.record.brush.opacity);
+    const b = this.record.brush;
+    for (const d of mirrored(dabs, this.record)) {
+      if (d.shade < 1) this.stamp(ctx, d, this.tip, b.grain, this.paper, (1 - d.shade) * b.opacity);
+      if (d.shade > 0) this.stamp(ctx, d, this.shadeTip, b.tiltShade.grain, this.shadePaper, d.shade * b.opacity);
+    }
     ctx.globalAlpha = 1;
   }
 
   private grow(d: Dab): void {
-    const r = d.size / 2 + 2;
+    const area = dabBounds(d);
     const b = this.bbox;
     if (!b) {
-      this.bbox = { x0: d.x - r, y0: d.y - r, x1: d.x + r, y1: d.y + r };
+      this.bbox = area;
       return;
     }
-    b.x0 = Math.min(b.x0, d.x - r);
-    b.y0 = Math.min(b.y0, d.y - r);
-    b.x1 = Math.max(b.x1, d.x + r);
-    b.y1 = Math.max(b.y1, d.y + r);
+    b.x0 = Math.min(b.x0, area.x0);
+    b.y0 = Math.min(b.y0, area.y0);
+    b.x1 = Math.max(b.x1, area.x1);
+    b.y1 = Math.max(b.y1, area.y1);
   }
 
   rect(): Rect | null {
-    const b = this.bbox;
-    if (!b) return null;
+    return this.bbox ? this.clip(this.bbox) : null;
+  }
+
+  private clip(b: { x0: number; y0: number; x1: number; y1: number }): Rect | null {
     const x = Math.max(0, Math.floor(b.x0));
     const y = Math.max(0, Math.floor(b.y0));
     const x1 = Math.min(this.width, Math.ceil(b.x1));
@@ -406,7 +440,7 @@ export class RasterEngine {
     return { x, y, w: x1 - x, h: y1 - y };
   }
 
-  /** The stroke image: normal buffer and shade buffer, each with its own paper grain (hard-edged when anti-aliasing is off). */
+  /** Combine the textured normal/shading buffers, hardening only for explicit pixel brushes. */
   private strokeImage(r: Rect): HTMLCanvasElement {
     const img = this.softImage(r);
     if (this.record?.brush.antiAlias !== false) return img;
@@ -422,18 +456,11 @@ export class RasterEngine {
   private softImage(r: Rect): HTMLCanvasElement {
     const b = this.record?.brush;
     if (!b) return this.buffer;
-    if (b.grain <= 0 && !this.hasShade) return this.buffer;
+    if (!this.hasShade) return this.buffer;
     const g = ctx2d(this.grained);
     g.clearRect(r.x, r.y, r.w, r.h);
     g.drawImage(this.buffer, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
-    applyGrain(g, r, b.grain, b.grainScale, b.grainImage);
-    if (this.hasShade) {
-      const s = ctx2d(this.scratch);
-      s.clearRect(r.x, r.y, r.w, r.h);
-      s.drawImage(this.shadeBuffer, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
-      applyGrain(s, r, b.tiltShade.grain, b.grainScale);
-      g.drawImage(this.scratch, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
-    }
+    g.drawImage(this.shadeBuffer, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
     return this.grained;
   }
 
@@ -470,11 +497,12 @@ export class RasterEngine {
   commit(rerender = false): StrokeCommit | null {
     const rec = this.record;
     if (!rec) return null;
-    if (rerender || rec.brush.taperEnd > 0) {
+    if (rerender || rec.brush.taperStart > 0 || rec.brush.taperEnd > 0) {
       this.bctx.clearRect(0, 0, this.width, this.height);
       this.sctx.clearRect(0, 0, this.width, this.height);
       this.bbox = null;
       this.hasShade = false;
+      this.dabIndex = 0;
       this.addDabs(dabsForStroke(rec.brush, rec.seed, rec.points, strokeLength(rec.points)));
     }
     const r = this.rect();
@@ -494,6 +522,8 @@ export class RasterEngine {
     this.record = null;
     this.bbox = null;
     this.hasShade = false;
+    this.paper = this.shadePaper = null;
+    this.pullFrom = null;
     this.bctx.clearRect(0, 0, this.width, this.height);
     this.sctx.clearRect(0, 0, this.width, this.height);
   }

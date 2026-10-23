@@ -284,11 +284,11 @@ export class Bubbles {
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
-    if (expanded && (ws === 'draw' || ws === 'animate')) return [...draw, ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'gallery']];
+    if (expanded && (ws === 'draw' || ws === 'animate')) return [...draw, ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'image']];
     if ((ws === 'draw' || ws === 'animate') && this.level === 'clean') return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', '']];
     if (ws === 'animate' && this.level !== 'full' && !this.moreTools) return [draw[0]!, draw[3]!, draw[4]!, draw[5]!, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['more', 'More tools', 'gear']];
-    if (ws === 'animate') return [...draw, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'gallery'], ['more', 'Fewer tools', 'gear']];
-    if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'gallery']];
+    if (ws === 'animate') return [...draw, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'image'], ['more', 'Fewer tools', 'gear']];
+    if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'image']];
     // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
     if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
     if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard', 'export']];
@@ -559,14 +559,14 @@ export class Bubbles {
         this.chip('Stronger', 'Carry more paint', false, () => { a.smudgeStrength = Math.min(1, a.smudgeStrength + 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thicker'),
       );
     } else if ((ws === 'draw' || ws === 'animate') && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
-      if (a.studentUI.controls.inkPaint) add(this.chip('Ink & Paint', a.autoPaintSupported ? 'Ink & Paint: fill newly closed areas after inking. Existing paint stays.' : 'Ink & Paint: this page exceeds the automatic paint limit for this device.', a.inkPaint.enabled, () => a.setInkPaint(!a.inkPaint.enabled), 'fillplane'));
+      if (a.studentUI.controls.inkPaint) add(this.chip('Ink & Paint', a.autoPaintSupported ? 'Ink & Paint: fill newly closed areas after inking. Existing paint stays.' : 'Ink & Paint: this page exceeds the automatic paint limit for this device.', a.inkPaint.enabled, () => a.setInkPaint(!a.inkPaint.enabled), 'inkpaint'));
       if (a.inkPaint.enabled && a.studentUI.controls.inkPaint) {
         const ink = el('label', { class: 'ink-paint-colour', title: 'Ink colour (automatic paint uses the main Colour)' }, 'Ink');
         const input = el('input', { type: 'color', 'aria-label': 'Ink colour', value: a.inkPaint.ink });
         input.addEventListener('change', () => a.setInkColor(input.value)); ink.append(input); add(ink);
-        add(this.chip('Paint colour', `Automatic paint: ${a.color}. Choose paint colour.`, false, b => this.hooks.colorPanel(b), 'fillplane'));
+        add(this.chip('Paint colour', `Automatic paint: ${a.color}. Choose paint colour.`, false, b => this.hooks.colorPanel(b), 'palette'));
       }
-      add(this.chip('\ud83d\udd8c\ufe0f Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)));
+      add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b), 'brushes'));
       if (a.studentUI.controls.planes) add(this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')), this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());

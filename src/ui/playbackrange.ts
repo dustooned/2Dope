@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { decorate, setLabel } from './icons';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -13,12 +14,13 @@ export class PlaybackRangeControl {
   private owner: { project: App['project']; comp: App['project']['comp']; workspace: App['workspace']; length: number } | null = null;
 
   constructor(private readonly app: App) {
+    decorate(this.button, 'range');
     this.button.addEventListener('click', () => this.open()); this.update();
   }
 
   update(): void {
     const app = this.app, range = app.playbackRange, custom = !!app.project.comp.playbackRange;
-    this.button.textContent = custom ? `Range ${range.start + 1}–${range.end}` : 'Range';
+    setLabel(this.button, custom ? `Range ${range.start + 1}–${range.end}` : 'Range');
     this.button.setAttribute('aria-label', custom ? `Playback range: frames ${range.start + 1} to ${range.end}` : 'Playback range: whole animation');
     this.button.title = custom ? `Loop frames ${range.start + 1}–${range.end}. Change playback range.` : 'Loop part of the animation';
     this.button.dataset.active = String(custom); this.button.disabled = app.strokeActive;

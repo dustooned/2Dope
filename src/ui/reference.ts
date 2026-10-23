@@ -35,8 +35,9 @@ export class ReferenceWindow {
   constructor(private readonly app: App) {
     const head = el('div', { class: 'ref-head' });
     const seg = el('div', { class: 'ref-seg', role: 'group', 'aria-label': 'What it shows' });
-    for (const [m, label, title] of [['images', '🖼️ Images', 'Your reference pictures'], ['canvas', '🎨 Canvas', 'The whole frame you are drawing, live']] as const) {
+    for (const [m, label, title] of [['images', 'Images', 'Your reference pictures'], ['canvas', 'Canvas', 'The whole frame you are drawing, live']] as const) {
       const b = el('button', { type: 'button', 'data-mode': m, title }, label);
+      decorate(b, m === 'images' ? 'image' : 'canvas');
       b.addEventListener('click', () => this.setMode(m));
       seg.append(b);
     }
@@ -46,12 +47,12 @@ export class ReferenceWindow {
       b.addEventListener('click', run);
       return b;
     };
-    const prev = btn('‹', 'Previous picture (←)', () => this.step(-1), undefined, 'ref-img');
-    const next = btn('›', 'Next picture (→)', () => this.step(1), undefined, 'ref-img');
+    const prev = btn('Previous picture', 'Previous picture (←)', () => this.step(-1), 'prev', 'ref-img');
+    const next = btn('Next picture', 'Next picture (→)', () => this.step(1), 'next', 'ref-img');
     const add = btn('', 'Add pictures (you can pick several)', () => this.file.click(), 'plus', 'ref-img');
-    const drop = btn('💧', 'Dropper: tap the picture to take its colour', () => { this.dropper = !this.dropper; this.sync(); }, undefined, 'ref-img ref-drop');
+    const drop = btn('Eyedropper', 'Dropper: tap the picture to take its colour', () => { this.dropper = !this.dropper; this.sync(); }, 'eyedrop', 'ref-img ref-drop');
     const del = btn('', 'Remove this picture', () => this.remove(), 'trash', 'ref-img');
-    const close = btn('✕', 'Close the reference', () => this.close(), undefined, 'ref-x');
+    const close = btn('Close', 'Close the reference', () => this.close(), 'close', 'ref-x');
     head.append(seg, prev, this.count, next, add, drop, del, close);
     const grip = el('div', { class: 'ref-grip', title: 'Drag to resize', 'aria-hidden': 'true' });
     const body = el('div', { class: 'ref-body' });

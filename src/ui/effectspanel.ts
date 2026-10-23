@@ -133,7 +133,8 @@ export class EffectsPanel {
     const r = this.root;
     r.replaceChildren();
     const head = el('div', { class: 'fx-head' });
-    const x = el('button', { type: 'button', class: 'fx-x', 'aria-label': 'Close' }, '✕');
+    const x = el('button', { type: 'button', class: 'fx-x icon-only', 'aria-label': 'Close' }, 'Close');
+    decorate(x, 'close');
     x.addEventListener('click', () => this.close());
     const mode = el('div', { class: 'fx-seg small fx-mode', role: 'group', 'aria-label': 'How many settings' });
     for (const [adv, label, title] of [[false, 'Simple', 'Just the main slider of each effect'], [true, 'Advanced', 'Every setting']] as const) {
@@ -141,7 +142,7 @@ export class EffectsPanel {
       b.addEventListener('click', () => { this.advanced = adv; try { localStorage.setItem(MODE_KEY, adv ? 'advanced' : 'simple'); } catch { /* optional */ } this.render(); });
       mode.append(b);
     }
-    head.append(el('strong', {}, `✨ Effects · ${l.name}`), mode, x);
+    head.append(el('strong', {}, `Effects · ${l.name}`), mode, x);
     r.append(head);
     if (!list.length) r.append(el('p', { class: 'hint' }, 'No effects yet. Add one below: it shows in Motion, in Share and in every export; the layer you draw on stays clean while you draw.'));
     else r.append(el('p', { class: 'hint fx-order' }, 'Top runs first. Drag ☰ to reorder, swipe left for more.'));
@@ -152,7 +153,8 @@ export class EffectsPanel {
     // add
     const add = el('div', { class: 'fx-add' });
     for (const t of EFFECT_TYPES) {
-      const b = el('button', { type: 'button', title: t.hint }, `+ ${t.label}`);
+      const b = el('button', { type: 'button', title: t.hint }, plainName(t));
+      decorate(b, 'plus');
       b.addEventListener('click', () => {
         const id = this.newId();
         this.opened.add(id);
@@ -172,12 +174,13 @@ export class EffectsPanel {
     const top = el('div', { class: 'fx-top' });
     const grip = el('button', { type: 'button', class: 'fx-grip', title: 'Drag to reorder', 'aria-label': `Reorder ${name}` }, '☰');
     const title = el('button', { type: 'button', class: 'fx-title', 'aria-expanded': String(open), title: open ? 'Fold this effect' : 'Show its settings' });
-    title.append(el('span', { class: 'fx-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), el('span', { class: 'fx-name' }, def.label), el('span', { class: 'fx-badge' }, TARGET_NAMES[e.target]));
+    title.append(el('span', { class: 'fx-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), el('span', { class: 'fx-name' }, name), el('span', { class: 'fx-badge' }, TARGET_NAMES[e.target]));
     title.addEventListener('click', () => { if (this.swiped) { this.swiped = ''; this.render(); return; } if (open) this.opened.delete(e.id); else this.opened.add(e.id); this.render(); });
     const sw = el('button', { type: 'button', class: `fx-switch${e.on ? ' on' : ''}`, role: 'switch', 'aria-checked': String(e.on), title: e.on ? 'Turn this effect off' : 'Turn this effect on', 'aria-label': `${name} on` });
     sw.append(el('span', { class: 'lc-switch-knob', 'aria-hidden': 'true' }));
     sw.addEventListener('click', () => this.patch(i, { on: !e.on }, e.on ? `${name} off` : `${name} on`));
-    const more = el('button', { type: 'button', class: 'fx-more', title: 'More: duplicate, merge, reset, delete, move', 'aria-label': `More for ${name}` }, '⋯');
+    const more = el('button', { type: 'button', class: 'fx-more icon-only', title: 'More: duplicate, merge, reset, delete, move', 'aria-label': `More for ${name}` }, 'More');
+    decorate(more, 'more');
     more.addEventListener('click', (ev) => this.menu(i, ev.clientX, ev.clientY));
     top.append(grip, title, sw, more);
     card.append(top);

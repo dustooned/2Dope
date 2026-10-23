@@ -62,7 +62,7 @@ export class ArtworkLibraryUI {
     const head = el('header', 'artwork-head'), title = el('h2', '', 'My Assets'); title.id = 'my-artwork-title';
     const close = button('Close My Assets', 'close', () => this.close()); close.classList.add('icon-only'); head.append(title, close);
     const nav = el('nav', 'artwork-library-nav'); nav.setAttribute('aria-label', 'Asset collections');
-    nav.append(button('In this project', 'gallery', () => { this.close(); this.back(); }), button('Import artwork file', 'plus', () => this.chooseFile()));
+    nav.append(button('In this project', 'gallery', () => { this.close(); this.back(); }), button('Import artwork file', 'import', () => this.chooseFile()));
     const searchRow = el('div', 'artwork-library-search');
     const search = el('input', 'textbox'); search.type = 'search'; search.placeholder = 'Search My Assets'; search.setAttribute('aria-label', 'Search My Assets');
     search.setAttribute('data-own-keys', '');
@@ -153,7 +153,7 @@ export class ArtworkLibraryUI {
     add.disabled = !sameSize || this.app.playing;
     if (!sameSize) { add.title = 'Use Open as project to keep the original canvas size.'; info.append(el('small', 'artwork-size-note', 'Different canvas · open as project')); }
     const open = button(`Open ${card.name} as project`, 'draw', () => void this.use(card, 'open'), 'Open as project'); open.disabled = !this.openProject;
-    const download = button(`Download ${card.name} artwork`, 'export', () => void this.use(card, 'download'), 'Download');
+    const download = button(`Download ${card.name} artwork`, 'download', () => void this.use(card, 'download'), 'Download');
     download.classList.add('artwork-download');
     const manage = el('details', 'artwork-library-manage'), summary = el('summary', '', 'Manage'); summary.setAttribute('aria-label', `Manage ${card.name}`);
     const editing = el('div', 'artwork-actions');

@@ -159,7 +159,7 @@ export class MotionPanel {
         dup(btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera'))),
       ),
       group(
-        btn('\ud83d\udcd6 Flipbook', 'Edit the selected drawing layer frame by frame in Draw’s flipbook', () => app.openFlipbook?.(ed.primary?.kind === 'drawings' ? ed.primary.id : undefined)),
+        btn('Flipbook', 'Edit the selected drawing layer frame by frame in Draw’s flipbook', () => app.openFlipbook?.(ed.primary?.kind === 'drawings' ? ed.primary.id : undefined)),
         btn('↑ Up', 'Move the selected layer up (in front)', () => ed.primary && ed.reorder(ed.primary.id, -1)),
         btn('↓ Down', 'Move the selected layer down (behind)', () => ed.primary && ed.reorder(ed.primary.id, 1)),
         this.multiBtn,
