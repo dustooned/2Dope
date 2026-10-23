@@ -28,10 +28,19 @@ import {
   type PartGrad,
 } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
-import { strokeLength } from '../core/stroke';
+import { strokeLength, type StrokeRecord } from '../core/stroke';
 
 /** Which planes of each drawing to draw: everything, only linework (with vectors), or only fills. */
 export type Planes = 'all' | 'line' | 'fill';
+
+/** Resident pixels and preview-only ink supplied by the drawing tool. Never saved as artwork. */
+export interface DrawingSource {
+  line: HTMLCanvasElement;
+  fill: HTMLCanvasElement | null;
+  vectors?: readonly StrokeRecord[];
+  vectorLength?: (v: StrokeRecord) => number;
+  overlay?: (g: CanvasRenderingContext2D, part: PartName) => void;
+}
 
 export interface CompositeOptions {
   planes?: Planes;
@@ -46,7 +55,7 @@ export interface CompositeOptions {
   /** A final render: guide layers (the storyboard) are left out unless set to export. */
   export?: boolean;
   /** Draw this drawing's pixels from other canvases (the stroke being painted right now). */
-  source?: (d: Drawing) => { line: HTMLCanvasElement; fill: HTMLCanvasElement | null } | null;
+  source?: (d: Drawing) => DrawingSource | null;
 }
 
 const BLEND: Record<BlendMode, GlobalCompositeOperation> = {
@@ -175,14 +184,16 @@ interface PartsCtx {
 
 function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions, parts?: PartsCtx): void {
   if (d.parked) return; // the caller pins what a frame needs; never draw a packed-away drawing
-  const src = opt?.source?.(d) ?? { line: d.line, fill: d.fill };
+  const src: DrawingSource = opt?.source?.(d) ?? { line: d.line, fill: d.fill };
   const paint = (t: CanvasRenderingContext2D, name: PartName) => {
     if (name === 'fill') {
       if (src.fill) t.drawImage(src.fill, 0, 0);
+      src.overlay?.(t, name);
       return;
     }
     t.drawImage(src.line, 0, 0);
-    for (const v of d.vectors) drawVectorStroke(t, v, strokeLength(v.points));
+    for (const v of src.vectors ?? d.vectors) drawVectorStroke(t, v, src.vectorLength?.(v) ?? strokeLength(v.points));
+    src.overlay?.(t, name);
   };
   if (!parts || !partsActive(parts.layer)) {
     for (const name of PART_NAMES) if (planes === 'all' || planes === name) paint(g, name);
@@ -191,7 +202,7 @@ function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, op
   const base = g.globalAlpha;
   for (const name of PART_NAMES) {
     if (planes !== 'all' && planes !== name) continue;
-    if (name === 'fill' && !src.fill) continue;
+    if (name === 'fill' && !src.fill && !src.overlay) continue;
     const p = partOf(parts.layer, name);
     const a = p.visible ? Math.max(0, Math.min(1, valueAt(p.opacity, parts.lf) / 100)) : 0;
     if (a <= 0) continue;
@@ -199,15 +210,17 @@ function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, op
     g.save();
     g.translate(ox, oy);
     g.globalAlpha = base * a;
-    if (p.tint) {
-      // recolour: the part's pixels in one colour, keeping their alpha (anti-aliasing stays)
-      const t = scratchFor(`t${parts.depth}`, src.line.width, src.line.height);
-      const tg = t.getContext('2d')!;
+    if (p.tint || a < 1 || src.overlay) {
+      // Flatten each plane's raster, vectors and predicted ink before applying its opacity.
+      const tg = fresh(`t${parts.depth}`, src.line.width, src.line.height);
+      const t = tg.canvas;
       paint(tg, name);
-      tg.globalCompositeOperation = 'source-in';
-      tg.fillStyle = partFill(tg, p.tint, p.grad ?? null, t.width, t.height);
-      tg.fillRect(0, 0, t.width, t.height);
-      tg.globalCompositeOperation = 'source-over';
+      if (p.tint) {
+        tg.globalCompositeOperation = 'source-in';
+        tg.fillStyle = partFill(tg, p.tint, p.grad ?? null, t.width, t.height);
+        tg.fillRect(0, 0, t.width, t.height);
+        tg.globalCompositeOperation = 'source-over';
+      }
       g.drawImage(t, 0, 0);
     } else paint(g, name);
     g.restore();
@@ -312,12 +325,12 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
   g.globalCompositeOperation = 'source-over';
 }
 
-function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, m: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number): void {
+function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, m: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number, editingDrawing?: Drawing): void {
   let source: HTMLCanvasElement | null = null;
   let direct: Drawing | null = null;
   if (l.kind === 'drawings') {
     const id = drawingOf(l, frame);
-    const d = id ? project.drawings.get(id) : undefined;
+    const d = editingDrawing ?? (id ? project.drawings.get(id) : undefined);
     if (!d || d.parked) return;
     // A plain layer draws straight in; with opacity, a blend mode or a mask the drawing is
     // flattened first (its fill does not show through its own lines; the mask takes paint away)
@@ -339,8 +352,9 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
         sg.setTransform(1, 0, 0, 1, 0, 0);
         sg.globalAlpha = 1;
         sg.globalCompositeOperation = 'destination-out';
-        sg.drawImage(mask.line, 0, 0);
-        for (const v of mask.vectors) drawVectorStroke(sg, v);
+        const maskSrc = opt.source?.(mask);
+        sg.drawImage(maskSrc?.line ?? mask.line, 0, 0);
+        for (const v of maskSrc?.vectors ?? mask.vectors) drawVectorStroke(sg, v);
         sg.globalCompositeOperation = 'source-over';
       }
     }
@@ -360,6 +374,33 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
   else if (source) g.drawImage(source, 0, 0);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * Draw the editable cel in its own page coordinates, using the same parts, mask, opacity and
+ * blend compositor as playback/export. Effects remain off while painting, as in the Draw UI.
+ * A clipping-group caller supplies full alpha for the base mask and applies base opacity once
+ * to the group; members supply their own opacity. Preview sources never mutate the document.
+ */
+export function drawEditingLayer(
+  g: CanvasRenderingContext2D, project: Project, c: Comp, l: DrawingsLayer, frame: number,
+  drawing: Drawing, matrix: DOMMatrix,
+  opt: { source?: CompositeOptions['source']; editingMask?: boolean; alpha?: number; blend?: BlendMode } = {},
+): void {
+  if (!l.visible) return;
+  const alpha = opt.alpha ?? opacityAt(l, frame);
+  if (alpha <= 0) return;
+  if (drawing.parked) {
+    // Keep the loading placeholder, but apply the same layer properties to it as to live pixels.
+    if (!drawing.thumb) return;
+    const g = fresh('editingPlaceholder', project.width, project.height);
+    g.drawImage(drawing.thumb, 0, 0, project.width, project.height);
+    drawing = { ...drawing, parked: null, line: g.canvas, fill: null };
+  }
+  const layer = { ...l, effects: undefined, ...(opt.editingMask ? { mask: undefined } : {}), blend: opt.blend ?? l.blend };
+  g.save();
+  drawLayer(g, project, c, layer, frame, matrix, alpha, 'all', { source: opt.source }, 0, drawing);
+  g.restore();
 }
 
 /**

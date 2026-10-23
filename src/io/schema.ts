@@ -137,6 +137,7 @@ export interface LayerFile {
 }
 
 export interface CompFile {
+  asset?: boolean;
   audio?: SoundClip[];
   name: string;
   width: number;
@@ -186,11 +187,11 @@ export interface ProjectFile {
 export class SchemaError extends Error {}
 
 const MAX_DIM = 8192;
-const MAX_DRAWINGS = 20_000;
+export const MAX_DRAWINGS = 20_000;
 const MAX_FRAMES = 1_000_000;
-const MAX_VECTORS = 50_000;
+export const MAX_VECTORS = 50_000;
 const MAX_POINTS = 200_000;
-const MAX_COMPS = 500;
+export const MAX_COMPS = 500;
 const MAX_LAYERS = 1000;
 const MAX_KEYS = 100_000;
 export const ASSET_PATH = /^assets\/[A-Za-z0-9_.-]{1,120}\.png$/;
@@ -554,6 +555,7 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     const bg = c.background;
     comps[id] = {
       name: str(c.name ?? 'Comp', `comp ${id} name`),
+      ...(c.asset === true ? { asset: true } : {}),
       width: cw,
       height: ch,
       fps: int(c.fps, `comp ${id} fps`, 1, 120),
@@ -725,6 +727,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
     out.set(id, {
       id,
       name: c.name,
+      ...(c.asset ? { asset: true } : {}),
       width: c.width,
       height: c.height,
       fps: c.fps,
@@ -742,6 +745,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
 /** A comp as written in files. */
 export function compFile(c: Comp): CompFile {
   const out: CompFile = {
+    ...(c.asset ? { asset: true } : {}),
     name: c.name,
     width: c.width,
     height: c.height,

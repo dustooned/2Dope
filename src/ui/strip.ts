@@ -7,6 +7,8 @@ import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlo
 import { rulerStep } from '../core/timecode';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './contextmenu';
 import { frameMenu } from './framemenu';
+import { AssetClipDrag } from './assetclipdrag';
+import { AssetClipPreviews } from './assetclippreviews';
 
 const THUMB_W = 56;
 const THUMB_H = 32;
@@ -72,6 +74,7 @@ export class Strip {
   /** Sounds as rows under the layers (the tracks sheet); set by main. */
   audio: { active(): boolean; sig(): string; rows: ExtraRows } | null = null;
   private cell = loadCell();
+  private assetPreviews: AssetClipPreviews;
   private drag: Drag | null = null;
   private flipBtn!: HTMLButtonElement;
   /** Which rail rows are folded open (groups, LINE / FILL). */
@@ -277,8 +280,10 @@ export class Strip {
     this.lockMark = el('div', { class: 'strip-lock', title: 'Scrub lock home frame' }, '⌂');
     this.track.append(this.inner);
     root.append(bar, this.track);
+    this.assetPreviews = new AssetClipPreviews(app,this.track);
 
     this.bindPointer();
+    new ResizeObserver(() => this.keepVisible()).observe(this.track);
     this.update();
   }
 
@@ -291,7 +296,12 @@ export class Strip {
   }
 
   private frameAtX(x: number): number {
-    return Math.max(0, Math.min(Math.floor(x / this.cell), this.app.project.length - 1));
+    const end = this.app.workspace === 'animate' ? this.app.compEnd - this.app.project.layer.start : this.app.project.length;
+    return Math.max(0, Math.min(Math.floor(x / this.cell), end - 1));
+  }
+  private seek(f: number): void {
+    if (this.app.workspace === 'animate') this.app.setFrame(Math.max(0, Math.min(this.app.project.layer.start + f, this.app.compEnd - 1)));
+    else this.app.setLayerFrame(f);
   }
 
   /** Time zoom around a point: pinch with two fingers, or Ctrl / ⌘ + wheel. */
@@ -345,6 +355,7 @@ export class Strip {
   }
 
   private bindPointer(): void {
+    new AssetClipDrag(this.app,this.track,() => this.cell);
     this.bindZoom();
     const app = this.app;
     this.track.addEventListener('pointerdown', (e) => {
@@ -395,7 +406,7 @@ export class Strip {
       if (p.y < RULER_H) {
         this.drag = { kind: 'scrub' };
         app.beginScrub();
-        app.setLayerFrame(this.frameAtX(p.x));
+        this.seek(this.frameAtX(p.x));
         return;
       }
       this.drag = { kind: 'marquee', x0: p.x, y0: p.y, base: e.shiftKey ? [...app.selection] : [], moved: false };
@@ -406,7 +417,7 @@ export class Strip {
       if (!d) return;
       const p = this.local(e);
       if (d.kind === 'scrub') {
-        app.setLayerFrame(this.frameAtX(p.x));
+        this.seek(this.frameAtX(p.x));
       } else if (d.kind === 'resize') {
         if (Math.abs(p.x - d.startX) > 1) d.moved = true;
         const startFrame = startOf(d.before, d.index);
@@ -479,7 +490,7 @@ export class Strip {
       } else if (d.kind === 'marquee' && !d.moved && !cancelled) {
         // a click on empty space: clear the selection and move the playhead
         if (!d.base.length) app.setSelection([]);
-        app.setLayerFrame(this.frameAtX(p.x));
+        this.seek(this.frameAtX(p.x));
       }
     };
     this.track.addEventListener('pointerup', (e) => finish(e, false));
@@ -543,7 +554,7 @@ export class Strip {
     }
     const cell = this.cell;
     setLabel(this.layerChip, app.project.isPlaceholder ? 'New layer' : app.project.layer.name);
-    this.frameLabel.textContent = app.blankPage ? `new · ${app.fmtDur(p.length)}` : `${app.fmt(app.lf)} / ${app.fmtDur(p.length)}`;
+    this.frameLabel.textContent = app.blankPage ? `new · ${app.fmtDur(p.length)}` : app.workspace === 'animate' ? `${app.fmt(app.frame)} / ${app.fmtDur(app.compEnd)}` : `${app.fmt(app.lf)} / ${app.fmtDur(p.length)}`;
     this.drawEditLine();
     const l = locate(p.exposures, app.lf);
     const targets = app.targets;
@@ -557,7 +568,7 @@ export class Strip {
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(p.fps);
     this.playhead.style.width = `${cell}px`;
-    this.playhead.style.transform = `translateX(${(app.blankPage ? p.length : app.lf) * cell}px)`;
+    this.playhead.style.transform = `translateX(${(app.blankPage ? p.length : app.workspace === 'animate' ? app.layerFrame : app.lf) * cell}px)`;
     this.flipBtn.setAttribute('aria-pressed', String(app.blankPage));
     this.selBtn.setAttribute('aria-pressed', String(app.multiSelect));
     this.blank.style.display = '';
@@ -583,6 +594,7 @@ export class Strip {
     }
     this.updateToggles();
     this.keepVisible();
+    this.assetPreviews.refresh();
   }
 
   /** On/off chips for each drawing layer and the active layer's Line / Fill (Time workspace). */
@@ -630,12 +642,12 @@ export class Strip {
     this.inner.replaceChildren();
     // wide enough for the layer, and for the board's panels when they run longer
     const boardEnd = this.app.board && p.layer.id !== this.app.board.id ? this.app.panelMarks.reduce((n, m) => Math.max(n, m.start + m.length), 0) - p.layer.start : 0;
-    this.inner.style.width = `${Math.max(Math.max(p.length, boardEnd) * cell + cell * 2, 200)}px`;
+    const length = this.app.workspace === 'animate' ? Math.max(p.length,this.app.compEnd-p.layer.start) : p.length;
+    this.inner.style.width = `${Math.max(Math.max(length, boardEnd) * cell + cell * 2, 200)}px`;
     const ruler = el('div', { class: 'strip-ruler' });
-    const step = rulerStep(cell, p.fps, this.app.timeFormat);
-    for (let f = 0; f < p.length; f++) {
-      if (f % step !== 0) continue;
-      const n = el('span', {}, this.app.fmt(f));
+    const step = Math.max(rulerStep(cell, p.fps, this.app.timeFormat),Math.ceil(length/1000));
+    for (let f = 0; f < length; f += step) {
+      const n = el('span', {}, this.app.fmt(this.app.workspace === 'animate' ? f+p.layer.start : f));
       n.style.left = `${f * cell}px`;
       n.style.width = `${cell}px`;
       ruler.append(n);
@@ -648,7 +660,7 @@ export class Strip {
       cell,
       RULER_H,
       p.layer.start,
-      Math.max(p.length * cell + cell * 2, 200),
+      Math.max(length * cell + cell * 2, 200),
       (d) => this.smallThumb(d),
       () => {
         this.signature = '';
@@ -697,10 +709,10 @@ export class Strip {
   private railSig(): string {
     const app = this.app;
     const c = app.project.comp;
-    return `${c.id}|${app.project.activeLayer}|${app.plane}|${[...this.rails.open].join(',')}|${c.layers
+    return `${c.id}|${app.workspace}|${app.compEnd}|${app.placedAsset?.id ?? ''}|${app.project.activeLayer}|${app.plane}|${[...this.rails.open].join(',')}|${c.layers
       .map(
         (l) =>
-          `${l.id}:${l.name}:${l.visible ? 1 : 0}${l.locked ? 1 : 0}:${l.start}:${l.in}:${l.out}:${l.label}:${l.kind === 'drawings' ? `${l.exposures.map((e) => `${e.drawing}.${e.length}`).join('/')}:${l.parts?.line?.visible !== false}${l.parts?.fill?.visible !== false}` : l.kind === 'comp' ? l.comp : ''}`,
+          `${l.id}:${l.name}:${l.visible ? 1 : 0}${l.locked ? 1 : 0}:${l.start}:${l.in}:${l.out}:${l.label}:${l.kind === 'drawings' ? `${l.exposures.map((e) => `${e.drawing}.${e.length}`).join('/')}:${l.parts?.line?.visible !== false}${l.parts?.fill?.visible !== false}` : l.kind === 'comp' ? `${l.comp}:${app.project.comps.get(l.comp)?.name}` : ''}`,
       )
       .join('|')}`;
   }
@@ -747,8 +759,8 @@ export class Strip {
   }
 
   private keepVisible(): void {
-    if (this.drag) return; // do not scroll under the user's pointer
-    const x = this.app.lf * this.cell;
+    if (this.drag || this.app.editor.assetClipDragging) return; // do not scroll under the user's pointer
+    const x = (this.app.workspace === 'animate' ? this.app.layerFrame : this.app.lf) * this.cell;
     const t = this.track;
     if (x < t.scrollLeft) t.scrollLeft = x - this.cell;
     else if (x + this.cell > t.scrollLeft + t.clientWidth) t.scrollLeft = x + this.cell * 2 - t.clientWidth;

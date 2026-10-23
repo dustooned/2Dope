@@ -11,6 +11,7 @@ import { RasterEngine } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { attachContextMenu } from './contextmenu';
 import { askText, confirmBox } from './dialogs';
+import { decorate } from './icons';
 
 const MINE_KEY = '2dope.brushes.mine';
 const CAT_KEY = '2dope.brushes.category';
@@ -39,6 +40,11 @@ export class BrushLibrary {
   private readonly cats = el('div', { class: 'bl-cats', role: 'tablist' });
   private readonly list = el('div', { class: 'bl-list', role: 'listbox', 'aria-label': 'Brushes' });
   private anchor: HTMLElement | null = null;
+  private anchorParent: HTMLElement | null = null;
+  private anchorLabel: string | null = null;
+  private readonly done = el('button', { type: 'button', class: 'bl-done', 'aria-label': 'Done choosing brush', title: 'Keep this brush and return to drawing' }, 'Done');
+  private readonly current = el('span', { class: 'bl-current', role: 'status', 'aria-label': 'Current brush and painting target' });
+  private cancelDrag = () => {};
   private cat: BrushCategory;
   private mine: BrushSettings[];
   private sets: BrushSets = (() => { try { return readSets(JSON.parse(localStorage.getItem(SETS_KEY) ?? 'null')); } catch { return readSets(null); } })();
@@ -71,6 +77,12 @@ export class BrushLibrary {
     }
     this.cat = c;
     const head = el('div', { class: 'bl-head' });
+    const identity = el('div', { class: 'bl-identity' });
+    identity.append(el('span', { class: 'bl-title' }, 'Brushes'), this.current);
+    decorate(this.done, 'check');
+    this.done.addEventListener('click', () => this.close(true));
+    head.append(identity, this.done);
+    const actions = el('div', { class: 'bl-actions' });
     const save = el('button', { type: 'button', class: 'primary', title: 'Save the brush you are using (with your changes) into My brushes' }, '＋ Save brush');
     save.addEventListener('click', () => void this.saveCurrent());
     const studio = el('button', { type: 'button', title: 'Every setting of this brush (Brush Studio)' }, '⚙ Studio');
@@ -88,10 +100,10 @@ export class BrushLibrary {
     });
     const imp = el('button', { type: 'button', title: 'Bring in brushes from Procreate (.brushset, .brush) or Photoshop (.abr)' }, '\u2913 Import');
     imp.addEventListener('click', () => picker.click());
-    head.append(el('span', { class: 'bl-title' }, 'Brushes'), imp, studio, save, picker);
+    actions.append(imp, studio, save, picker);
     const main = el('div', { class: 'bl-main' });
     main.append(this.cats, this.list);
-    this.root.append(head, main, el('p', { class: 'hint bl-hint' }, 'Tap to use · double-tap for all settings · hold for more'));
+    this.root.append(head, actions, main, el('p', { class: 'hint bl-hint' }, 'Tap to choose · Done to draw · double-tap for Studio · hold for more'));
     document.body.append(this.root);
 
     attachContextMenu(this.list, ({ target }) => {
@@ -124,15 +136,17 @@ export class BrushLibrary {
       (e) => {
         if (this.root.hidden) return;
         const t = e.target as Node;
-        if (this.root.contains(t) || this.anchor?.contains(t) || (t as HTMLElement).closest?.('.ctxmenu, dialog')) return;
+        if (this.root.contains(t) || this.currentAnchor()?.contains(t) || (t as HTMLElement).closest?.('.ctxmenu, dialog')) return;
         this.close();
       },
       true,
     );
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !this.root.hidden) this.close();
-    });
+      if (e.key !== 'Escape' || this.root.hidden || document.querySelector('dialog[open], .ctxmenu')) return;
+      e.preventDefault(); e.stopPropagation(); this.close(true);
+    }, true);
     window.addEventListener('resize', () => this.place());
+    new ResizeObserver(() => this.place()).observe(this.root);
   }
 
   get open(): boolean {
@@ -140,15 +154,22 @@ export class BrushLibrary {
   }
 
   toggle(anchor: HTMLElement): void {
-    if (this.open) return this.close();
+    if (this.open) return this.close(true);
     this.anchor = anchor;
+    this.anchorParent = anchor.parentElement;
+    this.anchorLabel = anchor.getAttribute('aria-label');
     this.root.hidden = false;
     this.render();
     this.place();
+    this.done.focus({ preventScroll: true });
   }
 
-  close(): void {
+  close(returnToCanvas = false): void {
+    this.cancelDrag();
+    this.dragged = false;
+    this.lastTap = { name: '', at: 0 };
     this.root.hidden = true;
+    if (returnToCanvas) this.app.focusCanvas();
   }
 
   /** Every brush: the built-in ones, then yours. */
@@ -323,12 +344,15 @@ export class BrushLibrary {
     let ghost: HTMLElement | null = null;
     let over: HTMLElement | null = null;
     const end = () => {
+      const id = s?.id;
       ghost?.remove();
       ghost = null;
       over?.classList.remove('drop');
       over = null;
       s = null;
+      if (id !== undefined && this.list.hasPointerCapture(id)) this.list.releasePointerCapture(id);
     };
+    this.cancelDrag = end;
     this.list.addEventListener('pointerdown', (e) => {
       const card = (e.target as HTMLElement).closest<HTMLElement>('.bl-card');
       if (!card || e.button > 0) return;
@@ -367,6 +391,7 @@ export class BrushLibrary {
     };
     this.list.addEventListener('pointerup', up);
     this.list.addEventListener('pointercancel', () => end());
+    this.list.addEventListener('lostpointercapture', (e) => { if (s?.id === e.pointerId) end(); });
     // the click that ends a drag is not a pick
     this.list.addEventListener('click', (e) => { if (this.dragged) { e.stopPropagation(); e.preventDefault(); this.dragged = false; } }, true);
   }
@@ -406,17 +431,30 @@ export class BrushLibrary {
   }
 
   private place(): void {
-    const a = this.anchor;
+    const a = this.currentAnchor();
     if (!a || this.root.hidden) return;
     const r = a.getBoundingClientRect();
     const w = Math.min(520, window.innerWidth - 16);
     this.root.style.width = `${w}px`;
     this.root.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
-    this.root.style.top = `${Math.min(r.bottom + 6, Math.max(8, window.innerHeight - this.root.offsetHeight - 8))}px`;
+    this.root.style.top = `${Math.max(8, Math.min(r.bottom + 6, window.innerHeight - this.root.offsetHeight - 8))}px`;
+  }
+
+  private currentAnchor(): HTMLElement | null {
+    if (this.anchor?.isConnected) return this.anchor;
+    if (!this.anchorParent?.isConnected || !this.anchorLabel) return null;
+    return [...this.anchorParent.children].find((e): e is HTMLElement => e instanceof HTMLElement && e.getAttribute('aria-label') === this.anchorLabel) ?? null;
   }
 
   private render(): void {
     if (this.root.hidden) return;
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusName = focused?.closest<HTMLElement>('.bl-card')?.dataset.name;
+    const focusCat = focused?.closest<HTMLElement>('[data-cat]')?.dataset.cat;
+    const listScroll = this.list.scrollTop, catsScroll = this.cats.scrollTop, catsLeft = this.cats.scrollLeft;
+    const tool = this.app.smudging ? 'Smudge' : this.app.tool === 'eraser' ? 'Eraser' : this.app.tool === 'pen' ? 'Vector' : 'Brush';
+    this.current.textContent = `${this.app.brush.name} · ${tool} · ${this.app.plane === 'line' ? 'Line' : 'Fill'}`;
+    this.current.title = this.current.textContent;
     if (!allCategories(this.sets).some((c) => c.id === this.cat)) this.cat = 'mine';
     const newSet = el('button', { type: 'button', class: 'bl-new', title: 'A new collection for your brushes (like a Procreate brush set)' }, '\uff0b New');
     newSet.addEventListener('click', () => void this.newSet());
@@ -446,6 +484,7 @@ export class BrushLibrary {
             const card = el('button', { type: 'button', class: `bl-card${b.name === cur ? ' on' : ''}`, role: 'option', 'aria-selected': String(b.name === cur), 'data-name': b.name, title: b.name });
             card.append(this.preview(b), el('span', { class: 'bl-name' }, b.name));
             card.addEventListener('click', () => {
+              if (this.root.hidden) return;
               const now = performance.now();
               const double = this.lastTap.name === b.name && now - this.lastTap.at < 400;
               this.lastTap = { name: b.name, at: now };
@@ -456,6 +495,14 @@ export class BrushLibrary {
           })
         : [el('p', { class: 'hint bl-empty' }, 'No brushes saved yet. Tune a brush, then tap ＋ Save brush.')]),
     );
+    // Selecting a brush/category rebuilds its controls: keep keyboard and scrolling in place.
+    if (focusName || focusCat) {
+      const replacement = [...this.root.querySelectorAll<HTMLElement>('[data-name], [data-cat]')].find(e => focusName ? e.dataset.name === focusName : e.dataset.cat === focusCat);
+      replacement?.focus({ preventScroll: true });
+    }
+    this.list.scrollTop = listScroll;
+    this.cats.scrollTop = catsScroll;
+    this.cats.scrollLeft = catsLeft;
   }
 
   /** A stroke drawn with the brush: thin to thick to thin, in the current colour. */

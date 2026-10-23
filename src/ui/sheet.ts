@@ -1,5 +1,6 @@
 import type { App } from '../app';
 import { autoIcon } from './icons';
+import { isPaintingWorkspace } from '../core/workspace';
 
 export type SheetState = 'peek' | 'half' | 'full';
 
@@ -24,7 +25,7 @@ export class TracksSheet {
   private drag: { id: number; y: number; h: number; t: number; moved: boolean } | null = null;
   private state: SheetState = 'half';
   /** Workspaces that use the sheet (the rest keep the plain splitter). */
-  static readonly WORKSPACES = new Set(['draw', 'time']);
+  static readonly WORKSPACES = new Set(['draw', 'animate', 'time']);
 
   constructor(private readonly app: App, private readonly column: HTMLElement, before: HTMLElement, private readonly onResize: () => void) {
     this.bar.append(el('span', { class: 'tracks-grip', 'aria-hidden': 'true' }));
@@ -41,6 +42,9 @@ export class TracksSheet {
     this.bar.append(this.play, this.readout, el('span', { class: 'spacer' }), this.size);
     column.insertBefore(this.bar, before);
     this.bindDrag();
+    const layout=new ResizeObserver(()=>this.fitCanvas());
+    layout.observe(column);
+    const stage=column.querySelector<HTMLElement>('#stage');if(stage)layout.observe(stage);
   }
 
   get active(): boolean {
@@ -76,6 +80,8 @@ export class TracksSheet {
   }
 
   set(s: SheetState, remember = true): void {
+    if(remember && this.app.strokeActive)return;
+    if(remember && isPaintingWorkspace(this.app.workspace))this.app.preserveCanvasView();
     this.state = s;
     const on = this.active;
     document.body.classList.toggle('sheet-peek', on && s === 'peek');
@@ -93,22 +99,24 @@ export class TracksSheet {
   }
 
   /**
-   * Keep enough canvas: full leaves it about 30% of the column, half at least 55%. Measured after
+   * Painting keeps about 45% canvas at full, 60% at half; Timing retains its review layout. Measured after
    * layout, so the strip buttons and audio lane are counted whatever their size.
    */
   private fitCanvas(): void {
     const stage = document.getElementById('stage');
     const track = this.column.querySelector<HTMLElement>('.strip-track');
-    if (!stage || !track || this.state === 'peek' || !this.active) return;
+    if (!stage || !track || !track.getClientRects().length || this.state === 'peek' || !this.active) return;
     const col = this.column.clientHeight;
     if (col < 300) return;
     const stageH = stage.getBoundingClientRect().height;
     const trackH = track.getBoundingClientRect().height;
-    const want = this.state === 'full' ? Math.max(160, col * 0.3) : Math.max(220, col * 0.55);
+    const want = this.canvasMinimum(this.state,col);
     if (this.state === 'half' && stageH >= want) return;
     const h = Math.max(60, Math.round(trackH + stageH - want));
-    document.body.style.setProperty('--track-h', `${h}px`);
-    this.onResize();
+    if(document.body.style.getPropertyValue('--track-h')!==`${h}px`) {
+      document.body.style.setProperty('--track-h', `${h}px`);
+      this.onResize();
+    }
   }
 
   /** Playhead readout and play state, cheap enough for every frame change. */
@@ -120,8 +128,17 @@ export class TracksSheet {
   }
 
   private fullHeight(): number {
+    if(isPaintingWorkspace(this.app.workspace)) {
+      const stage=document.getElementById('stage'),track=this.column.querySelector<HTMLElement>('.strip-track');
+      if(stage&&track)return Math.max(60,stage.getBoundingClientRect().height+track.getBoundingClientRect().height-this.canvasMinimum('full',this.column.clientHeight));
+    }
     // leave the canvas about 240 px (the handle and strip buttons take the rest)
     return Math.max(160, this.column.clientHeight - 340);
+  }
+
+  private canvasMinimum(state: SheetState,col: number): number {
+    if(isPaintingWorkspace(this.app.workspace))return state==='full'?Math.max(280,col*0.45):Math.max(300,col*0.6);
+    return state==='full'?Math.max(160,col*0.3):Math.max(220,col*0.55);
   }
 
   private restoreHalf(): void {
@@ -136,7 +153,7 @@ export class TracksSheet {
   private bindDrag(): void {
     const bar = this.bar;
     bar.addEventListener('pointerdown', (e) => {
-      if (!this.active) return;
+      if (!this.active || this.app.strokeActive) return;
       e.preventDefault();
       try { bar.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
       const cur = parseFloat(getComputedStyle(document.body).getPropertyValue('--track-h')) || 112;
@@ -148,6 +165,7 @@ export class TracksSheet {
       if (!d || d.id !== e.pointerId) return;
       const dy = e.clientY - d.y;
       if (!d.moved && Math.abs(dy) < 8) return;
+      if(!d.moved&&isPaintingWorkspace(this.app.workspace))this.app.preserveCanvasView();
       d.moved = true;
       const h = d.h - dy;
       // live resize; below 50 px the tracks close on release

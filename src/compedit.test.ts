@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CompEditor } from './compedit';
+import { CompEditor, type GestureOptions } from './compedit';
 import { setKey, staticProp, valueAt, type Vec2 } from './core/anim';
-import { apply, cameraLayer, compLength, drawingsLayer, instanceComp, newComp, nullLayer, worldMatrix, type Comp, type CompLayer } from './core/comp';
+import { apply, cameraLayer, compLayer, compLength, drawingsLayer, instanceComp, newComp, nullLayer, worldMatrix, type Comp, type CompLayer } from './core/comp';
 import { History } from './core/history';
 import type { App } from './app';
 
@@ -48,6 +48,131 @@ const close = (a: Vec2, b: Vec2) => {
   expect(a[0]).toBeCloseTo(b[0], 4);
   expect(a[1]).toBeCloseTo(b[1], 4);
 };
+
+describe('Animate asset gestures', () => {
+  function assetRig() {
+    const r = rig();
+    const source = newComp('source', 'Prop', 80, 60, 12); source.asset = true;
+    source.layers.push(drawingsLayer('paint', 'Paint', [{drawing:'art', length:12}], 80, 60));
+    r.project.comps.set(source.id, source);
+    const l = compLayer('asset', 'Prop', source, r.comp); l.locked = true; l.play = 'loop';
+    r.comp.layers.push(l);
+    const options: GestureOptions = {accept: x => x.kind === 'comp' && r.project.comps.get(x.comp)?.asset === true, allowLocked:true, simple:true, autoKey:false};
+    return {...r, source, l, options};
+  }
+  it('previews repeated clip timing changes, blocks overlapping gestures and commits one history step', () => {
+    const {ed,app,l,comp,source} = assetRig(); l.out=8;
+    const other = JSON.stringify(comp.layers[0]), art = JSON.stringify(source), transform=JSON.stringify(l.transform);
+    let saves=0; app.onDocChanged=()=>{saves++;};
+    expect(ed.assetClipStart(l.id,'move')).toBe(true); expect(ed.dragging).toBe(true);
+    expect(ed.assetClipStart(l.id,'out')).toBe(false);
+    ed.assetClipMove(2); ed.assetClipMove(5);
+    expect([l.start,l.in,l.out]).toEqual([5,5,13]); expect(app.history.canUndo).toBe(false); expect(saves).toBe(0);
+    ed.assetClipEnd(); expect(saves).toBe(1); expect(ed.dragging).toBe(false);
+    expect(JSON.stringify(comp.layers[0])).toBe(other); expect(JSON.stringify(source)).toBe(art); expect(JSON.stringify(l.transform)).toBe(transform);
+    app.history.undo(); expect([ed.layer(l.id)!.in,ed.layer(l.id)!.out]).toEqual([0,8]); expect(app.history.canUndo).toBe(false);
+    app.history.redo(); expect([ed.layer(l.id)!.in,ed.layer(l.id)!.out]).toEqual([5,13]);
+  });
+  it('cancel restores the starting frame and timing; a tap or drag back creates no history', () => {
+    const {ed,app,l} = assetRig(); app.frame=10;
+    ed.assetClipStart(l.id,'out'); ed.assetClipMove(-10); expect(app.frame).toBe(10); // drawing track still lasts 12
+    ed.gestureEnd(true); expect(ed.layer(l.id)!.out).toBeNull(); expect(app.frame).toBe(10); expect(ed.dragging).toBe(false);
+    ed.assetClipStart(l.id,'move'); ed.assetClipMove(6); ed.assetClipMove(0); ed.assetClipEnd();
+    expect(ed.layer(l.id)!.out).toBeNull(); expect(app.history.canUndo).toBe(false);
+    ed.assetClipStart(l.id,'move'); ed.assetClipEnd(); expect(app.history.canUndo).toBe(false);
+  });
+  it('clip gestures reject playback, busy input and non-asset layers', () => {
+    const {ed,app,l} = assetRig(); Object.assign(app,{playing:true});
+    expect(ed.assetClipStart(l.id,'move')).toBe(false);
+    Object.assign(app,{playing:false,strokeActive:true}); expect(ed.assetClipStart(l.id,'move')).toBe(false);
+    Object.assign(app,{strokeActive:false}); expect(ed.assetClipStart('L1','move')).toBe(false);
+  });
+  it('moves only a linked asset beneath the drawing, preserves its lock and source, and undoes once', () => {
+    const {ed, app, l, options, comp, source} = assetRig(); ed.autoKey = true;
+    expect(ed.hitLayer([200,150])?.id).toBe('L1');
+    expect(ed.gestureStart([200,150],1,false,options)).toBe(true);
+    expect(ed.primary?.id).toBe(l.id);
+    ed.gestureMove([220,160]); ed.gestureMove([240,175]); ed.gestureEnd();
+    close(l.transform.position.value,[240,175]); expect(l.transform.position.keys).toHaveLength(0);
+    expect(l.locked).toBe(true); expect(source.layers[0]!.id).toBe('paint');
+    expect(comp.layers[0]!.transform.position.value).toEqual([200,150]);
+    app.history.undo(); close(ed.layer(l.id)!.transform.position.value,[200,150]); expect(app.history.canUndo).toBe(false);
+    app.history.redo(); close(ed.layer(l.id)!.transform.position.value,[240,175]);
+  });
+  it('corner resizing preserves proportions and is one reversible transform', () => {
+    const {ed, app, l, options} = assetRig(); ed.select(l.id);
+    expect(ed.gestureStart([160,120],1,false,options)).toBe(true);
+    ed.gestureMove([120,90]); ed.gestureEnd();
+    close(ed.layer(l.id)!.transform.scale.value,[200,200]);
+    app.history.undo(); close(ed.layer(l.id)!.transform.scale.value,[100,100]);
+    expect(app.history.canUndo).toBe(false);
+  });
+  it('a tap or tiny pointer jitter selects without history; cancellation restores the whole gesture', () => {
+    const {ed, app, l, options, comp} = assetRig();
+    const before = structuredClone(comp.layers);
+    ed.gestureStart([200,150],1,false,options); ed.gestureMove([201,151]); ed.gestureEnd();
+    expect(ed.primary?.id).toBe(l.id); expect(app.history.canUndo).toBe(false);
+    ed.gestureStart([200,150],1,false,options); ed.gestureMove([260,200]); ed.gestureEnd(true);
+    expect(comp.layers).toEqual(before); expect(app.history.canUndo).toBe(false);
+  });
+  it('does not grab hidden, expired or ordinary comp layers, including selected handles', () => {
+    const {ed, app, l, options, source} = assetRig();
+    ed.select(l.id); l.out = 5; app.frame = 5;
+    expect(ed.gestureStart([160,120],1,false,options)).toBe(false);
+    l.out = null; l.visible = false;
+    expect(ed.gestureStart([200,150],1,false,options)).toBe(false);
+    l.visible = true; source.asset = false;
+    expect(ed.gestureStart([200,150],1,false,options)).toBe(false);
+  });
+  it('movement follows the pointer through a camera and a transformed parent', () => {
+    const {ed, l, options, comp} = assetRig();
+    const parent = nullLayer('parent', 'Parent', comp); parent.transform.position.value = [40,-20]; parent.transform.scale.value = [200,100];
+    const camera = cameraLayer('camera',comp); camera.zoom.value = 200;
+    comp.layers.push(parent,camera); l.parent = parent.id;
+    const pt = apply(ed.matrixOf(l),l.transform.anchor.value);
+    ed.gestureStart(pt,1,false,options); ed.gestureMove([pt[0]+40,pt[1]+20]); ed.gestureEnd();
+    close(l.transform.position.value,[210,160]);
+  });
+  it('duplicate remains linked and keeps the instance transform without changing its source', () => {
+    const {ed, l, comp, source, app} = assetRig();
+    l.transform.scale.value = [60,60]; ed.duplicate(l.id);
+    const copy = ed.primary as CompLayer;
+    expect(copy.id).not.toBe(l.id); expect(copy.comp).toBe(source.id);
+    expect(copy.transform.scale.value).toEqual([60,60]); expect(copy.locked).toBe(true);
+    expect(ed.instances(source.id)).toBe(2);
+    app.history.undo(); expect(ed.instances(source.id)).toBe(1); expect(comp.layers).toHaveLength(2);
+  });
+  it('adjusts an existing animated placement at the playhead without discarding its other keys', () => {
+    const {ed, app, l, options} = assetRig();
+    l.transform.position = setKey(setKey(staticProp<Vec2>([200,150]),0,[200,150]),10,[300,150]);
+    app.frame = 5;
+    ed.gestureStart([250,150],1,false,options); ed.gestureMove([275,170]); ed.gestureEnd();
+    const p = ed.layer(l.id)!.transform.position;
+    expect(p.keys.map(k => k.f)).toEqual([0,5,10]);
+    close(valueAt(p,0),[200,150]); close(valueAt(p,5),[275,170]); close(valueAt(p,10),[300,150]);
+  });
+  it('asset timing is one undo step and leaves source frames, transforms and other tracks unchanged with Ripple on', () => {
+    const {ed,app,l,comp,source} = assetRig(); Object.assign(app,{rippling:true,strokeActive:false,playing:false});
+    const drawing = structuredClone(comp.layers[0]), art = structuredClone(source), transform = structuredClone(l.transform);
+    expect(ed.setAssetTiming(l.id,'hold',24)).toBe(true);
+    expect(ed.layer(l.id)!.out).toBe(24); expect(comp.layers[0]).toEqual(drawing);
+    expect(source).toEqual(art); expect(ed.layer(l.id)!.transform).toEqual(transform);
+    app.history.undo(); expect(ed.layer(l.id)!.out).toBeNull(); expect(app.history.canUndo).toBe(false);
+    app.history.redo(); expect(ed.layer(l.id)!.out).toBe(24);
+  });
+  it('shrinking asset timing clamps the shared playhead on edit and redo', () => {
+    const {ed,app,l,comp} = assetRig();
+    comp.layers.splice(0,1); ed.setAssetTiming(l.id,'hold',40); app.frame = 39;
+    ed.setAssetTiming(l.id,'end',5); expect(app.frame).toBe(4);
+    app.history.undo(); app.frame = 30; app.history.redo(); expect(app.frame).toBe(4);
+  });
+  it('refuses timing edits during gestures/playback and on non-asset drawing layers', () => {
+    const {ed,app,l} = assetRig(); Object.assign(app,{strokeActive:true,playing:false});
+    expect(ed.setAssetTiming(l.id,'hold',10)).toBe(false);
+    Object.assign(app,{strokeActive:false,playing:true}); expect(ed.setAssetTiming(l.id,'end',10)).toBe(false);
+    Object.assign(app,{playing:false}); expect(ed.setAssetTiming('L1','end',10)).toBe(false);
+  });
+});
 
 describe('layers', () => {
   it('adds a null and a camera on top, selects them, and undoes', () => {

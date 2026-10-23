@@ -8,7 +8,7 @@ const ACCENT = '#ff5a8a';
  * the selected layers' boxes, corner squares (scale), a round handle above the top edge (rotate)
  * and a cross at the anchor point. Nothing here is part of an export.
  */
-export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, view: Viewport, dpr: number): void {
+export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, view: Viewport, dpr: number, simple = false): void {
   g.save();
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const scr = (p: [number, number]): [number, number] => {
@@ -37,8 +37,10 @@ export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, v
   g.strokeStyle = ACCENT;
   g.fillStyle = '#ffffff';
   for (const id of ed.selected) {
+    if (simple && id !== ed.primary?.id) continue;
     const l = ed.layer(id);
     if (!l || !l.visible) continue;
+    if (simple && ed.contentFrame(l) === null) continue;
     if (l.kind === 'camera' && ed.throughCamera) continue;
     const c = ed.corners(l).map(scr);
     g.setLineDash(l.kind === 'camera' ? [6, 4] : []);
@@ -58,6 +60,7 @@ export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, v
         g.stroke();
       }
     }
+    if (simple) continue;
     // rotate handle
     const top: [number, number] = [(c[0]![0] + c[1]![0]) / 2, (c[0]![1] + c[1]![1]) / 2];
     const h = scr(ed.rotateHandle(l, view.zoom));

@@ -41,7 +41,7 @@ export interface BubbleHooks {
   resetUi?: () => void;
 }
 
-type ToolKey = 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
+type ToolKey = 'assets' | 'more' | 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
   | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
 /**
@@ -60,6 +60,7 @@ export class Bubbles {
   private sig = '';
   /** The Layers bubble shows this cel's linked layers in the context bar. */
   private layersOpen = false;
+  private moreTools = false;
   /** Point editing's on/off settings, folded behind one chip. */
   private pointSettings = false;
 
@@ -70,7 +71,8 @@ export class Bubbles {
     // the order of a shot: plan it (Story), draw it (frame by frame, in the flipbook), time it, move it
     const modes: [Workspace, string, string, string][] = [
       ['board', 'Story', 'board', 'Story: panels, captions and the animatic'],
-      ['draw', 'Draw', 'draw', 'Draw: draw frame by frame in the flipbook, layer by layer'],
+      ['draw', 'Draw', 'draw', 'Draw: painting, backgrounds and assets'],
+      ['animate', 'Animate', 'flipbook', 'Animate: draw frames and arrange clips'],
       ['time', 'Timing', 'time', 'Timing: holds, marks and the exposure sheet'],
       ['motion', 'Motion', 'motion', 'Motion: move layers, keyframes and the camera'],
     ];
@@ -265,6 +267,7 @@ export class Bubbles {
   /** Which tool bubble is lit. */
   private current(): ToolKey {
     const a = this.app;
+    if (a.arrangingAssets) return 'assets';
     if (a.tool === 'fill') return a.fillMode === 'lasso' ? 'select' : 'fill';
     if (a.adjusting) return 'adjust';
     if (a.tool === 'brush' && a.smudging) return 'smudge';
@@ -272,14 +275,17 @@ export class Bubbles {
   }
 
   private get flipOn(): boolean {
-    return !!this.hooks.flip?.on() && this.app.workspace === 'draw';
+    return !!this.hooks.flip?.on() && (this.app.workspace === 'draw' || this.app.workspace === 'animate');
   }
 
   private toolsFor(ws: Workspace): [ToolKey, string, string][] {
     const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso'], ['adjust', 'Adjust: hue, saturation, brightness, blur', 'adjust']];
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
-    if (ws === 'draw' && this.level === 'clean') return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['color', 'Colour', '']];
+    const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
+    if ((ws === 'draw' || ws === 'animate') && this.level === 'clean') return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', '']];
+    if (ws === 'animate' && this.level !== 'full' && !this.moreTools) return [draw[0]!, draw[3]!, draw[4]!, draw[5]!, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['more', 'More tools', 'gear']];
+    if (ws === 'animate') return [...draw, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'gallery'], ['more', 'Fewer tools', 'gear']];
     if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'gallery']];
     // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
     if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
@@ -290,12 +296,16 @@ export class Bubbles {
 
   private pickTool(k: ToolKey, b: HTMLButtonElement): void {
     const a = this.app;
+    const arranging = a.arrangingAssets;
+    if (k === 'assets') { a.setArrangeAssets(!a.arrangingAssets); return; }
+    if (a.arrangingAssets && ['brush', 'pen', 'eraser', 'smudge', 'fill', 'select', 'adjust'].includes(k)) a.setArrangeAssets(false);
+    if (k === 'more') { this.moreTools = !this.moreTools; this.sig = ''; this.update(); return; }
     if (a.transforming && k !== 'select') a.cancelTransform();
     if (a.adjusting && k !== 'adjust' && k !== 'color' && k !== 'layers') a.applyAdjust();
     switch (k) {
       case 'adjust': if (!a.adjusting) a.beginAdjust('hsb'); break;
       case 'brush': case 'pen': case 'eraser':
-        if (a.tool === k && !(k === 'brush' && a.smudging)) this.hooks.brushLibrary(b);
+        if (a.tool === k && !arranging && !(k === 'brush' && a.smudging)) this.hooks.brushLibrary(b);
         else { a.setTool(k as Tool); if (k === 'brush') a.setSmudging(false); }
         break;
       case 'smudge': a.setSmudging(true); break;
@@ -454,16 +464,16 @@ export class Bubbles {
     const sel = !!a.spatialSelection;
     const xp = a.transformParams;
     const flip = this.flipOn;
-    const cels = this.layersOpen && (ws === 'draw' || ws === 'time') ? a.celLayers : [];
+    const cels = this.layersOpen && (ws === 'draw' || ws === 'animate' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
-    const shape = !!this.hooks.editShape && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
+    const shape = !!this.hooks.editShape && !a.arrangingAssets && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
     // what changes from frame to frame: frozen while playing, so the bubbles are not rebuilt on every
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
     const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws));
-    this.modeName.textContent = { draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
+    this.modeName.textContent = { animate: 'Animate', draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
     if (sig === this.sig) return;
     this.sig = sig;
 
@@ -492,7 +502,9 @@ export class Bubbles {
     const add = (...c: HTMLElement[]) => this.ctx.append(...c);
     // right after a snap: change the shape from here (no floating button on the simple screen)
     if (shape) add(this.chip('Edit shape', 'Change what the stroke snapped to, or keep your own stroke', false, (b) => this.hooks.editShape!(b), 'editpoints'));
-    if (editing) {
+    if (a.arrangingAssets) {
+      add(el('span', { class: 'bub-hint' }, 'Tap artwork · drag to move · corners resize'));
+    } else if (editing) {
       add(...this.widthControls());
     } else if (ws === 'time' && !this.layersOpen) {
       // holds: how many frames the drawing stays (tap a number); marks; frame by frame
@@ -504,7 +516,7 @@ export class Bubbles {
       add(this.chip('+', 'One frame longer', false, () => a.changeHold(1)));
       add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
       for (const [r, label, title] of [['key', '\ud83d\udd11 Key', 'A key drawing: the main poses of the move'], ['breakdown', 'Breakdown', 'A breakdown: the drawing that shapes the move between two keys'], ['inbetween', 'In-between', 'An in-between: fills the gaps so the move is smooth']] as const) add(this.chip(label, title, a.currentRole === r, () => a.setRole(r)));
-    } else if (this.layersOpen && (ws === 'draw' || ws === 'time') && !xp) {
+    } else if (this.layersOpen && (ws === 'draw' || ws === 'animate' || ws === 'time') && !xp) {
       // tight layer control: only this cel's linked layers, front first; tap one to draw on it
       const me = a.project.isPlaceholder ? '' : a.project.activeLayer;
       cels.forEach((l) => {
@@ -538,7 +550,7 @@ export class Bubbles {
         lbl,
         this.chip('Stronger', 'Carry more paint', false, () => { a.smudgeStrength = Math.min(1, a.smudgeStrength + 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thicker'),
       );
-    } else if (ws === 'draw' && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
+    } else if ((ws === 'draw' || ws === 'animate') && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
       add(
         this.chip('\ud83d\udd8c\ufe0f Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b)),
         this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')),

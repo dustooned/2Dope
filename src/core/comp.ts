@@ -200,6 +200,8 @@ export type Layer = DrawingsLayer | CompLayer | CameraLayer | NullLayer;
 export type LayerKind = Layer['kind'];
 
 export interface Comp {
+  /** Reusable local artwork; instances reference this comp instead of flattening its layers. */
+  asset?: boolean;
   /** Audio clips use this comp's clock; independent of drawing-layer visibility. */
   audio?: SoundClip[];
   id: string;

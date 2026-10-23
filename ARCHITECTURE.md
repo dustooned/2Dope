@@ -2,7 +2,157 @@
 
 Current code map reviewed 2026-10-14. See `HANDOFF.md` for the checked baseline and open work.
 
+Brush controls (2026-10-23): `Sidebar` adds visible Size/Opacity labels, pixel/percent values,
+numeric ARIA values with range/orientation/value text, and wider slider/button targets. Size uses
+the existing squared mapping over 1–500px (matching canvas size shortcuts); opacity spans 0–100%.
+Pointer input focuses the slider. Its own keys adjust actual units, Shift steps ten, Home/End
+reach limits and Enter/Escape focus the canvas. Cancel/lost capture/blur/hidden stop active drags,
+retaining the latest value. Resize observation measures usable stage height below tools and above
+the docked flipbook, selecting the compact row when needed. Changes still call `brushChanged`;
+tool/plane, document History, model/schema and stroke algorithms are unchanged.
+`tests/brushcontrols.html` checks actual controls/App/Bubbles, focus, gestures and painted pixels.
+
+Brush return (2026-10-23): `BrushLibrary` keeps brush/tool/plane status and 44px Done in a fixed
+header, separate from actions and scrolling collections/cards. Done, Escape and opener-toggle
+close focus the canvas; outside close and Studio retain their destination. Escape yields to nested
+dialogs/context menus. Rebuilt openers resolve by accessible label in their original parent.
+Rendering restores card/category focus and scroll, while closing resets double-tap state and
+cancels collection drag/capture/ghosts. Hidden cards ignore late clicks. Brush selection still uses
+`App.setBrush` and preserves tool/plane; storage, painting algorithms and document History are
+unchanged. `tests/brushreturn.html` exercises the actual library/App/toolbars and pen-style pixels.
+
+Colour return (2026-10-23): `ColorPanel` keeps a fixed title/44px Done row outside `.cp-body`'s
+scroll area. Explicit Done, toolbar-toggle close and Escape return focus to the canvas without
+changing the chosen colour/tool/plane. Closing clears disc drag state. Escape is captured before
+the hex field stops propagation, but yields to native modal dialogs/context menus. When Bubbles
+rebuilds the opener, the panel resolves its current sibling by accessible label within the original
+parent for outside-tap checks and placement. Existing colour preferences/Recent remain in use;
+document History, persistence formats and painting algorithms are unchanged.
+
+Painting-plane review (2026-10-23): `App.setPlane` preserves Brush/Eraser/Smudge instead of
+mapping Line to Vector and Fill to the bucket. Selecting the incompatible plane from Vector or
+the bucket uses Brush. `setTool` explicitly aligns Vector with Line and the bucket with Fill.
+No document/schema changes. `LayerCards` supplies larger Line/Fill/opacity targets and Close;
+card rebuilds restore the list scroll and the focused input/select within its original options
+group. `tests/paintingplanes.html` uses the actual App, Bubbles, LayerCards, resident pixels and
+compositor to check background/paint layers, separate planes, tool routing, opacity/visibility,
+focus/scroll and Undo. Physical touch/Pencil behavior remains a separate check.
+
+Source identity (2026-10-23): `ArtworkAssetsUI` shows source name and unplaced/linked-use status in
+a two-line header group. Counts reuse `CompEditor.instances` across all project comps; rename and
+History callbacks refresh the label. Below 700px, the workspace selector and redundant Source
+prefix step aside while editing, preserving the name, status, Assets and Done in one row. Full
+names and project-wide edit behavior remain in the group description/tooltips. Session navigation,
+document data, History commands and persistence stay unchanged. The workflow browser fixture
+checks geometry, zero/one/multiple uses across shots, long names, rename Undo/Redo and return.
+
+Compact source access (2026-10-23): `ArtworkAssetsUI` keeps its existing Edit source button in
+the fixed picker/Options/Done row rather than the scrolling details. Phone CSS keeps a labeled
+44px Edit target; Replace/Copies/Names occupy three columns in the remaining details. The source
+navigation/history implementation is unchanged. Layout/workflow browser fixtures check direct
+access with Options closed, selection disabling, touch-target geometry and the source-return loop.
+
+Input/focus update (2026-10-22): `App.onKey` leaves native field keys, button activation and
+already-handled events to their controls; ignored key releases clear held navigation state.
+The canvas is Tab-reachable and pointer input focuses it without scrolling. `ArtworkAssetsUI`
+returns focus to the canvas after source entry/Done and to the picker after placement. These are
+view/input changes with no History/schema changes. `tests/artworkworkflow.html` exercises the
+real App/UI creation, pen-style painting, Undo/Redo, placement, touch cancellation and return loop.
+
+Rendering update (2026-10-22): Draw's active cel uses `view/composite.ts` through `drawEditingLayer`, with preview-only raster/vector/ghost sources from `App.render`. Plane and layer opacity/blend/masks share the playback/export compositor; the active layer's effects stay off during painting. The red mask-edit tint and other editing guides remain outside the artwork. `tests/rendering.html` runs real-browser pixel regressions independently of the Node test suite.
+
+Workspace/assets update (2026-10-22): `core/workspace.ts` and `ui/paintingworkspace.ts` manage Draw/Animate layouts and local view preferences. `core/assets.ts` manages project-local artwork sources (normal comps with optional `asset: true`) and linked comp-layer placements; `ui/artworkassets.ts` adds New asset, the shelf and Done. Source creation and placement mutations use `CompEditor` history; source navigation/return is session state. Existing project capture/residency/compositing preserve all source layers/frames. `tests/assets.html` checks standalone PNG/ZIP reload and source updates with real browser pixels. Clips still uses the existing exposure timeline.
+
+Asset arrangement update: `App.setArrangeAssets` scopes an explicit Animate tool to the current
+project/comp. It renders the full comp with Residency and simplified selection handles, routes
+pointer gestures to `CompEditor.gestureStart` with an asset-only filter, permits initially locked
+instances without changing their lock, and disables new auto-keys for static transforms. Existing
+animated properties retain their key behavior. `ui/artworkassets.ts` owns the contextual placement
+picker/Edit source/Copies/Done controls; `ui/bubbles.ts` exposes Move assets alongside drawing
+tools. New placements select their instance. Mode/selection is session state, transforms are normal
+comp-layer data. Draw asset sources omit the outer-shot context. `tests/placement.html` exercises
+the real App input/cancel/navigation path without library storage.
+
 ## Runtime and entry point
+
+Asset timing update: `core/assettiming.ts` maps inclusive user frame numbers to existing
+comp-layer `start/in/out/play` fields; `CompEditor.setAssetTiming` applies one history command
+without ripple. `ui/artworkassets.ts` offers collapsible Clips timing controls and edge jumps.
+`ui/rails.ts` keeps asset tracks visible/selectable with finite or shot-following intervals;
+`ui/strip.ts` uses the shared comp length/clock in Animate even beyond the active drawing track.
+Off-frame placements remain selected for timing, while canvas handles require visible content.
+`tests/assettiming.html` exercises real controls, pixel boundaries and validated capture/reload.
+No new persistence fields or dependencies are needed.
+
+Direct clip gestures: `core/assettiming.ts` also computes snapped movement and edge trims from
+the original interval. `CompEditor.assetClipStart/Move/End` owns live previews, busy state and
+one history command; `gestureEnd(true)` cancels these during existing navigation/project exits.
+`ui/assetclipdrag.ts` delegates input to the stable Strip scroll container so rebuilding rails
+cannot lose the captured gesture. Pointer cancellation, second pointers, Escape, lost capture,
+blur and hidden pages restore the snapshot. Moving or trimming a following clip materializes
+its visible interval; Follow shot end restores automatic ending. The start grip trims `in`
+without shifting the source origin, unlike whole-clip movement. Source pixels/keys and sibling
+tracks are untouched. Asset labels sit above bars; selected grips use 44px targets. The Strip's
+Animate playhead/scroll uses unbounded layer time rather than the held drawing frame.
+`tests/assetclips.html` covers these paths and validated capture without opening library storage.
+
+Clip artwork previews: `view/assetpreview.ts` fingerprints a source's reachable comp settings and
+frame-one drawing revisions, pins only that frame through Residency, and renders a 192×108 PNG
+through the shared compositor (without the export stamp). `ui/assetclippreviews.ts` observes visible
+clip slots in the stable Strip scroll container, serializes preview jobs and keeps a 32-entry LRU
+per Project identity. Cache hits update existing elements; misses wait while drawing/dragging or
+playing. Cancellation/error paths unpin acquired drawings; stale projects/settings are discarded.
+Completed DOM slots do not rerender merely because their LRU entry was evicted. Visibility changes
+resume observation. CSS repeats the small PNG across a bar; it represents the shared source's
+first frame, independent of placement timing/transforms or animated-frame sampling.
+`core/assetlabels.ts` supplies per-source placement numbers, names and linked counts to the rails,
+picker and shelf. The toolbar and Draw header identify shared source editing. Editor selection
+changes refresh asset rails, including placement-picker selection. No document/schema changes.
+
+Asset names: `ArtworkAssets.renamePlacement` and `renameSource` in `core/assets.ts` push focused
+metadata commands by project/comp/layer id. Undo resolves live objects after comp snapshots have
+been replaced; it does not touch source links, pixels, timing, transforms or other placement names.
+Blank/unchanged names and busy/playback edits are rejected. `ui/artworkassets.ts` offers a compact
+Names picker and a source-card Rename action, reuses native dialogs with scope descriptions,
+guards asynchronous replies by project and active comp, and reopens the shelf after card renames.
+`ui/dialogs.ts` accepts an optional text-dialog description; existing callers retain their behavior.
+`tests/assetnames.html` exercises real App/dialog/history/validated archive and stale-project paths.
+
+Independent artwork: `ArtworkAssets.makeIndependent` prepares a reachable source graph through
+`core/assetcopy.ts`, including all exposure drawings, masks and nested comps. It snapshots stored
+immutable PNG references without decoding; dirty resident planes encode serially under Residency
+pins. Project/source metadata and drawing revisions are checked before allocation. File comp,
+drawing and vector limits are checked before and after asynchronous work. `Project.cloneStoredDrawing`
+creates fresh parked drawing ids, deep vectors and separate eventual canvases. Comp/layer/cel/audio
+ids, parents, pins, overrides and audio panel links remap within the copied graph. Immutable audio
+assets remain shared. Source names gain a unique copy suffix, within the existing 80-character cap.
+The selected placement changes only its comp link and remapped pinned overrides. `editProject`
+provides one metadata Undo/Redo; pool drawings remain to serve Redo and referencedKeys protects
+their stored assets. This extends existing comp snapshots rather than Motion's shallow makeUnique.
+The Copies picker retains linked Duplicate placement and adds Make independent; no schema or
+dependency change. `tests/assetindependent.html` exercises real App, dialogs, pixels and ZIP reload.
+
+Source replacement: `ArtworkAssets.canReplaceSource` rejects missing/nonasset/current sources,
+cycles and nested graphs that reach the target comp. `replaceSource` changes one comp link,
+clears old pinned overrides and materializes finite automatic one-shot endings with existing out
+timing. Looping shot-followers keep null out. One metadata History command resolves the live
+placement by id on Undo/Redo and notifies document changes. No pixels, sources or new fields are
+created. `ui/artworkassets.ts` reuses its sequential-preview shelf in a replacement mode, with
+disabled Current source, Use source buttons/preview actions and guarded project/comp/selection/
+old-source identity. Cancel/stale replies add no history; valid return restores Replace focus.
+The desktop action group stays together and becomes five labeled icon columns on phones.
+`tests/assetreplace.html` checks the real App, compositor, shelf, queued Undo/Redo and ZIP reload.
+
+Painting space: `ArtworkAssetsUI` starts with a persistent picker/Options/Done row. Source actions,
+identity, history and optional Timing live in a bounded scrolling details element. Folding is
+session view state; options/timing use `preserveCanvasView`, and Reset layout calls `resetLayout`.
+`TracksSheet` observes its column and stage: painting full/half reserve about 45%/60% canvas
+(280px/300px floors when space permits), accounting for actual transport/audio rows and a 60px
+minimum track area. Hidden editors are skipped; repeated identical sizes do not trigger layout
+loops. Timing keeps its review budget. User sheet changes/drags preserve the canvas before refit
+callbacks. `App.fit` explicitly clears the painting header and compact placement row; expanded
+options remain temporary overlays. No document/schema changes. `tests/paintinglayout.html` uses
+real App, sheet, painting/asset controls and app CSS to check view, frame, history and geometry.
 
 Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framework or backend. Video export lazily loads the pinned `mediabunny` dependency for browser encoding/muxing. Compositing currently uses Canvas 2D; WebGL and sparse tiles are not the current implementation.
 

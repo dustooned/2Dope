@@ -1,4 +1,6 @@
 import { setEffectCacheBudget } from './view/effects';
+import { PaintingWorkspaceUI } from './ui/paintingworkspace';
+import { ArtworkAssetsUI } from './ui/artworkassets';
 import { EffectsPanel } from './ui/effectspanel';
 import { scrollArrows } from './ui/scrollarrows';
 import { openBoardExport } from './ui/boardexport';
@@ -395,7 +397,7 @@ function syncFocus(): void {
   document.body.classList.toggle('timeline-folded', prefs.timeline === false && !TracksSheet.WORKSPACES.has(app.workspace));
   $('#focus-tools').setAttribute('aria-expanded', String(prefs.tools !== false && !document.body.classList.contains('bar-collapsed')));
   $('#focus-timeline').setAttribute('aria-expanded', String(prefs.timeline !== false));
-  $('#focus-context').textContent = { draw: 'Draw · make your art', time: 'Time · adjust exposure', motion: 'Motion · composite and animate', board: 'Board · plan the story' }[app.workspace];
+  $('#focus-context').textContent = { animate: 'Animate · draw and arrange frames', draw: 'Draw · paint and create assets', time: 'Time · adjust exposure', motion: 'Motion · composite and animate', board: 'Board · plan the story' }[app.workspace];
 }
 for (const part of ['tools', 'timeline'] as const) {
   $(`#focus-${part}`).addEventListener('click', () => {
@@ -423,14 +425,14 @@ let closePopovers = (): void => {};
 const applyWorkspace = () => {
   closePopovers();
   const w = app.workspace;
-  document.body.classList.remove('ws-board', 'ws-draw', 'ws-time', 'ws-motion');
+  document.body.classList.remove('ws-board', 'ws-draw', 'ws-animate', 'ws-time', 'ws-motion');
   document.body.classList.add(`ws-${w}`);
   for (const b of wsButtons) b.setAttribute('aria-pressed', String(b.dataset.ws === w));
   if (w === 'time') {
     if (prevWs !== 'time') lastTab = $('#tab-xsheet').hidden ? 'brush' : 'xsheet';
     showTab('xsheet');
     setPanel(true);
-  } else if (w === 'draw') {
+  } else if ((w === 'draw' || w === 'animate')) {
     if (prevWs === 'time') showTab(lastTab);
     setPanel(false);
   } else {
@@ -652,16 +654,26 @@ const bubbles = new Bubbles(app, $('#stage'), {
   layers: (anchor) => layersPop.toggle(anchor),
   fit: () => app.refit(),
 });
+const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
+  flipMode.update(); sheet.update(); strip.update(); bubbles.update(); app.requestRender();
+}, () => share.show());
+app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
+const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
+paintingUI.onReset = () => artworkUI.resetLayout();
+app.onWorkspaceChange = chain(app.onWorkspaceChange, () => artworkUI.update());
+app.onFrameChange = chain(app.onFrameChange, () => artworkUI.update());
+app.history.onChange = chain(app.history.onChange, () => artworkUI.update());
+app.editor.onChange = chain(app.editor.onChange, () => { artworkUI.update(); if (app.arrangingAssets) strip.update(); });
 app.onToolChange = chain(app.onToolChange, () => bubbles.update());
 app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
-flipMode.onChange = () => { layerCards.close(); bubbles.update(); strip.update(); setTimeout(() => app.refit(), 60); };
+flipMode.onChange = () => { paintingUI.update(); artworkUI.update(); layerCards.close(); bubbles.update(); strip.update(); setTimeout(() => app.refit(), 60); };
 app.onToolChange = chain(app.onToolChange, () => flipMode.update());
 // Motion (and anywhere else): open a drawing layer frame by frame in Draw's flipbook
 app.onFlipKey = (e) => flipMode.onKey(e);
 app.openFlipbook = (id) => {
-  if (app.workspace !== 'draw') app.setWorkspace('draw');
+  if (app.workspace !== 'draw' && app.workspace !== 'animate') app.setWorkspace('animate');
   if (id) app.pickLayer(id);
   flipMode.set(true);
 };
@@ -765,6 +777,11 @@ $('#export-seq').addEventListener('click', () => share.show());
 $('#focus-export').addEventListener('click', () => share.show());
 if (import.meta.env.DEV) (window as unknown as { __export: ExportUI }).__export = exporter;
 await files.start();
+// Restore the view only after the project is available; no file schema or document edits.
+try {
+  const saved = localStorage.getItem(WS_KEY);
+  if (saved === 'draw' || saved === 'animate' || saved === 'time' || saved === 'motion' || saved === 'board') app.setWorkspace(saved);
+} catch { /* default Draw */ }
 if (!persistent) files.toast('Browser storage is unavailable here (private window?), so your work will not survive closing this tab. Export a .2dope file to keep it.');
 
 /**
@@ -776,6 +793,7 @@ for (const bar of document.querySelectorAll<HTMLElement>('.bub-ctx, .nav-row, .t
 
 function resetUi(): void {
   if (app.strokeActive) return;
+  paintingUI.reset();
   if (app.playing) app.togglePlay();
   share.close();
   quick.set(false);

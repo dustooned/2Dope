@@ -2,6 +2,8 @@
 
 Read `HANDOFF.md` for the checked baseline, `ARCHITECTURE.md` for the code map, and the relevant format document before editing persistence or export. `DECISIONS.md` is a historical log; older "not yet" statements may have been superseded.
 
+Start with the dated current-state section at the top of `HANDOFF.md` and its linked review. Older handoff sections and `docs/CLAUDE-*-HANDOFF.md` describe past work, not necessarily the current feature set. Roadmap proposals do not authorize implementation. After completing requested work, refresh the current handoff with changed files, checks and remaining gaps.
+
 ## Development
 
 - TypeScript, Vite, Canvas 2D, native DOM; no UI framework or application server.

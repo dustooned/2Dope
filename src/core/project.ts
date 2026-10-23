@@ -248,6 +248,13 @@ export class Project {
     return d;
   }
 
+  /** An independent cel backed by immutable PNGs, decoded lazily into its own canvases. */
+  cloneStoredDrawing(src: Pick<Drawing, 'vectors'|'role'>, parked: Parked): Drawing {
+    let num = this.nextNum++;
+    while (this.drawings.has(`d${num}`)) num = this.nextNum++;
+    return this.adopt(`d${num}`, num, structuredClone(src.vectors), src.role, { ...structuredClone(parked), rev: 0 });
+  }
+
   /** Which drawing each copy was made from (this session only): linked art layers copy their partners too. */
   readonly copiedFrom = new Map<string, string>();
 

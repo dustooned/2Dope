@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { harmony, HARMONY_MODES, hexToHsv, hsvToHex, normalizeHex, paletteFromPixels, pushRecent, type HarmonyMode, type HSV } from '../core/color';
 import { attachContextMenu, showContextMenu, type CtxItem } from './contextmenu';
 import { askText, confirmBox } from './dialogs';
+import { decorate } from './icons';
 
 const RECENT_KEY = '2dope.color.recent';
 const PALETTE_KEY = '2dope.color.palette';
@@ -70,6 +71,9 @@ type Mode = 'disc' | 'values';
 export class ColorPanel {
   private readonly root = el('div', { class: 'colorpop', role: 'dialog', 'aria-label': 'Colour', hidden: '' });
   private anchor: HTMLElement | null = null;
+  private anchorParent: HTMLElement | null = null;
+  private anchorLabel: string | null = null;
+  private readonly done = el('button', { type: 'button', class: 'cp-done', 'aria-label': 'Done choosing colour', title: 'Keep this colour and return to drawing' }, 'Done');
   private hsv: HSV = { h: 0, s: 0, v: 0 };
   private before = '#000000';
   private mode: Mode = load<Mode>(MODE_KEY, 'disc') === 'values' ? 'values' : 'disc';
@@ -121,6 +125,10 @@ export class ColorPanel {
     private readonly app: App,
     private readonly systemPicker: HTMLInputElement,
   ) {
+    const titlebar = el('div', { class: 'cp-titlebar' });
+    decorate(this.done, 'check');
+    this.done.addEventListener('click', () => this.close(true));
+    titlebar.append(el('strong', {}, 'Colour'), this.done);
     const head = el('div', { class: 'cp-head' });
     const seg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Picker' });
     for (const [m, label] of [
@@ -247,7 +255,9 @@ export class ColorPanel {
       ];
     });
 
-    this.root.append(head, this.disc, this.values, harmHead, this.harmonyRow, el('div', { class: 'cp-label' }, 'Recent'), this.recentRow, palHead, this.paletteRow, add);
+    const body = el('div', { class: 'cp-body' });
+    body.append(head, this.disc, this.values, harmHead, this.harmonyRow, el('div', { class: 'cp-label' }, 'Recent'), this.recentRow, palHead, this.paletteRow, add);
+    this.root.append(titlebar, body);
     document.body.append(this.root);
     // tapping elsewhere closes it (not the circle that opened it, which toggles)
     window.addEventListener(
@@ -255,15 +265,18 @@ export class ColorPanel {
       (e) => {
         if (this.root.hidden) return;
         const t = e.target as Node;
-        if (this.root.contains(t) || this.anchor?.contains(t) || (t as HTMLElement).closest?.('.ctxmenu, dialog')) return;
+        if (this.root.contains(t) || this.currentAnchor()?.contains(t) || (t as HTMLElement).closest?.('.ctxmenu, dialog')) return;
         this.close();
       },
       true,
     );
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !this.root.hidden) this.close();
-    });
+      if (e.key !== 'Escape' || this.root.hidden || document.querySelector('dialog[open], .ctxmenu')) return;
+      e.preventDefault(); e.stopPropagation(); this.close(true);
+    }, true);
     window.addEventListener('resize', () => this.place());
+    // Disc/Values and new Recent rows change the panel height after it has opened.
+    new ResizeObserver(() => this.place()).observe(this.root);
   }
 
   get open(): boolean {
@@ -271,19 +284,24 @@ export class ColorPanel {
   }
 
   toggle(anchor: HTMLElement): void {
-    if (this.open) return this.close();
+    if (this.open) return this.close(true);
     this.anchor = anchor;
+    this.anchorParent = anchor.parentElement;
+    this.anchorLabel = anchor.getAttribute('aria-label');
     this.before = this.app.color;
     this.hsv = hexToHsv(this.app.color);
     this.root.hidden = false;
     this.render();
     this.place();
+    this.done.focus({ preventScroll: true });
   }
 
-  close(): void {
+  close(returnToCanvas = false): void {
     if (this.root.hidden) return;
+    this.drag = null;
     this.root.hidden = true;
     this.remember();
+    if (returnToCanvas) this.app.focusCanvas();
   }
 
   /** The app's colour changed elsewhere (eyedropper, system picker): follow it. */
@@ -315,7 +333,7 @@ export class ColorPanel {
   }
 
   private place(): void {
-    const a = this.anchor;
+    const a = this.currentAnchor();
     if (!a || this.root.hidden) return;
     const r = a.getBoundingClientRect();
     const w = Math.min(300, window.innerWidth - 16);
@@ -323,6 +341,13 @@ export class ColorPanel {
     this.root.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w))}px`;
     const h = this.root.offsetHeight;
     this.root.style.top = `${Math.max(8, Math.min(r.bottom + 6, window.innerHeight - h - 8))}px`;
+  }
+
+  /** Toolbars rebuild their colour button after a colour change; its parent stays in place. */
+  private currentAnchor(): HTMLElement | null {
+    if (this.anchor?.isConnected) return this.anchor;
+    if (!this.anchorParent?.isConnected || !this.anchorLabel) return null;
+    return [...this.anchorParent.children].find((e): e is HTMLElement => e instanceof HTMLElement && e.getAttribute('aria-label') === this.anchorLabel) ?? null;
   }
 
   private render(): void {

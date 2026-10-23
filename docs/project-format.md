@@ -93,6 +93,30 @@ assets/<hash>.wav       normalized PCM audio assets
 
 Display order of a drawing: fill, then line, then vector strokes.
 
+### Reusable artwork sources (2026-10-22)
+
+An optional `asset: true` on a comp marks editable artwork for the project-local Assets shelf.
+Its layers, drawings and optional frames use the existing comp representation. Placements are
+ordinary `kind: "comp"` layers referencing that comp ID, with `play: "loop"` and `locked: true`
+initially. All comps' referenced drawings are saved, including sources with no placements.
+The marker is additive in schema 3; missing/unknown values mean an ordinary comp. Older builds
+can read the underlying comps and placements but may discard the shelf marker when resaving.
+Source editing location and return navigation are session state, not file fields. Opening a
+project starts in its main shot. There is no external file path or cross-project asset link.
+
+Make independent gives one placement a copied comp graph and fresh drawing IDs. Line/Fill PNG
+assets may share content-addressed keys while unchanged; each drawing decodes into its own
+canvases and stores changed bytes under new keys. Vectors, masks and editing metadata are copied,
+and nested source/pin/parent/cel/audio-panel references remap to the copied graph. Audio bytes stay
+immutable shared assets. Placement name, timing and transforms remain unchanged. This uses the
+same schema 3 fields and standalone archive capture; no external dependency or new field is added.
+
+Replace source changes one placement's comp ID and clears its old source-layer overrides. Name,
+transform, parent, playback settings and start/in stay. Explicit out stays; a finite automatic
+one-shot ending is materialized into out before swapping sources so duration/fps changes do not
+retime the placement. Looping shot-followers keep null out. Source comps and drawings are retained.
+Undo restores the previous link, overrides and out through existing history; no new file fields.
+
 ### How a frame is built
 
 - A layer's matrix is `T(position) · R(rotation) · S(scale/100) · T(−anchor)`, multiplied by its parents' matrices

@@ -1,19 +1,127 @@
 # Next phase: a balanced, simpler UI, with Draw split from Animate
 
+Implementation status (2026-10-23, release checkpoint): the rendering consistency fix and first
+Draw/Animate workspace layouts are built. Draw offers Canvas/Flipbook; Animate offers
+Flipbook/Clips with simplified tools and recoverable control handles. Clips currently reuses
+the exposure timeline. The first project-local Assets shelf and layered source/linked-placement
+editing loop are built, including autosave and standalone archives. Cross-project sharing,
+advanced docking and the new rail remain planned. See HANDOFF.md for actual checks and gaps.
+
+Asset UI polish now includes an edge panel with artwork previews, compact icon controls and
+folded placement actions. Direct selection/move/resize of placed artwork is now built in
+Animate's explicit Move assets tool, with a placement picker, Edit source, Copies and Done.
+It uses existing comp transforms/history. Clips now has selected-instance Start/Hold/End,
+Follow shot end, edge preview jumps and visible asset intervals on the shared shot clock.
+Direct asset clip movement and edge trimming are now built with live previews and one Undo per
+gesture. Asset clips now repeat cached source-frame-one artwork previews, with source/placement
+labels and linked counts. Separate Rename placement and Rename source actions are now built in
+the Names menu and Assets cards, preserving custom placement names and shared links with Undo.
+Copies → Make independent is now built: it copies editable source graphs, drawings, masks and
+vectors for the selected placement, with one Undo restoring the original link. Copies also
+retains Duplicate placement for linked instances. Parked artwork reuses immutable PNG data;
+each copy owns its decoded canvases and editing metadata. No file-format change is needed.
+Replace source is now built using the existing preview shelf. It changes only the selected link,
+keeps name/timing/transform, resets old source-layer overrides, and restores the original with one
+Undo. Automatic one-shot endings stay put. The placement actions stay together and use a single
+row of labeled icons on phones. Both sources remain editable and included in project backups.
+The tablet layout pass now gives Move assets a compact picker/Options/Done bar, with source
+actions and optional timing in scrolling details. Full Tracks reserves roughly 45% canvas in
+painting modes (280px minimum when feasible). Editor recovery/viewport resizing reapplies the
+budget, and user folds/track changes preserve zoom and playhead. Fit canvas clears the header and
+compact asset bar; Reset layout folds asset details as well.
+The first complete Draw → Assets → Animate input review found and fixed native-control keyboard
+conflicts: Enter on Asset options exited placement, and Space started playback. Native controls
+now retain their keys, and source entry/Done and canvas input restore useful canvas focus.
+New placements focus their picker. The real App/UI regression covers creation, pen-style pixels,
+Undo/Redo, source return, touch move-to-pinch cancellation and keyboard routing without storage.
+Direct source access is now built (2026-10-23): Edit source stays in the compact placement row
+beside the picker, Options and Done. The phone button retains a visible Edit label and 44px target;
+the row keeps its height. Source editing and Done use the existing shot/frame return path.
+Source identity is now visible while painting (2026-10-23): the header shows the artwork name and
+Updates N placements across the project, or Not placed yet. Narrow screens give it the workspace
+selector's space until Done returns to the shot. Long names shorten within the row; full identity
+and edit behavior remain in the accessible description/tooltips. Rename Undo/Redo refreshes it.
+The first background-painting review now fixes Line/Fill unexpectedly replacing Brush with
+Vector/the bucket. Plane selection keeps Brush, Eraser and Smudge; explicit Vector/bucket choose
+their supported planes, and selecting the opposite plane returns to Brush. Layers now has larger
+Line/Fill/opacity targets and a Close action. Opacity/blend commits preserve focus and list scroll.
+The browser painting fixture exercises separate real pixels, compositor opacity/visibility and
+background/paint-layer Undo at phone/tablet sizes.
+Colour now has an explicit Done row outside scrolling controls, retaining colour/tool/plane and
+returning focus to the canvas. Escape works from Hex colour and yields to nested palette dialogs.
+The panel tracks its toolbar opener after colour changes rebuild Bubbles, so toggling it closed
+and positioning after resize continue to work. Closing also clears an unfinished disc drag.
+Brushes now has a fixed Done header identifying the selected brush, tool and Line/Fill target.
+Done/Escape/opener-toggle return to the canvas with those choices intact; card/category refreshes
+retain keyboard focus and scroll. Actions have larger targets, and collections/cards scroll
+independently. Studio, double-tap, imports and collection behavior remain available.
+Brush size/opacity controls now show labels and pixel/percent values with larger touch targets.
+Touch retains slider focus, arrows use actual units, Enter/Escape return to drawing, and a short
+usable canvas gets a compact row. Brush settings remain separate from drawing Undo.
+Next bounded slice (proposal for user authorization): review the full Draw → paint background →
+Assets → Animate placement loop with these controls together, fixing any remaining navigation or
+layout friction before expanding the interface.
+Targeted iPad/Pencil checks of the complete asset loop remain necessary before claiming device readiness.
+This is not authorization for the full rail rewrite.
+
 Student feedback (2026-10-20): the UI still feels tedious and unbalanced. The flipbook, the
 background sublayers, the layer stack and the toolbars all live in Draw and crowd each other.
 Layers overlap and some stop responding. Layer, Line and Fill opacity don't respond while drawing.
 
 Goals:
-1. Draw feels like Procreate.
-2. Animate (the flipbook) is its own mode, and Draw's pictures drop into it.
+1. Draw is a complete, simple painting/drawing system with a Procreate-inspired, original interface and an optional flipbook. It is where students make backgrounds and reusable assets.
+2. Animate keeps its canvas and drawing tools in a simplified, Dreams-inspired interface. Toggle between Flipbook and Clips views of the same animation; Draw's assets are available locally without a manual export/import round trip.
 3. Every mode uses the same balanced layout.
 4. Two interfaces, as in Clip Studio Paint: Simple (fixed, for tablets and phones) and
    Advanced (dockable panels). Focus becomes a hide-everything view. It must be easy to
    adjust your view and how you work.
 5. Lite is a minimalist version of the same layout.
 
-## Diagnosis (checked in code)
+## Latest direction (2026-10-22; takes precedence over earlier proposals)
+
+**Draw:** a self-contained painting workspace, useful even without making a larger animation.
+Create a new background, prop, character drawing or other asset, ink/paint it in layers, and
+optionally open a flipbook to animate it. The full drawing workflow stays here; the flipbook
+is an addition that can be hidden, not a reason to move drawing capability out of this mode.
+
+**Animate:** a canvas with drawing tools and a simpler Dreams-inspired arrangement. Students
+can draw/paint animation frames directly, place assets made in Draw, and switch the bottom
+editor between **Flipbook / Clips**. Both are views of the same content, selection and clock;
+switching does not copy drawings or convert the document. Motion remains available for deeper
+compositing and keyframe work.
+
+**Assets:** New asset in Draw creates locally saved, editable artwork. An Assets shelf makes it
+available to Animate in the same project as soon as it is created: add/place it, reopen it in
+Draw to change it or add layers, and return to Animate with edits preserved. Start with assets
+inside the project/local library and package their data in `.2dope` backups. Do not depend on
+watching OS folders or asking students to export/reimport for each change. Cross-project asset
+files/import are a later extension. Preserve source layers and animation when reusing an asset;
+linked placements share edits, while an explicit Make independent copy is a separate action.
+
+**Controls:** the canvas stays central in both modes. Toolbars, menus, layers, colour and the
+bottom editor can be shown/hidden easily and tucked against a chosen screen edge. A collapsed
+panel leaves a small, labelled handle to bring it back; no setting can strand the controls off
+screen. On touch devices, use explicit handles/buttons rather than gestures that conflict with
+canvas drawing or navigation. Keep one home per action, remember the arrangement per mode, and
+provide Reset layout. Simple uses restrained edge trays; Advanced may additionally dock/float
+panels. Opening or collapsing a tray preserves the canvas zoom, rotation and current artwork.
+
+Borrow familiar workflow principles from Procreate/Dreams while making 2Dope's interface,
+icons and visual design original. These are requested design requirements, not implemented
+features in full yet. The workspace shell and first local asset loop now exist. Auto Paint is
+noted for later.
+
+**Implemented first slice:** the connected Draw → New asset → Add in Animate → Edit
+in Draw → Return loop, with a canvas and drawing tools in both modes, an optional Draw flipbook,
+and Animate's Flipbook/Clips switch. It reuses existing painting/flipbook behavior. Validate
+undo, autosave/reopen, standalone backup, mode/view changes and edge-tray recovery before adding
+more tools or rewriting the rail for performance. The cleanup/layout work below supports this
+slice; it must not remove Draw's optional animation or Animate's drawing canvas.
+
+## Original diagnosis (2026-10-20; rendering items fixed in the 2026-10-22 working tree)
+
+The first three rendering bullets below record the original problem. The current working tree
+uses the shared layer compositor and removes the 25% floor; see HANDOFF.md for fresh checks.
 
 - **Opacity bug (confirmed).** The layer being drawn on is painted by its own path in
   `App.render` (`paintActive` / `paintMasked`, src/app.ts ~5540–5656), not by
@@ -36,18 +144,18 @@ Goals:
 
 **Story · Draw · Animate · Timing · Motion · Share**
 
-| | Draw (Procreate) | Animate (today's Draw) |
+| | Draw | Animate |
 |---|---|---|
-| Purpose | Paint one picture: backgrounds, character sheets, key poses, props | Frame by frame on tracks |
-| Bottom | nothing (full canvas) | flipbook (classic timeline still an option) |
+| Purpose | Complete painting/drawing workspace for backgrounds and assets, with optional animation | Draw/paint frames and arrange assets in a simpler animation workspace |
+| Bottom | Optional flipbook; hidden while painting a still asset | Toggle Flipbook / Clips; either can collapse to an edge handle |
 | Layers | Procreate panel: groups, opacity, blend, clip, mask, alpha lock, merge | one row per track in the flipbook; the layers panel for the current frame |
-| Time | none: it edits one picture | the shot's clock |
-| Tools | brushes, smudge, eraser, adjustments, selection, transform | the same drawing tools, plus onion, + Frame, timing |
+| Time | The asset's frames when its optional flipbook is open | The shot's shared clock |
+| Tools | Full painting, ink/colour, layers, selection, transform and adjustments | Canvas and simplified drawing tools, onion, + Frame and timing; extra options in edge trays |
 
-- **One shared document.** A Draw picture is a paint stack (the existing `cel` /
+- **One shared document.** A Draw asset is editable artwork with paint layers and optional frames (building on the existing `cel` /
   `importLayered` model). In Animate or Motion it shows as one layer: a background or a held
-  drawing. Double-tap it (or ✏️ Edit) to open it in Draw; Done goes back. Backgrounds stop being
-  special: they are Draw pictures.
+  drawing, or a frame-based asset. Double-tap it (or ✏️ Edit) to open it in Draw; Done goes back.
+  Backgrounds are reusable assets, not a separate painting system.
 - **A plain sketch.** The gallery can start a picture only, with no shot, which opens in Draw.
 - **Shared tool state.** Brush, colour and size are the same in Draw and Animate.
 - **Existing projects** open in Animate, unchanged. Conversion comes later (step 5).
@@ -70,7 +178,7 @@ Every mode puts each kind of control in the same zone:
 │ ├─┤                                                         │
 │ │↶│ undo / redo                                             │
 │ └─┘                                                         │
-│                 (Animate only: flipbook along the bottom)   │
+│          (optional Draw flipbook / Animate Flipbook·Clips)  │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -81,8 +189,8 @@ Every mode puts each kind of control in the same zone:
   Onion joins this row.
 - **Left edge:** a thin sidebar with size, eyedropper, opacity and undo/redo. It can move to the
   right edge for left-handed students, as in Procreate.
-- **Bottom:** only time-based UI (the flipbook in Animate, the ruler in Timing, the timeline in
-  Motion). Draw has nothing here.
+- **Bottom:** time-based UI only: optional flipbook in Draw, Flipbook/Clips in Animate, the ruler
+  in Timing and timeline in Motion. Each editor can tuck to its edge without changing content.
 - **Popovers, not bars.** Tool options, layers, colour and adjustments open as popovers from
   their button and close on a tap outside. No options bar stays on screen. This removes the
   bar that changes height and pushes the canvas around.
@@ -320,6 +428,32 @@ Painting each frame, like Dreams or paint-on-glass, not only ink-and-colour cels
 - **Memory:** painted frames cost more. Lite caps layers per frame (for example 3) and warns
   early. The residency system parks frame layers as it does drawings today.
 
+## Combined drawing workflow (requested 2026-10-22)
+
+The user wants a mode that combines drawing lines and painting: after drawing lines, the app
+detects newly enclosed areas and fills them automatically. This is a drawing workflow, in
+addition to the track types below; merely keeping Line and Paint in one track does not satisfy it.
+
+Proposed name: **Ink & Paint — Auto Paint**. Draw with Brush or Vector; on pen-up, detect areas
+that this stroke newly enclosed and paint underneath the ink. Keep Line and Paint separate
+internally for editing, undo, masks and exports, while presenting one combined drawing experience.
+
+Implementation requirements:
+- An open stroke does not flood the background. Existing enclosed areas are not recoloured just
+  because a later stroke was drawn elsewhere. Existing paint is preserved.
+- The closing stroke and its automatic paint are one undo/redo step and autosave as one edit.
+- Honour selections, locked layers, masks and residency. Mask editing, erasing and smudging do
+  not trigger automatic painting. Predicted pointer points never define a committed enclosure.
+- Detection runs after the stroke, without delaying live ink. Check the cost on Lite and large
+  pages before enabling it broadly; do not assume the current tap-fill operation is cheap enough
+  to scan a whole page after every stroke.
+- Include raster and vector outlines, shapes closed across multiple strokes, cancelled strokes,
+  undo/redo and save/reopen in verification. Gap closing needs a conservative, explicit rule.
+
+Noted for later at the user's request. Initial proposed default: black ink and the selected
+colour for automatic paint; both colours remain editable. The user expressed no strong colour
+preference. Auto Paint is **not implemented yet** and does not block the Draw/Animate asset loop.
+
 ## Track types: Ink & Paint, Plain, Painted
 
 Line + Fill stays, but becomes one choice, not the only way. **+ Track** asks which kind of
@@ -341,9 +475,11 @@ track (and remembers the last choice):
 
 Each of the three modes has one job for the same picture:
 
-1. **Draw: paint it.** A background, a prop or a character sheet is a **Picture**, a paint
+1. **Draw: create it.** New asset makes a background, prop or character sheet as a **Picture**, a paint
    stack with its own layers. Pictures live in the project's **Pictures** shelf (a small
-   library), so one picture can be used in many shots. Edit it once and every shot updates.
+   library), automatically available locally without exporting/importing. One picture can be
+   used in many shots. Edit it once and linked placements update. Draw also offers an optional
+   flipbook for frame-based assets and simple animation.
 2. **Animate: place it.** Drag a picture from the shelf onto the rail (or + Track → 🖼 Picture).
    It becomes a **static track**: one long bar held for the whole shot, locked by default so
    you can't draw on it by mistake. You animate over and under it. Double-tap the bar to open
@@ -654,7 +790,48 @@ Lite is for phones and older tablets. It uses the same zones with fewer things i
 
 Further digging into the packages isn't planned: the UI text and layouts were the useful part.
 
+## Quick cleanup of what's there now (checked in the app, 2026-10-21, Simple level, desktop)
+
+Small fixes that don't wait for the redesign:
+
+1. **Timing shows most controls twice.** The top bar has hold 1–4, − / +, Key / Breakdown /
+   In-between, Play, Onion, New / Duplicate / Delete. The X-sheet panel repeats hold 1–4, − / +,
+   K / B / I and onion, and the bottom strip repeats Play, New, Duplicate, Delete and Onion. →
+   The top bar keeps only the timing tools (hold, marks). The X-sheet panel keeps its grid and
+   the frame actions. The bottom strip keeps the transport. Each control appears once.
+2. **"Fill" means two things in Draw.** The paint-bucket tool and the Fill plane (next to Line)
+   have the same name, side by side. → Rename the plane **Paint** (Line / Paint, matching the
+   "Ink & Paint" track type) everywhere: buttons, tooltips, the manual and the X key's notice.
+3. **The transport is in a different order in each mode.** Draw: Play, ◀, ▶. Motion: ◀, Play,
+   ▶. Timing: Play in the top bar and again at the bottom. → One transport component (◀ Play ▶
+   and the frame count) in the same place in every mode.
+4. **Ambiguous icons.** Motion's "look through the camera" uses an eye (the same eye as show /
+   hide), and auto-key is a bare diamond. In the mode bar, Timing (a grid) and Motion (↔) are
+   hard to tell apart. → A camera viewfinder icon for camera view, "Auto-key" written on its
+   button, and mode buttons with their emoji and the name under the icon at Simple (📋 Story,
+   ✏️ Draw, ⏱ Timing, 🎬 Motion, 📤 Share).
+5. **Draw's tool row is ten buttons on one side.** Brush, Smudge, Vector, Eraser, Fill, Select,
+   Adjust, Colour, Layers and Reference all sit at the top right. → Move Select and Adjust to the
+   top left now (Procreate's split: document actions left, painting tools right). It's the first
+   step of the new layout.
+6. **The "🖌️ Brushes" chip repeats the Brush button.** → Tapping Brush again opens the library
+   (Procreate) and the chip goes away.
+7. **The flipbook's track box hides the track name.** The 46 px eye/tick box sits over the
+   name ("Drawing" is barely visible). → The name beside the box, cut off with … if long, with
+   the full name on hold.
+8. **Undo and redo are dim** at the bottom of the sidebar, though they're the most used buttons.
+   → Full contrast, and the same size as the eyedropper.
+9. **A pink chip under Motion's tools looks like a button** ("Move from start"). → Hints get
+   their own quieter style (outline, no fill) so they never look tappable.
+10. **The canvas shrinks when a side sheet opens** (Timing's X-sheet). → The sheet floats over
+    the canvas edge in Simple, or docks without refitting in Advanced (the refit is what makes
+    the page jump).
+
+These can ship before Phase 1 or alongside it; each is small and visible to students.
+
 ## Roadmap (each step its own commit, with tests and the build each time)
+
+**Phase 0: quick cleanup** (see above, items 1–10)
 
 **Phase 1: make what's there behave**
 1. Fix rendering: paint the active layer through the same compositor as every other layer
@@ -677,12 +854,15 @@ Further digging into the packages isn't planned: the UI text and layouts were th
 
 **Phase 3: the split**
 
-7. Add `'animate'` to `Workspace`; the flipbook, onion, + Frame and timing keys move there. Draw
-   keeps the canvas, tools, layers and adjustments. Timing keeps the X-sheet. Existing projects open in
-   Animate.
+7. Add `'animate'` to `Workspace`. Keep canvas/drawing tools in both modes: Draw has the fuller
+   painting/asset workflow and an optional flipbook; Animate has simplified tools and a
+   Flipbook/Clips toggle over the same shot. Reuse the current flipbook; do not remove it from
+   Draw. Timing keeps the X-sheet. Existing projects remain intact and can open in Animate.
 8. Track types (Plain, Ink & Paint, Painted) in `io/schema.ts`.
-9. Pictures and the Pictures shelf; static picture tracks; migrate old background stacks.
-   Convert layers to tracks.
+9. New asset in Draw and the local Assets/Pictures shelf; add a linked asset in Animate,
+   reopen it in Draw, edit/add layers and return without a manual file round trip. Support
+   held pictures first and preserve optional asset frames. Migrate old background stacks only
+   with compatibility/round-trip checks. Convert layers to tracks is a separate explicit action.
 
 **Phase 4: the rail**
 

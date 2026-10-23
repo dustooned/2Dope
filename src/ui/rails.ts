@@ -1,7 +1,8 @@
 import type { App } from '../app';
-import type { Comp, Layer } from '../core/comp';
+import { layerEnd, type Comp, type Layer } from '../core/comp';
 import type { Drawing } from '../core/project';
 import { decorate } from './icons';
+import { assetLabel } from '../core/assetlabels';
 
 /**
  * Draw's rails (Procreate Dreams style): every layer of the shot as a row on one timeline, in
@@ -112,7 +113,7 @@ function rowsOf(app: App, state: RailState): Row[] {
   // Focus: the layer you draw on, its linked art layers and the board; the rest folds into one row
   const me = app.project.isPlaceholder ? null : app.project.layer;
   const cel = me && me.kind === 'drawings' ? me.cel : undefined;
-  const keep = (l: Layer) => l.id === me?.id || (!!cel && l.kind === 'drawings' && l.cel === cel) || (l.kind === 'drawings' && !!l.guide);
+  const keep = (l: Layer) => l.id === me?.id || (!!cel && l.kind === 'drawings' && l.cel === cel) || (l.kind === 'drawings' && !!l.guide) || (app.workspace === 'animate' && l.kind === 'comp' && app.project.comps.get(l.comp)?.asset === true);
   const top = rows.filter((r) => r.kind === 'layer' && r.depth === 0) as Extract<Row, { kind: 'layer' }>[];
   const hidden = top.filter((r) => !keep(r.layer)).length;
   if (!hidden) return rows;
@@ -167,8 +168,10 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
       continue;
     }
     const l = r.layer;
-    const h = r.kind === 'part' ? PART_H : r.active ? ACTIVE_H : RAIL_H;
-    const row = el('div', { class: `rail${r.active ? ' active' : ''}${r.kind === 'part' ? ' part' : ''}${l.visible ? '' : ' off'}` });
+    const asset = r.kind === 'layer' && r.depth === 0 && app.workspace === 'animate' && l.kind === 'comp' && app.project.comps.get(l.comp)?.asset === true;
+    const identity = asset && l.kind === 'comp' ? assetLabel(app.project,app.project.comp,l) : null;
+    const h = r.kind === 'part' ? PART_H : r.active ? ACTIVE_H : asset ? 78 : RAIL_H;
+    const row = el('div', { class: `rail${asset ? ' asset-row' : ''}${r.active ? ' active' : ''}${r.kind === 'part' ? ' part' : ''}${l.visible ? '' : ' off'}` });
     row.style.top = `${y}px`;
     row.style.height = `${h}px`;
     row.style.width = `${width}px`;
@@ -214,11 +217,11 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
           tag.append(lock);
         }
       }
-      const kind = l.kind === 'comp' ? 'group' : l.kind === 'drawings' && l.guide ? 'board' : l.kind === 'drawings' && l.cel ? 'linked' : '';
-      const name = el('button', { type: 'button', class: 'rail-name', title: r.active ? 'You draw on this layer' : r.depth === 0 && l.kind === 'drawings' ? `Draw on ${l.name}` : r.depth === 0 && l.kind === 'comp' ? `Edit drawings inside ${l.name}` : l.name }, l.name);
+      const kind = identity ? `placement ${identity.number}` : l.kind === 'comp' ? 'group' : l.kind === 'drawings' && l.guide ? 'board' : l.kind === 'drawings' && l.cel ? 'linked' : '';
+      const name = el('button', { type: 'button', class: 'rail-name', title: identity ? `${identity.description} Select to move or time this placement.` : r.active ? 'You draw on this layer' : r.depth === 0 && l.kind === 'drawings' ? `Draw on ${l.name}` : r.depth === 0 && l.kind === 'comp' ? `Edit drawings inside ${l.name}` : l.name }, l.name);
       if (kind && kind !== l.name.toLowerCase()) name.append(el('span', { class: 'rail-kind' }, kind));
       if (r.depth === 0 && l.kind === 'drawings' && !r.active) name.addEventListener('click', () => app.pickLayer(l.id));
-      if (r.depth === 0 && l.kind === 'comp') name.addEventListener('click', () => { if (!app.strokeActive) ed.enter(l.id); });
+      if (r.depth === 0 && l.kind === 'comp') name.addEventListener('click', () => { if (!app.strokeActive) { if (asset) app.setArrangeAssets(true,l.id); else ed.enter(l.id); } });
       tag.append(name);
     } else {
       // LINE / FILL sublayer: its own eye (the layer you draw on), and which one brushes paint on
@@ -274,9 +277,21 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
           row.append(b);
         }
       } else if (l.kind === 'comp') {
-        const out = l.out ?? l.in + 9999;
+        const naturalEnd = layerEnd(l,app.project.comps,app.project.comp.fps);
+        const out = asset ? Math.min(app.compEnd,Number.isFinite(naturalEnd) ? naturalEnd : app.compEnd) : l.out ?? l.in + 9999;
         const x = (l.in + r.offset - x0) * cell;
-        const b = el('div', { class: 'rblock group' });
+        const selected = app.placedAsset?.id === l.id;
+        const b = el('div', { class: `rblock group${asset ? ` asset${selected ? ' selected' : ''}` : ''}` });
+        if (asset) {
+          const body = el('button', {type:'button',class:'asset-clip-body','aria-label':`Move clip ${l.name}`,'aria-pressed':String(selected),title:`${identity!.description} Frames ${l.in+1}–${out}. Preview: source frame 1. Drag to move this placement.`, 'data-asset-id':l.id,'data-asset-gesture':'move'});
+          body.append(el('span',{class:'asset-clip-art','data-asset-source':l.comp,'aria-hidden':'true'}),el('span',{class:'asset-clip-caption'},`${l.name} · ${Math.max(0,out-l.in)}f`));
+          body.addEventListener('click', () => { if (!app.strokeActive) app.setArrangeAssets(true,l.id); });
+          b.append(body);
+          if (selected) for (const [edge,label] of [['in','start'],['out','end']] as const) {
+            const handle = el('button',{type:'button',class:`asset-clip-edge ${edge}`,'aria-label':`Trim ${l.name} ${label}`,'data-asset-id':l.id,'data-asset-gesture':edge,title:`Drag to trim ${label}; use Timing for exact frame numbers.`});
+            handle.append(el('span',{'aria-hidden':'true'},'⋮')); b.append(handle);
+          }
+        }
         b.style.left = `${Math.max(0, x)}px`;
         b.style.width = `${Math.max(4, Math.min(width, (out - l.in) * cell) - 3)}px`;
         row.append(b);

@@ -45,10 +45,11 @@ function ownKeys(input: HTMLElement, onEnter: () => void): void {
 }
 
 /** Ask for a line of text. Resolves to null when cancelled. */
-export function askText(title: string, value = '', okLabel = 'OK'): Promise<string | null> {
+export function askText(title: string, value = '', okLabel = 'OK', description?: string): Promise<string | null> {
   return new Promise((resolve) => {
     const { dialog, body, foot, done } = modal<string | null>(title, null, resolve);
     const input = el('input', { type: 'text', maxlength: '80', value, 'aria-label': title, class: 'textbox' });
+    if(description) {body.append(el('p',{},description));input.setAttribute('aria-description',description);}
     body.append(input);
     const cancel = el('button', { type: 'button' }, 'Cancel');
     const ok = el('button', { type: 'button', class: 'primary' }, okLabel);
@@ -90,7 +91,7 @@ export function pickBox<T>(title: string, choices: Choice<T>[], extra?: { label:
     const list = el('div', { class: 'picklist' });
     for (const c of choices) {
       const b = el('button', { type: 'button' }, c.label);
-      if (c.hint) b.append(el('span', { class: 'hint' }, c.hint));
+      if (c.hint) {b.classList.add('with-hint');b.append(el('span', { class: 'hint' }, c.hint));}
       b.addEventListener('click', () => done(c.value));
       list.append(b);
     }

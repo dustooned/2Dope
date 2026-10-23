@@ -1,4 +1,5 @@
 import { syncCelGroups } from './core/cellink';
+import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
 import { easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentEasing, valueAt, type Easing, type Prop, type Vec2 } from './core/anim';
 import {
   apply,
@@ -98,6 +99,14 @@ export const keyId = (k: KeyRef) => `${k.layer}|${k.prop}|${k.f}`;
 
 type GestureKind = 'move' | 'scale' | 'rotate';
 
+/** Restricted canvas gestures, used by Animate's explicit asset arrangement tool. */
+export interface GestureOptions {
+  accept?: (layer: Layer) => boolean;
+  allowLocked?: boolean;
+  simple?: boolean;
+  autoKey?: boolean;
+}
+
 interface Gesture {
   kind: GestureKind;
   layer: string;
@@ -109,6 +118,9 @@ interface Gesture {
   startDist: number;
   startAngle: number;
   moved: boolean;
+  zoom: number;
+  simple: boolean;
+  autoKey: boolean;
 }
 
 const HANDLE_PX = 22;
@@ -143,6 +155,7 @@ export class CompEditor {
   rev = 0;
 
   private gesture: Gesture | null = null;
+  private clipGesture: {project: App['project']; comp: Comp; before: Layer[]; frame: number; id: string; kind: AssetClipGesture} | null = null;
 
   constructor(private readonly app: App) {}
 
@@ -330,6 +343,7 @@ export class CompEditor {
     this.keys.clear();
     this.open.clear();
     this.gesture = null;
+    this.clipGesture = null;
     this.trail = [];
   }
 
@@ -547,7 +561,7 @@ export class CompEditor {
       const via = crumbs[i]!.via!;
       const parent = crumbs[i - 1]!.comp;
       const inner = crumbs[i]!.comp;
-      frame = via.start + Math.floor((frame * parent.fps) / inner.fps + 1e-9);
+      frame = via ? via.start + Math.floor((frame * parent.fps) / inner.fps + 1e-9) : 0;
     }
     this.trail = this.trail.slice(0, depth);
     this.gestureEnd(true);
@@ -663,6 +677,7 @@ export class CompEditor {
       c.layers = structuredClone(layers);
       const was = this.app.project.activeComp;
       this.app.project.activeComp = compId;
+      this.app.frame = Math.max(0, Math.min(this.app.frame, this.app.compEnd - 1));
       this.tidy();
       if (was !== compId) this.app.onCompChange();
       this.changed();
@@ -836,6 +851,55 @@ export class CompEditor {
       if (t.out !== undefined) l.out = t.out === null ? null : Math.round(t.out);
       if (l.out !== null && l.out <= l.in) l.out = l.in + 1;
     });
+  }
+
+  /** Beginner asset timing: one instance, one undo step, with no ripple into other tracks. */
+  setAssetTiming(id: string, field: AssetTimingField, value?: number): boolean {
+    if (this.app.strokeActive || this.app.playing) return false;
+    const l = this.layer(id), p = this.app.project;
+    if (!l || l.kind !== 'comp' || !p.comps.get(l.comp)?.asset) return false;
+    const patch = assetTimingChange(l, this.comp, p.comps, field, value);
+    if (!patch) return false;
+    return this.edit(`Asset ${field === 'shot' ? 'follows shot end' : field}`, c => {
+      const live = c.layers.find(x => x.id === id);
+      if (!live || live.kind !== 'comp') return;
+      Object.assign(live, patch);
+      this.app.frame = Math.max(0, Math.min(this.app.frame, compLength(c, p.comps) - 1));
+    });
+  }
+
+  /** Live clip timing shares the numeric rules, but commits only on pointer release. */
+  assetClipStart(id: string, kind: AssetClipGesture): boolean {
+    if (this.app.strokeActive || this.dragging || this.app.playing) return false;
+    const l = this.layer(id), project = this.app.project;
+    if (!l || l.kind !== 'comp' || !project.comps.get(l.comp)?.asset) return false;
+    this.clipGesture = {project, comp:this.comp, before:structuredClone(this.comp.layers), frame:this.app.frame, id, kind};
+    this.changedLive(); return true;
+  }
+  get assetClipDragging(): boolean { return this.clipGesture !== null; }
+  assetClipMove(delta: number): void {
+    const g = this.clipGesture; if (!g) return;
+    if (g.project !== this.app.project || g.comp !== this.comp) { this.assetClipEnd(true); return; }
+    const original = g.before.find(l => l.id === g.id), live = this.layer(g.id);
+    if (!original || original.kind !== 'comp' || !live) return;
+    const patch = assetClipTimingChange(original,g.comp,g.project.comps,g.kind,delta);
+    if (!patch) return;
+    Object.assign(live,patch);
+    this.app.frame = Math.max(0,Math.min(g.frame,compLength(g.comp,g.project.comps)-1));
+    this.changedLive();
+  }
+  assetClipEnd(cancel = false): void {
+    const g = this.clipGesture; this.clipGesture = null; if (!g) return;
+    const same = g.project === this.app.project && g.comp === this.comp;
+    const after = structuredClone(g.comp.layers);
+    if (cancel || !same) {
+      g.comp.layers = g.before;
+      if (same) this.app.frame = Math.max(0,Math.min(g.frame,compLength(g.comp,g.project.comps)-1));
+      this.changedLive(); return;
+    }
+    if (JSON.stringify(after) === JSON.stringify(g.before)) { this.changedLive(); return; }
+    this.push(g.kind === 'move' ? 'Move asset clip' : g.kind === 'in' ? 'Trim asset start' : 'Trim asset end',g.comp.id,g.before,after);
+    this.changed();
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1084,10 +1148,10 @@ export class CompEditor {
     return [apply(m, [b.x, b.y]), apply(m, [b.x + b.w, b.y]), apply(m, [b.x + b.w, b.y + b.h]), apply(m, [b.x, b.y + b.h])];
   }
 
-  /** Topmost active, unlocked layer whose page contains a stage point. */
-  hitLayer(p: Vec2): Layer | null {
+  /** Topmost active layer containing a stage point; locked layers need explicit permission. */
+  hitLayer(p: Vec2, options: GestureOptions = {}): Layer | null {
     for (const l of this.comp.layers) {
-      if (!l.visible || l.locked) continue;
+      if (!l.visible || (l.locked && !options.allowLocked) || (options.accept && !options.accept(l))) continue;
       if (l.kind === 'camera' && this.throughCamera) continue;
       const end = layerEnd(l, this.app.project.comps);
       if (this.app.frame < l.in || this.app.frame >= end) continue;
@@ -1142,19 +1206,19 @@ export class CompEditor {
    * true when something was grabbed. Dragging the selected layer's rotate handle rotates; a corner
    * scales; anywhere else on a layer moves it (selecting it first).
    */
-  gestureStart(pt: Vec2, zoom: number, add = false): boolean {
+  gestureStart(pt: Vec2, zoom: number, add = false, options: GestureOptions = {}): boolean {
     const near = (a: Vec2, b: Vec2) => Math.hypot(a[0] - b[0], a[1] - b[1]) * zoom <= HANDLE_PX;
     const sel = this.primary;
     let kind: GestureKind = 'move';
     let target: Layer | null = null;
-    if (sel && sel.visible && !sel.locked) {
-      if (near(this.rotateHandle(sel, zoom), pt)) [kind, target] = ['rotate', sel];
+    if (sel && sel.visible && (!sel.locked || options.allowLocked) && (!options.accept || options.accept(sel)) && this.app.frame >= sel.in && this.app.frame < layerEnd(sel, this.app.project.comps)) {
+      if (!options.simple && near(this.rotateHandle(sel, zoom), pt)) [kind, target] = ['rotate', sel];
       else if (sel.kind !== 'null' && this.corners(sel).some((c) => near(c, pt))) [kind, target] = ['scale', sel];
     }
     // looking through the selected camera: any drag moves the camera (the picture follows the finger)
-    if (!target && sel && sel.kind === 'camera' && this.throughCamera && sel.visible && !sel.locked && !add) target = sel;
+    if (!target && sel && sel.kind === 'camera' && this.throughCamera && sel.visible && !sel.locked && !add && (!options.accept || options.accept(sel))) target = sel;
     if (!target) {
-      target = this.hitLayer(pt);
+      target = this.hitLayer(pt, options);
       if (!target) {
         if (!add) this.select(null);
         return false;
@@ -1173,12 +1237,13 @@ export class CompEditor {
       startDist: Math.max(1e-6, Math.hypot(pt[0] - anchor[0], pt[1] - anchor[1])),
       startAngle: Math.atan2(pt[1] - anchor[1], pt[0] - anchor[0]),
       moved: false,
+      zoom, simple: options.simple ?? false, autoKey: options.autoKey ?? this.autoKey,
     };
     return true;
   }
 
   get dragging(): boolean {
-    return this.gesture !== null;
+    return this.gesture !== null || this.clipGesture !== null;
   }
 
   gestureMove(pt: Vec2): void {
@@ -1188,11 +1253,12 @@ export class CompEditor {
     const original = g.before.find((l) => l.id === g.layer);
     const live = c.layers.find((l) => l.id === g.layer);
     if (!original || !live) return;
+    if (!g.moved && Math.hypot(pt[0] - g.startPt[0], pt[1] - g.startPt[1]) * g.zoom < 3) return;
     g.moved = true;
     const f = this.frameOf(original);
     const set = (n: PropName, value: number | Vec2) => {
       const base = this.getProp(original, n);
-      const p = isAnimated(base) || this.autoKey ? setKey(base, f, value as never, this.lastEase, this.keyAtStart && !isAnimated(base) ? 0 : undefined) : { ...base, value };
+      const p = isAnimated(base) || g.autoKey ? setKey(base, f, value as never, this.lastEase, this.keyAtStart && !isAnimated(base) ? 0 : undefined) : { ...base, value };
       this.setProp(live, n, p as Prop);
     };
     const dx = pt[0] - g.startPt[0];
@@ -1221,7 +1287,8 @@ export class CompEditor {
       const target = this.fromStage([g.anchorComp[0] + dx, g.anchorComp[1] + dy]);
       set('position', apply(invert(parentWorld), target));
     } else if (g.kind === 'scale') {
-      const k = Math.hypot(pt[0] - g.anchorComp[0], pt[1] - g.anchorComp[1]) / g.startDist;
+      const ratio = Math.hypot(pt[0] - g.anchorComp[0], pt[1] - g.anchorComp[1]) / g.startDist;
+      const k = g.simple ? Math.max(0.01, ratio) : ratio;
       const s = valueAt(original.transform.scale, f);
       set('scale', [s[0] * k, s[1] * k]);
     } else {
@@ -1250,6 +1317,7 @@ export class CompEditor {
 
   /** Finish (or cancel) a drag: one undo step if anything moved. */
   gestureEnd(cancel = false): void {
+    this.assetClipEnd(cancel);
     const g = this.gesture;
     this.gesture = null;
     if (!g) return;

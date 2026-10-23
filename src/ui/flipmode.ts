@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { isPaintingWorkspace, paintingView } from '../core/workspace';
 import type { BlendMode, DrawingsLayer } from '../core/comp';
 import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick, type CtxItem } from './contextmenu';
 import { askText, confirmBox } from './dialogs';
@@ -39,7 +40,8 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
  */
 export class FlipMode {
   readonly row = el('div', { class: 'flip-row', role: 'region', 'aria-label': 'Flipbook' });
-  on = false;
+  private views = { draw: false, animate: true };
+  get on(): boolean { return isPaintingWorkspace(this.app.workspace) ? this.views[this.app.workspace] : false; }
   private sig = '';
   onChange: () => void = () => {};
   // the header's buttons stay the same elements while playing, so a tap on Pause is never lost
@@ -70,7 +72,7 @@ export class FlipMode {
       b.addEventListener('click', () => { if (held) { held = false; return; } run(); });
       return b;
     };
-    const done = btn('Timeline', 'Show the timeline under the canvas instead (tracks, ruler, holds)', 'time', () => this.set(false), undefined, 'flip-btn flip-adv flip-view');
+    const done = btn('Close flipbook', 'Draw: return to painting. Animate: switch to Clips.', 'time', () => this.set(false), undefined, 'flip-btn flip-adv flip-view');
     this.play.addEventListener('click', () => this.app.togglePlay());
     const prev = btn('Previous drawing', 'Previous drawing (hold: the first frame)', 'prev', () => this.app.prevDrawing(), () => this.app.setLayerFrame(0), 'flip-btn flip-icon', '');
     const next = btn('Next drawing', 'Next drawing (hold: the last frame)', 'next', () => this.app.nextDrawing(), () => this.app.setLayerFrame(this.app.project.length - 1), 'flip-btn flip-icon', '');
@@ -91,14 +93,19 @@ export class FlipMode {
     this.wireHandle(handle, stage);
     try { const m = JSON.parse(localStorage.getItem(MINI_KEY) ?? 'null'); if (m && Number.isFinite(m.x)) this.mini = m; } catch { /* docked */ }
     // the flipbook is Draw's view unless you picked the timeline
-    try { this.on = localStorage.getItem(KEY) !== 'timeline'; } catch { /* default */ }
+    try {
+      this.views.draw = paintingView('draw', localStorage.getItem(KEY)) === 'flipbook';
+      this.views.animate = paintingView('animate', localStorage.getItem('2dope.animate.view')) === 'flipbook';
+    } catch { /* defaults */ }
     this.update();
   }
 
   /** Draw's bottom view: the flipbook (true) or the timeline. */
   set(on: boolean): void {
-    this.on = on;
-    try { localStorage.setItem(KEY, on ? 'flipbook' : 'timeline'); } catch { /* optional */ }
+    const ws = this.app.workspace;
+    if (!isPaintingWorkspace(ws) || this.app.strokeActive) return;
+    this.views[ws] = on;
+    try { localStorage.setItem(ws === 'draw' ? KEY : '2dope.animate.view', on ? 'flipbook' : ws === 'draw' ? 'still' : 'clips'); } catch { /* optional */ }
     // seeing the last drawing faintly is what makes drawing the next one easy
     if (on && !this.app.onion.enabled) this.app.toggleOnion();
     this.sig = '';
@@ -109,7 +116,7 @@ export class FlipMode {
   /** The flipbook shows in Draw when it is the chosen view, and always at the Focus level. */
   private get shown(): boolean {
     const b = document.body.classList;
-    return this.app.workspace === 'draw' && !b.contains('quick') && (this.on || b.contains('ui-clean'));
+    return isPaintingWorkspace(this.app.workspace) && !b.contains('quick') && this.on && !b.contains('painting-editor-folded');
   }
 
   /** The tracks: the shot's drawing layers (not guides), front first. */

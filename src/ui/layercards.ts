@@ -230,6 +230,11 @@ export class LayerCards {
     const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${[...this.foldedStacks].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     if (sig === this.sig) return;
     this.sig = sig;
+    const scrollTop = this.root.querySelector<HTMLElement>('.lc-list')?.scrollTop ?? 0;
+    const focused = document.activeElement;
+    const field = focused instanceof HTMLInputElement || focused instanceof HTMLSelectElement ? focused : null;
+    const fieldName = field && this.root.contains(field) ? field.getAttribute('aria-label') : null;
+    const fieldGroup = fieldName ? field?.closest('.lc-options')?.getAttribute('aria-label') : null;
     this.root.replaceChildren();
 
     const head = el('div', { class: 'lc-head' });
@@ -247,7 +252,10 @@ export class LayerCards {
     const add = el('button', { type: 'button', class: 'lc-icon', title: 'New layer: animation, background or object', 'aria-label': 'New layer', 'aria-expanded': String(this.addOpen) }, 'Add');
     decorate(add, 'plus');
     add.addEventListener('click', () => { this.addOpen = !this.addOpen; this.sig = ''; this.update(); });
-    head.append(others, add);
+    const close = el('button', { type: 'button', class: 'lc-icon', title: 'Close layers and return to drawing', 'aria-label': 'Close layers' }, 'Close');
+    decorate(close, 'close');
+    close.addEventListener('click', () => { this.close(); app.focusCanvas(); });
+    head.append(others, add, close);
     this.root.append(head);
     const crumbs = app.editor.crumbs();
     if (crumbs.length > 1) {
@@ -334,6 +342,14 @@ export class LayerCards {
     if (!layers.length) list.append(el('p', { class: 'hint' }, 'No layers yet. Draw, or tap +.'));
     this.root.append(list);
     this.place();
+    list.scrollTop = scrollTop;
+    // Committing opacity/blend rebuilds the cards. Keep the live control and list in place
+    // so the next keyboard adjustment cannot fall through to canvas frame shortcuts.
+    if (fieldName && fieldGroup) {
+      const group = [...this.root.querySelectorAll<HTMLElement>('.lc-options')].find(e => e.getAttribute('aria-label') === fieldGroup);
+      const replacement = [...(group?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input,select') ?? [])].find(e => e.getAttribute('aria-label') === fieldName);
+      replacement?.focus({ preventScroll: true });
+    }
   }
 
   /** Tap: draw on it (or open its options if it is already the one). Hold, then drag: reorder. */
@@ -547,7 +563,8 @@ export class LayerCards {
         const row = el('div', { class: `lc-part${app.plane === pt ? ' paint' : ''}` });
         const name = el('button', { type: 'button', class: 'lc-part-name', 'aria-pressed': String(app.plane === pt), title: pt === 'line' ? 'Paint on LINE: your strokes, on top' : 'Paint on FILL: colour under the strokes' }, pt === 'line' ? 'Line' : 'Fill');
         name.addEventListener('click', () => { app.setPlane(pt); this.sig = ''; this.update(); });
-        const eye = el('button', { type: 'button', class: 'lc-part-eye', 'aria-pressed': String(q.visible), title: q.visible ? `Hide ${pt === 'line' ? 'Line' : 'Fill'}` : `Show ${pt === 'line' ? 'Line' : 'Fill'}` }, q.visible ? 'Hide' : 'Show');
+        const visibility = `${q.visible ? 'Hide' : 'Show'} ${pt === 'line' ? 'Line' : 'Fill'}`;
+        const eye = el('button', { type: 'button', class: 'lc-part-eye', 'aria-pressed': String(q.visible), title: visibility, 'aria-label': visibility }, q.visible ? 'Hide' : 'Show');
         decorate(eye, 'eye');
         eye.addEventListener('click', () => { app.editor.setPart(l.id, pt, { visible: !q.visible }); this.sig = ''; this.update(); });
         const r = el('input', { type: 'range', min: '0', max: '100', step: '1', 'aria-label': `${pt === 'line' ? 'Line' : 'Fill'} opacity` });

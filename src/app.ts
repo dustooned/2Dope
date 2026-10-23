@@ -18,12 +18,12 @@ import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareF
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
-import { compLength, drawingsLayer, frameContent, invert, partOf, worldMatrix, type BlendMode, type Comp, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { staticProp, valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { guardTouchContextMenus } from './ui/touchcontext';
 import { CompEditor } from './compedit';
-import { clipGroups, drawClipGroup, drawComp, drawLayerAround, drawLayersAround } from './view/composite';
+import { clipGroups, drawClipGroup, drawComp, drawEditingLayer, drawLayerAround, drawLayersAround, type DrawingSource } from './view/composite';
 import { drawMotionOverlay } from './view/overlay';
 import {
   addAfter,
@@ -179,23 +179,59 @@ export interface InputStats {
 }
 
 /** Draw: the canvas and flipbook strip. Time: the X-sheet. Motion: layers, keys and the comp's result. */
-export type Workspace = 'board' | 'draw' | 'time' | 'motion';
+export type { Workspace } from './core/workspace';
+import { isPaintingWorkspace, type Workspace } from './core/workspace';
 
 export class App {
   project = new Project(1920, 1080);
   workspace: Workspace = 'draw';
-  /** Edits to layers and keys (the Motion workspace). */
+  /** Shared layer/key edits for Motion and Animate asset arrangement. */
   readonly editor = new CompEditor(this);
   onWorkspaceChange: () => void = () => {};
   private motionPointer: number | null = null;
+  private arrangeProject: Project | null = null;
+  private arrangeComp = '';
+  get arrangingAssets(): boolean {
+    return this.workspace === 'animate' && this.arrangeProject === this.project && this.arrangeComp === this.project.activeComp && !this.project.comp.asset;
+  }
+  private isAssetPlacement(l: Layer): l is CompLayer {
+    return l.kind === 'comp' && this.project.comps.get(l.comp)?.asset === true;
+  }
+  get placedAsset(): CompLayer | null {
+    const l = this.editor.primary;
+    return this.arrangingAssets && l && this.isAssetPlacement(l) ? l : null;
+  }
+  /** Return keyboard navigation to the drawing surface without moving the page. */
+  focusCanvas(): void { this.canvas.focus({ preventScroll: true }); }
+  setArrangeAssets(on: boolean, selected?: string): void {
+    if (on && (this.workspace !== 'animate' || this.project.comp.asset || this.strokeActive)) return;
+    if (on && this.playing) this.togglePlay();
+    const was = this.arrangingAssets;
+    this.editor.gestureEnd(true); this.motionPointer = null;
+    this.arrangeProject = on ? this.project : null; this.arrangeComp = on ? this.project.activeComp : '';
+    if (on) {
+      this.leaveBlankPage(); this.exitPointEdit(); this.clearSpatialSelection();
+      if (this.adjusting) this.applyAdjust();
+      if (this.gradEdit) this.applyGradEdit();
+      const l = selected ? this.editor.layer(selected) : null;
+      this.editor.select(l && this.isAssetPlacement(l) ? l.id : null);
+    } else if (was) this.editor.select(null);
+    if (was !== this.arrangingAssets) this.fit();
+    this.updateCursor(); this.onToolChange(); this.onFrameChange(); this.requestRender();
+  }
+  duplicatePlacedAsset(): void {
+    const l = this.placedAsset;
+    if (!l || this.strokeActive) return;
+    this.editor.duplicate(l.id);
+  }
   readonly raster = new RasterEngine(1920, 1080);
-  /** What the canvas shows, in pixels: the comp in Motion, the drawing page otherwise. */
+  /** Comp dimensions in Motion/asset arrangement; drawing-page dimensions while painting. */
   get docW(): number {
-    return this.workspace === 'motion' ? this.project.comp.width : this.project.width;
+    return this.workspace === 'motion' || this.arrangingAssets ? this.project.comp.width : this.project.width;
   }
 
   get docH(): number {
-    return this.workspace === 'motion' ? this.project.comp.height : this.project.height;
+    return this.workspace === 'motion' || this.arrangingAssets ? this.project.comp.height : this.project.height;
   }
 
   /** UI hook: a different comp is open (entered or left a precomp). */
@@ -217,12 +253,15 @@ export class App {
     if (this.playing) this.togglePlay();
     if (w === 'motion') this.leaveBlankPage();
     this.editor.gestureEnd(true);
+    const arranged = this.arrangingAssets;
+    this.arrangeProject = null;
+    this.motionPointer = null;
     const was = this.workspace;
     this.workspace = w;
     if (w === 'board') this.enterBoard();
     else if (was === 'board') this.leaveBoard();
     // Draw and Time look at the same page; Motion looks at the comp
-    if ((was === 'motion') !== (w === 'motion')) this.fit();
+    if ((was === 'motion') !== (w === 'motion') || arranged) this.fit();
     this.requestRender();
     this.onFrameChange();
     this.onWorkspaceChange();
@@ -313,6 +352,7 @@ export class App {
   ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas unavailable');
+    if (!canvas.hasAttribute('tabindex')) canvas.tabIndex = 0;
     this.ctx = ctx;
     this.clampOnion();
     // Merge over the default so brushes saved by older builds gain new fields.
@@ -343,7 +383,7 @@ export class App {
 
   /** True while a stroke is being drawn (autosave waits for it to end). */
   get strokeActive(): boolean {
-    return this.live !== null || this.waits.length > 0 || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null;
+    return this.live !== null || this.waits.length > 0 || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null || this.editor.dragging;
   }
 
   get viewW(): number {
@@ -359,23 +399,26 @@ export class App {
   }
 
   setTool(t: Tool): void {
+    if (this.arrangingAssets) this.setArrangeAssets(false);
     if (this.adjusting) this.applyAdjust();
     if (this.gradEdit) this.applyGradEdit();
     if (this.fillG) this.endFill(true);
     if (t !== 'brush') this.smudging = false;
     if (t !== 'pen') this.exitPointEdit();
     this.tool = t;
+    // Vector ink belongs to Line; the bucket always writes to Fill.
+    if (t === 'pen') this.plane = 'line';
+    else if (t === 'fill') this.plane = 'fill';
     this.onToolChange();
   }
 
   setPlane(p: Plane): void {
+    if (this.arrangingAssets) this.setArrangeAssets(false);
     if (this.fillG) this.endFill(true);
     this.plane = p;
-    this.tool = p === 'line' ? 'pen' : 'fill';
-    if (p === 'fill') {
-      this.fillMode = 'tap';
-      saveJSON(FILL_MODE_KEY, 'tap');
-    }
+    // Choosing where to paint must not replace a brush, eraser or smudge tool.
+    // Vector and bucket cannot paint on the opposite plane; use the raster brush there.
+    if ((this.tool === 'pen' && p === 'fill') || (this.tool === 'fill' && p === 'line')) return this.setTool('brush');
     this.onToolChange();
   }
 
@@ -2620,6 +2663,7 @@ export class App {
 
   /** Replace the whole project (open, restore, new). Clears undo and per-project view state. */
   loadProject(p: Project): void {
+    this.editor.gestureEnd(true); this.motionPointer = null; this.arrangeProject = null;
     this.cancelTransform();
     this.ve = null;
     this.wBase = null;
@@ -2767,11 +2811,11 @@ export class App {
    */
   /** Draw's bottom view is the flipbook (set by the UI). */
   get flipbookView(): boolean {
-    return this.workspace === 'draw' && document.body.classList.contains('flipmode');
+    return isPaintingWorkspace(this.workspace) && document.body.classList.contains('flipmode');
   }
 
   get alwaysShown(): DrawingsLayer[] {
-    if (this.flipbookView) return this.drawLayers().filter((l) => !l.guide && l.visible);
+    if (this.flipbookView || this.project.comp.asset) return this.drawLayers().filter((l) => !l.guide && l.visible);
     return this.celLayers;
   }
 
@@ -3400,7 +3444,7 @@ export class App {
 
   /** The Flipbook button: a fresh blank page right now (after the last drawing). Draw on it to add the frame; tap again for the next. */
   flipToBlank(): void {
-    if (this.workspace !== 'draw' && this.workspace !== 'time') this.setWorkspace('draw');
+    if (!isPaintingWorkspace(this.workspace) && this.workspace !== 'time') this.setWorkspace('animate');
     if (!this.flipbook) this.setFlipbook(true);
     this.goBlankPage();
   }
@@ -3428,8 +3472,9 @@ export class App {
   }
 
   nextFrame(): void {
+    if (this.arrangingAssets) { this.setFrame(this.frame + 1); return; }
     if (this.blankPage) return;
-    if (this.flipbook && (this.workspace === 'draw' || this.workspace === 'time') && !this.playing && this.layerFrame >= this.project.length - 1) return this.goBlankPage();
+    if (this.flipbook && (isPaintingWorkspace(this.workspace) || this.workspace === 'time') && !this.playing && this.layerFrame >= this.project.length - 1) return this.goBlankPage();
     this.setFrame(this.frame + 1);
   }
 
@@ -4096,11 +4141,22 @@ export class App {
     // Flip's drawing row floats over the bottom
     const flip = document.body.classList.contains('flipmode');
     const set = parseFloat(this.stage.style.getPropertyValue('--fit-top'));
-    const clear = Number.isFinite(set) ? set : 64;
+    let clear = Number.isFinite(set) ? set : 64;
+    const header=this.stage.querySelector<HTMLElement>('.painting-header');
+    if(header?.offsetParent)clear=Math.max(clear,header.getBoundingClientRect().bottom-this.stage.getBoundingClientRect().top+8);
     // the extra top inset beyond the margin: the bubble rows, or Full's floating options row
     const top = bubbles ? clear - 16 : Math.max(0, clear - 40);
     const fh = parseFloat(this.stage.style.getPropertyValue('--flip-h'));
-    const flipH = flip ? (Number.isFinite(fh) ? fh : 200) : 0;
+    let flipH = flip ? (Number.isFinite(fh) ? fh : 200) : 0;
+    // Fit above the essential asset row. Expanded options are temporary overlays;
+    // fitting them must not shrink the page to the small space beside an open tray.
+    const placement = this.arrangingAssets ? this.stage.querySelector<HTMLElement>('.asset-placement-tools') : null;
+    const choice = placement?.querySelector<HTMLElement>('.asset-placement-choice');
+    if (placement?.offsetParent && choice) {
+      const css=getComputedStyle(placement),s=this.stage.getBoundingClientRect(),r=placement.getBoundingClientRect();
+      flipH=Math.max(flipH,s.bottom-r.bottom+choice.getBoundingClientRect().height+
+        parseFloat(css.paddingTop)+parseFloat(css.paddingBottom)+placement.offsetHeight-placement.clientHeight);
+    }
     this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top, flipH);
     // the layer label floats under the bubble rows: when the page would reach under it (an upright
     // tablet, a phone), fit again a little lower
@@ -4127,6 +4183,11 @@ export class App {
    */
   refit(): void {
     if (!this.fitSig || this.viewSig() === this.fitSig) this.fit();
+  }
+
+  /** Keep the current canvas placement while the user opens or tucks away overlay controls. */
+  preserveCanvasView(): void {
+    this.fitSig = 'user-layout';
   }
 
   actualSize(): void {
@@ -4457,6 +4518,7 @@ export class App {
     window.addEventListener('keydown', (e) => this.onKey(e, true));
     window.addEventListener('keyup', (e) => this.onKey(e, false));
     window.addEventListener('blur', () => {
+      if (this.motionPointer !== null) { this.editor.gestureEnd(true); this.motionPointer = null; }
       if (this.fillG) this.endFill(true);
       this.held.clear();
       this.endScrub();
@@ -4466,16 +4528,19 @@ export class App {
     // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
+      if (this.motionPointer === e.pointerId) { this.onUp(e, cancelled); return; }
       if ((this.live && e.pointerId === this.live.pointerId) || (this.waiting && e.pointerId === this.waiting.id) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
     window.addEventListener('pointercancel', (e) => lifted(e, true));
     c.addEventListener('lostpointercapture', (e) => {
+      if (e.buttons === 0 && this.motionPointer === e.pointerId) { this.onUp(e, false); return; }
       // a pen that is no longer pressed has lifted
       if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id))) this.onUp(e, false);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
+        if (this.motionPointer !== null) { this.editor.gestureEnd(true); this.motionPointer = null; }
         if (this.fillG) this.endFill(true);
         this.endStroke();
       }
@@ -4489,6 +4554,7 @@ export class App {
 
   private onDown(e: PointerEvent): void {
     e.preventDefault();
+    this.focusCanvas();
     try {
       this.canvas.setPointerCapture(e.pointerId);
     } catch {
@@ -4639,7 +4705,7 @@ export class App {
       this.touches.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y });
       if (!this.tapSession) this.tapSession = { start: performance.now(), maxTouches: 0, moved: false, view: { x: this.view.x, y: this.view.y, zoom: this.view.zoom, rot: this.view.rot } };
       this.tapSession.maxTouches = Math.max(this.tapSession.maxTouches, this.touches.size);
-      if (this.touches.size >= 3 && !this.scrub3 && this.workspace !== 'motion') this.beginScrub3();
+      if (this.touches.size >= 3 && !this.scrub3 && this.workspace !== 'motion' && !this.arrangingAssets) this.beginScrub3();
       // a second finger means "navigate": let go of a layer drag
       if (this.motionPointer !== null && this.motionPointer !== e.pointerId) {
         this.editor.gestureEnd(true);
@@ -4651,7 +4717,9 @@ export class App {
         this.beginTimeScrub(e);
         return;
       }
-      if (this.touches.size === 1 && this.workspace === 'motion') {
+      if (this.touches.size === 1 && this.arrangingAssets) {
+        if (this.assetDown(e)) return;
+      } else if (this.touches.size === 1 && this.workspace === 'motion') {
         if (this.motionDown(e)) return;
       } else if (this.touches.size === 1 && this.fingerPaint) {
         this.beginStroke(e);
@@ -4682,6 +4750,7 @@ export class App {
       return;
     }
     if (e.button !== 0) return;
+    if (this.arrangingAssets) { this.assetDown(e); return; }
     if (this.workspace === 'motion') {
       this.motionDown(e);
       return;
@@ -4715,6 +4784,7 @@ export class App {
 
   private armHold(e: PointerEvent): void {
     this.disarmHold();
+    if (this.arrangingAssets) return;
     // finger painting keeps a still finger for drawing dots; the menu is a right-click there
     if (this.touches.size !== 1 || (this.fingerPaint && this.workspace !== 'motion')) return;
     const x = e.clientX;
@@ -4861,6 +4931,15 @@ export class App {
     return grabbed;
   }
 
+  private assetDown(e: PointerEvent): boolean {
+    if (this.playing) this.togglePlay();
+    const grabbed = this.editor.gestureStart(this.stagePoint(e), this.view.zoom, false, {
+      accept: l => this.isAssetPlacement(l), allowLocked: true, simple: true, autoKey: false,
+    });
+    this.motionPointer = grabbed ? e.pointerId : null;
+    this.requestRender(); return grabbed;
+  }
+
   private liveIsTouch(): boolean {
     return this.live !== null && this.touches.has(this.live.pointerId);
   }
@@ -4941,6 +5020,11 @@ export class App {
     const arm = this.holdArm;
     if (arm && arm.id === e.pointerId && Math.hypot(e.clientX - arm.x, e.clientY - arm.y) > HOLD_SLOP) this.disarmHold();
     if (this.motionPointer === e.pointerId) {
+      const touch = this.touches.get(e.pointerId);
+      if (touch) {
+        const p = this.local(e); touch.x = p.x; touch.y = p.y;
+        if (this.tapSession && Math.hypot(p.x - touch.sx, p.y - touch.sy) > 10) this.tapSession.moved = true;
+      }
       this.editor.gestureMove(this.stagePoint(e));
       return;
     }
@@ -5047,7 +5131,7 @@ export class App {
     if (this.held_ === e.pointerId) this.held_ = null;
     if (this.motionPointer === e.pointerId) {
       this.motionPointer = null;
-      this.editor.gestureEnd(cancelled && e.pointerType !== 'pen');
+      this.editor.gestureEnd(cancelled && (this.arrangingAssets || e.pointerType !== 'pen'));
     }
     if (this.waiting && e.pointerId === this.waiting.id) {
       // (a pen's cancel still keeps its stroke, as below)
@@ -5173,7 +5257,7 @@ export class App {
       this.requestRender();
       return;
     }
-    if (this.touches.size === 1 && (!this.fingerPaint || this.workspace === 'motion') && !this.editor.dragging) {
+    if (this.touches.size === 1 && (!this.fingerPaint || this.workspace === 'motion' || this.arrangingAssets) && !this.editor.dragging) {
       const t = this.touches.get(id)!;
       // One finger pans (the pen always draws, fingers navigate).
       const prev = t as TouchInfo & { px?: number; py?: number };
@@ -5217,11 +5301,20 @@ export class App {
 
   private onKey(e: KeyboardEvent, down: boolean): void {
     const target = e.target as HTMLElement | null;
-    const typing = target instanceof HTMLInputElement && target.type !== 'range' && target.type !== 'checkbox' && target.type !== 'color';
-    if (typing || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
+    const control = target?.closest('input,select,textarea,[contenteditable]:not([contenteditable="false"])');
+    const activation = (e.code === 'Enter' || e.code === 'Space') && target?.closest('button,summary,[role="button"]');
+    if (document.querySelector('dialog[open]') || e.defaultPrevented || control || activation || target?.closest('[data-own-keys]')) {
+      // A release can land in a control after a canvas keydown. Clear navigation state
+      // without turning that control's Space activation into canvas playback.
+      if (!down) {
+        if (e.key === 'Alt') this.altDown = false;
+        if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && this.scrubbing) this.endScrub();
+        this.held.delete(e.code); this.updateCursor();
+      }
+      return;
+    }
     // Panels that handle their own keys (the X-sheet grid) are left alone.
     if (e.key === 'Alt') this.altDown = down;
-    if (target?.closest?.('[data-own-keys]')) return;
     if (!down) {
       if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && this.scrubbing) this.endScrub();
       // A tap of Space (no drag) plays / pauses; Space + drag pans.
@@ -5247,6 +5340,16 @@ export class App {
       e.preventDefault();
       this.redo();
       return;
+    }
+    if (this.arrangingAssets) {
+      if (e.code === 'Escape' || e.code === 'Enter') {
+        e.preventDefault();
+        if (this.editor.dragging) { this.editor.gestureEnd(true); this.motionPointer = null; }
+        else this.setArrangeAssets(false);
+        return;
+      }
+      if (!mod && e.code === 'KeyD') { this.duplicatePlacedAsset(); return; }
+      if (['Delete', 'Backspace', 'KeyN'].includes(e.code) || (mod && ['KeyA', 'KeyC', 'KeyX', 'KeyV'].includes(e.code))) { e.preventDefault(); return; }
     }
     if (mod && e.code === 'KeyA') {
       e.preventDefault();
@@ -5481,6 +5584,11 @@ export class App {
 
     g.imageSmoothingEnabled = this.view.zoom < 2;
     this.residency.use(this.workingSet());
+    if (this.arrangingAssets) {
+      drawComp(g, this.project, this.project.comp, this.frame, { camera: this.editor.throughCamera });
+      if (this.placedAsset) drawMotionOverlay(g, this.editor, this.view, this.dpr, true);
+      return;
+    }
     if (this.workspace === 'motion') {
       // inside a precomp: the comp above, faint, placed so this comp sits where its layer puts it
       const ctx = this.editor.showContext ? this.editor.context() : null;
@@ -5500,6 +5608,7 @@ export class App {
     const others = this.showLayers ? this.otherAlpha : 0;
     // the other layers of this stack (a background's paint layers, a drawing's art layers) always show
     const keep = new Set(this.alwaysShown.map((l) => l.id).filter((id) => id !== activeId));
+    for (const l of comp.layers) if (l.kind === 'comp' && this.project.comps.get(l.comp)?.asset) keep.add(l.id);
     // notes (draw-over corrections) always show, whatever Others and the storyboard slider say
     const hasNotes = comp.layers.some((l) => l.notes && l.visible);
     const around = others > 0 || this.boardAlpha > 0 || keep.size > 0 || hasNotes;
@@ -5510,7 +5619,8 @@ export class App {
     const exclude = group ? new Set([group.base, ...group.members].map((i) => comp.layers[i]!.id)) : undefined;
     // drawing inside a group: the rest of the shot shows around it, as in Procreate
     const outer = (side: 'below' | 'above') => {
-      const ctx = around ? this.editor.context() : null;
+      // Reusable sources are edited on their own; sibling instances must not appear as source art.
+      const ctx = around && !comp.asset ? this.editor.context() : null;
       if (!ctx) return;
       g.save();
       const m = invert(worldMatrix(ctx.parent, ctx.layer, ctx.frame));
@@ -5527,23 +5637,14 @@ export class App {
       return;
     }
     const maskD = this.maskDrawing;
-    const maskLive = !!this.live && !!maskD && this.live.drawing === maskD;
-    const live = maskLive ? null : this.live;
-    const d = live ? live.drawing : this.drawing;
-    if (d.parked) {
-      // Coming back from storage (a few ms): show its thumbnail stretched meanwhile.
-      if (d.thumb) g.drawImage(d.thumb, 0, 0, this.docW, this.docH);
-      for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
-      return;
-    }
+    const d = this.live && this.live.drawing !== maskD ? this.live.drawing : this.drawing;
     const base = g.getTransform();
-    const paintActive = (x: CanvasRenderingContext2D, partScale = 1) => {
-      if (this.blankPage && !live) return;
-      x.setTransform(base);
-      const rasterLive = live && live.record.tool !== 'pen' ? live : null;
-      // Alpha Lock: the stroke being drawn shows only over paint already there (the plane before the stroke is the mask)
-      const locked = !!rasterLive && rasterLive.record.tool !== 'eraser' && this.project.layer.kind === 'drawings' && this.project.layer.alphaLock === true;
-      const liveSrc = (plane: Plane, under: HTMLCanvasElement | null) => {
+    const active = this.project.layer;
+    const source = (drawing: Drawing): DrawingSource => {
+      const ink = this.live?.drawing === drawing ? this.live : null;
+      const raster = ink && ink.record.tool !== 'pen' ? ink : null;
+      const locked = !!raster && raster.record.tool !== 'eraser' && drawing !== maskD && active.alphaLock === true;
+      const liveSrc = (under: HTMLCanvasElement | null) => {
         const src = this.raster.displaySource();
         if (!locked || !under) return src;
         const t = this.lockScratch ??= document.createElement('canvas');
@@ -5556,104 +5657,83 @@ export class App {
         tg.globalCompositeOperation = 'destination-in';
         tg.drawImage(under, 0, 0);
         tg.globalCompositeOperation = 'source-over';
-        void plane;
         return t;
       };
-      const fillSrc = rasterLive && rasterLive.plane === 'fill' ? liveSrc('fill', d.fill) : d.fill;
-      const lineSrc = rasterLive && rasterLive.plane === 'line' ? liveSrc('line', d.line) : d.line;
-      // the layer's Line / Fill parts: hidden or faded here too (a hidden part being drawn on shows faintly)
-      const fillA = this.partAlpha('fill') * partScale;
-      const lineA = this.partAlpha('line') * partScale;
-      x.globalAlpha = fillA;
-      if (fillSrc && fillA > 0) x.drawImage(fillSrc, 0, 0);
-      x.globalAlpha = lineA;
-      if (lineA > 0) x.drawImage(lineSrc, 0, 0);
-      x.globalAlpha = 1;
-
-      // Predicted input: drawn ahead of the real stroke this frame only (lower perceived latency).
-      if (live && live.predicted.length && live.record.brush.smoothing < 0.15 && live.record.tool !== 'pen' && !locked) {
-        const w = live.walker.clone();
-        const ghost = live.predicted.flatMap((p) => w.push(p));
-        this.raster.drawGhost(x, ghost);
-      }
-
-      x.globalAlpha = lineA;
-      if (lineA > 0) for (const v of d.vectors) drawVectorStroke(x, v, this.lengthOf(v));
-      x.globalAlpha = 1;
-      if (live && live.record.tool === 'pen') {
-        const extra = live.record.brush.smoothing < 0.15 ? live.predicted : [];
-        const pts = [...live.record.points, ...extra];
-        drawVectorStroke(x, { ...live.record, points: pts });
-        const sym = live.record.sym;
+      let vectors = drawing.vectors;
+      if (ink?.record.tool === 'pen') {
+        const extra = ink.record.brush.smoothing < 0.15 ? ink.predicted : [];
+        const points = [...ink.record.points, ...extra];
+        vectors = [...vectors, { ...ink.record, points }];
+        const sym = ink.record.sym;
         if (sym && sym.mode !== 'off') {
           const n = symmetryCopies(sym.mode, sym.cx, sym.cy, 0, 0, 0).length;
-          for (let k = 1; k < n; k++) drawVectorStroke(x, { ...live.record, points: pts.map((p) => { const c = symmetryCopies(sym.mode, sym.cx, sym.cy, p.x, p.y, 0)[k]!; return { ...p, x: c.x, y: c.y }; }) });
+          for (let k = 1; k < n; k++) vectors.push({ ...ink.record, points: points.map((p) => {
+            const c = symmetryCopies(sym.mode, sym.cx, sym.cy, p.x, p.y, 0)[k]!;
+            return { ...p, x: c.x, y: c.y };
+          }) });
         }
       }
-    };
-
-    // a layer with a mask: drawn on its own, then the mask takes paint away; while editing the
-    // mask, what it hides shows as a red tint
-    const paintMasked = (x: CanvasRenderingContext2D, partScale = 1) => {
-      if (!maskD || maskD.parked) return paintActive(x, partScale);
-      const W = x.canvas.width, H = x.canvas.height;
-      const s = (this.maskScratch ??= document.createElement('canvas'));
-      if (s.width !== W || s.height !== H) { s.width = W; s.height = H; }
-      const sg = s.getContext('2d')!;
-      sg.setTransform(1, 0, 0, 1, 0, 0);
-      sg.clearRect(0, 0, W, H);
-      paintActive(sg, partScale);
-      const src = maskLive && this.live!.record.tool !== 'pen' ? this.raster.displaySource() : maskD.line;
-      const paintMask = (y: CanvasRenderingContext2D) => {
-        y.setTransform(base);
-        y.drawImage(src, 0, 0);
-        for (const v of maskD.vectors) drawVectorStroke(y, v, this.lengthOf(v));
-        if (maskLive && this.live!.record.tool === 'pen') drawVectorStroke(y, this.live!.record);
+      return {
+        line: raster?.plane === 'line' ? liveSrc(drawing.line) : drawing.line,
+        fill: raster?.plane === 'fill' ? liveSrc(drawing.fill) : drawing.fill,
+        vectors,
+        vectorLength: (v) => this.lengthOf(v),
+        // Predicted points are preview-only and inherit the plane/layer opacity and mask.
+        overlay: raster && raster.predicted.length && raster.record.brush.smoothing < 0.15 && !locked
+          ? (x, part) => {
+            if (part !== raster.plane) return;
+            const w = raster.walker.clone();
+            this.raster.drawGhost(x, raster.predicted.flatMap((p) => w.push(p)));
+          } : undefined,
       };
-      if (!this.editingMask) {
-        sg.globalCompositeOperation = 'destination-out';
-        paintMask(sg);
-        sg.globalCompositeOperation = 'source-over';
-      }
-      x.save();
-      x.setTransform(1, 0, 0, 1, 0, 0);
-      x.drawImage(s, 0, 0);
-      x.restore();
-      if (this.editingMask) {
-        // the hidden parts in red over the layer, so you see what the mask does as you paint it
-        sg.setTransform(1, 0, 0, 1, 0, 0);
-        sg.clearRect(0, 0, W, H);
-        paintMask(sg);
-        sg.setTransform(1, 0, 0, 1, 0, 0);
-        sg.globalCompositeOperation = 'source-in';
-        sg.fillStyle = 'rgba(255, 40, 70, 0.45)';
-        sg.fillRect(0, 0, W, H);
-        sg.globalCompositeOperation = 'source-over';
-        x.save();
-        x.setTransform(1, 0, 0, 1, 0, 0);
-        x.drawImage(s, 0, 0);
-        x.restore();
-      }
-      x.setTransform(base);
     };
-
+    const paintActive = (x: CanvasRenderingContext2D, alpha = opacityAt(active, this.frame), blend = active.blend) => {
+      if (this.blankPage && !this.live) return;
+      drawEditingLayer(x, this.project, comp, active, this.frame, d, base, { source, editingMask: this.editingMask, alpha, blend });
+    };
     if (group) {
       const layerAt = (i: number) => comp.layers[i]!;
+      const strength = (i: number) => i === idx || keep.has(layerAt(i).id) ? 1 : others;
       const draw = (i: number, alpha: number) => (x: CanvasRenderingContext2D) => {
-        if (i === idx) paintMasked(x, alpha);
-        else drawLayerAround(x, this.project, comp, this.frame, activeId, layerAt(i).blend === 'normal' ? layerAt(i) : ({ ...layerAt(i), blend: 'normal' } as typeof comp.layers[number]), alpha, base);
+        if (i === idx) paintActive(x, alpha, 'normal');
+        else drawLayerAround(x, this.project, comp, this.frame, activeId, { ...layerAt(i), blend: 'normal' }, alpha, base);
       };
-      const shown = (i: number) => i === idx || (others > 0 && layerAt(i).visible);
-      drawClipGroup(
+      if (layerAt(group.base).visible) drawClipGroup(
         g,
         draw(group.base, 1),
-        group.base === idx ? 1 : others,
+        opacityAt(layerAt(group.base), this.frame) * strength(group.base),
         layerAt(group.base).blend,
-        group.members.filter(shown).map((j) => ({ draw: draw(j, j === idx ? 1 : others), blend: layerAt(j).blend })),
+        group.members.filter((i) => layerAt(i).visible && strength(i) > 0).map((i) => ({
+          draw: draw(i, opacityAt(layerAt(i), this.frame) * strength(i)), blend: layerAt(i).blend,
+        })),
         'draw',
       );
       g.setTransform(base);
-    } else paintMasked(g);
+    } else paintActive(g);
+
+    // The red mask-editing tint is an editing guide, outside the layer's actual artwork.
+    if (this.editingMask && maskD && !maskD.parked && active.visible) {
+      const s = this.maskScratch ??= document.createElement('canvas');
+      if (s.width !== g.canvas.width || s.height !== g.canvas.height) { s.width = g.canvas.width; s.height = g.canvas.height; }
+      const sg = s.getContext('2d')!;
+      sg.setTransform(1, 0, 0, 1, 0, 0);
+      sg.globalAlpha = 1;
+      sg.globalCompositeOperation = 'source-over';
+      sg.clearRect(0, 0, s.width, s.height);
+      sg.setTransform(base);
+      const maskSrc = source(maskD);
+      sg.drawImage(maskSrc.line, 0, 0);
+      for (const v of maskSrc.vectors ?? maskD.vectors) drawVectorStroke(sg, v, this.lengthOf(v));
+      sg.setTransform(1, 0, 0, 1, 0, 0);
+      sg.globalCompositeOperation = 'source-in';
+      sg.fillStyle = 'rgba(255, 40, 70, 0.45)';
+      sg.fillRect(0, 0, s.width, s.height);
+      sg.globalCompositeOperation = 'source-over';
+      g.save();
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.drawImage(s, 0, 0);
+      g.restore();
+    }
 
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude, keep);
     outer('above');
@@ -5677,21 +5757,13 @@ export class App {
     this.editor.setPart(l.id, name, { visible: !partOf(l, name).visible });
   }
 
-  /** How strongly the Draw view shows a part of the active layer (0 = hidden). */
-  private partAlpha(name: PartName): number {
-    const p = partOf(this.project.layer, name);
-    const a = p.visible ? Math.max(0, Math.min(1, valueAt(p.opacity, this.layerFrame) / 100)) : 0;
-    const target = this.tool === 'pen' ? 'line' : this.plane;
-    return target === name ? Math.max(a, 0.25) : a;
-  }
-
   /**
    * The drawings that must be live right now, most important first: the current one, its onion
    * neighbours, and during playback the drawings coming up in the next second and a half.
    */
   private workingSet(): Drawing[] {
     const p = this.project;
-    if (this.workspace === 'motion') {
+    if (this.workspace === 'motion' || this.arrangingAssets) {
       // everything the comp shows at this frame (through precomps), and what is coming up in playback
       const out = new Set<Drawing>();
       const add = (f: number) => {
@@ -5729,13 +5801,13 @@ export class App {
       const d = id ? p.drawings.get(id) : undefined;
       if (d) out.add(d);
     }
-    if (this.showLayers || this.boardAlpha > 0) {
+    if (this.showLayers || this.boardAlpha > 0 || p.comp.layers.some(l => l.kind === 'comp' && p.comps.get(l.comp)?.asset)) {
       for (const id of frameContent(p.comps, p.comp.id, this.frame).drawings) {
         const d = p.drawings.get(id);
         if (d) out.add(d);
       }
       // inside a group: the shot around it
-      const ctx = this.editor.context();
+      const ctx = p.comp.asset ? null : this.editor.context();
       if (ctx)
         for (const id of frameContent(p.comps, ctx.parent, ctx.frame).drawings) {
           const d = p.drawings.get(id);
