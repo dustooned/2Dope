@@ -8,8 +8,9 @@ import { PaintingWorkspaceUI } from './paintingworkspace';
 import { FlipMode } from './flipmode';
 import { showContextMenu } from './contextmenu';
 
-const keys = ['2dope.painting.layout.draw','2dope.painting.layout.animate','2dope.draw.view','2dope.animate.view','2dope.flip.mini','2dope.ui.level','2dope.m0.color','2dope.m0.brush','2dope.brushes.category'];
+const keys = ['2dope.brushes.preferences','2dope.painting.layout.draw','2dope.painting.layout.animate','2dope.draw.view','2dope.animate.view','2dope.flip.mini','2dope.ui.level','2dope.m0.color','2dope.m0.brush','2dope.brushes.category'];
 const saved = keys.map(k => localStorage.getItem(k));
+localStorage.removeItem('2dope.brushes.preferences');
 const canvas = document.querySelector<HTMLCanvasElement>('#canvas')!, stage = document.querySelector<HTMLElement>('#stage')!;
 const app = new App(canvas, stage);
 app.loadProject(new Project(128,128)); app.setWorkspace('draw'); app.color = '#264653';

@@ -32,8 +32,9 @@ function swatch(label: string, brush: BrushSettings, pressure: number | ((t: num
   for (let i = 0; i < repeats; i++) paint(c, record(brush, pts));
   return c;
 }
-const keys = ['2dope.m0.brush','2dope.m0.color','2dope.inkpaint','2dope.ui.level','2dope.select.shape'];
+const keys = ['2dope.brushes.preferences','2dope.m0.brush','2dope.m0.color','2dope.inkpaint','2dope.ui.level','2dope.select.shape'];
 const saved = keys.map(k => localStorage.getItem(k));
+localStorage.removeItem('2dope.brushes.preferences');
 let app: App | null = null;
 try {
   const paper = makeCanvas(8, 8), pg = ctx2d(paper); pg.fillStyle = '#fff'; pg.fillRect(0, 0, 8, 8); pg.fillStyle = '#000'; pg.fillRect(0, 0, 4, 8);

@@ -3955,6 +3955,11 @@ body:not(.ws-draw):not(.ws-animate) .shape-pop {
 .bl-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .bl-current { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bl-done { min-width: 44px; min-height: 44px; flex: 0 0 auto; border-radius: 12px; background: var(--accent); border-color: var(--accent); color: white; }
+.bl-favorite { min-width: 44px; min-height: 44px; flex: 0 0 auto; }
+.bl-favorite[aria-pressed='true'] { color: var(--accent); border-color: var(--accent); background: var(--panel-2); }
+.bl-favorite[aria-pressed='true'] .ico { fill: currentColor; }
+.bl-name { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.bl-name .ico { width: 14px; height: 14px; flex: 0 0 auto; color: var(--accent); }
 .bl-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .bl-actions button { flex: 1; min-width: 0; min-height: 44px; }
 .bl-title {

@@ -2,6 +2,17 @@
 
 Current code map reviewed 2026-10-14. See `HANDOFF.md` for the checked baseline and open work.
 
+Brush workflow (2026-10-23): `core/brushprefs.ts` validates bounded device-only size/opacity
+memory, five unique recent choices and favorites. App records outgoing/current working values
+and recalls only size/opacity when a preset/library brush is selected. Explicit Save brush updates
+bypass recall. `2dope.brushes.preferences` contains small name/value metadata with no image bytes;
+the current full brush still uses its existing key and personal definitions remain in IndexedDB.
+`BrushLibrary` adds Recent/Favorites tabs and a pressed Favorite header action using the existing
+icons, cards, hold menu, scrolling and Done flow. Rename carries metadata; delete removes it and
+selects Pencil if needed. Project History, saved pixels, student profiles and artwork formats
+are untouched. `tests/brushprefs.html` exercises sliders, library, management and fresh-App reads;
+its responsive wrapper covers phone/tablet/short landscape on isolated test origins.
+
 Raster brush feel (2026-10-23): `brush/dabs.ts` supplies a smooth finite-slope taper with a
 brush-diameter run-up for wide tips, subpixel ends and a final stamp at the recorded endpoint.
 Zero-length finished taps retain their mark. `RasterEngine.commit` rebuilds start/end tapers

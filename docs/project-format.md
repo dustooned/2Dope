@@ -1,5 +1,11 @@
 # The .2dope project format (schema 3)
 
+Brush working memory, Favorites and Recent use device-only `2dope.brushes.preferences`
+(version 1: bounded name/size/opacity entries, favorite names, five recent names). No brush image
+bytes are duplicated there. The current brush and saved personal brush definitions retain their
+existing stores. These preferences are outside project files, My Assets, student profiles and
+document Undo; no project or brush format migration is needed.
+
 Student profiles are device preferences, not project fields. `2dope.student.profiles` stores a
 version-1 list of named settings snapshots plus the last applied profile id; `2dope.student.ui`
 stores current tool/control visibility, and `2dope.student.fingerPaint` stores finger drawing.

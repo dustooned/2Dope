@@ -2,6 +2,48 @@
 
 ## Current state (2026-10-23) — read this first
 
+**Latest step: brush memory, Favorites and Recent release, following 586f67d.**
+The user authorized committing and pushing this checked release to main on 2026-10-23.
+The user approved this bounded next Draw improvement. Each brush recalls its working size and
+opacity when selected through the library or Studio preset selector. Draw/Animate and painting
+tools share the existing brush identity. Other Studio changes still require Save brush to keep
+a reusable definition; saving over a personal brush supplies its exact new values.
+
+Brushes adds Recent (five unique choices, latest first) and Favorites ahead of the existing
+collections. The fixed header has a 44px pressed Favorite button, and the existing hold menu
+offers Add/Remove from Favorites for any card. Favorites reuse original cards/definitions, with
+star marks and helpful empty states. Selecting Recent keeps focus on its moving card; removing
+a favorite through the menu recovers to its card or the category. Rename carries preferences;
+delete removes them and selects Pencil when deleting the active personal brush.
+
+`core/brushprefs.ts` validates bounded metadata in device-only `2dope.brushes.preferences`:
+version 1, up to 610 name/size/opacity entries and favorites, five recent names. No image data,
+document fields, schema migration, drawing Undo, student-profile fields or extra canvases.
+Existing current-brush and personal-definition stores remain in place. Changed: new core
+preferences/tests, App, BrushLibrary, icons/CSS, browser/responsive fixtures, four existing fixture
+preference guards, manual/UPDATES, architecture/project-format/test docs and this handoff.
+
+Fresh checks: **59 files / 482 unit tests**, strict TypeScript/production build and diff check
+passed (existing large-bundle warning remains). On isolated `127.0.0.1:5214`, new workflow
+**21/0 each** at desktop, 390×844, 1024×768 and 768×390; brush return **24/0**, brush controls
+**26/0**, integrated painting **20/0** = **154 browser assertions**. The initial new fixture caught
+context-menu focus loss (fixed) and a fractional 44px measurement (uses existing 43.9 tolerance).
+Brush-controls previously expected an explicit same-name definition to reset values; it now
+uses the same exact-definition bypass as Save brush while new tests cover ordinary recall.
+
+Native built review on isolated `127.0.0.1:5215` created a 720p test project, favorited Textured
+Paint, adjusted it to 11px/30%, switched to Marker and back through Favorites, and reloaded:
+brush, values, favorite and selected Favorites category retained. Corrected a selected-button
+theme clash discovered visually. Screenshot: `../artifacts/brush-memory-favorites.jpg`.
+User project storage was not cleared. Release prepared for the authorized main push; verify
+Pages for the exact pushed SHA. Physical iPad/Pencil/Safari review
+and earlier deferred Clips/view fixture failures remain separate.
+
+**Next:** user review of brush shortcuts; selection feathering/saved selections were the next
+suggested Draw improvement, not implemented or otherwise authorized by this step.
+
+### Previous step: raster taper and textured paint release
+
 **Latest step: raster taper and textured paint release, including the preceding UI icon cleanup.**
 The user authorized committing and pushing these checked changes to main on 2026-10-23.
 The user chose brush feel over Procreate parity work. Raster tapers now use a smooth finite-slope

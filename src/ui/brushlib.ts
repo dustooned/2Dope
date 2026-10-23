@@ -11,12 +11,13 @@ import { RasterEngine } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { attachContextMenu } from './contextmenu';
 import { askText, confirmBox } from './dialogs';
-import { decorate } from './icons';
+import { decorate, iconSvg } from './icons';
 
 const MINE_KEY = '2dope.brushes.mine';
 const CAT_KEY = '2dope.brushes.category';
 /** Your brush collections (Procreate brush sets) and which brushes are in them. */
 const SETS_KEY = '2dope.brushes.sets';
+const RECENT = '$recent', FAVORITES = '$favorites';
 const PW = 220;
 const PH = 54;
 
@@ -44,6 +45,7 @@ export class BrushLibrary {
   private anchorLabel: string | null = null;
   private readonly done = el('button', { type: 'button', class: 'bl-done', 'aria-label': 'Done choosing brush', title: 'Keep this brush and return to drawing' }, 'Done');
   private readonly current = el('span', { class: 'bl-current', role: 'status', 'aria-label': 'Current brush and painting target' });
+  private readonly favorite = el('button', { type: 'button', class: 'bl-favorite', 'aria-label': 'Favorite current brush', 'aria-pressed': 'false' }, 'Favorite');
   private cancelDrag = () => {};
   private cat: BrushCategory;
   private mine: BrushSettings[];
@@ -71,7 +73,7 @@ export class BrushLibrary {
     let c: BrushCategory = categoryOf(app.brush.name, this.mine, this.sets);
     try {
       const saved = localStorage.getItem(CAT_KEY);
-      if (allCategories(this.sets).some((x) => x.id === saved)) c = saved as BrushCategory;
+      if (this.categories().some((x) => x.id === saved)) c = saved as BrushCategory;
     } catch {
       // default category
     }
@@ -81,7 +83,9 @@ export class BrushLibrary {
     identity.append(el('span', { class: 'bl-title' }, 'Brushes'), this.current);
     decorate(this.done, 'check');
     this.done.addEventListener('click', () => this.close(true));
-    head.append(identity, this.done);
+    decorate(this.favorite, 'favorite');
+    this.favorite.addEventListener('click', () => this.toggleFavorite(this.app.brush.name));
+    head.append(identity, this.favorite, this.done);
     const actions = el('div', { class: 'bl-actions' });
     const save = el('button', { type: 'button', class: 'primary', title: 'Save the brush you are using (with your changes) into My brushes' }, 'Save brush');
     decorate(save, 'plus');
@@ -122,6 +126,7 @@ export class BrushLibrary {
       return [
         { label: 'Use this brush', run: () => this.use(b) },
         { label: 'Open in Studio', run: () => this.studio(b) },
+        { label: this.app.brushPreferences.favorites.includes(name) ? 'Remove from Favorites' : 'Add to Favorites', run: () => this.toggleFavorite(name, true) },
         { label: 'Duplicate', run: () => this.add({ ...cloneBrush(b), name: uniqueName(`${name} copy`, this.names()) }) },
         ...(own && places.length > 1 ? [{ title: 'Move to' }, { chips: places.filter((c) => c.id !== here).map((c) => ({ label: c.label, run: () => this.moveBrush(name, c.id) })) }] : []),
         { title: 'Copy to' },
@@ -225,6 +230,28 @@ export class BrushLibrary {
   private use(b: BrushSettings): void {
     this.app.setBrush(cloneBrush(b));
     this.render();
+  }
+
+  private toggleFavorite(name: string, returnToCard = false): void {
+    this.app.toggleBrushFavorite(name);
+    this.lastTap = { name: '', at: 0 };
+    this.render();
+    if (returnToCard) {
+      const card = [...this.list.querySelectorAll<HTMLElement>('[data-name]')].find(e => e.dataset.name === name);
+      (card ?? this.cats.querySelector<HTMLElement>('[aria-selected="true"]'))?.focus({ preventScroll: true });
+    }
+  }
+
+  private categories(): { id: string; label: string; own: boolean }[] {
+    return [{ id: RECENT, label: 'Recent', own: false }, { id: FAVORITES, label: 'Favorites', own: false }, ...allCategories(this.sets)];
+  }
+
+  private brushesIn(cat: string): BrushSettings[] {
+    if (cat === RECENT || cat === FAVORITES) {
+      const names = cat === RECENT ? this.app.brushPreferences.recent : this.app.brushPreferences.favorites;
+      return names.map(n => this.find(n)).filter((b): b is BrushSettings => !!b);
+    }
+    return this.all().filter(b => categoryOf(b.name, this.mine, this.sets) === cat);
   }
 
   private studio(b: BrushSettings): void {
@@ -408,7 +435,8 @@ export class BrushLibrary {
       // saving under your own brush's name updates it
       this.mine = this.mine.map((b, i) => (i === own ? { ...cloneBrush(cur), name: b.name } : b));
       this.saveMine();
-      this.use(this.mine[own]!);
+      this.app.setBrush(this.mine[own]!, false);
+      this.render();
       return;
     }
     this.add({ ...cloneBrush(cur), name: uniqueName(name, this.names()) });
@@ -421,7 +449,7 @@ export class BrushLibrary {
     this.mine = this.mine.map((x) => (x.name === b.name ? { ...x, name: next } : x));
     this.saveMine();
     this.setSets(renamedIn(this.sets, b.name, next));
-    if (this.app.brush.name === b.name) this.app.setBrush({ ...cloneBrush(this.app.brush), name: next });
+    this.app.renameBrushPreferences(b.name, next);
     this.render();
   }
 
@@ -430,6 +458,7 @@ export class BrushLibrary {
     this.mine = this.mine.filter((x) => x.name !== b.name);
     this.saveMine();
     this.setSets(forget(this.sets, b.name));
+    this.app.forgetBrushPreferences(b.name);
     this.render();
   }
 
@@ -458,15 +487,18 @@ export class BrushLibrary {
     const tool = this.app.smudging ? 'Smudge' : this.app.tool === 'eraser' ? 'Eraser' : this.app.tool === 'pen' ? 'Vector' : 'Brush';
     this.current.textContent = `${this.app.brush.name} · ${tool} · ${this.app.plane === 'line' ? 'Line' : 'Fill'}`;
     this.current.title = this.current.textContent;
-    if (!allCategories(this.sets).some((c) => c.id === this.cat)) this.cat = 'mine';
+    const favorite = this.app.brushPreferences.favorites.includes(this.app.brush.name);
+    this.favorite.setAttribute('aria-pressed', String(favorite));
+    this.favorite.title = `${favorite ? 'Remove' : 'Add'} ${this.app.brush.name} ${favorite ? 'from' : 'to'} Favorites`;
+    if (!this.categories().some((c) => c.id === this.cat)) this.cat = 'mine';
     const newSet = el('button', { type: 'button', class: 'bl-new', title: 'A new collection for your brushes (like a Procreate brush set)' }, 'New');
     decorate(newSet, 'plus');
     newSet.addEventListener('click', () => void this.newSet());
     this.cats.replaceChildren(
-      ...allCategories(this.sets).map((c) => {
-        const count = this.all().filter((b) => categoryOf(b.name, this.mine, this.sets) === c.id).length;
+      ...this.categories().map((c) => {
+        const count = this.brushesIn(c.id).length;
         const b = el('button', { type: 'button', role: 'tab', 'aria-selected': String(c.id === this.cat), 'data-cat': c.id, 'data-own': c.own ? '1' : '0', title: c.own ? 'Your collection: hold for rename or delete; drop a brush here to move it in' : c.id === 'mine' ? 'Your brushes; drop a brush here to move it back' : c.label }, c.label);
-        decorate(b, c.own ? 'folder' : c.id === 'sketch' ? 'draw' : c.id === 'ink' ? 'pen' : c.id === 'paint' ? 'brush' : 'brushes');
+        decorate(b, c.id === FAVORITES ? 'favorite' : c.id === RECENT ? 'recent' : c.own ? 'folder' : c.id === 'sketch' ? 'draw' : c.id === 'ink' ? 'pen' : c.id === 'paint' ? 'brush' : 'brushes');
         b.append(el('span', { class: 'bl-count' }, String(count)));
         b.addEventListener('click', () => {
           this.cat = c.id;
@@ -481,13 +513,14 @@ export class BrushLibrary {
       }),
       newSet,
     );
-    const shown = this.all().filter((b) => categoryOf(b.name, this.mine, this.sets) === this.cat);
+    const shown = this.brushesIn(this.cat);
     const cur = this.app.brush.name;
     this.list.replaceChildren(
       ...(shown.length
         ? shown.map((b) => {
             const card = el('button', { type: 'button', class: `bl-card${b.name === cur ? ' on' : ''}`, role: 'option', 'aria-selected': String(b.name === cur), 'data-name': b.name, title: b.name });
             card.append(this.preview(b), el('span', { class: 'bl-name' }, b.name));
+            if (this.app.brushPreferences.favorites.includes(b.name)) card.querySelector('.bl-name')!.insertAdjacentHTML('beforeend', iconSvg('favorite'));
             card.addEventListener('click', () => {
               if (this.root.hidden) return;
               const now = performance.now();
@@ -498,12 +531,13 @@ export class BrushLibrary {
             });
             return card;
           })
-        : [el('p', { class: 'hint bl-empty' }, 'No brushes saved yet. Tune a brush, then tap ＋ Save brush.')]),
+        : [el('p', { class: 'hint bl-empty' }, this.cat === FAVORITES ? 'Choose a brush, then tap Favorite to keep it here. You can also hold a brush for Add to Favorites.' : this.cat === RECENT ? 'Your last five chosen brushes appear here.' : 'No brushes saved yet. Tune a brush, then tap ＋ Save brush.')]),
     );
     // Selecting a brush/category rebuilds its controls: keep keyboard and scrolling in place.
     if (focusName || focusCat) {
       const replacement = [...this.root.querySelectorAll<HTMLElement>('[data-name], [data-cat]')].find(e => focusName ? e.dataset.name === focusName : e.dataset.cat === focusCat);
       replacement?.focus({ preventScroll: true });
+      if (!replacement && focusName) this.cats.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
     }
     this.list.scrollTop = listScroll;
     this.cats.scrollTop = catsScroll;

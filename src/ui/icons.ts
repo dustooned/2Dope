@@ -6,6 +6,8 @@
  */
 
 const P: Record<string, string> = {
+  favorite: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>',
+  recent: '<path d="M3 4v5h5M3.5 9a9 9 0 119 12"/><path d="M12 7v5l3 2"/>',
   editpoints: '<path d="M4 18C8 6 16 6 20 18"/><rect x="2.5" y="16.5" width="3" height="3"/><circle cx="12" cy="9" r="1.8"/><rect x="18.5" y="16.5" width="3" height="3"/>',
   curvept: '<path d="M3 17C7 7 17 7 21 17"/><circle cx="12" cy="9.5" r="2.6"/>',
   straightpt: '<path d="M3 17l9-8 9 8"/><rect x="9.4" y="6.4" width="5.2" height="5.2"/>',

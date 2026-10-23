@@ -22,6 +22,7 @@ import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
 import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type InterfaceLevel } from './core/studentprefs';
+import { BRUSH_PREFS_KEY, readBrushPreferences, rememberBrush, recalledBrush, usedBrush, favoriteBrush, forgetBrush, renameBrush } from './core/brushprefs';
 import { staticProp, valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { guardTouchContextMenus } from './ui/touchcontext';
@@ -354,6 +355,7 @@ export class App {
   onStats: () => void = () => {};
   onToolChange: () => void = () => {};
   onBrushChange: () => void = () => {};
+  brushPreferences = readBrushPreferences(loadJSON<unknown>(BRUSH_PREFS_KEY));
 
   private readonly ctx: CanvasRenderingContext2D;
   private dpr = 1;
@@ -394,6 +396,7 @@ export class App {
     this.clampOnion();
     // Merge over the default so brushes saved by older builds gain new fields.
     this.brush = { ...cloneBrush(PRESETS[0]!), ...(loadJSON<Partial<BrushSettings>>(BRUSH_KEY) ?? {}) };
+    this.brushPreferences = usedBrush(rememberBrush(this.brushPreferences, this.brush), this.brush.name);
     if (this.brush.tipImage) void loadTip(this.brush.tipImage);
     if (this.brush.grainImage) void loadGrain(this.brush.grainImage);
     this.color = loadJSON<string>(COLOR_KEY) ?? '#1d1d24';
@@ -2560,17 +2563,39 @@ export class App {
     g.restore();
   }
 
-  setBrush(b: BrushSettings): void {
-    this.brush = b;
+  setBrush(b: BrushSettings, recall = true): void {
+    this.brushPreferences = rememberBrush(this.brushPreferences, this.brush);
+    this.brush = cloneBrush(recall ? recalledBrush(this.brushPreferences, b) : b);
+    this.brushPreferences = usedBrush(this.brushPreferences, b.name);
     if (b.tipImage) void loadTip(b.tipImage);
     if (b.grainImage) void loadGrain(b.grainImage);
-    saveJSON(BRUSH_KEY, b);
-    this.onBrushChange();
+    this.brushChanged();
   }
 
   brushChanged(): void {
+    this.brushPreferences = rememberBrush(this.brushPreferences, this.brush);
+    saveJSON(BRUSH_PREFS_KEY, this.brushPreferences);
     saveJSON(BRUSH_KEY, this.brush);
     this.onBrushChange();
+  }
+
+  toggleBrushFavorite(name: string): void {
+    this.brushPreferences = favoriteBrush(this.brushPreferences, name);
+    saveJSON(BRUSH_PREFS_KEY, this.brushPreferences);
+  }
+
+  renameBrushPreferences(from: string, to: string): void {
+    this.brushPreferences = renameBrush(this.brushPreferences, from, to);
+    if (this.brush.name === from) {
+      this.brush.name = to;
+      this.brushChanged();
+    } else saveJSON(BRUSH_PREFS_KEY, this.brushPreferences);
+  }
+
+  forgetBrushPreferences(name: string): void {
+    if (this.brush.name === name) this.setBrush(PRESETS[0]!);
+    this.brushPreferences = forgetBrush(this.brushPreferences, name);
+    saveJSON(BRUSH_PREFS_KEY, this.brushPreferences);
   }
 
   setColor(c: string): void {

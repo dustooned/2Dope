@@ -13,8 +13,9 @@ import { LayerCards } from './layercards';
 import { ColorPanel } from './colorpanel';
 import { BrushLibrary } from './brushlib';
 
-const keys=['2dope.painting.layout.draw','2dope.painting.layout.animate','2dope.draw.view','2dope.animate.view','2dope.sheet.draw','2dope.sheet.animate','2dope.m3.--track-h','2dope.flip.mini','2dope.ui.level','2dope.m0.brush','2dope.m0.color','2dope.brushes.category','2dope.color.recent','2dope.color.mode','2dope.color.palette','2dope.color.palettes','2dope.color.paletteAt','2dope.color.harmony'];
+const keys=['2dope.brushes.preferences','2dope.painting.layout.draw','2dope.painting.layout.animate','2dope.draw.view','2dope.animate.view','2dope.sheet.draw','2dope.sheet.animate','2dope.m3.--track-h','2dope.flip.mini','2dope.ui.level','2dope.m0.brush','2dope.m0.color','2dope.brushes.category','2dope.color.recent','2dope.color.mode','2dope.color.palette','2dope.color.palettes','2dope.color.paletteAt','2dope.color.harmony'];
 const saved=keys.map(k=>localStorage.getItem(k));
+localStorage.removeItem('2dope.brushes.preferences');
 const inkPaintPref=localStorage.getItem('2dope.inkpaint');localStorage.removeItem('2dope.inkpaint');
 for(const k of keys.filter(k=>k.startsWith('2dope.color.')))localStorage.removeItem(k);
 const stage=document.querySelector<HTMLElement>('#stage')!,canvas=document.querySelector<HTMLCanvasElement>('#canvas')!,root=document.querySelector<HTMLElement>('#sidebar')!,stripRoot=document.querySelector<HTMLElement>('#strip')!;

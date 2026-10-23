@@ -7,8 +7,9 @@ import { Bubbles } from './bubbles';
 import { PaintingWorkspaceUI } from './paintingworkspace';
 import { FlipMode } from './flipmode';
 
-const keys=['2dope.painting.layout.draw','2dope.painting.layout.animate','2dope.draw.view','2dope.animate.view','2dope.flip.mini','2dope.ui.level','2dope.m0.brush'];
+const keys=['2dope.brushes.preferences','2dope.painting.layout.draw','2dope.painting.layout.animate','2dope.draw.view','2dope.animate.view','2dope.flip.mini','2dope.ui.level','2dope.m0.brush'];
 const saved=keys.map(k=>localStorage.getItem(k));
+localStorage.removeItem('2dope.brushes.preferences');
 const canvas=document.querySelector<HTMLCanvasElement>('#canvas')!,stage=document.querySelector<HTMLElement>('#stage')!,root=document.querySelector<HTMLElement>('#sidebar')!;
 const size=root.querySelector<HTMLElement>('[data-slider="size"]')!,opacity=root.querySelector<HTMLElement>('[data-slider="opacity"]')!;
 const app=new App(canvas,stage);app.loadProject(new Project(128,128));app.setWorkspace('draw');app.project.comp.duration=24;
@@ -56,8 +57,9 @@ try{
   check('Space on a focused slider does not start canvas playback',!app.playing&&app.frame===frame);
   app.setTool('eraser');app.setPlane('line');tap(size,.3);key(size,'ArrowRight');tap(opacity,.4);
   check('Adjusting size and opacity preserves Eraser and Line with no Undo entry',app.tool==='eraser'&&app.plane==='line'&&app.brush.opacity===.4&&!app.history.canUndo);
-  app.setTool('brush');app.setPlane('fill');app.setBrush({...cloneBrush(PRESETS.find(b=>b.name==='Pixel Ink')!),size:12,opacity:1,smoothing:0});
-  check('Choosing a different brush refreshes both labeled values',size.querySelector('.vval')!.textContent==='12 px'&&opacity.querySelector('.vval')!.textContent==='100%');
+  // Explicit replacement supplies exact values, like Save brush; choosing a library brush recalls its memory.
+  app.setTool('brush');app.setPlane('fill');app.setBrush({...cloneBrush(PRESETS.find(b=>b.name==='Pixel Ink')!),size:12,opacity:1,smoothing:0},false);
+  check('Explicit brush definition replacement refreshes both labeled values',size.querySelector('.vval')!.textContent==='12 px'&&opacity.querySelector('.vval')!.textContent==='100%');
   tap(opacity,.5);key(opacity,'Enter');app.fit();stroke(40);await settle();const half=alpha(40);tap(opacity,1);key(opacity,'Enter');stroke(88);await settle();const full=alpha(88);
   check('New strokes use the adjusted opacity on Fill without painting Line',half>=120&&half<=132&&full>245&&app.drawing.line.getContext('2d')!.getImageData(64,40,1,1).data[3]===0);
   controlButton('Undo').click();await settle();check('One Undo removes the last stroke rather than the brush adjustment',alpha(88)===0&&alpha(40)>0&&app.brush.opacity===1);

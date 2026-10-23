@@ -1,5 +1,16 @@
 # Browser rendering checks
 
+## Brush memory, Favorites and Recent
+
+Open `/tests/brushprefs.html` on an isolated origin. The real App/Sidebar/BrushLibrary checks
+per-brush size/opacity recall, five unique recent choices, favorites and empty-state recovery,
+keyboard focus, tool/Fill/colour preservation, shared Animate preferences, personal brush
+save/overwrite/rename/delete, fresh-App storage reads, fixed touch targets and unchanged document
+History/notifications. It restores preference keys and the original brush list after checking.
+`/tests/brushprefs-responsive.html?size=phone` uses a 390×844 iframe; `tablet` is 1024×768 and
+`landscape` is 768×390. Run sequentially because they share preference keys. Also check native
+built-app selection, slider changes and reload. Physical Pencil/iPad Safari remain separate.
+
 ## Ink & Paint / Auto Paint
 
 Open `/tests/inkpaint.html` on an isolated origin. Twenty-seven assertions on Full-profile desktop
