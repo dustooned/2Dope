@@ -1,6 +1,7 @@
 import { storageEstimate, type FolderRecord, type ProjectMeta } from '../io/persist';
 import type { NewProjectUI } from './newdialog';
 import { askText, confirmBox, pickBox } from './dialogs';
+import { iconSvg } from './icons';
 import type { FileUI } from './files';
 
 const SORT_KEY = '2dope.m2.sort';
@@ -237,7 +238,7 @@ export class Gallery {
       if (u) cell.append(el('img', { src: u, alt: '' }));
       box.append(cell);
     }
-    if (!items.length) box.append(el('span', { class: 'folderglyph' }, '📁'));
+    if (!items.length) { const glyph = el('span', { class: 'folderglyph' }); glyph.innerHTML = iconSvg('folder'); box.append(glyph); }
     card.append(box);
     const body = el('div', { class: 'gbody' });
     body.append(el('strong', {}, f.name), el('span', { class: 'hint' }, `${items.length} project${items.length === 1 ? '' : 's'}`));
@@ -363,7 +364,7 @@ export class Gallery {
   private async moveTo(ids: string[], folders: FolderRecord[]): Promise<void> {
     const choice = await pickBox<string | null>(
       ids.length === 1 ? 'Move to' : `Move ${ids.length} projects to`,
-      [{ label: 'Projects (no folder)', value: null }, ...folders.map((f) => ({ label: `📁 ${f.name}`, value: f.id as string | null }))],
+      [{ label: 'Projects (no folder)', value: null }, ...folders.map((f) => ({ label: f.name, value: f.id as string | null }))],
       {
         label: 'New folder…',
         run: async () => {

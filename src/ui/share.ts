@@ -361,7 +361,7 @@ export class ShareView {
     if (this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture') {
       // for handing in: the student's name, class and the date, burned into the corner
       const box = el('fieldset', { class: 'share-stamp' });
-      box.append(el('legend', {}, '\ud83c\udf93 Hand in'));
+      box.append(el('legend', {}, 'Hand in'));
       const on = el('label', { class: 'share-row toggle' });
       const tick = el('input', { type: 'checkbox' });
       tick.checked = this.stamp.on;

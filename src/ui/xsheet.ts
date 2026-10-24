@@ -46,7 +46,7 @@ export class XSheet {
 
   constructor(
     private readonly app: App,
-    private readonly root: HTMLElement,
+    root: HTMLElement,
   ) {
     root.classList.add('xsheet');
     const bar = el('div', { class: 'xs-bar' });

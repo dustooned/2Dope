@@ -37,7 +37,7 @@ export class Quick {
   constructor(
     private readonly app: App,
     host: HTMLElement,
-    private readonly actions: { exportPng: () => void; saveFile: () => void; exportSeq: () => void },
+    actions: { exportPng: () => void; saveFile: () => void; exportSeq: () => void },
   ) {
     host.classList.add('quickbar');
     host.setAttribute('role', 'toolbar');

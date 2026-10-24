@@ -302,14 +302,14 @@ export class LayerCards {
       info.append(el('span', { class: 'lc-name' }, l.name));
       const tags: string[] = [];
       if (l.kind === 'comp') tags.push(`group \u00b7 ${app.project.comps.get(l.comp)?.layers.length ?? 0} layers`);
-      if (l.kind === 'drawings' && l.notes) tags.push('\ud83d\udcdd notes \u00b7 not exported');
+      if (l.kind === 'drawings' && l.notes) tags.push('notes \u00b7 not exported');
       else if (l.kind === 'drawings' && l.guide) tags.push('board');
       if (linked && !inStack) tags.push('linked');
       if (l.kind === 'drawings' && l.still) tags.push('still');
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
       if (l.kind === 'drawings' && l.reference) tags.push('reference');
       if (l.kind === 'drawings' && l.mask) tags.push(on && app.editingMask ? 'editing mask' : 'mask');
-      if (l.kind === 'drawings' && l.effects?.length) tags.push('✨ effects');
+      if (l.kind === 'drawings' && l.effects?.length) tags.push('effects');
       if (l.blend !== 'normal') tags.push(l.blend);
       const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
       if (op < 100) tags.push(`${op}%`);
@@ -456,7 +456,7 @@ export class LayerCards {
     const folded = this.foldedStacks.has(id) && !members.some((m) => m.id === active);
     const head = el('div', { class: `lc-stack${members.some((m) => m.id === active) ? ' here' : ''}`, role: 'group', 'aria-label': `${base.name} stack` });
     const fold = el('button', { type: 'button', class: 'lc-stack-fold', 'aria-expanded': String(!folded), title: folded ? 'Show its layers' : 'Fold its layers away' });
-    fold.append(el('span', { class: 'lc-fold', 'aria-hidden': 'true' }, folded ? '\u25b8' : '\u25be'), el('span', { class: 'lc-stack-name' }, `${still ? '\ud83d\uddbc\ufe0f' : '\ud83c\udf9e\ufe0f'} ${base.name}`), el('span', { class: 'lc-tags' }, `${members.length} layer${members.length === 1 ? '' : 's'}`));
+    fold.append(el('span', { class: 'lc-fold', 'aria-hidden': 'true' }, folded ? '\u25b8' : '\u25be'), el('span', { class: 'lc-stack-name' }, base.name), el('span', { class: 'lc-tags' }, `${still ? 'still \u00b7 ' : ''}${members.length} layer${members.length === 1 ? '' : 's'}`));
     fold.addEventListener('click', () => { if (this.foldedStacks.has(id)) this.foldedStacks.delete(id); else this.foldedStacks.add(id); this.sig = ''; this.update(); });
     const add = el('button', { type: 'button', class: 'lc-icon', title: still ? 'Add a paint layer to this stack (on top)' : 'Add an art layer to this drawing (same frames, its own paint)', 'aria-label': `Add a layer to ${base.name}` }, still ? 'Paint layer' : 'Art layer');
     decorate(add, 'plus');

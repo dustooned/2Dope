@@ -62,11 +62,6 @@ export interface Drawing {
   thumbRev: number;
 }
 
-/** Are the drawing's pixels in its canvases right now? */
-export function isResident(d: Drawing): boolean {
-  return d.parked === null;
-}
-
 export const FPS_PRESETS = [12, 15, 24, 25, 30, 50, 60];
 
 /** Draw the whole drawing (fill, then line, then vectors) onto a context. */

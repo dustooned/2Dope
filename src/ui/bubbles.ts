@@ -523,7 +523,7 @@ export class Bubbles {
       add(el('span', { class: 'bub-hint bub-hold' }, hold === null ? 'mixed' : `${hold} frame${hold === 1 ? '' : 's'}`));
       add(this.chip('+', 'One frame longer', false, () => a.changeHold(1)));
       add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
-      for (const [r, label, title] of [['key', '\ud83d\udd11 Key', 'A key drawing: the main poses of the move'], ['breakdown', 'Breakdown', 'A breakdown: the drawing that shapes the move between two keys'], ['inbetween', 'In-between', 'An in-between: fills the gaps so the move is smooth']] as const) add(this.chip(label, title, a.currentRole === r, () => a.setRole(r)));
+      for (const [r, label, title] of [['key', 'Key', 'A key drawing: the main poses of the move'], ['breakdown', 'Breakdown', 'A breakdown: the drawing that shapes the move between two keys'], ['inbetween', 'In-between', 'An in-between: fills the gaps so the move is smooth']] as const) add(this.chip(label, title, a.currentRole === r, () => a.setRole(r)));
     } else if (this.layersOpen && (ws === 'draw' || ws === 'animate' || ws === 'time') && !xp) {
       // tight layer control: only this cel's linked layers, front first; tap one to draw on it
       const me = a.project.isPlaceholder ? '' : a.project.activeLayer;
@@ -635,7 +635,7 @@ export class Bubbles {
     } else if (ws === 'board') {
       const st = this.hooks.story;
       if (st) {
-        for (const [v, label, show] of [['panels', 'Panels', '\ud83d\uddc2\ufe0f Panels'], ['timeline', 'Timeline', '\ud83c\udf9e\ufe0f Timeline'], ['split', 'Split', '\u25eb Both']] as const) add(this.chip(show, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
+        for (const [v, label, show] of [['panels', 'Panels', 'Panels'], ['timeline', 'Timeline', 'Timeline'], ['split', 'Split', 'Both']] as const) add(this.chip(show, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
       }
       add(this.chip('\u25c0 Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later \u25b6', 'Move the selected panels later', false, () => a.moveSelection(1)));
       add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));

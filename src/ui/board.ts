@@ -15,7 +15,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 }
 
 const ROWS: Record<CaptionField, number> = { shot: 1, camera: 1, dialogue: 2, action: 2, slug: 1, note: 2 };
-const HINT: Record<CaptionField, string> = { shot: '\ud83c\udfac Shot (e.g. Sc 1 \u00b7 Sh 2)', camera: '\ud83c\udfa5 Camera (e.g. Wide, pan left)', dialogue: '\ud83d\udcac What is said', action: '\ud83c\udfc3 What happens', slug: '\u23f1 Timing (e.g. hold, beat)', note: '\ud83d\udcdd Notes' };
+const HINT: Record<CaptionField, string> = { shot: 'Shot (e.g. Sc 1 \u00b7 Sh 2)', camera: 'Camera (e.g. Wide, pan left)', dialogue: 'What is said', action: 'What happens', slug: 'Timing (e.g. hold, beat)', note: 'Notes' };
 /** Quick picks for the camera field (type anything, or pick one). */
 const CAMERA_PICKS = ['Wide', 'Medium', 'Close-up', 'Extreme close-up', 'Over the shoulder', 'Point of view', 'Bird\u2019s eye', 'Low angle', 'Static', 'Pan left', 'Pan right', 'Tilt up', 'Tilt down', 'Dolly in', 'Dolly out', 'Zoom in', 'Zoom out', 'Truck left', 'Truck right', 'Shake'];
 

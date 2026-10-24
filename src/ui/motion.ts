@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import { PlaybackRangeControl } from './playbackrange';
-import { autoIcon, setLabel } from './icons';
+import { autoIcon, iconSvg, setLabel } from './icons';
 import { easingOf, EASINGS, isAnimated, spacingTicks, type Easing, type Prop, type Vec2 } from '../core/anim';
 import { compLength, layerEnd, PART_NAMES, partOf, playsOn, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
@@ -474,7 +474,8 @@ export class MotionPanel {
     const dot = el('span', { class: 'ldot' });
     dot.style.background = LABELS[l.label] ?? LABELS[0]!;
     const name = el('button', { type: 'button', class: 'lname', 'data-act': 'name', title: 'Tap to select. Double-tap to rename.' }, `${KIND_ICON[l.kind]} ${l.name}`);
-    const eye = el('button', { type: 'button', class: 'leye', 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'data-act': 'eye' }, l.visible ? '👁' : '–');
+    const eye = el('button', { type: 'button', class: 'leye', 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'data-act': 'eye' }, l.visible ? '' : '–');
+    if (l.visible) eye.innerHTML = iconSvg('eye');
     const more = el('button', { type: 'button', class: 'lmore', 'aria-label': `More for ${l.name}`, 'data-act': 'more' }, '⋯');
     left.append(chev, dot, name);
     if (l.parent) {
@@ -521,8 +522,9 @@ export class MotionPanel {
         title: p.visible ? `Hide the ${label.toLowerCase()} of this layer` : `Show the ${label.toLowerCase()}`,
         'data-act': 'parteye',
       },
-      p.visible ? '👁' : '–',
+      p.visible ? '' : '–',
     );
+    if (p.visible) eye.innerHTML = iconSvg('eye');
     const name = el('button', { type: 'button', class: 'lname part-name', 'data-act': 'parttwirl', title: `${label} part: tap to show its opacity and offset rows` }, label);
     // colour: tapping opens the system picker; a small ✕ goes back to the drawing's own colours
     const tint = el('input', {
@@ -924,7 +926,7 @@ export class MotionPanel {
         { chips: (['flat', 'linear', 'radial'] as const).map((k) => ({ label: k === 'flat' ? '\u25ac One colour' : k === 'linear' ? '\u25e2 Linear' : '\u25ce Radial', on: (p.grad?.kind ?? (p.tint ? 'flat' : '')) === k, run: () => this.setPartStyle(l, part, k) })) },
         ...(p.grad?.kind === 'linear' ? [{ title: 'Direction' }, { chips: [[0, '\u2192'], [45, '\u2198'], [90, '\u2193'], [135, '\u2199'], [180, '\u2190'], [225, '\u2196'], [270, '\u2191'], [315, '\u2197']].map(([deg, g]) => ({ label: String(g), title: `${deg}\u00b0`, on: p.grad!.angle === deg, run: () => ed.setPart(l.id, part, { grad: { ...p.grad!, angle: Number(deg) } }) })) }] : []),
         { sep: true },
-        { label: `\u2728 Add a texture to the ${name.toLowerCase()}\u2026`, run: () => this.addPartTexture(l, part) },
+        { label: `Add a texture to the ${name.toLowerCase()}\u2026`, run: () => this.addPartTexture(l, part) },
         { label: `Reset ${name.toLowerCase()} settings`, run: () => ed.resetPart(l.id, part), danger: true },
       ];
     }

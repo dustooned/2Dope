@@ -9,7 +9,7 @@ import type { CtxItem } from './contextmenu';
  */
 export function frameMenu(app: App, extra: CtxItem[] = []): CtxItem[] {
   const n = app.targets.length;
-  const roles = (['key', 'breakdown', 'inbetween'] as const).map((r) => ({ label: r === 'key' ? '🔑 Key' : r === 'breakdown' ? 'Breakdown' : 'In-between', title: `Mark as ${r}`, run: () => app.setRole(r) }));
+  const roles = (['key', 'breakdown', 'inbetween'] as const).map((r) => ({ label: r === 'key' ? 'Key' : r === 'breakdown' ? 'Breakdown' : 'In-between', title: `Mark as ${r}`, run: () => app.setRole(r) }));
   const holds = [1, 2, 3, 4, 6, 8].map((k) => ({ label: `${k}`, title: `Show for ${k} frame${k > 1 ? 's' : ''}`, run: () => app.setExposure(k) }));
   // splitting needs the playhead inside a held drawing (not on its first frame)
   const here = n === 1 ? locate(app.project.exposures, app.lf) : null;

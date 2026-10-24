@@ -7,7 +7,7 @@ export class Splitter {
   private drag: { y: number; h: number } | null = null;
 
   constructor(
-    private readonly handle: HTMLElement,
+    handle: HTMLElement,
     private readonly column: HTMLElement,
     /** Which CSS variable the visible timeline reads, for the current workspace. */
     private readonly target: () => { name: string; min: number; def: number },

@@ -227,7 +227,7 @@ export class FlipMode {
           c.append(cv);
         } else c.classList.add('empty');
         if (e.length > 1) c.append(el('span', { class: 'flip-hold' }, `×${e.length}`));
-        if (d.role === 'key') c.append(el('span', { class: 'flip-role', title: 'Key drawing' }, '🔑'));
+        if (d.role === 'key') c.append(el('span', { class: 'flip-role', title: 'Key drawing' }, '\u25c6'));
         cells.append(c);
         start += e.length;
       });
@@ -655,7 +655,7 @@ export class FlipMode {
         : [{ label: 'Add a mask (paint to hide parts of this track)', run: mine(() => app.addMask()) }]),
       { sep: true },
       { label: 'Rename…', run: async () => { const n = await askText('Track name', l.name, 'Rename'); if (n !== null) ed.rename(l.id, n); } },
-      { label: '✨ Effects…', run: () => app.openEffects?.(l.id) },
+      { label: 'Effects…', run: () => app.openEffects?.(l.id) },
       { label: '\u2191 Move up', run: () => app.moveTrack(l.id, -1) },
       { label: '\u2193 Move down', run: () => app.moveTrack(l.id, 1) },
       { label: 'Duplicate track', run: () => void app.duplicateLayer(l.id) },

@@ -288,7 +288,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
     const idx = PRESETS.findIndex((p) => p.name === app.brush.name);
     // a brush from My brushes: show its name (the library holds it)
     presetSel.querySelector('option[data-mine]')?.remove();
-    if (idx < 0) presetSel.append(el('option', { value: 'mine', 'data-mine': '' }, `⭐ ${app.brush.name}`));
+    if (idx < 0) presetSel.append(el('option', { value: 'mine', 'data-mine': '' }, `${app.brush.name} (My brushes)`));
     presetSel.value = idx < 0 ? 'mine' : String(idx);
     drawPreview();
   };

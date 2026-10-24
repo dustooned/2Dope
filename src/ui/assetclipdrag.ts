@@ -5,7 +5,7 @@ import type { AssetClipGesture } from '../core/assettiming';
 export class AssetClipDrag {
   private drag: {pointer:number; x:number; scroll:number; cell:number; moved:boolean} | null = null;
   private suppressClick = false;
-  constructor(private app: App, private track: HTMLElement, cell: () => number) {
+  constructor(app: App, track: HTMLElement, cell: () => number) {
     const finish = (cancel: boolean) => {
       const d = this.drag; this.drag = null; if (!d) return;
       this.suppressClick = d.moved || cancel;

@@ -1,8 +1,61 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-10-23) — read this first
+## Current state (2026-10-24) — read this first
 
-**Latest step: brush memory, Favorites and Recent release, following 586f67d.**
+**Latest step: code and UI cleanup after 206e7fb.**
+The user authorized committing and pushing this checked cleanup to main on 2026-10-24.
+The user asked to clean up the code and UI. The scope was dead code, dead CSS and leftover
+colour emoji. No behaviour, data, file format or History changes.
+
+Code: removed unused `isResident` (core/project), `contextMenuOpen` (ui/contextmenu) and the
+`LayerKind` type (core/comp). Constructor parameters that were stored but never read are now plain
+parameters in AssetClipDrag, QuickBar, Splitter and XSheet. `tsc --noUnusedLocals
+--noUnusedParameters` now reports only `assetTimingChange`'s unused `comps`, which was kept so
+it matches the signature of `assetClipTimingChange`.
+
+CSS: removed rules with no matching element: `.logo`, `.hold-readout`, `.role-text-*`, `.dfoot`
+(the `.vfoot` half of that rule is kept), `.share-seg`, `.fx-del`. Classes built from templates
+are still live (`role-${r}`, `painting-${key}-handle/-folded`, `ui-${level}`), so treat any
+"unused class" scan with care.
+
+UI: the focus bar's Tools/Timeline/Share buttons use `data-icon` (panel/time/export) instead of
+emoji. Motion layer and part eyes use the SVG `eye` icon, and an empty gallery folder uses the
+`folder` icon. Emoji were removed from:
+- effect and dither palette labels
+- storyboard caption placeholders
+- Key role chip and frame-menu label
+- Board view chips
+- Effects/texture menu items
+- layer-card tags (a still stack now shows "still ·")
+- gallery Move-to folders
+- the Hand in legend
+The flipbook key-drawing marker is now ◆. The Studio preset option for a personal brush reads
+"Name (My brushes)" instead of using ⭐, which now means Favorites. Monochrome text symbols
+(✓ ✕ ★ ♪ ☰ ✎) and the flipbook colour-tag dots were kept on purpose, as was the default
+"📝 Notes" layer name, because it is saved in project data. Release note added.
+
+Changed: index.html, style.css, core/{comp,dither,effects,project}.ts, ui/{assetclipdrag,
+board,bubbles,contextmenu,flipmode,framemenu,gallery,layercards,manualtext,motion,panel,quick,
+share,splitter,xsheet}.ts, this handoff.
+
+Fresh checks: **59 files / 482 unit tests**, strict TypeScript and production build passed
+(existing large-bundle warning remains). Dev-server review on isolated `127.0.0.1:5216` used a
+new 1080p test project:
+- The focus bar at Full level shows the SVG icons with intact labels and aria-labels.
+- The Timeline toggle folds and unfolds and keeps its icon.
+- The Motion eye toggles between the icon and – both ways.
+- No app console errors.
+
+A synthetic Escape dispatched on `document` threw in QuickMenu's key handler
+(`target?.closest` on a non-Element). Real key events target an element, so it was not fixed.
+Browser fixtures were not re-run, and the effects, board and gallery labels were not checked
+visually. User project storage was not touched.
+
+Release prepared for the authorized main push; verify Pages for the exact pushed SHA.
+
+**Next:** user review of the cleaned-up labels and icons.
+
+### Previous step: brush memory, Favorites and Recent release, following 586f67d
 The user authorized committing and pushing this checked release to main on 2026-10-23.
 The user approved this bounded next Draw improvement. Each brush recalls its working size and
 opacity when selected through the library or Studio preset selector. Draw/Animate and painting
