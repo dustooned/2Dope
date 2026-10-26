@@ -23,6 +23,11 @@ export interface SoundClip {
   link: { layer: string; drawing: string; occurrence: number; offset: number } | null;
 }
 
+/** The clips without one sound; an unknown id changes nothing. The sound's stored audio stays in the project for Undo. */
+export function withoutClip(clips: readonly SoundClip[], id: string): SoundClip[] {
+  return clips.filter((c) => c.id !== id);
+}
+
 /** Linked clips follow their panel after retiming/reordering. A removed panel silences its clip. */
 export function soundStart(clip: SoundClip, comp: Comp): number | null {
   const link = clip.link;

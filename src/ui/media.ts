@@ -60,7 +60,7 @@ export function mediaPicker(app: App, audio: AudioTracks): () => void {
             const bmp = await createImageBitmap(f);
             app.importPicture(f.name, bmp, bmp.width, bmp.height);
             bmp.close();
-            app.onNotice?.(`${f.name} is an object layer for the whole shot. Move or scale it with Select.`);
+            app.onNotice?.(`${f.name} is an object layer for the whole shot. Move or scale it with Select. To remove it, hold its track (or Layers → Delete).`);
           } catch {
             app.onNotice?.(`${f.name}: this picture could not be read.`);
           }
@@ -69,7 +69,7 @@ export function mediaPicker(app: App, audio: AudioTracks): () => void {
           const ok = await app.importMovie(f, (i, n) => app.onNotice?.(`Bringing in ${f.name}… ${Math.round((i / n) * 100)}%`));
           if (ok) {
             await audio.import(f, true);
-            app.onNotice?.(`${f.name} is a layer from frame 1, one drawing per frame. Draw over it on another layer.`);
+            app.onNotice?.(`${f.name} is a layer from frame 1, one drawing per frame. Draw over it on another layer. To remove it, hold its track (or Layers → Delete); any sound it had is a separate clip with its own delete.`);
           }
         } else if (kind === 'sound') await audio.import(f);
         else app.onNotice?.(`${f.name}: not a picture, movie or sound.`);

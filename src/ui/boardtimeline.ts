@@ -4,7 +4,7 @@ import { paintWaveform } from './waveform';
 import { soundStart, type SoundClip } from '../core/audio';
 import { blockDropIndex, startOf } from '../core/timeline';
 import { rulerStep } from '../core/timecode';
-import { showContextMenu, swallowNextClick, HOLD_MS } from './contextmenu';
+import { attachContextMenu, showContextMenu, swallowNextClick, HOLD_MS, type CtxItem } from './contextmenu';
 import { frameMenu } from './framemenu';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
@@ -37,6 +37,8 @@ export class BoardTimeline {
   private sig = '';
   private drag: Drag | null = null;
   private audio: AudioPlayback | null = null;
+  /** A sound's hold / right-click menu (settings, mute, delete), from the Audio tracks. */
+  soundMenu: ((id: string) => CtxItem[] | null) | null = null;
 
   constructor(private readonly app: App) {
     let z = 6;
@@ -298,8 +300,9 @@ export class BoardTimeline {
       const s = el('div', {
         class: `btl-sound${clip.muted ? ' muted' : ''}${clip.link ? ' linked' : ''}`,
         'data-id': clip.id,
-        title: `${clip.name}${clip.link ? ' · follows its panel' : ''} · drag to move`,
+        title: `${clip.name}${clip.link ? ' · follows its panel' : ''} · drag to move · hold or right-click to delete`,
       });
+      attachContextMenu(s, () => this.soundMenu?.(clip.id) ?? null);
       s.style.left = `${start * cell}px`;
       s.style.top = `${4 + index * 36}px`;
       s.style.width = `${Math.max(4, len * cell)}px`;

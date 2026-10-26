@@ -370,6 +370,7 @@ app.pickMedia = mediaPicker(app, audioTracks);
   sheet.bar.insertBefore(addMedia, sheet.bar.querySelector('.spacer'));
 }
 board.setAudio(audioPlayback);
+board.setSoundMenu((id) => audioTracks.soundMenu(id));
 // the panel's dialogue as a subtitle under the picture (Board, and while playing with a board)
 const subtitle = $('#subtitle');
 const showSubtitle = () => {

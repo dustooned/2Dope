@@ -1,6 +1,8 @@
 import type { App } from '../app';
 import type { AudioPlayback } from '../audio';
-import { soundStart, type SoundClip } from '../core/audio';
+import { soundStart, withoutClip, type SoundClip } from '../core/audio';
+import { attachContextMenu, type CtxItem } from './contextmenu';
+import { decorate } from './icons';
 import { locate } from '../core/timeline';
 import { paintWaveform } from './waveform';
 
@@ -39,6 +41,40 @@ export class AudioTracks {
     this.app.history.push({ label, do: () => apply(after), undo: () => apply(before) }, false);
   }
   /** Import a sound as a clip from frame 1. `quiet`: no message when it has no sound (a silent movie). */
+  /** Delete one sound: one Undo step, from its row, its card, the Audio panel or its hold menu. */
+  deleteClip(id: string): void {
+    const clip = (this.app.project.comp.audio ?? []).find(s => s.id === id);
+    if (!clip || this.app.strokeActive) return;
+    if (this.cardClip === id) this.closeCard();
+    this.edit('Delete sound', list => withoutClip(list, id));
+    this.signature = '';
+    this.update(true);
+    this.app.onNotice?.(`Deleted “${clip.name}”. Undo brings it back.`);
+  }
+
+  /** Press and hold (or right-click) a sound: its settings, mute and delete. */
+  soundMenu(id: string): CtxItem[] | null {
+    const clip = (this.app.project.comp.audio ?? []).find(s => s.id === id);
+    if (!clip) return null;
+    return [
+      { title: `♪ ${clip.name}` },
+      { label: 'Settings…', run: () => this.openCard(id) },
+      { label: clip.muted ? 'Unmute' : 'Mute', run: () => this.edit(clip.muted ? 'Unmute audio' : 'Mute audio', list => list.map(s => s.id === id ? { ...s, muted: !s.muted } : s)) },
+      { sep: true },
+      { label: 'Delete sound', danger: true, run: () => this.deleteClip(id) },
+    ];
+  }
+
+  /** A small trash button that deletes this sound (rows are too tight for a label). */
+  private deleteButton(clip: SoundClip, className: string): HTMLButtonElement {
+    const b = el('button', 'Delete'); b.type = 'button'; b.className = className;
+    b.title = `Delete ${clip.name} (Undo brings it back)`;
+    b.setAttribute('aria-label', `Delete ${clip.name}`);
+    decorate(b, 'trash');
+    b.onclick = (e) => { e.stopPropagation(); this.deleteClip(clip.id); };
+    return b;
+  }
+
   async import(file: File, quiet = false): Promise<void> {
     if (this.importing || this.app.strokeActive) return;
     if (this.app.playing) this.app.togglePlay();
@@ -52,7 +88,7 @@ export class AudioTracks {
       const clip: SoundClip = { id: p.newId('a'), asset: result.id, name: file.name.slice(0, 120), start: frame, trimIn: 0, trimOut: result.sound.duration, gain: 1, muted: false, link: null };
       this.edit('Import audio', clips => [...clips, clip]);
       this.root.open = true;
-      if (!quiet) this.app.onNotice?.('Sound added at frame 1. Drag it on the timeline to move it; drag its ends to trim.');
+      if (!quiet) this.app.onNotice?.('Sound added at frame 1. Drag it on the timeline to move it; drag its ends to trim. Its trash button (or hold it) deletes it.');
     } catch (e) { if (!quiet) this.app.onNotice?.(e instanceof Error ? e.message : String(e)); }
     finally { this.importing = false; this.update(true); }
   }
@@ -111,7 +147,7 @@ export class AudioTracks {
         if (controls.hidden) this.openClips.delete(clip.id); else this.openClips.add(clip.id);
         settings.setAttribute('aria-expanded', String(!controls.hidden));
       };
-      head.append(settings);
+      head.append(settings, this.deleteButton(clip, 'audio-delete'));
       this.fillControls(controls, clip, () => this.update(true));
       row.append(head, lane, controls); this.body.append(row);
     }
@@ -154,7 +190,8 @@ export class AudioTracks {
       const occurrence = board.exposures.slice(0, at.index).filter(e => e.drawing === drawing).length;
       change({ link: { layer: board.id, drawing, occurrence, offset: clip.start - board.start - at.start } });
     });
-    button('Delete clip', () => this.edit('Delete audio clip', list => list.filter(s => s.id !== clip.id)));
+    const del = el('button', 'Delete sound'); del.type = 'button'; del.className = 'danger';
+    del.onclick = () => this.deleteClip(clip.id); controls.append(del);
     if (start === null) controls.append(el('span', 'Linked panel removed: clip is silent. Unlink to place it manually.'));
   }
 
@@ -196,7 +233,7 @@ export class AudioTracks {
       mute.onclick = () => this.edit(clip.muted ? 'Unmute audio' : 'Mute audio', list => list.map(s => s.id === clip.id ? { ...s, muted: !s.muted } : s));
       const name = el('button', `\u266A ${clip.name}`); name.type = 'button'; name.className = 'rail-name'; name.title = 'Sound settings';
       name.onclick = () => this.openCard(clip.id);
-      tag.append(mute, name); row.append(tag);
+      tag.append(mute, name, this.deleteButton(clip, 'rail-btn icon-only rail-del')); row.append(tag);
       row.append(this.clipBlock(clip, x0, cell)); nodes.push(row); y += H;
     }
     return { nodes, height: y - top };
@@ -212,7 +249,7 @@ export class AudioTracks {
       const mute = el('button', clip.muted ? '\u2013' : '\u266A'); mute.type = 'button'; mute.className = 'leye';
       mute.setAttribute('aria-pressed', String(!clip.muted)); mute.title = clip.muted ? 'Unmute this sound' : 'Mute this sound';
       mute.onclick = () => this.edit(clip.muted ? 'Unmute audio' : 'Mute audio', list => list.map(s => s.id === clip.id ? { ...s, muted: !s.muted } : s));
-      left.append(name, mute);
+      left.append(name, mute, this.deleteButton(clip, 'leye icon-only ldel'));
       const right = el('div'); right.className = 'mright'; right.style.width = `${end * cell}px`;
       right.append(this.clipBlock(clip, 0, cell));
       row.append(left, right);
@@ -299,6 +336,7 @@ export class AudioTracks {
     b.addEventListener('pointerup', (e) => end(e, false));
     b.addEventListener('pointercancel', (e) => end(e, true));
     b.addEventListener('click', (e) => { e.stopPropagation(); if (!dragged) this.openCard(clip.id); });
+    attachContextMenu(b, () => this.soundMenu(clip.id));
     return b;
   }
 
@@ -335,7 +373,7 @@ export class AudioTracks {
     head.append(el('span', `\u266A ${clip.name}`));
     const x = el('button', '\u2715'); x.type = 'button'; x.className = 'audio-card-x'; x.setAttribute('aria-label', 'Close');
     x.onclick = () => this.closeCard();
-    head.append(x);
+    head.append(this.deleteButton(clip, 'audio-card-del'), x);
     let y0 = -1;
     head.addEventListener('pointerdown', e => { y0 = e.clientY; });
     head.addEventListener('pointerup', e => { if (y0 >= 0 && e.clientY - y0 > 50) this.closeCard(); y0 = -1; });

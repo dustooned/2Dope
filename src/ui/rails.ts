@@ -3,6 +3,8 @@ import { layerEnd, type Comp, type Layer } from '../core/comp';
 import type { Drawing } from '../core/project';
 import { decorate } from './icons';
 import { assetLabel } from '../core/assetlabels';
+import { attachContextMenu } from './contextmenu';
+import { askText, confirmBox } from './dialogs';
 
 /**
  * Draw's rails (Procreate Dreams style): every layer of the shot as a row on one timeline, in
@@ -223,6 +225,16 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
       if (r.depth === 0 && l.kind === 'drawings' && !r.active) name.addEventListener('click', () => app.pickLayer(l.id));
       if (r.depth === 0 && l.kind === 'comp') name.addEventListener('click', () => { if (!app.strokeActive) { if (asset) app.setArrangeAssets(true,l.id); else ed.enter(l.id); } });
       tag.append(name);
+      // hold (or right-click) a layer's name: rename or delete it, e.g. a movie or picture you brought in
+      if (r.depth === 0 && !identity) {
+        name.title += ' · hold or right-click for Rename and Delete';
+        attachContextMenu(tag, () => [
+          { title: l.name },
+          { label: 'Rename…', run: async () => { const n = await askText('Layer name', l.name, 'Rename'); if (n !== null) ed.rename(l.id, n); } },
+          { sep: true },
+          { label: 'Delete layer', danger: true, run: async () => { if (await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true)) ed.deleteLayers([l.id]); } },
+        ]);
+      }
     } else {
       // LINE / FILL sublayer: its own eye (the layer you draw on), and which one brushes paint on
       const vis = l.kind === 'drawings' ? l.parts?.[r.part]?.visible !== false : true;

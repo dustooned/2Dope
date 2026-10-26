@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compLayer, compLength, drawingsLayer, newComp } from './comp';
-import { soundStart, soundWindow, waveform, type SoundClip } from './audio';
+import { soundStart, soundWindow, waveform, withoutClip, type SoundClip } from './audio';
 import { mixSound, soundVoices } from '../io/soundmix';
 import { Project } from './project';
 import { assetPaths, compFile, compsFromFile, SCHEMA, validateProjectFile } from '../io/schema';
@@ -72,5 +72,17 @@ describe('shared audio timing and storage', () => {
     expect(() => validateProjectFile(bad)).toThrow(/source out/);
     const old = structuredClone(raw); delete old.comps.c1.audio; old.schema = 2;
     expect(validateProjectFile(old).schema).toBe(3);
+  });
+});
+
+describe('deleting a sound', () => {
+  const clip = (id: string, name = id): SoundClip => ({ id, asset: `s${id}`, name, start: 0, trimIn: 0, trimOut: 1, gain: 1, muted: false, link: null });
+  it('removes only that clip and leaves the others in order', () => {
+    const list = [clip('a1'), clip('a2'), clip('a3')];
+    expect(withoutClip(list, 'a2').map((c) => c.id)).toEqual(['a1', 'a3']);
+    expect(list.map((c) => c.id)).toEqual(['a1', 'a2', 'a3']);
+  });
+  it('changes nothing for an unknown clip', () => {
+    expect(withoutClip([clip('a1')], 'zz').map((c) => c.id)).toEqual(['a1']);
   });
 });

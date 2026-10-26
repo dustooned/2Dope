@@ -3,7 +3,7 @@ import { CAPTION_FIELDS, type CaptionField } from '../core/timeline';
 import type { AudioPlayback } from '../audio';
 import { openBoardExport } from './boardexport';
 import { BoardTimeline } from './boardtimeline';
-import { attachContextMenu } from './contextmenu';
+import { attachContextMenu, type CtxItem } from './contextmenu';
 import { frameMenu } from './framemenu';
 import { autoIcon, decorate, setLabel } from './icons';
 
@@ -108,6 +108,11 @@ export class BoardPanel {
   setAudio(a: AudioPlayback): void {
     this.timeline.setAudio(a);
     this.update();
+  }
+
+  /** A sound's hold menu on the board timeline (settings, mute, delete). */
+  setSoundMenu(menu: (id: string) => CtxItem[] | null): void {
+    this.timeline.soundMenu = menu;
   }
 
   /** The board view shown now (the bubbles light the matching chip). */

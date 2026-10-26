@@ -2,7 +2,30 @@
 
 ## Current state (2026-10-26) — read this first
 
-**Latest step: shared workspace navigation and options bug fixes.**
+**Latest step: easy delete for imported sounds and movies.**
+The user authorized committing and pushing this to main on 2026-10-26.
+The user reported no easy way to delete imported sound and video. Sounds could only be deleted from
+the folded Settings controls; movies/pictures are ordinary drawing layers whose delete sat in the
+Flipbook hold menu, Layers and Motion. No data/format change: delete reuses the existing audio
+History edit and `CompEditor.deleteLayers`.
+
+- `core/audio.ts` `withoutClip` (2 unit tests). `AudioTracks.deleteClip` (one "Delete sound" undo
+  step, closes the card, notice "Deleted … Undo brings it back.") and `soundMenu` (Settings…,
+  Mute, Delete sound). Trash buttons on Clips rail sound rows, Motion sound rows, Audio lane rows
+  and the sound card header; the controls' "Delete clip" is now "Delete sound". Hold/right-click
+  menus on sound blocks (Clips/Motion) and Story timeline sounds (`Board.setSoundMenu`).
+- `rails.ts`: hold/right-click on a top-level layer name tag in Clips offers Rename… and Delete
+  layer (confirm, undoable). Import notices for movies, pictures and sounds say how to remove them.
+- Manual (Layers media list, Audio) and release note "Easy delete for sounds and movies".
+
+Checks: 59 files / 488 unit tests, strict TypeScript and build passed. Browser on 127.0.0.1:5217 with a generated 1 s WAV and a
+generated WebM: the Clips trash, the block menu, the card trash, the Motion trash, the Audio lane
+trash and the Story timeline menu each removed the sound, with one Undo restoring it. The Clips
+layer menu's Delete layer confirmed and removed the movie layer; Undo restored it. Not checked on
+touch hardware (hold timing) and the movie had no sound track, so movie+sound import was not re-run.
+
+### Earlier step (2026-10-26): shared workspace navigation, ebee0fc
+
 The user reviewed and authorized committing and pushing this to main on 2026-10-26.
 The user asked to move Draw/Animate workspace switching into the shared mode bubbles, fix tool
 options leaking across workspaces (repro: Fill in Draw, then Motion showed Fill options), audit

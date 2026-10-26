@@ -963,7 +963,11 @@ body.ui-hidden .strip {
 .audio-clip { margin-top: 8px; }
 .audio-clip-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 0 5px; }
 .audio-clip-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.audio-settings { flex-shrink: 0; min-height: 30px; padding: 3px 8px; font-size: 11px; }
+.audio-settings, .audio-delete { flex-shrink: 0; min-height: 30px; padding: 3px 8px; font-size: 11px; }
+/* every sound has a visible delete: here, on its timeline rows and in its card (one Undo step) */
+.audio-delete, .audio-card-del, .rail-tag .rail-del, .mleft .ldel, .audio-controls button.danger { color: var(--danger); }
+.audio-clip-head { flex-wrap: nowrap; }
+.audio-clip-head > span:first-child { flex: 1; }
 .audio-lane { height: 36px; position: relative; overflow: hidden; background: #17191f; border-radius: var(--radius-xs); cursor: crosshair; }
 .audio-lane::after { content: ''; position: absolute; left: var(--audio-playhead); top: 0; bottom: 0; border-left: 2px solid var(--accent); pointer-events: none; }
 .audio-lane canvas { position: absolute; height: 36px; background: #25443c; }
@@ -4150,8 +4154,9 @@ body.ws-motion .audio-tracks { display: none !important; }
 .audio-card { position: fixed; z-index: 60; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); max-height: 70dvh; overflow: auto; padding: 0 14px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: 0 10px 30px #0008; }
 .audio-card-head { position: sticky; top: 0; display: flex; align-items: center; gap: 8px; min-height: 52px; background: var(--panel); font-weight: 600; touch-action: none; }
 .audio-card-head::before { content: ''; position: absolute; left: 50%; top: 5px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line); }
-.audio-card-head span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-card-head > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .audio-card-x { width: 44px; height: 44px; font-size: 18px; }
+.audio-card-del { height: 44px; flex-shrink: 0; }
 .audio-card .audio-controls { display: flex; flex-wrap: wrap; gap: 8px; }
 .audio-card .audio-controls label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .audio-card .audio-controls input { width: 110px; min-height: 36px; }
