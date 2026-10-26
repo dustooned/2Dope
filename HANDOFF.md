@@ -2,7 +2,7 @@
 
 ## Current state (2026-10-26) — read this first
 
-### Command registry, Slice 1: the Select row (2026-10-26, branch `codex/command-registry`, committed, not pushed)
+### Command registry, Slice 1: the Select row (2026-10-26, `9552148`, merged into main and pushed)
 
 Implements Slice 1 of [the command registry handoff](docs/CLAUDE-COMMAND-REGISTRY-HANDOFF.md),
 modelled on [research/clip-studio-paint](docs/research/clip-studio-paint/README.md): stable id,
@@ -71,7 +71,7 @@ Customize matches the other chips' size.
 registry the same way, then time, fill, smudge, paint and points. Extend `commandrow.browser.ts` for
 each row.
 
-### Slice 1: vector lines keep to the selection (2026-10-26, committed on branch `codex/vector-selection`, not pushed or merged)
+### Slice 1: vector lines keep to the selection (2026-10-26, `0f36113`, merged into main and pushed)
 
 Implements Slice 1 of [the follow-up slices handoff](docs/CLAUDE-FOLLOWUP-SLICES-HANDOFF.md). It is
 on branch `codex/vector-selection` from `6491434`, committed there at the user's request (not pushed
