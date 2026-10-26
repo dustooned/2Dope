@@ -2,7 +2,54 @@
 
 ## Current state (2026-10-26) — read this first
 
-**Latest step: menu workspace names (follows 8b0fd1f).**
+**Latest step: shared workspace navigation and options bug fixes.**
+The user reviewed and authorized committing and pushing this to main on 2026-10-26.
+The user asked to move Draw/Animate workspace switching into the shared mode bubbles, fix tool
+options leaking across workspaces (repro: Fill in Draw, then Motion showed Fill options), audit
+the visible buttons per workspace, and keep changes local.
+
+- Navigation: `paintingworkspace.ts` drops the workspace `<select>` and Draw/Animate shortcut
+  (constructor loses its `share` argument; 13 browser fixtures updated). The shared mode row shows
+  in Draw/Animate at every level (it stays hidden at Focus elsewhere, as before). Share lights
+  while open and the name beside the row reads Share. `.painting-header` now holds only New asset /
+  Assets / source editing. `Bubbles.placePaintingRows` places it right of the mode row when it
+  fits (desktop, 768px tablet), else under it (phone), and moves the tool row down only on overlap.
+  On phones New asset is now an icon button instead of `display: none`.
+- Options row: new pure `optionsRow` / `toolChoice` in `core/workspace.ts`; `bubbles.ts` routes
+  every options branch through it. Fill, Select, Smudge, Adjust, transform, point editing, asset
+  arranging and QuickShape Edit shape only appear in Draw/Animate. Adjust now wins over the Fill/
+  Select tool under it (previously its sliders/Apply/Cancel never showed after Fill or Select).
+  Gradient Done/Cancel also show under Select (Fill selection with a gradient style had none).
+- `App.setWorkspace` calls `settleTemporaryEdits`: applies an open transform and adjustment and
+  exits point editing (each one existing undo step). Gradient edits were already applied.
+- Feedback instead of silent no-ops: Earlier/Later at the first/last panel or drawing; Fill
+  selection, transform and Edit points on a locked layer or a still-loading drawing. QuickMenu's
+  key handler no longer throws for keys dispatched on document/window (noted on 2026-10-24).
+- Manual (Draw and Animate, workspaces), release note "One way to switch workspaces",
+  ARCHITECTURE note added.
+
+Audit (127.0.0.1:5217, disposable 1080p project, desktop): every Story, Timing and Motion tool
+bubble and options chip was clicked and its effect recorded (history label, layers, workspace,
+notice or panel). All acted; Effects with a camera selected falls back to the first drawing layer;
+Split outside a layer already explained itself. Draw tools and their chips were exercised too.
+Not changed: Move assets with nothing placed still enters arranging with only its hint.
+
+Checks: 59 files / **486 unit tests** (4 new options-row tests), strict TypeScript and production
+build passed. Browser on 127.0.0.1:5217: Fill→Motion shows Motion options, Timing/Story their own;
+Adjust after Select shows Apply/Cancel/Colour/Blur; transform and HSB adjustment are kept on a
+workspace switch and one Undo removes each; first-panel Earlier shows its notice; Share lights.
+No overlaps among dock, modes, asset header, tools, options, level and edge handles in Draw and
+Animate at all three levels at 1440x900, 768x1024 and 375x812. Fixtures: paintingworkflow 20/0,
+paintingplanes 36/0, artworkworkflow 30/0, brushcontrols 26/0, inkpaint 27/0, paintinglayout
+16/0, quickmenu 34/0, studentprofiles 28/0, brushreturn 24/0, colourreturn 16/0, playbackrange
+50/0. flipbooksource fails "Source playback advances and loops…" and artworklibrary stays on
+Running… — both identical on an unchanged HEAD copy (127.0.0.1:5218), so not from this change.
+Note: my audit clicks saved symmetry/guide/fill prefs on the 5217 test origin, which broke
+fixtures until those keys were removed there; reset test-origin prefs before fixture runs.
+Point-edit settle was not exercised with a real vector line, and physical iPad/Pencil was not tested.
+
+### Earlier step (2026-10-26): menu workspace names, 1f3d413
+
 The user authorized committing and pushing this rename to main on 2026-10-26.
 The user asked for the menu's Board and Time buttons (`index.html`, `data-ws` board/time) to be
 renamed Story and Timing, the names that the mode bubbles, the painting switcher and the manual

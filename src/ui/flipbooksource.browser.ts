@@ -17,7 +17,7 @@ const stage = document.querySelector<HTMLElement>('#stage')!, canvas = document.
 const app = new App(canvas, stage); app.loadProject(new Project(128, 128)); app.project.comp.duration = 24; app.project.comp.fps = 24; app.setWorkspace('animate'); app.setFrame(7); app.quickShape = false;
 const sidebar = new Sidebar(app, document.querySelector<HTMLElement>('#sidebar')!), flip = new FlipMode(app, stage), strip = new Strip(app, stripRoot);
 const sheet = new TracksSheet(app, document.querySelector<HTMLElement>('.stage-col')!, stripRoot, () => app.refit());
-const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh(), () => {});
+const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh());
 const assets = new ArtworkAssetsUI(app, document.querySelector<HTMLElement>('.painting-header')!);
 const bubbles = new Bubbles(app, stage, { brushLibrary() {}, colorPanel() {}, layers() {}, layerCards() {}, fit: () => app.refit(), editShape() {}, flip: { on: () => flip.on, set: on => flip.set(on) } }); bubbles.setLevel('simple', false);
 function refresh() { painting.update(); sheet.update(); strip.update(); assets.update(); bubbles.update(); sidebar.update(); }

@@ -257,6 +257,7 @@ export class App {
   setWorkspace(w: Workspace): void {
     if (this.gradEdit) this.applyGradEdit();
     if (w === this.workspace || this.live) return;
+    this.settleTemporaryEdits();
     if (this.playing) this.togglePlay();
     if (w === 'motion') this.leaveBlankPage();
     this.editor.gestureEnd(true);
@@ -272,6 +273,17 @@ export class App {
     this.requestRender();
     this.onFrameChange();
     this.onWorkspaceChange();
+  }
+
+  /**
+   * Leaving a workspace keeps work in progress instead of stranding it behind controls the next
+   * workspace does not show: a transform, an adjustment and point edits are kept (one undo step
+   * each, as Apply / Done would), so Undo can still take them back.
+   */
+  private settleTemporaryEdits(): void {
+    if (this.xf) this.applyTransform();
+    if (this.adjusting) this.applyAdjust();
+    if (this.ve) this.exitPointEdit();
   }
 
   /** Current frame, 0-based. */
@@ -831,9 +843,10 @@ export class App {
 
   /** Edit the points of a vector line on this drawing (the given one, or the last drawn). */
   enterPointEdit(strokeId?: string): boolean {
-    if (this.live || this.xf || this.playing || this.project.layer.locked) return false;
+    if (this.live || this.xf || this.playing) return false;
+    if (this.project.layer.locked) { this.onNotice?.(`“${this.project.layer.name}” is locked. Unlock it in Layers to edit its points.`); return false; }
     const d = this.drawing;
-    if (!this.residency.isReady(d)) return false;
+    if (!this.residency.isReady(d)) { this.onNotice?.('This drawing is still loading. Try again in a moment.'); return false; }
     const pens = d.vectors.filter((v) => v.tool === 'pen');
     const rec = (strokeId ? pens.find((v) => v.id === strokeId) : null) ?? pens[pens.length - 1];
     if (!rec) {
@@ -1244,9 +1257,10 @@ export class App {
   beginTransform(): boolean {
     const s = this.spatial;
     const area = this.spatialSelection;
-    if (!s || !area || this.xf || this.strokeActive || this.playing || this.project.layer.locked) return false;
+    if (!s || !area || this.xf || this.strokeActive || this.playing) return false;
+    if (this.project.layer.locked) { this.onNotice?.(`“${this.project.layer.name}” is locked. Unlock it in Layers to move it.`); return false; }
     const d = this.drawing;
-    if (!this.residency.isReady(d)) return false;
+    if (!this.residency.isReady(d)) { this.onNotice?.('This drawing is still loading. Try again in a moment.'); return false; }
     const W = this.docW, H = this.docH;
     this.xf = {
       d, area, points: s.points.map((p) => [p[0], p[1]]), pivot: [(area.x0 + area.x1 + 1) / 2, (area.y0 + area.y1 + 1) / 2], params: { ...IDENTITY },
@@ -1653,9 +1667,10 @@ export class App {
   /** Direct fill uses the selection itself, never line detection or following drawings. */
   fillSelectedArea(): void {
     const area = this.spatialSelection;
-    if (!area || this.strokeActive || this.playing || this.project.layer.locked) return;
+    if (!area || this.strokeActive || this.playing) return;
+    if (this.project.layer.locked) { this.onNotice?.(`“${this.project.layer.name}” is locked. Unlock it in Layers to fill it.`); return; }
     const d = this.drawing;
-    if (!this.residency.isReady(d)) return;
+    if (!this.residency.isReady(d)) { this.onNotice?.('This drawing is still loading. Try again in a moment.'); return; }
     const before = planeCanvas(d, 'fill').getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
     this.paintMask(d, area.mask, area, this.rgbOf(this.color), this.gradFor(area));
     this.touchFill(d);
@@ -4092,6 +4107,13 @@ export class App {
   /** Move the selected (or current) exposures earlier or later by `delta` places, as one block. */
   moveSelection(delta: number): void {
     const t = this.targets;
+    const n = this.project.exposures.length;
+    const what = this.workspace === 'board' ? 'panel' : 'drawing';
+    if (!t.length) { this.onNotice?.(`Pick a ${what} to move first.`); return; }
+    if (delta < 0 ? Math.min(...t) === 0 : Math.max(...t) === n - 1) {
+      this.onNotice?.(delta < 0 ? `That is already the first ${what}.` : `That is already the last ${what}.`);
+      return;
+    }
     this.editTimeline(delta < 0 ? 'Move earlier' : 'Move later', (ex) => shiftBlock(ex, t, delta));
   }
 

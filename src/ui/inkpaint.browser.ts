@@ -19,7 +19,7 @@ const keys = [AUTO_PAINT_KEY, '2dope.painting.layout.draw', '2dope.painting.layo
 const saved = keys.map(k => localStorage.getItem(k)); for (const k of keys) localStorage.removeItem(k);
 const stage = document.querySelector<HTMLElement>('#stage')!, canvas = document.querySelector<HTMLCanvasElement>('#canvas')!;
 const app = new App(canvas, stage), flip = new FlipMode(app, stage);
-const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh(), () => {}), sidebar = new Sidebar(app, document.querySelector<HTMLElement>('#sidebar')!);
+const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh()), sidebar = new Sidebar(app, document.querySelector<HTMLElement>('#sidebar')!);
 const bubbles = new Bubbles(app, stage, { brushLibrary() {}, colorPanel() {}, layers() {}, fit: () => app.fit(), editShape() {} }); bubbles.setLevel('simple', false);
 function refresh() { flip.update(); painting.update(); bubbles.update(); sidebar.update(); }
 app.onFrameChange = refresh; app.onWorkspaceChange = refresh; app.onToolChange = refresh; app.history.onChange = refresh; app.onBrushChange = refresh; app.onShapeChange = refresh;

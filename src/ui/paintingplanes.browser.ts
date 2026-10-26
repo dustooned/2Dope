@@ -13,7 +13,7 @@ const canvas=document.querySelector<HTMLCanvasElement>('#canvas')!,stage=documen
 const app=new App(canvas,stage);app.loadProject(new Project(128,128));app.setWorkspace('draw');app.project.comp.duration=24;
 app.brush={...app.brush,size:14,opacity:1,smoothing:0};app.fillMode='tap';app.color='#286ab4';app.showLayers=true;app.otherAlpha=1;
 const cards=new LayerCards(app),flip=new FlipMode(app,stage);
-const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh(),()=>{});
+const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh());
 const bubbles=new Bubbles(app,stage,{brushLibrary(){},colorPanel(){},layers:anchor=>cards.toggle(anchor),layerCards:anchor=>cards.toggle(anchor),fit:()=>app.refit()});bubbles.setLevel('simple',false);
 function refresh(){painting.update();bubbles.update();cards.update();}
 app.onToolChange=refresh;app.onFrameChange=refresh;app.onWorkspaceChange=refresh;app.editor.onChange=refresh;app.history.onChange=refresh;

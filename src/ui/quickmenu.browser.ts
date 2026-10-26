@@ -15,7 +15,7 @@ const saved = keys.map(k => localStorage.getItem(k)); for (const k of keys) loca
 localStorage.setItem(QUICK_MENU_KEY, '{broken json');
 const stage = document.querySelector<HTMLElement>('#stage')!, canvas = document.querySelector<HTMLCanvasElement>('#canvas')!;
 const app = new App(canvas, stage); app.loadProject(new Project(128, 128)); app.project.layer.exposures[0]!.length = 4; app.project.comp.duration = 24;
-const flip = new FlipMode(app, stage), painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh(), () => {});
+const flip = new FlipMode(app, stage), painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh());
 const sidebar = new Sidebar(app, document.querySelector<HTMLElement>('#sidebar')!);
 const chip = document.createElement('input'); chip.type = 'color'; chip.hidden = true; document.body.append(chip);
 const colours = new ColorPanel(app, chip);

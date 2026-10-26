@@ -15,7 +15,7 @@ const canvas=document.querySelector<HTMLCanvasElement>('#canvas')!,stage=documen
 const app=new App(canvas,stage);app.loadProject(new Project(128,128));app.setWorkspace('draw');app.color='#1d1d24';app.brush={...app.brush,size:14,opacity:1,smoothing:0};app.setPlane('fill');
 const picker=document.createElement('input');picker.type='color';picker.hidden=true;document.body.append(picker);
 const colours=new ColorPanel(app,picker),cards=new LayerCards(app),flip=new FlipMode(app,stage);
-const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh(),()=>{});
+const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh());
 const bubbles=new Bubbles(app,stage,{brushLibrary(){},colorPanel:a=>colours.toggle(a),layers:a=>cards.toggle(a),layerCards:a=>cards.toggle(a),fit:()=>app.refit()});bubbles.setLevel('simple',false);
 function refresh(){painting.update();bubbles.update();cards.update();}
 app.onColorChange=()=>{colours.sync();bubbles.update();};app.onToolChange=refresh;app.onFrameChange=refresh;app.onWorkspaceChange=refresh;app.editor.onChange=refresh;

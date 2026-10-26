@@ -156,7 +156,8 @@ export class QuickMenu {
     }
   }
   private key = (e: KeyboardEvent): void => {
-    const target = e.target as HTMLElement | null;
+    // a key sent to the document or window has no element to look inside
+    const target = e.target instanceof Element ? e.target as HTMLElement : null;
     if (e.defaultPrevented || document.querySelector('dialog[open]') || target?.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])')) return;
     if (e.code === 'KeyQ' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
       if (target?.closest('[data-own-keys]') && !this.popup?.contains(target)) return;

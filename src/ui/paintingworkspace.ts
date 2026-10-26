@@ -1,24 +1,25 @@
-import type { App, Workspace } from '../app';
+import type { App } from '../app';
 import { isPaintingWorkspace } from '../core/workspace';
 import type { FlipMode } from './flipmode';
-import { decorate, setLabel } from './icons';
 
 type Fold = 'tools' | 'options' | 'brush' | 'editor';
 type Prefs = Record<Fold, boolean>;
 const defaults = (): Prefs => ({ tools: false, options: false, brush: false, editor: false });
 
-/** The two painting layouts: view-only controls, independent of document history and assets. */
+/**
+ * The two painting layouts: view-only controls, independent of document history and assets.
+ * Switching workspaces is the shared mode bubbles' job (as everywhere else); the header here only
+ * carries the artwork asset buttons.
+ */
 export class PaintingWorkspaceUI {
   onReset: () => void = () => {};
   private header = document.createElement('nav');
   private footer = document.createElement('nav');
-  private picker = document.createElement('select');
-  private switcher: HTMLButtonElement;
   private viewButtons: HTMLButtonElement[] = [];
   private handles = new Map<Fold, HTMLButtonElement>();
   private prefs = { draw: defaults(), animate: defaults() };
 
-  constructor(private app: App, private flip: FlipMode, stage: HTMLElement, private refresh: () => void, share: () => void) {
+  constructor(private app: App, private flip: FlipMode, stage: HTMLElement, private refresh: () => void) {
     const button = (label: string, run: () => void) => {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
       b.addEventListener('click', () => {
@@ -34,19 +35,7 @@ export class PaintingWorkspaceUI {
         for (const k of Object.keys(this.prefs[ws]) as Fold[]) this.prefs[ws][k] = saved?.[k] === true;
       } catch { /* defaults */ }
     }
-    this.header.className = 'painting-header'; this.header.setAttribute('aria-label', 'Painting workspace');
-    this.picker.setAttribute('aria-label', 'Workspace');
-    for (const [value, label] of [['board', 'Story'], ['draw', 'Draw'], ['animate', 'Animate'], ['time', 'Timing'], ['motion', 'Motion'], ['share', 'Share']]) {
-      const o = document.createElement('option'); o.value = value!; o.textContent = label!; this.picker.append(o);
-    }
-    this.picker.addEventListener('change', () => {
-      if (app.strokeActive) return this.update();
-      if (this.picker.value === 'share') share(); else app.setWorkspace(this.picker.value as Workspace);
-    });
-    this.switcher = button('Animate →', () => app.setWorkspace(app.workspace === 'draw' ? 'animate' : 'draw'));
-    this.switcher.className = 'painting-switcher';
-    decorate(this.switcher, 'flipbook');
-    this.header.append(this.picker, this.switcher);
+    this.header.className = 'painting-header'; this.header.setAttribute('aria-label', 'Artwork assets');
     stage.append(this.header);
     this.footer.className = 'painting-views'; this.footer.setAttribute('aria-label', 'Drawing views');
     for (const label of ['Canvas', 'Flipbook', 'Clips']) {
@@ -98,9 +87,6 @@ export class PaintingWorkspaceUI {
     }
     document.body.classList.toggle('painting-still', active && ws === 'draw' && !this.flip.on);
     if (!active) return;
-    this.picker.value = ws;
-    setLabel(this.switcher, ws === 'draw' ? 'Animate' : 'Draw', ws === 'draw' ? 'flipbook' : 'draw');
-    this.switcher.setAttribute('aria-label', ws === 'draw' ? 'Go to Animate' : 'Go to Draw');
     for (const b of this.viewButtons) {
       b.hidden = ws === 'draw' ? b.textContent === 'Clips' : b.textContent === 'Canvas';
       b.setAttribute('aria-pressed', String(this.flip.on ? b.textContent === 'Flipbook' : b.textContent === (ws === 'draw' ? 'Canvas' : 'Clips')));

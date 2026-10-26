@@ -13,7 +13,7 @@ const canvas=document.querySelector<HTMLCanvasElement>('#canvas')!,stage=documen
 const app=new App(canvas,stage);app.loadProject(new Project(128,128));app.setWorkspace('draw');app.project.comp.duration=24;app.setFrame(7);
 const sheet=new TracksSheet(app,document.querySelector<HTMLElement>('.stage-col')!,document.querySelector<HTMLElement>('#strip')!,()=>{});
 const flip=new FlipMode(app,stage);
-const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh(),()=>{});
+const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh());
 const ui=new ArtworkAssetsUI(app,document.querySelector<HTMLElement>('.painting-header')!);
 function refresh(){painting.update();sheet.update();ui.update();}
 app.onFrameChange=refresh;app.onWorkspaceChange=()=>{sheet.restore();refresh();};app.editor.onChange=()=>ui.update();
@@ -81,7 +81,7 @@ try{
   app.undo();await settle();app.project.comps.delete(other.id);ui.update();
   app.fit();stroke(80);await settle();check('A source edit still paints after the navigation and touch gesture',art.rev>rev&&ink()&&!app.strokeActive);
   click('Done editing asset');check('Done restores Animate and the previous shot frame without focusing hidden source controls',app.workspace==='animate'&&app.project.activeComp===shot&&app.frame===frame&&document.activeElement===canvas);
-  check('Leaving the source clears its status and restores the workspace selector',document.querySelector<HTMLElement>('.asset-context')!.hidden&&document.querySelector('.asset-editing-status')!.textContent===''&&document.querySelector('select[aria-label="Workspace"]')!.getBoundingClientRect().width>0);
+  check('Leaving the source clears its status and restores the asset buttons',document.querySelector<HTMLElement>('.asset-context')!.hidden&&document.querySelector('.asset-editing-status')!.textContent===''&&document.querySelector('.painting-header button[aria-haspopup="dialog"]')!.getBoundingClientRect().width>0);
   app.setArrangeAssets(true,placement.id);refresh();click('Done arranging assets');check('Placement Done returns focus to the drawing canvas',!app.arrangingAssets&&document.activeElement===canvas);
   button('Assets (1)').focus();pointer('pointerdown',100,100);pointer('pointercancel',100,100);check('Drawing pointer input reclaims canvas focus from toolbar controls',document.activeElement===canvas&&!app.strokeActive);
   key(canvas,'Space');key(canvas,'Space','keyup');check('Canvas Space still starts playback',app.playing);key(canvas,'Space');key(canvas,'Space','keyup');check('Canvas Space still pauses playback',!app.playing);

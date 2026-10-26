@@ -185,6 +185,15 @@ real App/UI creation, pen-style painting, Undo/Redo, placement, touch cancellati
 
 Rendering update (2026-10-22): Draw's active cel uses `view/composite.ts` through `drawEditingLayer`, with preview-only raster/vector/ghost sources from `App.render`. Plane and layer opacity/blend/masks share the playback/export compositor; the active layer's effects stay off during painting. The red mask-edit tint and other editing guides remain outside the artwork. `tests/rendering.html` runs real-browser pixel regressions independently of the Node test suite.
 
+Workspace navigation (2026-10-26): Draw and Animate no longer have their own workspace select or
+Draw/Animate shortcut; the shared `Bubbles` mode row switches every workspace and stays visible in
+painting workspaces at every level. `.painting-header` only carries the artwork asset buttons;
+`Bubbles.placePaintingRows` puts it after the mode row (or under it when narrow) via `--ph-top` /
+`--ph-left`, and drops the tool row (`--pt-top`) only when it would collide. Which options row
+shows is the pure `optionsRow` / `toolChoice` in `core/workspace.ts` (unit tested), so drawing
+tool states never leak into Story, Timing or Motion. `App.setWorkspace` applies an open transform,
+adjustment or point edit before switching.
+
 Workspace/assets update (2026-10-22): `core/workspace.ts` and `ui/paintingworkspace.ts` manage Draw/Animate layouts and local view preferences. `core/assets.ts` manages project-local artwork sources (normal comps with optional `asset: true`) and linked comp-layer placements; `ui/artworkassets.ts` adds New asset, the shelf and Done. Source creation and placement mutations use `CompEditor` history; source navigation/return is session state. Existing project capture/residency/compositing preserve all source layers/frames. `tests/assets.html` checks standalone PNG/ZIP reload and source updates with real browser pixels. Clips still uses the existing exposure timeline.
 
 Asset arrangement update: `App.setArrangeAssets` scopes an explicit Animate tool to the current

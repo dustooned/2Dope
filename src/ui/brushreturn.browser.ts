@@ -18,7 +18,7 @@ app.setBrush(cloneBrush(PRESETS[0]!)); app.setPlane('fill');
 let studios = 0;
 const library = new BrushLibrary(app, () => { studios++; });
 const flip = new FlipMode(app, stage);
-const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh(), () => {});
+const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh());
 const bubbles = new Bubbles(app, stage, {brushLibrary:a => library.toggle(a), colorPanel(){}, layers(){}, layerCards(){}, fit:() => app.refit()});
 bubbles.setLevel('simple',false);
 function refresh(){ painting.update(); bubbles.update(); }

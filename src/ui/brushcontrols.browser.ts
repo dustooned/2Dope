@@ -15,7 +15,7 @@ const size=root.querySelector<HTMLElement>('[data-slider="size"]')!,opacity=root
 const app=new App(canvas,stage);app.loadProject(new Project(128,128));app.setWorkspace('draw');app.project.comp.duration=24;
 app.setBrush({...cloneBrush(PRESETS.find(b=>b.name==='Pixel Ink')!),size:16,opacity:1,smoothing:0});app.setPlane('fill');app.color='#264653';
 const sidebar=new Sidebar(app,root),flip=new FlipMode(app,stage);
-const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh(),()=>{});
+const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh());
 const bubbles=new Bubbles(app,stage,{brushLibrary(){},colorPanel(){},layers(){},layerCards(){},fit:()=>app.refit()});bubbles.setLevel('simple',false);
 function refresh(){painting.update();bubbles.update();sidebar.update();root.querySelector<HTMLButtonElement>('[data-action="undo"]')!.disabled=!app.history.canUndo;root.querySelector<HTMLButtonElement>('[data-action="redo"]')!.disabled=!app.history.canRedo;}
 app.onBrushChange=refresh;app.onToolChange=refresh;app.onFrameChange=refresh;app.onWorkspaceChange=refresh;app.editor.onChange=refresh;app.history.onChange=refresh;

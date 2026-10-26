@@ -4586,8 +4586,9 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 
 /* Painting workspaces: canvas-first Draw and simplified Animate, with recoverable edge trays. */
 .painting-header, .painting-views, .painting-handle { display: none; }
-body.painting-workspace .painting-header { position: absolute; top: 8px; left: 60px; z-index: 12; display: flex; gap: 6px; padding: 4px; border-radius: var(--radius-lg); background: var(--panel); border: 1px solid var(--line); }
-body.painting-workspace .painting-header select, body.painting-workspace .painting-header button { min-height: 44px; padding: 0 10px; }
+/* the header holds only the artwork asset buttons; Bubbles.placePaintingRows sets --ph-top / --ph-left */
+body.painting-workspace .painting-header { position: absolute; top: var(--ph-top, 8px); left: var(--ph-left, 60px); z-index: 12; display: flex; gap: 6px; padding: 4px; border-radius: var(--radius-lg); background: var(--panel); border: 1px solid var(--line); }
+body.painting-workspace .painting-header button { min-height: 44px; padding: 0 10px; }
 body.painting-workspace .painting-views { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 5px 10px; background: var(--panel); border-top: 1px solid var(--line); overflow-x: auto; white-space: nowrap; touch-action: pan-x; }
 .painting-views button { flex: 0 0 auto; min-height: 44px; }
 .painting-views button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
@@ -4597,8 +4598,10 @@ body.painting-workspace .painting-tools-handle, body.painting-workspace .paintin
 .painting-tools-handle { right: 0; top: 70px; border-radius: var(--radius-md) 0 0 var(--radius-md); }
 .painting-options-handle { right: 0; top: 120px; border-radius: var(--radius-md) 0 0 var(--radius-md); }
 .painting-brush-handle { left: 0; bottom: 12px; border-radius: 0 var(--radius-md) var(--radius-md) 0; }
-body.painting-workspace .bub-modes, body.painting-workspace .topbar, body.painting-workspace .focusbar { display: none !important; }
-body.painting-workspace .bub-tools { display: flex !important; top: 68px; right: 70px; left: auto; max-width: calc(100% - 78px); flex-wrap: wrap; }
+body.painting-workspace .topbar, body.painting-workspace .focusbar { display: none !important; }
+/* Draw and Animate switch workspaces with the same mode bubbles as Story, Timing and Motion, at every level */
+body.painting-workspace:not(.quick):not(.ui-hidden) .bub-modes { display: flex !important; }
+body.painting-workspace .bub-tools { display: flex !important; top: var(--pt-top, 68px); right: 70px; left: auto; max-width: calc(100% - 78px); flex-wrap: wrap; }
 body.painting-workspace .bub-ctx { top: var(--tools-bottom, 126px); right: 70px; max-width: calc(100% - 90px); }
 body.painting-tools-folded .bub-tools, body.painting-options-folded .bub-ctx, body.painting-brush-folded .sidebar { display: none !important; }
 body.painting-still .tracks-handle, body.painting-still #strip, body.painting-still #splitter, body.painting-still .audio-tracks,
@@ -4606,7 +4609,7 @@ body.painting-editor-folded .tracks-handle, body.painting-editor-folded #strip, 
 body.painting-workspace .paint-target, body.painting-workspace #stats { display: none !important; }
 body.quick .painting-header, body.quick .painting-views, body.quick .painting-handle, body.ui-hidden .painting-header, body.ui-hidden .painting-views, body.ui-hidden .painting-handle { display: none !important; }
 .painting-header[hidden], .painting-views[hidden], .painting-handle[hidden], .painting-views button[hidden] { display: none !important; }
-@media (max-width: 700px) { .painting-purpose { display: none; } body.painting-workspace .painting-header select { max-width: 120px; } }
+@media (max-width: 700px) { .painting-purpose { display: none; } }
 body.painting-workspace.flipmode .painting-brush-handle { bottom: calc(var(--flip-h, 180px) + 8px); }
 /* Keep the compact brush toggle beside the tools/options recovery buttons on short screens. */
 @media (min-width: 420px) and (max-height: 500px) {
@@ -4723,21 +4726,19 @@ body.painting-workspace.flipmode .painting-brush-handle { bottom: calc(var(--fli
 .asset-editing-name { font-size: 12px; line-height: 16px; color: var(--text); }
 .asset-editing-status { font-size: 10px; line-height: 13px; color: var(--muted); }
 .asset-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 4px; background: var(--panel); border-radius: var(--radius); font-size: 11px; color: var(--muted); }
-body.painting-workspace .painting-header { max-width: calc(100% - 114px); align-items: center; white-space: nowrap; border-radius: var(--radius-lg); box-shadow: 0 4px 16px #0002; }
-body.painting-workspace .painting-header button, body.painting-workspace .painting-header select { border-radius: var(--radius-md); }
+body.painting-workspace .painting-header { max-width: calc(100% - var(--ph-left, 60px) - 60px); align-items: center; white-space: nowrap; border-radius: var(--radius-lg); box-shadow: 0 4px 16px #0002; }
+body.painting-workspace .painting-header button { border-radius: var(--radius-md); }
 body.painting-workspace .painting-header .asset-done { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .painting-header > * { flex-shrink: 0; }
-body.painting-workspace .painting-header.editing-asset { width: min(620px, calc(100% - 114px)); }
+body.painting-workspace .painting-header.editing-asset { width: min(620px, calc(100% - var(--ph-left, 60px) - 60px)); }
 .painting-header.editing-asset .asset-context { flex: 1; min-width: 0; }
 .asset-context .asset-done { flex: 0 0 auto; }
 .painting-header [hidden] { display: none !important; }
 @media (max-width: 700px) {
   body.painting-workspace .painting-header { gap: 4px; }
-  body.painting-workspace .painting-header select { width: 94px; padding: 0 4px; }
-  .painting-header .asset-create { display: none; }
-  .painting-header.editing-asset .painting-switcher, .painting-header.editing-asset > select { display: none; }
+  .painting-header.editing-asset .asset-create { display: none; }
   .painting-header.editing-asset .asset-source-prefix { display: none; }
-  .painting-switcher .lbl, .painting-header button[aria-haspopup=dialog] > .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .painting-header .asset-create > .lbl, .painting-header button[aria-haspopup=dialog] > .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .asset-context { padding-left: 0; border: 0; }
   .painting-header.editing-asset .asset-context { gap: 6px; }
   body.painting-workspace .painting-header .asset-done { padding: 0 8px; }

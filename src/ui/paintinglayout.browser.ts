@@ -12,7 +12,7 @@ const app=new App(document.querySelector<HTMLCanvasElement>('#canvas')!,stage);a
 const sheet=new TracksSheet(app,column,document.querySelector<HTMLElement>('#strip')!,()=>setTimeout(()=>app.refit(),0));
 const flip=new FlipMode(app,stage);
 const refresh=()=>{flip.update();sheet.update();assets.update();app.requestRender();};
-const painting=new PaintingWorkspaceUI(app,flip,stage,refresh,()=>{});
+const painting=new PaintingWorkspaceUI(app,flip,stage,refresh);
 const assets=new ArtworkAssetsUI(app,document.querySelector<HTMLElement>('.painting-header')!);painting.onReset=()=>assets.resetLayout();
 flip.onChange=()=>{painting.update();assets.update();};
 app.onFrameChange=()=>{painting.update();refresh();};app.onWorkspaceChange=()=>{painting.update();sheet.restore();refresh();};app.editor.onChange=()=>assets.update();

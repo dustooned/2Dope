@@ -22,7 +22,7 @@ const stage=document.querySelector<HTMLElement>('#stage')!,canvas=document.query
 const app=new App(canvas,stage);app.loadProject(new Project(128,128));app.project.comp.duration=24;app.setWorkspace('draw');app.setFrame(7);app.quickShape=true;
 const sidebar=new Sidebar(app,root),cards=new LayerCards(app),flip=new FlipMode(app,stage),strip=new Strip(app,stripRoot);
 const sheet=new TracksSheet(app,document.querySelector<HTMLElement>('.stage-col')!,stripRoot,()=>app.refit());
-const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh(),()=>{});
+const painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh());
 const assets=new ArtworkAssetsUI(app,document.querySelector<HTMLElement>('.painting-header')!);
 const picker=document.createElement('input');picker.type='color';picker.hidden=true;document.body.append(picker);
 const colours=new ColorPanel(app,picker),brushes=new BrushLibrary(app,()=>{});
@@ -79,7 +79,7 @@ try{
   check('Both linked placements show source repainting through the shot compositor',pixel[0]!>230&&pixel[1]!<130&&pixel[2]!>100&&pixel[3]!>245&&app.project.comp.layers.filter(l=>l.kind==='comp'&&l.comp===source).length===2);
   click('Done arranging assets');click('Clips');sheet.set('half',false);refresh();await settle();
   check('Clips exposes source-linked rails while retaining canvas drawing tools',!flip.on&&document.querySelectorAll('[aria-label="Move clip Workflow landscape"]').length===2&&app.workspace==='animate'&&canvas.getBoundingClientRect().height>100);
-  const historyBeforeShelf=app.history.peekUndo();click('Go to Draw');await settle();click('Assets (1)');click('Edit Workflow landscape');await settle();
+  const historyBeforeShelf=app.history.peekUndo();click('Draw',document.querySelector('.bub-modes')!);await settle();click('Assets (1)');click('Edit Workflow landscape');await settle();
   check('Shelf Edit also resumes the last background/frame without adding document history',app.project.activeLayer===background&&app.frame===9&&app.workspace==='draw'&&app.history.peekUndo()===historyBeforeShelf);
   click('Done editing asset');check('The shelf return keeps the original Draw shot frame',app.workspace==='draw'&&app.project.activeComp===shot&&app.frame===7);
 }catch(e){check(String(e),false);}

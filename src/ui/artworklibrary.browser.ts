@@ -18,7 +18,7 @@ const keys = ['2dope.painting.layout.draw', '2dope.painting.layout.animate', '2d
 const saved = keys.map(k => localStorage.getItem(k)); for (const k of keys) localStorage.removeItem(k);
 const stage = document.querySelector<HTMLElement>('#stage')!, canvas = document.querySelector<HTMLCanvasElement>('#canvas')!;
 const app = new App(canvas, stage), flip = new FlipMode(app, stage);
-const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh(), () => {});
+const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh());
 const dbName = `2dope-artwork-check-${crypto.randomUUID()}`, device = new DeviceArtworkStore(dbName);
 let failSave = false, failRemove = false, holdRead: (() => void) | null = null, delayRead = false, reads = 0;
 const store: ArtworkStore = { list: () => device.list(), put: async e => { if (failSave) throw new Error('Test storage full'); await device.put(e); },

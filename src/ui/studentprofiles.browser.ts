@@ -15,7 +15,7 @@ const keys=[STUDENT_PROFILES_KEY,STUDENT_UI_KEY,FINGER_PAINT_KEY,QUICK_MENU_KEY,
 const saved=keys.map(k=>localStorage.getItem(k));keys.forEach(k=>localStorage.removeItem(k));
 const stage=document.querySelector<HTMLElement>('#stage')!,canvas=document.querySelector<HTMLCanvasElement>('#canvas')!;
 const app=new App(canvas,stage);app.loadProject(new Project(128,128));app.setWorkspace('draw');
-const flip=new FlipMode(app,stage),painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh(),()=>{});
+const flip=new FlipMode(app,stage),painting=new PaintingWorkspaceUI(app,flip,stage,()=>refresh());
 const bubbles=new Bubbles(app,stage,{brushLibrary(){},colorPanel(){},layers(){},fit:()=>app.refit()});
 function refresh(){painting.update();flip.update();bubbles.update();}
 app.onToolChange=refresh;app.onWorkspaceChange=refresh;app.onFrameChange=refresh;flip.onChange=refresh;

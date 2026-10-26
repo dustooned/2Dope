@@ -22,7 +22,7 @@ const saved = keys.map(k => localStorage.getItem(k)); keys.forEach(k => localSto
 const stage = document.querySelector<HTMLElement>('#stage')!, canvas = document.querySelector<HTMLCanvasElement>('#canvas')!, stripRoot = document.querySelector<HTMLElement>('#strip')!;
 const app = new App(canvas, stage), flip = new FlipMode(app, stage), strip = new Strip(app, stripRoot);
 const sheet = new TracksSheet(app, document.querySelector<HTMLElement>('.stage-col')!, stripRoot, () => app.refit());
-const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh(), () => {});
+const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh());
 const motion = new MotionPanel(app, document.querySelector<HTMLElement>('#motion')!);
 function refresh() {
   painting.update(); flip.update(); sheet.update(); strip.update(); motion.update();

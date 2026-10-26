@@ -669,7 +669,7 @@ const bubbles = new Bubbles(app, $('#stage'), {
 });
 const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
   flipMode.update(); sheet.update(); strip.update(); bubbles.update(); app.requestRender();
-}, () => share.show());
+});
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
 paintingUI.onReset = () => artworkUI.resetLayout();

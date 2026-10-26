@@ -7,6 +7,7 @@ import type { Tool } from '../core/stroke';
 import type { XParams } from '../core/selxform';
 import { decorate } from './icons';
 import { STUDENT_TOOLS, type StudentTool } from '../core/studentprefs';
+import { isPaintingWorkspace, optionsRow, toolChoice, type OptionsState } from '../core/workspace';
 
 export type UiLevel = 'clean' | 'simple' | 'full';
 const LEVEL_KEY = '2dope.ui.level';
@@ -151,10 +152,12 @@ export class Bubbles {
     const s = this.stage.getBoundingClientRect();
     const bottomOf = (e: HTMLElement) => (e.offsetParent && !e.hidden ? e.getBoundingClientRect().bottom - s.top : 0);
     const narrow = window.innerWidth <= 700;
+    const painting = document.body.classList.contains('painting-workspace');
+    if (painting) this.placePaintingRows(s);
     // the mode and tool rows side by side need the stage's width; when they do not fit (a tablet
     // upright, a split screen) the tools go under the modes, as on a phone
     const mw = this.modes.offsetParent ? this.modes.offsetWidth : 0, tw = this.tools.offsetParent && !this.tools.hidden ? this.tools.offsetWidth : 0;
-    const stack = !narrow && mw > 0 && tw > 0 && mw + tw + 60 + 60 + 12 > s.width;
+    const stack = !painting && !narrow && mw > 0 && tw > 0 && mw + tw + 60 + 60 + 12 > s.width;
     if (stack !== this.stage.classList.contains('bub-stack')) this.stage.classList.toggle('bub-stack', stack);
     const tools = Math.max(bottomOf(this.modes), bottomOf(this.tools));
     if (!tools) {
@@ -179,6 +182,33 @@ export class Bubbles {
     this.stage.style.setProperty('--top-clear', `${clear}px`);
     this.stage.style.setProperty('--fit-top', `${clear + label}px`);
     this.hooks.fit();
+  }
+
+  /**
+   * Draw and Animate: the mode row sits top left like everywhere else, the asset buttons follow it
+   * on the same row when there is room (else on the row under it), and the tool row goes under
+   * them on the right, dropping a row only when it would run into the asset buttons.
+   */
+  private placePaintingRows(s: DOMRect): void {
+    const header = this.stage.querySelector<HTMLElement>('.painting-header');
+    if (!this.modes.offsetParent) return;
+    const m = this.modes.getBoundingClientRect();
+    const modesLeft = Math.round(m.left - s.left), modesRight = Math.round(m.right - s.left), modesBottom = Math.round(m.bottom - s.top);
+    const shown = !!header && !header.hidden && header.offsetParent !== null;
+    const hw = shown ? header.offsetWidth : 0, hh = shown ? header.offsetHeight : 0;
+    // the level button keeps the top right corner (60px)
+    const row1 = shown && modesRight + 8 + hw <= s.width - 60;
+    const hLeft = row1 ? modesRight + 8 : modesLeft;
+    const hTop = row1 ? 8 : modesBottom + 6;
+    this.stage.style.setProperty('--ph-left', `${hLeft}px`);
+    this.stage.style.setProperty('--ph-top', `${hTop}px`);
+    let top = modesBottom + 6;
+    if (shown && !row1) {
+      // tools hang from the right edge (70px clear of the Tools / Options handles)
+      const tw = this.tools.offsetWidth, toolsLeft = s.width - 70 - tw;
+      if (toolsLeft < hLeft + hw + 8) top = hTop + hh + 6;
+    }
+    this.stage.style.setProperty('--pt-top', `${top}px`);
   }
 
   setLevel(l: UiLevel, remember = true): void {
@@ -265,14 +295,27 @@ export class Bubbles {
     return out;
   }
 
-  /** Which tool bubble is lit. */
-  private current(): ToolKey {
+  /** A gradient just filled: drag its handles on the canvas, then keep it or put it back. */
+  private gradChips(): HTMLButtonElement[] {
     const a = this.app;
-    if (a.arrangingAssets) return 'assets';
-    if (a.tool === 'fill') return a.fillMode === 'lasso' ? 'select' : 'fill';
-    if (a.adjusting) return 'adjust';
-    if (a.tool === 'brush' && a.smudging) return 'smudge';
-    return a.tool as ToolKey;
+    if (!a.gradEditing) return [];
+    return [
+      this.chip('Done', 'Keep the gradient (or tap elsewhere)', false, () => a.applyGradEdit(), 'check'),
+      this.chip('Cancel', 'Put the area back', false, () => a.cancelGradEdit(), 'close'),
+    ];
+  }
+
+  private optionsState(): OptionsState {
+    const a = this.app;
+    return {
+      workspace: a.workspace, tool: a.tool, fillMode: a.fillMode, smudging: a.smudging, adjusting: !!a.adjusting,
+      transforming: a.transforming, pointEditing: a.pointEditing, arranging: a.arrangingAssets, layersOpen: this.layersOpen,
+    };
+  }
+
+  /** Which tool bubble is lit (an adjustment in progress wins over the Fill or Select tool under it). */
+  private current(): ToolKey {
+    return toolChoice(this.optionsState());
   }
 
   private get flipOn(): boolean {
@@ -468,14 +511,19 @@ export class Bubbles {
     const flip = this.flipOn;
     const cels = this.layersOpen && (ws === 'draw' || ws === 'animate' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
-    const shape = !!this.hooks.editShape && !a.arrangingAssets && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
+    // drawing tools and their temporary states only belong to Draw and Animate: Timing, Motion and
+    // Story keep their own options even when the last drawing tool was Fill, Select or Smudge
+    const drawWs = isPaintingWorkspace(ws);
+    const sharing = !!this.hooks.share?.open();
+    const shape = drawWs && !!this.hooks.editShape && !a.arrangingAssets && a.shapeEditable && !editing && !a.transforming && (a.tool === 'brush' || a.tool === 'pen');
     // what changes from frame to frame: frozen while playing, so the bubbles are not rebuilt on every
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
-    const sig = [shape, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
+    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
-    for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(b.dataset.ws === ws));
-    this.modeName.textContent = { animate: 'Animate', draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
+    for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
+    this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]')?.setAttribute('aria-pressed', String(sharing));
+    this.modeName.textContent = sharing ? 'Share' : { animate: 'Animate', draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
     const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}`;
     if (paintingSig === this.sig) return;
     this.sig = paintingSig;
@@ -505,16 +553,17 @@ export class Bubbles {
       this.tools.append(b);
     }
 
-    // context: only what the chosen tool needs
+    // context: only what the chosen tool needs, and only in the workspace it belongs to
     this.ctx.replaceChildren();
+    const row = optionsRow(this.optionsState());
     const add = (...c: HTMLElement[]) => this.ctx.append(...c);
     // right after a snap: change the shape from here (no floating button on the simple screen)
     if (shape) add(this.chip('Edit shape', 'Change what the stroke snapped to, or keep your own stroke', false, (b) => this.hooks.editShape!(b), 'editpoints'));
-    if (a.arrangingAssets) {
+    if (row === 'assets') {
       add(el('span', { class: 'bub-hint' }, 'Tap artwork · drag to move · corners resize'));
-    } else if (editing) {
+    } else if (row === 'points') {
       add(...this.widthControls());
-    } else if (ws === 'time' && !this.layersOpen) {
+    } else if (row === 'time') {
       // holds: how many frames the drawing stays (tap a number); marks; frame by frame
       const hold = a.currentHold;
       add(el('span', { class: 'bub-hint' }, '\u23f1 Hold'));
@@ -524,7 +573,7 @@ export class Bubbles {
       add(this.chip('+', 'One frame longer', false, () => a.changeHold(1)));
       add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
       for (const [r, label, title] of [['key', 'Key', 'A key drawing: the main poses of the move'], ['breakdown', 'Breakdown', 'A breakdown: the drawing that shapes the move between two keys'], ['inbetween', 'In-between', 'An in-between: fills the gaps so the move is smooth']] as const) add(this.chip(label, title, a.currentRole === r, () => a.setRole(r)));
-    } else if (this.layersOpen && (ws === 'draw' || ws === 'animate' || ws === 'time') && !xp) {
+    } else if (row === 'layers') {
       // tight layer control: only this cel's linked layers, front first; tap one to draw on it
       const me = a.project.isPlaceholder ? '' : a.project.activeLayer;
       cels.forEach((l) => {
@@ -532,7 +581,7 @@ export class Bubbles {
       });
       add(this.chip('+ Layer', 'A new art layer for these cels: same frames and timing, its own drawing', false, () => { a.addCelLayer(); this.sig = ''; this.update(); }));
       if (!flip) add(this.chip('All layers', 'Every layer of the shot', false, (b) => this.hooks.layers(b)));
-    } else if (xp) {
+    } else if (row === 'transform' && xp) {
       const step = (label: string, title: string, patch: () => Partial<XParams>) => this.chip(label, title, false, () => a.setTransform(patch()));
       add(
         this.chip('Apply', 'Keep it (Enter)', false, () => a.applyTransform(), 'check'),
@@ -547,9 +596,9 @@ export class Bubbles {
         this.chip('Fit', 'Fit to the page', false, () => a.fitTransform(), 'fit'),
         this.chip('Reset', 'Back to where it started', false, () => a.resetTransform(), 'undo'),
       );
-    } else if (cur === 'adjust' && a.adjusting) {
+    } else if (row === 'adjust') {
       add(...this.adjustControls());
-    } else if (cur === 'smudge') {
+    } else if (row === 'smudge') {
       const lbl = el('span', { class: 'bub-hint' }, `Strength ${Math.round(a.smudgeStrength * 100)}%`);
       add(
         this.chip('Line', 'Smudge the LINE', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }),
@@ -558,7 +607,7 @@ export class Bubbles {
         lbl,
         this.chip('Stronger', 'Carry more paint', false, () => { a.smudgeStrength = Math.min(1, a.smudgeStrength + 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thicker'),
       );
-    } else if ((ws === 'draw' || ws === 'animate') && (cur === 'brush' || cur === 'pen' || cur === 'eraser')) {
+    } else if (row === 'paint') {
       if (a.studentUI.controls.inkPaint) add(this.chip('Ink & Paint', a.autoPaintSupported ? 'Ink & Paint: fill newly closed areas after inking. Existing paint stays.' : 'Ink & Paint: this page exceeds the automatic paint limit for this device.', a.inkPaint.enabled, () => a.setInkPaint(!a.inkPaint.enabled), 'inkpaint'));
       if (a.inkPaint.enabled && a.studentUI.controls.inkPaint) {
         const ink = el('label', { class: 'ink-paint-colour', title: 'Ink colour (automatic paint uses the main Colour)' }, 'Ink');
@@ -571,12 +620,8 @@ export class Bubbles {
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
       if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
-    } else if (cur === 'fill') {
-      // a gradient just filled: drag its handles on the canvas, then keep it or put it back
-      if (a.gradEditing) {
-        add(this.chip('Done', 'Keep the gradient (or tap elsewhere)', false, () => a.applyGradEdit(), 'check'));
-        add(this.chip('Cancel', 'Put the area back', false, () => a.cancelGradEdit(), 'close'));
-      }
+    } else if (row === 'fill') {
+      add(...this.gradChips());
       add(
         this.chip('Tap / drag', 'Fill the areas you tap or drag across', a.fillMode === 'tap', () => a.setFillMode('tap')),
         this.chip('Leftovers', 'Clean up specks the fill missed', a.fillMode === 'leftover', () => a.setFillMode('leftover')),
@@ -595,7 +640,7 @@ export class Bubbles {
         add(second, this.chip('Swap', 'Swap the two colours', false, () => a.swapColors()));
       }
       if (sel) add(this.chip('Fill selection', 'Colour everything inside the selection', false, () => a.fillSelectedArea()));
-    } else if (cur === 'select') {
+    } else if (row === 'select') {
       // how to select (Procreate's modes) and how a new selection combines with this one
       const shapes: [SelectShape, string, string, string][] = [
         ['free', 'Freehand', 'Draw round what you want', 'lasso'],
@@ -615,7 +660,8 @@ export class Bubbles {
       const oNext = ops[(oi + 1) % ops.length]!;
       const opChip = this.chip(oLabel, `${oLabel}: ${oTitle}. Tap for ${oNext[1]}.`, a.selectOp !== 'new', () => a.setSelectOp(oNext[0]), oIcon);
       opChip.classList.add('bub-cycle');
-      add(shapeChip, opChip, el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
+      // Fill in the selection with a gradient style starts a gradient edit here too
+      add(...this.gradChips(), shapeChip, opChip, el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
       if (sel) {
         add(
           this.chip('Transform', 'Move, size, rotate or flip what is selected (drag the canvas to move)', false, () => a.beginTransform(), 'motion'),
@@ -632,14 +678,14 @@ export class Bubbles {
         add(this.chip('Select all', 'Select everything on this drawing', false, () => a.invertSelection(), 'selnew'));
       }
       if (a.hasArtClip) add(this.chip('Paste', 'Paste what you copied, ready to move', false, () => a.pasteArt(), 'paste'));
-    } else if (ws === 'board') {
+    } else if (row === 'board') {
       const st = this.hooks.story;
       if (st) {
         for (const [v, label, show] of [['panels', 'Panels', 'Panels'], ['timeline', 'Timeline', 'Timeline'], ['split', 'Split', 'Both']] as const) add(this.chip(show, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
       }
       add(this.chip('\u25c0 Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later \u25b6', 'Move the selected panels later', false, () => a.moveSelection(1)));
       add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));
-    } else if (ws === 'motion') {
+    } else if (row === 'motion') {
       // easing, reverse and delete only when keys are selected; otherwise just how new keys start
       if (a.editor.keys.size) {
         for (const e of EASINGS) add(this.chip(e.label, `Easing of the selected keys: ${e.label}`, false, () => a.editor.setEasing(e.id)));
