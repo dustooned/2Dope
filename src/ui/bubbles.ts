@@ -8,6 +8,9 @@ import type { XParams } from '../core/selxform';
 import { decorate } from './icons';
 import { STUDENT_TOOLS, type StudentTool } from '../core/studentprefs';
 import { isPaintingWorkspace, optionsRow, toolChoice, type OptionsState } from '../core/workspace';
+import { isCommandHidden } from '../core/commandprefs';
+import { commandPrefs, commandsFor, commandsIn, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
+import { attachContextMenu, showContextMenu } from './contextmenu';
 
 export type UiLevel = 'clean' | 'simple' | 'full';
 const LEVEL_KEY = '2dope.ui.level';
@@ -140,6 +143,8 @@ export class Bubbles {
     const levelChanged = app.onInterfaceLevelChange;
     app.onInterfaceLevelChange = () => { levelChanged(); this.setLevel(app.interfaceLevel); };
     this.setLevel(this.level, false);
+    // hiding or showing a command (here or in App settings) redraws the row
+    onCommandPrefsChange(() => { this.sig = ''; this.update(); });
     window.addEventListener('resize', () => setTimeout(() => this.measure(), 0));
   }
 
@@ -238,6 +243,35 @@ export class Bubbles {
     if (icon) decorate(b, icon);
     b.addEventListener('click', () => fn(b));
     return b;
+  }
+
+  /** A row's registry commands as chips (hidden ones left out), then Customize. */
+  private commandChips(context: CommandContext): HTMLButtonElement[] {
+    const a = this.app, prefs = commandPrefs();
+    const chips = commandsFor(context, a).filter((c) => !isCommandHidden(prefs, c.id)).map((c) => this.commandChip(c));
+    const customize = this.chip('Customize', 'Choose which actions this row shows', false, (b) => this.customize(context, b), 'more');
+    return [...chips, customize];
+  }
+
+  private commandChip(c: Command): HTMLButtonElement {
+    const a = this.app;
+    const b = this.chip(c.label, c.title, c.isOn?.(a) ?? false, () => c.run(a), c.icon);
+    b.dataset.command = c.id;
+    // right-click or hold: take it off this row (Customize brings it back)
+    attachContextMenu(b, () => [{ label: `Hide “${c.label}” from this row`, run: () => setHidden(c.id, true) }]);
+    return b;
+  }
+
+  /** Every command of a row, ticked when shown: tap to hide or show it. */
+  private customize(context: CommandContext, anchor: HTMLElement): void {
+    const prefs = commandPrefs(), r = anchor.getBoundingClientRect();
+    showContextMenu(r.left, r.bottom, [
+      { title: 'Show in this row' },
+      ...commandsIn(context).map((c) => {
+        const hidden = isCommandHidden(prefs, c.id);
+        return { label: c.label, checked: !hidden, hint: hidden ? 'Show' : 'Hide', run: () => setHidden(c.id, !hidden) };
+      }),
+    ]);
   }
 
   /** Drawing Guide: one button that steps through the symmetries. */
@@ -517,7 +551,7 @@ export class Bubbles {
     // what changes from frame to frame: frozen while playing, so the bubbles are not rebuilt on every
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
-    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
+    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]')?.setAttribute('aria-pressed', String(sharing));
@@ -654,25 +688,8 @@ export class Bubbles {
       const sep = () => el('span', { class: 'bub-sep', 'aria-hidden': 'true' });
       // Fill in the selection with a gradient style starts a gradient edit here too
       add(...this.gradChips(), ...shapeChips, sep(), ...opChips, sep());
-      if (sel) {
-        add(
-          this.chip('Transform', 'Move, size, rotate or flip what is selected (drag the canvas to move)', false, () => a.beginTransform(), 'motion'),
-          this.chip('Fill', 'Colour everything inside the selection', false, () => a.fillSelectedArea(), 'fill'),
-          this.chip('Copy', 'Copy what is selected (paste on any drawing)', false, () => a.copyArt(), 'copy'),
-          this.chip('Cut', 'Copy what is selected and remove it', false, () => a.cutArt(), 'scissors'),
-          this.chip('Duplicate', 'A second copy in place, ready to move', false, () => a.duplicateArt(), 'layers'),
-          this.chip('Copy to layer', 'Copy what is selected onto a new layer above, on the same frames', false, () => a.selectionToNewLayer(false), 'copylayer'),
-          this.chip('Cut to layer', 'Move what is selected onto a new layer above, on the same frames', false, () => a.selectionToNewLayer(true), 'cutlayer'),
-          this.chip('Delete', 'Remove what is selected', false, () => a.deleteSelectedArt(), 'trash'),
-          this.chip('Invert', 'Select everything else', false, () => a.invertSelection(), 'invert'),
-          this.chip('Deselect', 'Drop the selection', false, () => a.clearSpatialSelection(), 'deselect'),
-        );
-      } else {
-        if (a.canReselect) add(this.chip('Reselect', 'Bring back the selection you dropped', false, () => a.reselect(), 'recent'));
-        add(this.chip('Move all', 'Move, size or rotate the whole drawing', false, () => a.moveAll(), 'motion'));
-        add(this.chip('Select all', 'Select everything on this drawing', false, () => a.invertSelection(), 'selnew'));
-      }
-      if (a.hasArtClip) add(this.chip('Paste', 'Paste what you copied, ready to move', false, () => a.pasteArt(), 'paste'));
+      // the actions come from the command registry, minus the ones this device hides
+      add(...this.commandChips('select'));
     } else if (row === 'board') {
       const st = this.hooks.story;
       if (st) {

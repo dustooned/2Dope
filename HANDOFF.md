@@ -2,6 +2,75 @@
 
 ## Current state (2026-10-26) — read this first
 
+### Command registry, Slice 1: the Select row (2026-10-26, branch `codex/command-registry`, committed, not pushed)
+
+Implements Slice 1 of [the command registry handoff](docs/CLAUDE-COMMAND-REGISTRY-HANDOFF.md),
+modelled on [research/clip-studio-paint](docs/research/clip-studio-paint/README.md): stable id,
+contexts, hidden bit, and a variant hook (the hook is not used yet).
+
+The source tree was clean before starting. The checkout was on `codex/vector-selection`, and the
+dirty `HANDOFF.md` blocked switching to `main`. So `codex/command-registry` branches from `0f36113`
+and includes the vector-selection commit. Not committed. Slice 2 was not started.
+
+- **`src/core/commandprefs.ts`** (5 tests): `readCommandPrefs`, `isCommandHidden`,
+  `setCommandHidden` and the key `2dope.commands.hidden`. Ids must match `namespace.name`
+  (lower case, at most 64 characters); duplicates are dropped and the list is capped at 200.
+  Device-local only.
+- **`src/ui/commands.ts`** (4 tests).
+  - It has the `Command` type, `COMMANDS`, `commandsIn(context)` (all of a row, for Customize),
+    `commandsFor(context, app)` (enabled ones, hidden ones not removed) and `commandById`.
+  - It keeps a cached device store: `commandPrefs()`, `setHidden()`, `onCommandPrefsChange()` and
+    `reloadCommandPrefs()`.
+  - The Select commands copy labels, titles, icons and run bodies verbatim from `bubbles.ts`:
+    transform, fill, copy, cut, duplicate, delete, invert, deselect, reselect, moveall, selectall
+    and paste. It also adds **`select.copytolayer` and `select.cuttolayer`**: those chips postdate
+    the handoff's list, and the row must stay identical.
+  - `isEnabled` reproduces the old if/else: the selection actions need a selection; Reselect needs
+    `canReselect`; Move all and Select all need no selection; Paste needs `hasArtClip`. Orders
+    10–140 give the old sequence.
+- **`bubbles.ts`.** The Select row's action chips now come from `commandChips('select')`, including
+  the no-selection Reselect / Move all / Select all, which the registry expresses identically. The
+  shape chips, operation chips and `gradChips()` are unchanged.
+  - Each registry chip has `data-command`, and right-click or hold offers "Hide “X” from this row".
+  - A **Customize** chip at the end lists all 14 Select commands (✓ when shown; Hide/Show hint) and
+    toggles them.
+  - `sig` includes the hidden set, and Bubbles redraws on `onCommandPrefsChange`.
+- **`settings.ts`.** "Hidden controls" sits under Visible tools and controls. It lists hidden
+  commands, each with a Show button that takes effect on Apply (like the rest of the dialog). It is
+  not part of student profiles.
+- **Copy.** A manual sentence on the options bar, and the UPDATES entry "Hide Select actions you do
+  not use".
+
+**Checks.**
+- `npm test`: 65 files / 527 tests.
+- `npm run build` passed (existing chunk warning).
+- `git diff --check -- src tests` is clean.
+
+New fixture `tests/commandrow.html`: **19 / 0** in headless Chrome with a fresh profile. It runs in
+two passes around a real `location.reload()`, and covers:
+- the exact label order with and without a selection;
+- icons, titles and pressed states;
+- Copy and Transform still work;
+- right-click Hide removes exactly Copy and saves it;
+- the tool bar and the transform row are untouched;
+- Copy is still hidden after the reload;
+- Customize lists all 14 commands and brings Copy back in place;
+- App settings Show applies only on Apply;
+- student profiles and the comp JSON hold no hidden ids.
+
+Regression fixtures: selectionpaint 40/0, selectionedit 29/0, quickmenu 34/0, paintingworkflow 20/0,
+paintingplanes 36/0. At 375px the row still scrolls inside its bar with no page overflow, and
+Customize matches the other chips' size.
+
+**Not verified.**
+- Touch hold-to-hide on a real device (the fixture uses the contextmenu event).
+- The screen-reader announcement of the Customize sheet.
+- Hidden-controls labels for commands from later slices (they show "Label (context row)").
+
+**Resume at Slice 2:** move the transform row (`bubbles.ts`, `row === 'transform'`) into the
+registry the same way, then time, fill, smudge, paint and points. Extend `commandrow.browser.ts` for
+each row.
+
 ### Slice 1: vector lines keep to the selection (2026-10-26, committed on branch `codex/vector-selection`, not pushed or merged)
 
 Implements Slice 1 of [the follow-up slices handoff](docs/CLAUDE-FOLLOWUP-SLICES-HANDOFF.md). It is

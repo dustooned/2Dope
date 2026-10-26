@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { defaultQuickMenu, QUICK_ACTIONS, type QuickMenuPrefs } from '../core/quickmenu';
 import { decorate } from './icons';
+import { commandById, commandPrefs, setHidden } from './commands';
 import { PROFILE_LIMIT, STUDENT_CONTROLS, STUDENT_PROFILES_KEY, STUDENT_TOOLS, profileName, readStudentProfiles, readStudentSetup, readStudentUI, type StudentSetup } from '../core/studentprefs';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string) => {
@@ -53,6 +54,21 @@ export class AppSettingsUI {
     for (const [id,label] of STUDENT_CONTROLS) { const {row,input}=checkbox(`Show ${label}`,label); controlChecks.set(id,input); toolsSection.append(row); }
     const allTools=el('button','','Show all tools and controls'); allTools.type='button';
     allTools.addEventListener('click',()=>{for(const c of [...toolChecks.values(),...controlChecks.values()])c.checked=true;}); toolsSection.append(allTools);
+    // option-row actions hidden on this device (from a row's Customize or a hold); Show applies with Apply
+    const hiddenControls=el('section','hidden-controls'),toShow=new Set<string>();
+    const renderHidden=()=>{
+      hiddenControls.replaceChildren(el('h4','','Hidden controls'));
+      const ids=commandPrefs().hidden;
+      if(!ids.length){hiddenControls.append(el('p','menu-note','Nothing is hidden. Hold or right-click an action in an options row, or use its Customize button, to hide it.'));return;}
+      hiddenControls.append(el('p','menu-note','Actions hidden from the options rows on this browser/device. Student profiles do not include them.'));
+      for(const id of ids){
+        const c=commandById(id),row=el('div','app-settings-field'),b=el('button','',toShow.has(id)?'Will show':'Show');b.type='button';
+        b.setAttribute('aria-label',`Show ${c?.label??id}`);b.setAttribute('aria-pressed',String(toShow.has(id)));
+        b.addEventListener('click',()=>{if(toShow.has(id))toShow.delete(id);else toShow.add(id);renderHidden();});
+        row.append(el('span','',c?`${c.label} (${c.contexts[0]} row)`:id),b);hiddenControls.append(row);
+      }
+    };
+    renderHidden();toolsSection.append(hiddenControls);
     const options=el('details','student-settings-section'); options.append(el('summary','','Drawing options'));
     const levelRow=el('label','app-settings-field'), level=el('select'); level.setAttribute('aria-label','Interface level');
     for(const [value,label] of [['clean','Focus'],['simple','Simple'],['full','Full']]){const o=el('option','',label);o.value=value!;level.append(o);} levelRow.append(el('span','','Interface'),level);
@@ -141,6 +157,7 @@ export class AppSettingsUI {
       if(setup.quickShape!==this.app.quickShape)this.app.setQuickShape(setup.quickShape);
       if(setup.fingerPaint!==this.app.fingerPaint)this.app.setFingerPaint(setup.fingerPaint);
       if(setup.inkPaint!==this.app.inkPaint.enabled)this.app.setInkPaint(setup.inkPaint);
+      for(const id of toShow)setHidden(id,false);
       this.apply(setup.quickMenu); done();
     });
     close.addEventListener('click', done); cancel.addEventListener('click', done);
