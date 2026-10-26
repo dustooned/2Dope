@@ -2,7 +2,18 @@
 
 ## Current state (2026-10-26) — read this first
 
-**Latest step: sizing, corner and text-size pass (follows f94e90a).**
+**Latest step: menu workspace names (follows 8b0fd1f).**
+The user authorized committing and pushing this rename to main on 2026-10-26.
+The user asked for the menu's Board and Time buttons (`index.html`, `data-ws` board/time) to be
+renamed Story and Timing, the names that the mode bubbles, the painting switcher and the manual
+already use. Only the button labels changed; the `data-ws` values, layer names ("Board" guide
+layer), the export option and historical release notes are untouched. A line was added to the
+2026-10-26 release note. Checks: 59 files / 482 tests, strict TypeScript and build passed. On
+127.0.0.1:5217, the menu shows Story / Draw / Animate / Timing / Motion, and each button opens
+its workspace (ws-board, ws-draw, ws-animate, ws-time, ws-motion).
+
+### Earlier step (2026-10-26): sizing, corner and text-size pass, 8b0fd1f
+
 The user authorized committing and pushing this pass to main on 2026-10-26.
 The user reported the live site looked unchanged and asked to also fix the button sizes and the
 corner/text-size drift. The deployed CSS/JS did contain f94e90a (checked by fetching the live
