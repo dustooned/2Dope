@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Page not found · 2Dope</title>
+    <link rel="icon" type="image/svg+xml" href="/2Dope/logo.svg" id="icon" />
     <style>
       :root { color-scheme: dark; }
       * { box-sizing: border-box; }
@@ -39,7 +40,7 @@
   </head>
   <body>
     <main>
-      <div class="logo"><b>2Dope</b> pen lab</div>
+      <div class="logo"><img id="logo" src="/2Dope/logo.svg" alt="" width="64" height="64" /><br /><b>2Dope</b> pen lab</div>
       <svg class="sketch" viewBox="0 0 120 70" fill="none" stroke="#9a9aa8" stroke-width="3" stroke-linecap="round" aria-hidden="true">
         <path d="M10 55 C 30 10, 50 10, 60 35 S 90 60, 110 15" stroke-dasharray="2 7" />
         <circle cx="110" cy="15" r="6" stroke="#ff5a8a" />
@@ -54,7 +55,9 @@
       (function () {
         var p = location.pathname;
         var i = p.indexOf('/2Dope/');
-        document.getElementById('home').href = i >= 0 ? p.slice(0, i + 7) : '/';
+        var root = i >= 0 ? p.slice(0, i + 7) : '/';
+        document.getElementById('home').href = root;
+        document.getElementById('logo').src = document.getElementById('icon').href = root + 'logo.svg';
       })();
     </script>
   </body>

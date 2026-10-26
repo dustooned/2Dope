@@ -2,6 +2,18 @@
 
 ## Current state (2026-10-26) — read this first
 
+### App logo and site icon (2026-10-26, committed and pushed to main at the user's request)
+
+The user supplied `2dopeLogo.svg` (an Affinity export with embedded gradient images) for the site
+icon and app logo. It is now `public/logo.svg`, with the size fixed to 300×300 instead of 100%.
+`public/favicon-32.png` (transparent) and `public/apple-touch-icon.png` (180px on `--bg` #1d1d22)
+were rendered from it with headless Chrome. `index.html` links all three. The logo also sits at the
+top of the menu (`.menu-logo`, decorative alt) and in the Projects header (`.glogo`, before the
+crumbs). `public/404.html` shows it and resolves its path from the `/2Dope/` root. A release note was
+added. Checks: 59 files / 488 tests and the build passed; `dist/index.html` uses `./` paths. The menu
+and Projects header were viewed on the 127.0.0.1:5217 test server at desktop width. Not checked: a
+real iPad home-screen add, Safari's tab icon, phone-width Projects header, and the deployed 404 page.
+
 **Latest step: easy delete for imported sounds and movies.**
 The user authorized committing and pushing this to main on 2026-10-26.
 The user reported no easy way to delete imported sound and video. Sounds could only be deleted from

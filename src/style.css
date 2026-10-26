@@ -1135,6 +1135,13 @@ body.drawing .dock {
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55);
 }
 
+.menu-logo {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 4px 0 0;
+}
+
 .menu section + section {
   margin-top: 6px;
   padding-top: 4px;
@@ -1294,6 +1301,12 @@ body.gallery-open .dock {
   padding-top: max(10px, env(safe-area-inset-top));
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+}
+
+.glogo {
+  width: 36px;
+  height: 36px;
+  flex: none;
 }
 
 .gcrumbs {

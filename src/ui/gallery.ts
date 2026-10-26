@@ -198,7 +198,8 @@ export class Gallery {
     const add = el('button', { type: 'button', class: 'primary' }, '+ New project');
     add.addEventListener('click', () => void this.createNew());
 
-    h.append(back, crumbs, el('span', { class: 'spacer' }), sort, select, folderBtn, imp, add);
+    const logo = el('img', { class: 'glogo', src: `${import.meta.env.BASE_URL}logo.svg`, alt: '2Dope', width: '36', height: '36' });
+    h.append(back, logo, crumbs, el('span', { class: 'spacer' }), sort, select, folderBtn, imp, add);
     return h;
   }
 
