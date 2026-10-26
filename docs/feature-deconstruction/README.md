@@ -11,7 +11,7 @@ Open-source Craft repos (Apache-2.0) may be reused with attribution.
 | 04 | [Craft apps command catalogs](04-craft-apps-command-catalogs.md) | DesignCraft/FilmCraft/EffectCraft CLIs (`craft-commands/`) |
 | 05 | [Drawing data model + timesheet markers](05-harmony-drawing-api-and-timesheet.md) | Harmony scripting API docs |
 | 06 | [Craft source: brushes, vectors, audio](06-craft-source-brushes-vectors.md) | photocraft, vectorcraft, soundcraft source |
-| 07 | [Procreate Dreams](07-procreate-dreams-handbook.md) | Official public handbook (no API exists) |
+| 07 | [Procreate Dreams](07-procreate-dreams-handbook.md) | Official public handbook + static read of the shipped 1.0.11 package (2026-10-26); no scripting API |
 | 08 | [Dreams clean-room spec](08-dreams-cleanroom-spec.md) | Full handbook re-read as testable rules, mapped to 2Dope status and milestones |
 | 09 | [EffectCraft layers, precomp, keyframes](09-effectcraft-layers-precomp-keyframes.md) | EffectCraft source (comp/layer model, time mapping, Essential Graphics, bezier keys) |
 | 10 | [Harmony nodes, groups, workspaces](10-harmony-nodes-groups-workspaces.md) | Harmony shipped editors, layouts, scripts |
@@ -20,7 +20,7 @@ Open-source Craft repos (Apache-2.0) may be reused with attribution.
 | 13 | [Clip Studio: fill, ink, layers, phone mode](13-clip-studio-fill-ink-layers-phone.md) | Clip Studio manual + Dreams colour panel: drag/enclose/leftover fill, crisp ink, brush import, line/fill parts, X-sheet touch editing, Lite phone mode; plan |
 | 14 | [Drawing assist](14-drawing-assist.md) | Procreate guides, Drawing Assist and QuickShape, plus Lazy Nezumi's rulers (radial speed lines, parallel, accuracy) from its manual; plan |
 | 15 | [Workspace roles, masks, effects](15-workspace-roles-masks-effects.md) | Draw / Time / Motion jobs, clipping masks and mattes, light layer effects, Dreams-style rails and zoom; revised plan |
-| 16 | [Storyboard Pro → Animatic](16-storyboard-pro-animatic.md) | Acts/sequences/shots/panels, captions, thumbnails + timeline, camera per panel, pitch mode, mapped onto comps / guide layers / exposures; animatic plan R7a–e |
+| 16 | [Storyboard Pro → Animatic](16-storyboard-pro-animatic.md) | Acts/sequences/shots/panels, captions, thumbnails + timeline, camera per panel, pitch mode, mapped onto comps / guide layers / exposures; animatic plan R7a–e; shipped binaries read statically (2026-10-26) |
 
 Reference clones: `E:\2026\Dev\Apps\2Dope\reference\` (+ `C:\Users\dusto\effectcraft`).
 
@@ -43,6 +43,10 @@ Reference clones: `E:\2026\Dev\Apps\2Dope\reference\` (+ `C:\Users\dusto\effectc
 
 ## Still to do
 - Harmony export/render settings and preferences (onion skin, light table); EffectCraft expressions and masks.
-- REA/Ghidra pass on `toonboom.exe` after app restart (DLLs unsupported by REA on Windows).
-- Procreate Dreams: handbook done (07); add hands-on notes from the owner's own use if anything differs.
+- Storyboard Pro binaries: static REA pass done 2026-10-26 ([report](../research/storyboard-pro-24.0.1/README.md));
+  no method-level decompilation — the SBP-specific DLLs are FlexNet-wrapped and the main EXE has no
+  symbols, so a Ghidra pass needs one concrete question first (`toonboom.exe` alone is only the demo daemon).
+- Procreate Dreams: handbook done (07); package 1.0.11 read statically 2026-10-26
+  ([report](../research/procreate-dreams-1.0.11/README.md)); `.drm` chunk table not decoded. Add hands-on
+  notes from the owner's own use if anything differs.
 - Decide: port Craft algorithms to TypeScript vs. compile Rust crates to WASM.

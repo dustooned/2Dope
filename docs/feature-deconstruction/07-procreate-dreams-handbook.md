@@ -79,3 +79,26 @@ Per direction (backwards/forwards): frame count, opacity, **color tint toggle + 
 
 ## Not in Dreams (2Dope advantages to keep)
 X-sheet view, expressions, precomp time remap, line/fill planes and auto fill, vector layers, Blender handoff, mattes/passes, parenting/nulls, open JSON format, web/no-install.
+
+## What the 1.0.11 package confirms (2026-10-26)
+
+Static REA pass over the local `.ipa` — no launch, no decompilation. Details and evidence:
+[research/procreate-dreams-1.0.11](../research/procreate-dreams-1.0.11/README.md).
+
+- The app ships five onboarding videos named exactly **welcome, draw, gestures, keyframe, perform** —
+  the five topics above are the product's own first-run curriculum.
+- Bundle `au.com.savageinteractive.Dreams`, 1.0.11 (17168), iPad-only. Its documents are
+  **`.dream`/`.drm`** (`si.savage.dreams.document`) and **`.alpine`** (`si.savage.alpine.document`).
+  A `.drm` starts with a `Valkyrie` chunk header and embeds JPEG/PNG frames with the project data.
+- The engine is Procreate's **Valkyrie** renderer (430 classes) plus **Phoenix** tile writing,
+  **DisplayList** vector/text drawing and a **Compositor** shader set — four Metal libraries.
+- Swift metadata names the model: tracks, content, entity/track keyframes, `keyframe_as_attribute`,
+  `allow_keyframe_subframes`, `onionSkin` with `blendPrimaryFrame` and
+  `max_onion_skins_in_direction`, `perFrameColorPalette`, masks and clipping, `export_codec_limit`,
+  and quick/advanced export families.
+- The layer cell set includes **Mesh**, **TextureSet** and **MaterialLayer** besides paint layers; the
+  brush repository ships 19 preset groups (Recent, Sketching, Inking, Drawing, Painting, Artistic…).
+
+Nothing here contradicts the handbook; it adds the data-model names and confirms the onboarding and
+brush grouping.
+

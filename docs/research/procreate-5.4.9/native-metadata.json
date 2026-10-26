@@ -1,0 +1,737 @@
+{
+  "authority": "supplementary local structural inspection, not REA native Evidence",
+  "source": "D:\\Downloads\\Compressed\\Procreate_5.4.9_Pro.ipa",
+  "archive_entry_count": 2537,
+  "bundle": {
+    "CFBundleIdentifier": "au.com.savageinteractive.procreate",
+    "CFBundleShortVersionString": "5.4.9",
+    "CFBundleVersion": "57074",
+    "MinimumOSVersion": "16.3",
+    "UIDeviceFamily": [
+      2
+    ]
+  },
+  "members": [
+    {
+      "path": "Payload/Procreate.app/Info.plist",
+      "bytes": 23882,
+      "sha256": "f2991e3afe11409fe4f416a54d8835370ff024f8d1cff9010adbba41a3812533"
+    },
+    {
+      "path": "Payload/Procreate.app/Procreate",
+      "bytes": 19148752,
+      "sha256": "3c10dce0b2de599ea126e553bf77a16b713917acc108bba3f61d8a2c45c5130d"
+    }
+  ],
+  "encryption_commands": [
+    {
+      "command_index": 14,
+      "cryptoff": 16384,
+      "cryptsize": 15400960,
+      "cryptid": 0
+    }
+  ],
+  "chained_fixups": [
+    {
+      "segment_index": 2,
+      "pointer_format": 6,
+      "page_size": 16384
+    },
+    {
+      "segment_index": 3,
+      "pointer_format": 6,
+      "page_size": 16384
+    }
+  ],
+  "objc": {
+    "classlist_entries": 1732,
+    "named_classes_decoded": 1732,
+    "unresolved_classlist_indices": [],
+    "selected_classes": [
+      {
+        "name": "DocumentTransformBehaviourNumpad",
+        "class_address": "0x10106d7f0",
+        "method_count": 13,
+        "methods": [
+          {
+            "selector": "initWithAnchor:commitMarqueeRect:initialTransform:commitMarqueeTransform:",
+            "implementation": "0x1006dffe8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf75a0",
+            "method_record_file_offset": 12547488
+          },
+          {
+            "selector": "transformWithScale:rotation:identity:",
+            "implementation": "0x1006e059c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf75c4",
+            "method_record_file_offset": 12547524
+          },
+          {
+            "selector": "transformWithSize:absoluteAngleDegrees:",
+            "implementation": "0x1006e0a60",
+            "implementation_in_text": true,
+            "method_record": "0x100bf75d0",
+            "method_record_file_offset": 12547536
+          }
+        ]
+      },
+      {
+        "name": "DocumentSelectionController",
+        "class_address": "0x10106df20",
+        "method_count": 104,
+        "methods": [
+          {
+            "selector": "undoManager",
+            "implementation": "0x1006f9af0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6828",
+            "method_record_file_offset": 12544040
+          },
+          {
+            "selector": "threshold",
+            "implementation": "0x1006f9bf0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf684c",
+            "method_record_file_offset": 12544076
+          },
+          {
+            "selector": "setThreshold:",
+            "implementation": "0x1006f9c3c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6858",
+            "method_record_file_offset": 12544088
+          },
+          {
+            "selector": "canFeather",
+            "implementation": "0x1006f9cc8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf687c",
+            "method_record_file_offset": 12544124
+          },
+          {
+            "selector": "compressUndos",
+            "implementation": "0x1006fa044",
+            "implementation_in_text": true,
+            "method_record": "0x100bf68f4",
+            "method_record_file_offset": 12544244
+          },
+          {
+            "selector": "maskAlphaDidChange",
+            "implementation": "0x1006fa938",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6948",
+            "method_record_file_offset": 12544328
+          },
+          {
+            "selector": "updatePaintables",
+            "implementation": "0x1006fa948",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6960",
+            "method_record_file_offset": 12544352
+          },
+          {
+            "selector": "paintable",
+            "implementation": "0x1006fae38",
+            "implementation_in_text": true,
+            "method_record": "0x100bf696c",
+            "method_record_file_offset": 12544364
+          },
+          {
+            "selector": "clearMask",
+            "implementation": "0x1006faff8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6984",
+            "method_record_file_offset": 12544388
+          },
+          {
+            "selector": "invertMask",
+            "implementation": "0x1006fb068",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6990",
+            "method_record_file_offset": 12544400
+          },
+          {
+            "selector": "saveMask:",
+            "implementation": "0x1006fb0e0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf699c",
+            "method_record_file_offset": 12544412
+          },
+          {
+            "selector": "removeMask:",
+            "implementation": "0x1006fb244",
+            "implementation_in_text": true,
+            "method_record": "0x100bf69a8",
+            "method_record_file_offset": 12544424
+          },
+          {
+            "selector": "loadMask:",
+            "implementation": "0x1006fb3f4",
+            "implementation_in_text": true,
+            "method_record": "0x100bf69b4",
+            "method_record_file_offset": 12544436
+          },
+          {
+            "selector": "loadMaskThumbnail:",
+            "implementation": "0x1006fb5a4",
+            "implementation_in_text": true,
+            "method_record": "0x100bf69c0",
+            "method_record_file_offset": 12544448
+          },
+          {
+            "selector": "swapToMask:",
+            "implementation": "0x1006fb7bc",
+            "implementation_in_text": true,
+            "method_record": "0x100bf69cc",
+            "method_record_file_offset": 12544460
+          },
+          {
+            "selector": "savedMasks",
+            "implementation": "0x1006fb848",
+            "implementation_in_text": true,
+            "method_record": "0x100bf69d8",
+            "method_record_file_offset": 12544472
+          },
+          {
+            "selector": "registerUndoState:",
+            "implementation": "0x1006fb900",
+            "implementation_in_text": true,
+            "method_record": "0x100bf69f0",
+            "method_record_file_offset": 12544496
+          },
+          {
+            "selector": "renderMaskGeometryChords:operation:",
+            "implementation": "0x1006fbc60",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6a2c",
+            "method_record_file_offset": 12544556
+          },
+          {
+            "selector": "wandBegan:",
+            "implementation": "0x1006fbf98",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6a50",
+            "method_record_file_offset": 12544592
+          },
+          {
+            "selector": "wandMoved:point:",
+            "implementation": "0x1006fc070",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6a5c",
+            "method_record_file_offset": 12544604
+          },
+          {
+            "selector": "wandEnded",
+            "implementation": "0x1006fc074",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6a68",
+            "method_record_file_offset": 12544616
+          },
+          {
+            "selector": "wandCancel",
+            "implementation": "0x1006fc07c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6a74",
+            "method_record_file_offset": 12544628
+          },
+          {
+            "selector": "finishAndCommitWand:",
+            "implementation": "0x1006fc084",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6a80",
+            "method_record_file_offset": 12544640
+          },
+          {
+            "selector": "updateModeWandProperties",
+            "implementation": "0x1006fc0e0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6a8c",
+            "method_record_file_offset": 12544652
+          },
+          {
+            "selector": "updateWandThresholdWithGesture:",
+            "implementation": "0x1006fc16c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6a98",
+            "method_record_file_offset": 12544664
+          },
+          {
+            "selector": "paintBeganWithGesture:",
+            "implementation": "0x1006fc2e8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6aa4",
+            "method_record_file_offset": 12544676
+          },
+          {
+            "selector": "paintMoved:",
+            "implementation": "0x1006fc730",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6ab0",
+            "method_record_file_offset": 12544688
+          },
+          {
+            "selector": "paintEnded:",
+            "implementation": "0x1006fc738",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6abc",
+            "method_record_file_offset": 12544700
+          },
+          {
+            "selector": "featherAmount",
+            "implementation": "0x1006fd754",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6bac",
+            "method_record_file_offset": 12544940
+          },
+          {
+            "selector": "featherBegin",
+            "implementation": "0x1006fd760",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6bb8",
+            "method_record_file_offset": 12544952
+          },
+          {
+            "selector": "featherUpdated:",
+            "implementation": "0x1006fd7e0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6bc4",
+            "method_record_file_offset": 12544964
+          },
+          {
+            "selector": "featherEnded:",
+            "implementation": "0x1006fd82c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6bd0",
+            "method_record_file_offset": 12544976
+          },
+          {
+            "selector": "commitFeather",
+            "implementation": "0x1006fd834",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6bdc",
+            "method_record_file_offset": 12544988
+          },
+          {
+            "selector": "thresholding",
+            "implementation": "0x1006fd8c8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6c00",
+            "method_record_file_offset": 12545024
+          },
+          {
+            "selector": "snapping",
+            "implementation": "0x1006fd8d0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6c0c",
+            "method_record_file_offset": 12545036
+          },
+          {
+            "selector": "setSnapping:",
+            "implementation": "0x1006fd8d8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6c18",
+            "method_record_file_offset": 12545048
+          },
+          {
+            "selector": "discardableUndos",
+            "implementation": "0x1006fd90c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6c48",
+            "method_record_file_offset": 12545096
+          }
+        ]
+      },
+      {
+        "name": "DocumentTransformController",
+        "class_address": "0x10106dfc0",
+        "method_count": 100,
+        "methods": [
+          {
+            "selector": "undoManager",
+            "implementation": "0x1006ff0b8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf77ac",
+            "method_record_file_offset": 12548012
+          },
+          {
+            "selector": "commitWarp",
+            "implementation": "0x1006ff1a4",
+            "implementation_in_text": true,
+            "method_record": "0x100bf77c4",
+            "method_record_file_offset": 12548036
+          },
+          {
+            "selector": "updatePaintable",
+            "implementation": "0x1006ff310",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7800",
+            "method_record_file_offset": 12548096
+          },
+          {
+            "selector": "updatePaintableWithLocation:node:highlighted:",
+            "implementation": "0x1006ff320",
+            "implementation_in_text": true,
+            "method_record": "0x100bf780c",
+            "method_record_file_offset": 12548108
+          },
+          {
+            "selector": "paintable",
+            "implementation": "0x1006ff3f4",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7818",
+            "method_record_file_offset": 12548120
+          },
+          {
+            "selector": "commitMarquee",
+            "implementation": "0x1006ffa7c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7878",
+            "method_record_file_offset": 12548216
+          },
+          {
+            "selector": "setWarpShowAdvancedMesh:",
+            "implementation": "0x1006ffb34",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7890",
+            "method_record_file_offset": 12548240
+          },
+          {
+            "selector": "warpShowAdvancedMesh",
+            "implementation": "0x1006ffc24",
+            "implementation_in_text": true,
+            "method_record": "0x100bf789c",
+            "method_record_file_offset": 12548252
+          },
+          {
+            "selector": "snapping",
+            "implementation": "0x1006ffd5c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf78c0",
+            "method_record_file_offset": 12548288
+          },
+          {
+            "selector": "setSnapping:",
+            "implementation": "0x1006ffd64",
+            "implementation_in_text": true,
+            "method_record": "0x100bf78cc",
+            "method_record_file_offset": 12548300
+          },
+          {
+            "selector": "snappingThreshold",
+            "implementation": "0x1006ffe8c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf78d8",
+            "method_record_file_offset": 12548312
+          },
+          {
+            "selector": "setSnappingThreshold:",
+            "implementation": "0x1006ffe94",
+            "implementation_in_text": true,
+            "method_record": "0x100bf78e4",
+            "method_record_file_offset": 12548324
+          },
+          {
+            "selector": "snappingVelocityThreshold",
+            "implementation": "0x1006ffee8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf78f0",
+            "method_record_file_offset": 12548336
+          },
+          {
+            "selector": "setSnappingVelocityThreshold:",
+            "implementation": "0x1006ffef0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf78fc",
+            "method_record_file_offset": 12548348
+          },
+          {
+            "selector": "compressUndos",
+            "implementation": "0x1007003e0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7968",
+            "method_record_file_offset": 12548456
+          },
+          {
+            "selector": "registerUndoForTransformState:",
+            "implementation": "0x100701b5c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7a34",
+            "method_record_file_offset": 12548660
+          },
+          {
+            "selector": "controlPointUndoMessageForZDirection:",
+            "implementation": "0x100702a40",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7a7c",
+            "method_record_file_offset": 12548732
+          },
+          {
+            "selector": "snappingMarqueeBoxSet",
+            "implementation": "0x10070400c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7b78",
+            "method_record_file_offset": 12548984
+          },
+          {
+            "selector": "snappingAngleSetThreshold",
+            "implementation": "0x100704044",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7b84",
+            "method_record_file_offset": 12548996
+          },
+          {
+            "selector": "snappingWillLockGuidanceAtAngle:firstTime:forContext:",
+            "implementation": "0x10070404c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7b90",
+            "method_record_file_offset": 12549008
+          },
+          {
+            "selector": "snappingWillSwitchGuidanceFrom:toAngle:forContext:",
+            "implementation": "0x100704104",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7b9c",
+            "method_record_file_offset": 12549020
+          },
+          {
+            "selector": "didAngularSnappingInterfaceSnapToAngle:",
+            "implementation": "0x100704208",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7ba8",
+            "method_record_file_offset": 12549032
+          },
+          {
+            "selector": "didAngularSnappingInterfaceFinishWithState:",
+            "implementation": "0x100704264",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7bb4",
+            "method_record_file_offset": 12549044
+          },
+          {
+            "selector": "didCartesianSnappingInterfaceFinishWithState:",
+            "implementation": "0x1007042c8",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7bc0",
+            "method_record_file_offset": 12549056
+          },
+          {
+            "selector": "didCartesianSnappingInterfaceSnappedTo:",
+            "implementation": "0x10070432c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7bcc",
+            "method_record_file_offset": 12549068
+          },
+          {
+            "selector": "discardableUndos",
+            "implementation": "0x1007043d0",
+            "implementation_in_text": true,
+            "method_record": "0x100bf7c38",
+            "method_record_file_offset": 12549176
+          }
+        ]
+      },
+      {
+        "name": "DocumentSelectionViewController",
+        "class_address": "0x10106e4c0",
+        "method_count": 38,
+        "methods": [
+          {
+            "selector": "paint:",
+            "implementation": "0x100725090",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6db4",
+            "method_record_file_offset": 12545460
+          },
+          {
+            "selector": "gesturePaint",
+            "implementation": "0x100725d68",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6e8c",
+            "method_record_file_offset": 12545676
+          },
+          {
+            "selector": "setGesturePaint:",
+            "implementation": "0x100725d78",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6e98",
+            "method_record_file_offset": 12545688
+          },
+          {
+            "selector": "wandOrigin",
+            "implementation": "0x100725d8c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6ea4",
+            "method_record_file_offset": 12545700
+          },
+          {
+            "selector": "setWandOrigin:",
+            "implementation": "0x100725d9c",
+            "implementation_in_text": true,
+            "method_record": "0x100bf6eb0",
+            "method_record_file_offset": 12545712
+          }
+        ]
+      },
+      {
+        "name": "ValkyrieSelectionMode",
+        "class_address": "0x10108e9c0",
+        "method_count": 30,
+        "methods": [
+          {
+            "selector": "renderChords:operation:maskOperation:",
+            "implementation": "0x100aa2fd4",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e340",
+            "method_record_file_offset": 12641088
+          },
+          {
+            "selector": "adjustFeatherAmount:",
+            "implementation": "0x100aa30a8",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e358",
+            "method_record_file_offset": 12641112
+          },
+          {
+            "selector": "commitFeather",
+            "implementation": "0x100aa3104",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e364",
+            "method_record_file_offset": 12641124
+          },
+          {
+            "selector": "saveMask:",
+            "implementation": "0x100aa3150",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e370",
+            "method_record_file_offset": 12641136
+          },
+          {
+            "selector": "wandAtPoint:threshold:cleared:",
+            "implementation": "0x100aa31cc",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e37c",
+            "method_record_file_offset": 12641148
+          },
+          {
+            "selector": "wandEndedAndCommit:",
+            "implementation": "0x100aa3238",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e388",
+            "method_record_file_offset": 12641160
+          },
+          {
+            "selector": "terminateAndCommit:",
+            "implementation": "0x100aa33f4",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e3b8",
+            "method_record_file_offset": 12641208
+          },
+          {
+            "selector": "accumulatePlots:intoCommitted:predicted:",
+            "implementation": "0x100aa4ba4",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e3f4",
+            "method_record_file_offset": 12641268
+          },
+          {
+            "selector": "puckPaintable",
+            "implementation": "0x100aa5360",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e478",
+            "method_record_file_offset": 12641400
+          }
+        ]
+      },
+      {
+        "name": "ValkyrieSelectionModePaintableMask",
+        "class_address": "0x10108eb00",
+        "method_count": 17,
+        "methods": [
+          {
+            "selector": "paintToEncoder:state:",
+            "implementation": "0x100aa578c",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e4bc",
+            "method_record_file_offset": 12641468
+          }
+        ]
+      },
+      {
+        "name": "ValkyrieSelectionModeRenderer",
+        "class_address": "0x10108eb50",
+        "method_count": 24,
+        "methods": [
+          {
+            "selector": "commitOnCommands:tickResult:",
+            "implementation": "0x100aa69dc",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e60c",
+            "method_record_file_offset": 12641804
+          },
+          {
+            "selector": "wandAtPoint:threshold:cleared:commands:",
+            "implementation": "0x100aa6ea4",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e654",
+            "method_record_file_offset": 12641876
+          },
+          {
+            "selector": "invalidateFeather",
+            "implementation": "0x100aa719c",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e678",
+            "method_record_file_offset": 12641912
+          },
+          {
+            "selector": "featherAmount",
+            "implementation": "0x100aa71a4",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e684",
+            "method_record_file_offset": 12641924
+          },
+          {
+            "selector": "setFeatherAmount:",
+            "implementation": "0x100aa71ac",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e690",
+            "method_record_file_offset": 12641936
+          },
+          {
+            "selector": "validateFeatherOnCommands:",
+            "implementation": "0x100aa71b8",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e69c",
+            "method_record_file_offset": 12641948
+          },
+          {
+            "selector": "commitFeatherCommands:",
+            "implementation": "0x100aa7270",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e6a8",
+            "method_record_file_offset": 12641960
+          },
+          {
+            "selector": "renderChords:operation:maskOperation:modified:textureToScreen:commands:",
+            "implementation": "0x100aa735c",
+            "implementation_in_text": true,
+            "method_record": "0x100c0e6c0",
+            "method_record_file_offset": 12641984
+          }
+        ]
+      },
+      {
+        "name": "ValkyrieWarpGeometry",
+        "class_address": "0x10108ff50",
+        "method_count": 6,
+        "methods": []
+      }
+    ]
+  },
+  "limitations": [
+    "Internal metadata does not authenticate the package.",
+    "Selectors and implementation addresses do not establish call paths or runtime reachability.",
+    "No method bodies, shader algorithms, performance or Pencil input were analyzed.",
+    "No application code was executed; Swift-only members, categories and inherited methods are outside this selected-method inventory."
+  ]
+}

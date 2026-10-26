@@ -1,10 +1,34 @@
 # 08: Procreate Dreams, clean-room behavior spec
 
-**Source:** the public handbook only (help.procreate.com/dreams/handbook, v2.1, all 35 pages re-read 2026-10-11). Nothing from the app, its files or its binaries. Everything below is our own wording of *observable behavior*, written as rules we can build and test.
+**Source:** the public handbook (help.procreate.com/dreams/handbook, v2.1, all 35 pages re-read 2026-10-11), plus — added 2026-10-26 — a static read of the shipped 1.0.11 package (see *Package evidence* below). Rules stay our own wording of *observable behavior*; no code, assets or file contents are copied.
+
 Supersedes the summary in [07](07-procreate-dreams-handbook.md), which stays as the short version.
 
 **Status key:** ✅ 2Dope has it · 🔶 partly · ⬜ not yet · ❌ we choose not to
 **Milestone key:** M2 Blender handoff · M3 keyframes/compose/perform · M4 flipbook polish/mini · M5 tracks/groups/masks · M6 export/project polish
+
+## Package evidence (2026-10-26)
+
+A static REA pass over the shipped 1.0.11 `.ipa` — no launch, no decompilation — names the model
+behind the rules. Details and evidence:
+[research/procreate-dreams-1.0.11](../research/procreate-dreams-1.0.11/README.md).
+
+- **A2 / A3:** `trackConfiguration`, `content`, `contents`, `frame_timings` and a `frameAllocator`
+  exist in the model metadata; tracks and content are the stored shape.
+- **B1:** `perform` / `performing` and the keyframe vocabulary are separate named subsystems, which
+  matches the handbook's Perform/Keyframe split. Our decision to keep one timeline with a Record
+  toggle is unaffected.
+- **D:** keyframes are stored **as attributes** on entities (`keyframe_as_attribute`) and may carry
+  **subframes** (`allow_keyframe_subframes`). Worth reflecting in the D rules and the schema.
+- **Onion skin:** `onionSkin`, `blendPrimaryFrame` and `max_onion_skins_in_direction` confirm the
+  handbook options and that the count is capped per direction.
+- **Colour:** `perFrameColorPalette` confirms per-frame palettes as a stored feature.
+- **Export (M6):** `quickExport*` / `advancedExport*` families plus `export_codec_limit` — Dreams caps
+  codec choice instead of exposing every AVFoundation option.
+- **Project file:** `.drm`/`.dream` is a `Valkyrie` chunk container with JPEG/PNG frames embedded, not
+  JSON or ZIP. Our open `.2dope` choice stays a differentiator.
+
+None of this changes a rule below; it names the shapes behind the behavior.
 
 ---
 

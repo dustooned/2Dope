@@ -1,9 +1,41 @@
 # 16. Toon Boom Storyboard Pro → 2Dope's Animatic mode
 
-Study, 2026-10-11. Sources: the user's Storyboard Pro 24 install, readable data only (`resources\sb_menus.xml`
-and the other settings files, which list the commands and their names), plus Toon Boom's public
-documentation (links at the end). The `win64\bin` folder is compiled programs (124 DLLs, 15 EXEs)
-and was not opened or decompiled. Behaviour and structure only; wording is ours.
+Study, 2026-10-11. Sources: the user's Storyboard Pro 24 install, the readable data files
+(`resources\sb_menus.xml` and the other settings files, which list the commands and their names),
+Toon Boom's public documentation (links at the end), and — added 2026-10-26 — a static REA pass over
+`win64\bin`. Behaviour and structure only; wording is ours.
+
+## What the installed binaries add (2026-10-26)
+
+The compiled folder was inspected with REA (imports, exports, resources, entropy, class names), not
+launched. Details and evidence: [research/storyboard-pro-24.0.1](../research/storyboard-pro-24.0.1/README.md).
+
+- **Version and build:** 24.0.1.23015, an x64 Qt 6 application that imports `ToonBoomSboardCore`,
+  `ToonBoomPlayback`, `ToonBoomDrawToolCore`, `ToonBoomGraphito` and the shared scene core, with
+  OpenSceneGraph, Intel IPP and FBX shipped alongside. The Storyboard-Pro-specific DLLs are FlexNet
+  (`*_libFNP.dll`) wrappers; the main executable is not packed.
+- **The native project is `.sboard`** (`-project <file>`, filter `projectFile(*.sboard)`), with
+  `scene.xstage` / `.tstage` / `.tboard` / `.tbup` as derived or interchange scene folders.
+- **Captions are a Storyboard Pro layer over a generic scene core.** `ToonBoomSceneCore.dll` exposes
+  timed values (sound, markers, elements), sequences, transitions and `*Cmd` command classes — the
+  undoable object model shared with Harmony — while `SBU_CaptionData(s)` and `SBU_DragPanels` live in
+  the executable.
+- **Export is a job pipeline:** EDL, AAF, FCP XML, CSV, PDF (`SBU_ExportPDFManager` with analyse,
+  preview and real jobs, progress reported in the dialog), QuickTime movies (`openh264`, `prores`,
+  "one movie per panel", handles), plus a Harmony export whose file list is `resources\sb_export.xml`
+  (DPX 8–16, EXR, PSD, PNG, TGA, TIF, SGI, TVG, YUV, PDF…).
+- **Import is broader than the docs suggest:** Final Draft `.fdx`/`.xml` (V7 and V8 importers), CSV,
+  FCP XML, animatic import and Harmony scenes.
+- **Storyboard Pro has a QtScript automation surface** (QtScript + QtScriptTools, a Script Manager
+  form, and `SBU_SboardScript`, `SBU_MotionScript`, `SBU_ExportScript`, `SBU_CaptionScript`,
+  `SBU_LayerScript`, `SBU_PrjMgtScript` and friends). Not Python; not the Harmony node scripting.
+- **Pitch mode disables autosave** (`AUTO_SAVE_DISABLED_WHILE_IN_PITCH_MODE`), which is why leaving
+  it is its own code path.
+
+For 2Dope this confirms the export/import list in the table below, adds FCP XML and Final Draft
+import as real peers, and supports modelling captions as structured exposure notes rather than a
+second document model.
+
 
 ## What Storyboard Pro is built around
 

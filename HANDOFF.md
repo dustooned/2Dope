@@ -338,6 +338,96 @@ added. Checks: 59 files / 488 tests and the build passed; `dist/index.html` uses
 and Projects header were viewed on the 127.0.0.1:5217 test server at desktop width. Not checked: a
 real iPad home-screen add, Safari's tab icon, phone-width Projects header, and the deployed 404 page.
 
+### Draw exploration (2026-10-26, research only)
+
+The user asked to parse the current Draw tools and explore Procreate-like additions, especially
+selections. [Current audit](docs/DRAW-CAPABILITY-AUDIT-2026-10-26.md) maps implemented tools,
+source limitations, official Procreate handbook behavior and a proposed implementation order.
+No application behavior changed. Baseline `c870fbf` was clean; 59 files / 488 tests and the
+production build passed (existing large-chunk warning).
+
+Focused Chrome check on isolated `127.0.0.1:5227`, disposable 720p project: Rectangle selection
+immediately enters Transform; Apply restores Copy/Add/Subtract actions; Brush paints beyond both
+selection boundaries. Evidence: `docs/draw-audit-2026-10-26.png`. Smudge/Eraser/adjustment selection
+limits were inspected in source, not freshly demonstrated. No complete fixture suite, iPad,
+save/reopen, REA, commit, push or deployment. Earlier selection studies predate the current code.
+
+Suggested next step: explicit Select controls and deliberate Transform entry, then hard-edged
+selection clipping for raster painting. Preserve vectors and settle crossing-stroke behavior
+before claiming all-tool selection support. The audit is a proposal, not an implemented release.
+
+### Procreate 5.4.9 package read (2026-10-26, research only)
+
+The user asked for a REA pass on their local Procreate `_Pro.ipa` ("I believe I have an IAP"), then
+to finish the job. [docs/research/procreate-5.4.9/README.md](docs/research/procreate-5.4.9/README.md)
+records what the package shows: identity (5.4.9 / 57074, iPad, `au.com.savageinteractive.procreate`),
+a repack marker (`cryptid 0`, no provisioning profile), no in-app-purchase code, and the shipped
+Objective-C and Interface Builder vocabulary for saved selections, live wand threshold, feather
+preview plus single commit, and angular-versus-Cartesian snapping. It also confirms the feather
+popover is one slider. No method bodies were decompiled (Windows Ghidra does not admit iOS Mach-O),
+no code was executed, and no app file changed. The [Draw audit](docs/DRAW-CAPABILITY-AUDIT-2026-10-26.md)
+carries a one-paragraph addendum so its "no .ipa inspected" sentence is no longer read as current.
+
+### Storyboard Pro 24 binaries read (2026-10-26, research only)
+
+The user then asked for the same static REA pass on `F:\ToonBoom SBP\win64\bin`.
+[research/storyboard-pro-24.0.1/README.md](docs/research/storyboard-pro-24.0.1/README.md) records it:
+24.0.1.23015, Qt 6 + OpenSceneGraph; `.sboard` projects; an export/import class map (EDL, AAF, FCP
+XML, CSV, PDF with analyse and preview jobs, QuickTime with one-movie-per-panel, Final Draft and
+Harmony import); a QtScript automation surface; and FlexNet-wrapped `*_libFNP.dll` modules around an
+otherwise unpacked executable. No decompilation and nothing executed.
+[Doc 16](docs/feature-deconstruction/16-storyboard-pro-animatic.md) gained a dated section, and its
+index entry and "Still to do" line were updated. No app file changed.
+
+### Procreate Dreams 1.0.11 package read (2026-10-26, research only)
+
+The user asked for the same static pass on the Dreams `.ipa`.
+[research/procreate-dreams-1.0.11/README.md](docs/research/procreate-dreams-1.0.11/README.md) records
+it: bundle `au.com.savageinteractive.Dreams` 1.0.11 (17168), documents `.dream`/`.drm` and `.alpine`,
+a `Valkyrie` chunk container with embedded JPEG/PNG frames, the Valkyrie/Phoenix/DisplayList/
+Compositor engine split, 1,243 ObjC classes across 70 Swift modules, and model names for tracks,
+content, keyframes-as-attributes with subframes, onion-skin caps and `blendPrimaryFrame`, per-frame
+palettes, masks/clipping and export families with a codec limit. No decompilation, nothing executed.
+Docs [07](docs/feature-deconstruction/07-procreate-dreams-handbook.md) and
+[08](docs/feature-deconstruction/08-dreams-cleanroom-spec.md) gained dated package-evidence sections
+(08 no longer claims nothing was read). No app file changed.
+
+### Clip Studio Paint UI model verified (2026-10-26, research only)
+
+The user brought a finding from another session — CSP's tool UI is a shipped SQLite database — and
+asked how to use it here. Re-verified with REA's SQLite inspector:
+`Settings\PAINT\Tool\english\EditImageTool.todb` (893,952 bytes, SHA-256 `c06ba91b…`, SQLite 3.53.4,
+UTF-16LE), tables `Manager` (12 columns), `Node` (24), `Variant` (504). `Node` is the command tree
+with a stable `NodeDefaultIdentifier`, UUID sibling/child links, `NodeHidden`/`NodeHideByGrade`
+flags and `NodeVariantID`; `Variant` is **not** a language table but a sparse per-node parameter row
+(sampled rows are NULL outside their tool's columns), so one command can present different controls
+per context. Recorded in
+[research/clip-studio-paint/README.md](docs/research/clip-studio-paint/README.md); the 2Dope plan —
+one registry, per-context filters, persisted hidden set, variant hook, starting with the Select row —
+is in [CLAUDE-COMMAND-REGISTRY-HANDOFF.md](docs/CLAUDE-COMMAND-REGISTRY-HANDOFF.md). No app change.
+
+**Latest step: easy delete for imported sounds and movies.**
+The user authorized committing and pushing this to main on 2026-10-26.
+The user reported no easy way to delete imported sound and video. Sounds could only be deleted from
+the folded Settings controls; movies/pictures are ordinary drawing layers whose delete sat in the
+Flipbook hold menu, Layers and Motion. No data/format change: delete reuses the existing audio
+History edit and `CompEditor.deleteLayers`.
+
+- `core/audio.ts` `withoutClip` (2 unit tests). `AudioTracks.deleteClip` (one "Delete sound" undo
+  step, closes the card, notice "Deleted … Undo brings it back.") and `soundMenu` (Settings…,
+  Mute, Delete sound). Trash buttons on Clips rail sound rows, Motion sound rows, Audio lane rows
+  and the sound card header; the controls' "Delete clip" is now "Delete sound". Hold/right-click
+  menus on sound blocks (Clips/Motion) and Story timeline sounds (`Board.setSoundMenu`).
+- `rails.ts`: hold/right-click on a top-level layer name tag in Clips offers Rename… and Delete
+  layer (confirm, undoable). Import notices for movies, pictures and sounds say how to remove them.
+- Manual (Layers media list, Audio) and release note "Easy delete for sounds and movies".
+
+Checks: 59 files / 488 unit tests, strict TypeScript and build passed. Browser on 127.0.0.1:5217 with a generated 1 s WAV and a
+generated WebM: the Clips trash, the block menu, the card trash, the Motion trash, the Audio lane
+trash and the Story timeline menu each removed the sound, with one Undo restoring it. The Clips
+layer menu's Delete layer confirmed and removed the movie layer; Undo restored it. Not checked on
+touch hardware (hold timing) and the movie had no sound track, so movie+sound import was not re-run.
+
 ### Earlier step (2026-10-26): shared workspace navigation, ebee0fc
 
 The user reviewed and authorized committing and pushing this to main on 2026-10-26.
