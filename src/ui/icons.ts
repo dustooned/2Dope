@@ -90,6 +90,8 @@ const P: Record<string, string> = {
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 018 0v2.5"/>',
   flipbook: '<rect x="7" y="3.5" width="12" height="15" rx="1.5"/><path d="M5 6.5v13.5a.5.5 0 00.5.5H16"/><path d="M13 8v6M10 11h6"/>',
   layers: '<path d="M12 4l9 4.5-9 4.5-9-4.5z"/><path d="M3 13l9 4.5 9-4.5"/>',
+  copylayer: '<path d="M10 8l8 4-8 4-8-4z"/><path d="M2 16l8 4 8-4"/><path d="M19 2v6M16 5h6"/>',
+  cutlayer: '<path d="M10 8l8 4-8 4-8-4z"/><path d="M2 16l8 4 8-4"/><path d="M19 8V2M16 5l3-3 3 3"/>',
   camera: '<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5l5-3v9l-5-3z"/>',
   more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
   board: '<rect x="3" y="4" width="8" height="6" rx="1"/><rect x="13" y="4" width="8" height="6" rx="1"/><path d="M3 14h8M3 17h6M13 14h8M13 17h6"/>',

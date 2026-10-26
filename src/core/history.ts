@@ -57,6 +57,23 @@ export class History {
     return cmd;
   }
 
+  /**
+   * Make the last `n` recorded commands one undo step (an action built from smaller edits).
+   * Undo runs them backwards; redo runs them in order.
+   */
+  combine(n: number, label: string): void {
+    if (n < 2 || n > this.done.length) return;
+    const parts = this.done.splice(this.done.length - n, n);
+    const ids = new Map(parts.flatMap((c) => c.drawings ?? []).map((d) => [d.id, d]));
+    this.done.push({
+      label,
+      drawings: [...ids.values()],
+      do: () => { for (const c of parts) c.do(); },
+      undo: () => { for (const c of [...parts].reverse()) c.undo(); },
+    });
+    this.onChange();
+  }
+
   /** Forget all undo/redo (used when a different project is loaded). */
   clear(): void {
     this.done = [];

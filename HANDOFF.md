@@ -2,6 +2,83 @@
 
 ## Current state (2026-10-26) — read this first
 
+### Selection editing: colour wand, Reselect, Copy/Cut to layer (2026-10-26, committed and pushed to main at the user's request)
+
+The user asked to check the new research docs and implement from them. The new notes are
+[research/procreate-5.4.9](docs/research/procreate-5.4.9/README.md) (saved selections, live wand
+threshold, feather with one commit, snapping) and [research/storyboard-pro-24.0.1](docs/research/storyboard-pro-24.0.1/README.md)
+(export/import background, nothing to build now). Neither has an implementation handoff. So this
+takes the [audit's](docs/DRAW-CAPABILITY-AUDIT-2026-10-26.md) next bounded selection items that need
+no schema change. It is built on `2298783`.
+
+- **Colour selection with a live threshold.** New `SelectShape` `'color'` (chip "Colour", palette
+  icon). A tap selects the connected pixels within the threshold of the tapped colour, using the
+  drawing as seen (Fill, Line, vectors; `visiblePixels`).
+  - Pure `src/fill/wand.ts` `colorRegion`: premultiplied RGBA, so empty paper is one colour;
+    4-connected; 6 unit tests.
+  - Dragging sideways before lifting changes the threshold live: 2 screen px per 1%, with a notice
+    "Threshold N%". It is saved to `2dope.select.threshold` on lift.
+  - New, Add and Subtract combine against the selection from before the tap
+    (`takeSelection(..., prev)`). Esc or pointercancel restores it.
+  - The gesture is `wandG`. It counts in `strokeActive` and is routed in move, up, cancel,
+    other-pointer and Esc. Selection construction still adds no undo step.
+- **Reselect.** `clearSpatialSelection` remembers the dropped selection (`lastSpatial`).
+  `canReselect` requires the same project, comp, layer, frame and drawing. A "Reselect" chip shows
+  when nothing is selected. It is session-only, not saved.
+- **Copy to layer / Cut to layer** (`selectionToNewLayer`, new `copylayer` / `cutlayer` icons).
+  - A new drawing gets the selected Line, Fill and wholly-inside vectors (new ids).
+  - The new layer is a `structuredClone` of the source layer: timing, transform, settings,
+    unlocked, `cel` removed. It goes just above the source and is named "… selection".
+  - Its exposures copy the source's lengths. The selected drawing maps to the copy; every other
+    exposure maps to one shared empty drawing.
+  - Cut also runs `deleteSelectedArt('Cut')`.
+  - New `History.combine(n, label)` (2 unit tests) makes the layer edit and the cut one undo step.
+    It only combines when the cut actually pushed a step.
+
+Copy: the manual's Select paragraph, two new paragraphs (Colour and threshold; Copy/Cut to layer and
+Reselect), and the UPDATES entry "Colour selection, Reselect and Copy to layer".
+
+**Checks.** `npm test`: 62 files / 502 tests. `npm run build` passed (existing chunk warning).
+Fixtures in headless Chrome (fresh profile, 1280×900, against 127.0.0.1:5217):
+
+| Fixture | Pass / Fail |
+|---|---|
+| New `tests/selectionedit.html` | 29 / 0 |
+| selectionpaint | 29 / 0 |
+| paintingplanes | 36 / 0 |
+| quickmenu | 34 / 0 |
+| paintingworkflow | 20 / 0 |
+| artworkworkflow | 31 / 0 |
+| pointedit | 9 / 0 |
+| brushreturn | 24 / 0 |
+
+The new fixture covers:
+- the Colour chip;
+- threshold 0 selecting the exact colour;
+- the live drag up and back;
+- the remembered threshold;
+- cancel;
+- Add and Subtract;
+- Reselect, including across frames;
+- copy pixels in place, source unchanged, one undo and redo;
+- cut moving the pixels, the 2+3 exposure timing, nothing shown on the other drawing, one undo.
+
+The new chips were viewed in the real app at desktop width.
+
+`git diff --check` flags a trailing blank line in `docs/feature-deconstruction/07-…`. That file is
+another collaborator's concurrent edit and was not touched.
+
+**Not done or not verified.**
+- Out of scope: feather (needs fractional masks in every consumer), saved selections (needs
+  persistence design), selection-construction undo, tap-to-place polygon lasso, and transform
+  precision/snapping.
+- Wand cost on a full-HD page: one full-page flood per 1% threshold step while dragging, not
+  measured on iPad.
+- Copy to layer when the source layer has a layer mask or clipping: both are cloned with the
+  settings and not separately tested. Like Duplicate layer, the clone keeps the same mask drawing
+  id, so the two layers share one mask.
+- Pencil/touch feel of the sideways drag.
+
 ### Selection as a painting stencil (2026-10-26, committed and pushed to main at the user's request)
 
 Implements the Must scope of [the stencil handoff](docs/CLAUDE-SELECTION-STENCIL-HANDOFF.md), plus

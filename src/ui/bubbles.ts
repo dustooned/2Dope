@@ -517,7 +517,7 @@ export class Bubbles {
     // what changes from frame to frame: frozen while playing, so the bubbles are not rebuilt on every
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
-    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
+    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]')?.setAttribute('aria-pressed', String(sharing));
@@ -645,6 +645,7 @@ export class Bubbles {
         ['rect', 'Rectangle', 'Drag a rectangle', 'selrect'],
         ['ellipse', 'Ellipse', 'Drag an ellipse', 'selellipse'],
         ['auto', 'Automatic', 'Tap an area between lines', 'selauto'],
+        ['color', 'Colour', 'Tap a colour; drag sideways before lifting to take more or fewer shades', 'palette'],
       ];
       // one chip per choice, the current one pressed
       const shapeChips = shapes.map(([k, label, title, icon]) => this.chip(label, `${label}: ${title.toLowerCase()}`, a.selectShape === k, () => a.setSelectShape(k), icon));
@@ -660,11 +661,14 @@ export class Bubbles {
           this.chip('Copy', 'Copy what is selected (paste on any drawing)', false, () => a.copyArt(), 'copy'),
           this.chip('Cut', 'Copy what is selected and remove it', false, () => a.cutArt(), 'scissors'),
           this.chip('Duplicate', 'A second copy in place, ready to move', false, () => a.duplicateArt(), 'layers'),
+          this.chip('Copy to layer', 'Copy what is selected onto a new layer above, on the same frames', false, () => a.selectionToNewLayer(false), 'copylayer'),
+          this.chip('Cut to layer', 'Move what is selected onto a new layer above, on the same frames', false, () => a.selectionToNewLayer(true), 'cutlayer'),
           this.chip('Delete', 'Remove what is selected', false, () => a.deleteSelectedArt(), 'trash'),
           this.chip('Invert', 'Select everything else', false, () => a.invertSelection(), 'invert'),
           this.chip('Deselect', 'Drop the selection', false, () => a.clearSpatialSelection(), 'deselect'),
         );
       } else {
+        if (a.canReselect) add(this.chip('Reselect', 'Bring back the selection you dropped', false, () => a.reselect(), 'recent'));
         add(this.chip('Move all', 'Move, size or rotate the whole drawing', false, () => a.moveAll(), 'motion'));
         add(this.chip('Select all', 'Select everything on this drawing', false, () => a.invertSelection(), 'selnew'));
       }

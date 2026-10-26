@@ -11,6 +11,7 @@ import { newSeed } from './core/rng';
 import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type Tool } from './core/stroke';
 import { DabWalker } from './brush/dabs';
 import { maskCanvas } from './brush/clip';
+import { colorRegion } from './fill/wand';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
@@ -92,13 +93,14 @@ const FILL_ACROSS_KEY = '2dope.fill.across';
 const FILL_REFER_KEY = '2dope.fill.refer';
 const SYMMETRY_KEY = '2dope.symmetry';
 const SELECT_SHAPE_KEY = '2dope.select.shape';
+const WAND_KEY = '2dope.select.threshold';
 const GUIDE_KEY = '2dope.guide';
 const ASSIST_KEY = '2dope.guide.assist';
 
 /** Fill tool: region fill, temporary lasso selection, or leftover cleanup. */
 export type FillMode = 'tap' | 'lasso' | 'leftover';
 /** Procreate's selection modes. */
-export type SelectShape = 'free' | 'rect' | 'ellipse' | 'auto';
+export type SelectShape = 'free' | 'rect' | 'ellipse' | 'auto' | 'color';
 
 /** An inclusive pixel box (x1 < 0 = empty). */
 interface Box4 {
@@ -147,6 +149,9 @@ interface LiveStroke {
   /** The selection a raster stroke paints inside, fixed at pen-down (never while editing a mask). */
   clip: Uint8Array | null;
 }
+
+/** A temporary spatial selection and the drawing context it belongs to. */
+interface SpatialSel { project: Project; comp: string; layer: string; drawing: Drawing; frame: number; area: Area; points: [number, number][]; exact?: boolean }
 
 interface AutoPaintStroke { color: string; selection: Uint8Array | null; mask: Drawing | null }
 
@@ -439,7 +444,7 @@ export class App {
 
   /** True while a stroke is being drawn (autosave waits for it to end). */
   get strokeActive(): boolean {
-    return this.live !== null || this.waits.length > 0 || this.fillG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null || this.editor.dragging;
+    return this.live !== null || this.waits.length > 0 || this.fillG !== null || this.wandG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null || this.editor.dragging;
   }
 
   get viewW(): number {
@@ -695,7 +700,7 @@ export class App {
   fillMode: FillMode = loadJSON<FillMode>(FILL_MODE_KEY) ?? 'tap';
   /** Temporary spatial selection, independent of the timeline's exposure selection. */
   /** `exact`: the mask is the selection (Automatic, combined, Select contents); the points are only its box. */
-  private spatial: { project: Project; comp: string; layer: string; drawing: Drawing; frame: number; area: Area; points: [number, number][]; exact?: boolean } | null = null;
+  private spatial: SpatialSel | null = null;
 
   get spatialSelection(): Area | null {
     const s = this.spatial;
@@ -709,8 +714,28 @@ export class App {
   }
 
   clearSpatialSelection(): void {
-    if (this.fillG || this.fillBusy) return;
+    if (this.fillG || this.fillBusy || this.wandG) return;
+    // Reselect can bring it back while you stay on this drawing
+    if (this.spatialSelection) this.lastSpatial = this.spatial;
     this.spatial = null;
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** The selection Deselect last dropped, for Reselect (only on the drawing and frame it belongs to). */
+  private lastSpatial: SpatialSel | null = null;
+
+  /** Is there a dropped selection that belongs here, and nothing selected now? */
+  get canReselect(): boolean {
+    const s = this.lastSpatial;
+    return !!s && !this.spatialSelection && s.project === this.project && s.comp === this.project.comp.id && s.layer === this.project.activeLayer && s.frame === this.frame && s.drawing === this.drawing && !this.blankPage;
+  }
+
+  /** Bring back the selection Deselect dropped. */
+  reselect(): void {
+    if (!this.canReselect || this.strokeActive) return;
+    this.spatial = this.lastSpatial;
+    this.lastSpatial = null;
     this.requestRender();
     this.onToolChange();
   }
@@ -1509,9 +1534,8 @@ export class App {
   }
 
   /** Put an area into the selection the way selectOp says (a new one, added, or taken away). */
-  private takeSelection(area: Area | null, points: [number, number][], exact: boolean): void {
+  private takeSelection(area: Area | null, points: [number, number][], exact: boolean, prev: Area | null = this.spatialSelection): void {
     const W = this.docW, H = this.docH;
-    const prev = this.spatialSelection;
     let out = area, pts = points, ex = exact;
     if (prev && area && this.selectOp !== 'new') {
       const mask = new Uint8Array(W * H);
@@ -1534,6 +1558,68 @@ export class App {
       return;
     }
     this.takeSelection({ mask: r.mask, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 }, boxPoints(r), true);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** Colour selection threshold, 0..1 (how different a colour may be and still be taken). */
+  wandThreshold = loadJSON<number>(WAND_KEY) ?? 0.15;
+  /** A colour selection in progress: drag sideways to change the threshold, lift to keep it. */
+  private wandG: { pointerId: number; px: Uint8ClampedArray; x: number; y: number; clientX: number; t0: number; prev: SpatialSel | null } | null = null;
+  /** Screen pixels of sideways drag per 1% of threshold. */
+  private static readonly WAND_PX_PER_PERCENT = 2;
+
+  /** The drawing as you see it (Fill, Line, vector lines), as RGBA, for the colour wand. */
+  private visiblePixels(d: Drawing): Uint8ClampedArray {
+    const W = this.docW, H = this.docH;
+    const c = makeCanvas(W, H);
+    const g = c.getContext('2d')!;
+    if (d.fill) g.drawImage(d.fill, 0, 0);
+    g.drawImage(d.line, 0, 0);
+    for (const v of d.vectors) drawVectorStroke(g, v, this.lengthOf(v));
+    return g.getImageData(0, 0, W, H).data;
+  }
+
+  /** Colour selection: tap a colour; drag sideways (before lifting) to take more or fewer shades. */
+  private beginWand(e: PointerEvent, fx: number, fy: number): void {
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    this.wandG = { pointerId: e.pointerId, px: this.visiblePixels(d), x: fx, y: fy, clientX: e.clientX, t0: this.wandThreshold, prev: this.spatialSelection ? this.spatial : null };
+    this.onStrokeState(true);
+    this.wandAt(this.wandThreshold);
+  }
+
+  /** Select the colour region at this threshold (combined with the selection from before the tap). */
+  private wandAt(t: number): void {
+    const g = this.wandG;
+    if (!g) return;
+    this.wandThreshold = Math.max(0, Math.min(1, Math.round(t * 100) / 100));
+    const r = colorRegion(g.px, this.docW, this.docH, g.x, g.y, this.wandThreshold);
+    this.spatial = g.prev;
+    this.takeSelection(r, r ? boxPoints(r) : [], true, g.prev?.area ?? null);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  private wandMove(e: PointerEvent): void {
+    const g = this.wandG;
+    if (!g) return;
+    const t = g.t0 + (e.clientX - g.clientX) / (App.WAND_PX_PER_PERCENT * 100);
+    const next = Math.max(0, Math.min(1, Math.round(t * 100) / 100));
+    if (next !== this.wandThreshold) {
+      this.wandAt(next);
+      this.onNotice?.(`Threshold ${Math.round(next * 100)}%`);
+    }
+  }
+
+  private endWand(cancel: boolean): void {
+    const g = this.wandG;
+    if (!g) return;
+    this.wandG = null;
+    this.onStrokeState(false);
+    if (cancel) this.spatial = g.prev;
+    else saveJSON(WAND_KEY, this.wandThreshold);
+    if (!cancel && !this.spatial) this.onNotice?.('Nothing of that colour to select here.');
     this.requestRender();
     this.onToolChange();
   }
@@ -1665,6 +1751,56 @@ export class App {
       this.setFillMode('lasso');
       this.beginTransform();
     }
+    this.onToolChange();
+  }
+
+  /**
+   * Copy (or cut) what is selected onto a new layer just above, in the same place and on the same
+   * frames: the new layer copies this one's timing, position and settings, and shows the copy
+   * wherever this layer shows this drawing. One undo step.
+   */
+  selectionToNewLayer(cut = false): void {
+    const a = this.spatialSelection;
+    const d = this.drawing;
+    const src = this.project.isPlaceholder ? null : this.project.layer;
+    if (!a || !src || src.kind !== 'drawings' || this.strokeActive || !this.residency.isReady(d)) return;
+    if (cut && src.locked) {
+      this.onNotice?.(`“${src.name}” is locked. Unlock it in Layers to cut from it.`);
+      return;
+    }
+    if (this.xf) this.applyTransform();
+    const sel = this.spatialSelection ?? a;
+    const label = cut ? 'Cut to new layer' : 'Copy to new layer';
+    const rect = { x: sel.x0, y: sel.y0, w: sel.x1 - sel.x0 + 1, h: sel.y1 - sel.y0 + 1 };
+    const nd = this.project.newDrawing();
+    putPixels(nd.line, rect, this.cutOut(d.line, sel));
+    if (d.fill) putPixels(planeCanvas(nd, 'fill'), rect, this.cutOut(d.fill, sel));
+    nd.vectors = structuredClone(this.vectorsInside(d, sel)).map((v) => ({ ...v, id: newStrokeId() }));
+    // wherever this layer shows another drawing, the new layer shows nothing
+    const others = src.exposures.some((e) => e.drawing !== d.id) ? this.project.newDrawing() : null;
+    const newId = this.project.newId('L');
+    const made = this.editor.edit(label, (cc) => {
+      const at = cc.layers.findIndex((l) => l.id === src.id);
+      const l = cc.layers[at];
+      if (!l || l.kind !== 'drawings') return;
+      const copy = structuredClone(l);
+      copy.id = newId;
+      copy.name = `${l.name} selection`;
+      copy.locked = false;
+      delete copy.cel; // its own layer, not linked
+      copy.exposures = l.exposures.map((e) => ({ drawing: e.drawing === d.id ? nd.id : others!.id, length: e.length }));
+      cc.layers.splice(at, 0, copy);
+    });
+    if (!made) return;
+    const added = this.history.peekUndo();
+    if (cut) this.deleteSelectedArt('Cut');
+    if (this.history.peekUndo() !== added) this.history.combine(2, label);
+    this.residency.updateThumb(nd);
+    this.spatial = null;
+    this.focusLayer(newId);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
     this.onToolChange();
   }
 
@@ -2335,6 +2471,10 @@ export class App {
     const p = this.toPoint(e, e.timeStamp);
     if (this.fillMode === 'lasso' && this.selectShape === 'auto') {
       this.autoSelect(p.x, p.y);
+      return;
+    }
+    if (this.fillMode === 'lasso' && this.selectShape === 'color') {
+      this.beginWand(e, p.x, p.y);
       return;
     }
     const before = this.fillMode === 'lasso' ? null : planeCanvas(d, 'fill').getContext('2d')!.getImageData(0, 0, this.docW, this.docH);
@@ -4728,14 +4868,14 @@ export class App {
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
       if (this.motionPointer === e.pointerId) { this.onUp(e, cancelled); return; }
-      if ((this.live && e.pointerId === this.live.pointerId) || (this.waiting && e.pointerId === this.waiting.id) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
+      if ((this.live && e.pointerId === this.live.pointerId) || (this.waiting && e.pointerId === this.waiting.id) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.wandG && e.pointerId === this.wandG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
     window.addEventListener('pointercancel', (e) => lifted(e, true));
     c.addEventListener('lostpointercapture', (e) => {
       if (e.buttons === 0 && this.motionPointer === e.pointerId) { this.onUp(e, false); return; }
       // a pen that is no longer pressed has lifted
-      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id))) this.onUp(e, false);
+      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.wandG && e.pointerId === this.wandG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id))) this.onUp(e, false);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -4878,6 +5018,10 @@ export class App {
     if (this.fillG && this.fillG.pointerId !== e.pointerId) {
       if (isTouch && !this.touches.has(this.fillG.pointerId)) return; // palm during pen fill
       this.endFill(true);
+    }
+    if (this.wandG && this.wandG.pointerId !== e.pointerId) {
+      if (isTouch && !this.touches.has(this.wandG.pointerId)) return; // palm during a pen colour selection
+      this.endWand(true);
     }
 
     // QuickShape: a finger touching down while a snapped shape is held makes it perfect
@@ -5216,6 +5360,7 @@ export class App {
       return;
     }
     if (this.fillG && e.pointerId === this.fillG.pointerId) return this.fillMove(e);
+    if (this.wandG && e.pointerId === this.wandG.pointerId) return this.wandMove(e);
     const arm = this.holdArm;
     if (arm && arm.id === e.pointerId && Math.hypot(e.clientX - arm.x, e.clientY - arm.y) > HOLD_SLOP) this.disarmHold();
     if (this.motionPointer === e.pointerId) {
@@ -5326,6 +5471,7 @@ export class App {
       return;
     }
     if (this.fillG && e.pointerId === this.fillG.pointerId) this.endFill(cancelled);
+    if (this.wandG && e.pointerId === this.wandG.pointerId) this.endWand(cancelled);
     this.disarmHold();
     if (this.held_ === e.pointerId) this.held_ = null;
     if (this.motionPointer === e.pointerId) {
@@ -5585,7 +5731,8 @@ export class App {
       return;
     }
     if (e.code === 'Escape' && this.workspace !== 'motion') {
-      if (this.fillG) this.endFill(true);
+      if (this.wandG) this.endWand(true);
+      else if (this.fillG) this.endFill(true);
       else this.clearSpatialSelection();
       return;
     }
