@@ -14,6 +14,8 @@ export interface Command {
   /** Namespaced, permanent: renaming the label never changes this. */
   id: `${string}.${string}`;
   label: string;
+  /** How Customize and App settings name it, when the chip's label is a symbol such as − or 2. */
+  name?: string;
   title: string;
   icon?: string;
   contexts: readonly CommandContext[];
@@ -22,12 +24,17 @@ export interface Command {
   run(app: App): void;
   isOn?(app: App): boolean;
   isEnabled?(app: App): boolean;
+  /** Label, title or icon that follow app state; the fields above are the defaults. */
+  face?(app: App): { label?: string; title?: string; icon?: string };
   /** Later slices: which parameter group this command shows in this context. */
   variant?(app: App): string;
 }
 
 const selected = (a: App) => !!a.spatialSelection;
 const unselected = (a: App) => !a.spatialSelection;
+const transforming = (a: App) => !!a.transformParams;
+const xp = (a: App) => a.transformParams!;
+const ROLE_TITLES = { key: 'A key drawing: the main poses of the move', breakdown: 'A breakdown: the drawing that shapes the move between two keys', inbetween: 'An in-between: fills the gaps so the move is smooth' } as const;
 
 export const COMMANDS: readonly Command[] = [
   // with something selected
@@ -47,7 +54,55 @@ export const COMMANDS: readonly Command[] = [
   { id: 'select.selectall', label: 'Select all', title: 'Select everything on this drawing', icon: 'selnew', contexts: ['select'], order: 130, run: (a) => a.invertSelection(), isEnabled: unselected },
   // either way
   { id: 'select.paste', label: 'Paste', title: 'Paste what you copied, ready to move', icon: 'paste', contexts: ['select'], order: 140, run: (a) => a.pasteArt(), isEnabled: (a) => a.hasArtClip },
+
+  // Transform: while something is being moved, sized or rotated
+  { id: 'transform.apply', label: 'Apply', title: 'Keep it (Enter)', icon: 'check', contexts: ['transform'], order: 10, run: (a) => a.applyTransform(), isEnabled: transforming },
+  { id: 'transform.cancel', label: 'Cancel', title: 'Put it back (Esc)', icon: 'close', contexts: ['transform'], order: 20, run: (a) => a.cancelTransform(), isEnabled: transforming },
+  { id: 'transform.freeform', label: 'Freeform', title: 'Uniform: corners keep proportions. Tap for freeform', icon: 'freeform', contexts: ['transform'], order: 30, run: (a) => { a.transformFreeform = !a.transformFreeform; }, isOn: (a) => a.transformFreeform, isEnabled: transforming, face: (a) => (a.transformFreeform ? { title: 'Freeform: corners stretch freely. Tap for uniform' } : {}) },
+  { id: 'transform.smaller', label: '−', name: 'Smaller', title: 'Smaller', contexts: ['transform'], order: 40, run: (a) => a.setTransform({ scale: xp(a).scale / 1.1 }), isEnabled: transforming },
+  { id: 'transform.bigger', label: '+', name: 'Bigger', title: 'Bigger', contexts: ['transform'], order: 50, run: (a) => a.setTransform({ scale: xp(a).scale * 1.1 }), isEnabled: transforming },
+  { id: 'transform.rotateleft', label: '⟲45', name: 'Rotate left 45°', title: 'Rotate left 45°', contexts: ['transform'], order: 60, run: (a) => a.setTransform({ rotate: xp(a).rotate - 45 }), isEnabled: transforming },
+  { id: 'transform.rotateright', label: '⟳45', name: 'Rotate right 45°', title: 'Rotate right 45°', contexts: ['transform'], order: 70, run: (a) => a.setTransform({ rotate: xp(a).rotate + 45 }), isEnabled: transforming },
+  { id: 'transform.fliph', label: 'Flip ↔', title: 'Mirror left to right', icon: 'fliph', contexts: ['transform'], order: 80, run: (a) => a.flipTransform('h'), isOn: (a) => !!a.transformParams?.flipH, isEnabled: transforming },
+  { id: 'transform.flipv', label: 'Flip ↕', title: 'Mirror top to bottom', icon: 'flipv', contexts: ['transform'], order: 90, run: (a) => a.flipTransform('v'), isOn: (a) => !!a.transformParams?.flipV, isEnabled: transforming },
+  { id: 'transform.fit', label: 'Fit', title: 'Fit to the page', icon: 'fit', contexts: ['transform'], order: 100, run: (a) => a.fitTransform(), isEnabled: transforming },
+  { id: 'transform.reset', label: 'Reset', title: 'Back to where it started', icon: 'undo', contexts: ['transform'], order: 110, run: (a) => a.resetTransform(), isEnabled: transforming },
+
+  // Timing: how long the drawing stays, and what kind of drawing it is
+  ...([1, 2, 3, 4] as const).map((n): Command => ({ id: `time.hold${n}`, label: `${n}`, name: `Hold for ${n}`, title: `Show this drawing for ${n} frame${n > 1 ? 's' : ''} (animators call it “on ${['ones', 'twos', 'threes', 'fours'][n - 1]}”)`, contexts: ['time'], order: n * 10, run: (a) => a.setExposure(n), isOn: (a) => a.currentHold === n })),
+  { id: 'time.shorter', label: '−', name: 'One frame shorter', title: 'One frame shorter', contexts: ['time'], order: 50, run: (a) => a.changeHold(-1) },
+  { id: 'time.longer', label: '+', name: 'One frame longer', title: 'One frame longer', contexts: ['time'], order: 60, run: (a) => a.changeHold(1) },
+  ...([['key', 'Key', 70], ['breakdown', 'Breakdown', 80], ['inbetween', 'In-between', 90]] as const).map(([r, label, order]): Command => ({ id: `time.${r}`, label, title: ROLE_TITLES[r], contexts: ['time'], order, run: (a) => a.setRole(r), isOn: (a) => a.currentRole === r })),
+
+  // Fill
+  { id: 'fill.swap', label: 'Swap', title: 'Swap the two colours', contexts: ['fill'], order: 10, run: (a) => a.swapColors(), isEnabled: (a) => a.fillStyle !== 'solid' },
+  { id: 'fill.selection', label: 'Fill selection', title: 'Colour everything inside the selection', contexts: ['fill'], order: 20, run: (a) => a.fillSelectedArea(), isEnabled: selected },
+
+  // Smudge
+  { id: 'smudge.softer', label: 'Softer', title: 'Carry less paint', icon: 'thinner', contexts: ['smudge'], order: 10, run: (a) => { a.smudgeStrength = Math.max(0.1, a.smudgeStrength - 0.1); } },
+  { id: 'smudge.stronger', label: 'Stronger', title: 'Carry more paint', icon: 'thicker', contexts: ['smudge'], order: 20, run: (a) => { a.smudgeStrength = Math.min(1, a.smudgeStrength + 0.1); } },
+
+  // Brush and Vector
+  { id: 'paint.inkpaint', label: 'Ink & Paint', title: 'Ink & Paint: fill newly closed areas after inking. Existing paint stays.', icon: 'inkpaint', contexts: ['paint'], order: 10, run: (a) => a.setInkPaint(!a.inkPaint.enabled), isOn: (a) => a.inkPaint.enabled, isEnabled: (a) => a.studentUI.controls.inkPaint, face: (a) => (a.autoPaintSupported ? {} : { title: 'Ink & Paint: this page exceeds the automatic paint limit for this device.' }) },
+  { id: 'paint.editpoints', label: 'Edit points', title: 'Drag the corners and bends of a vector line; set its thickness', contexts: ['paint'], order: 20, run: (a) => { a.enterPointEdit(); }, isEnabled: (a) => a.tool === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen') },
+
+  // Editing a vector line's points
+  { id: 'points.toggle', label: 'Curved point', name: 'Straight / curved point', title: 'Tap a point first; hold a point to switch it', icon: 'curvept', contexts: ['points'], order: 10, run: (a) => a.togglePoint(), isOn: (a) => a.pointSelMode === 'straight',
+    face: (a) => ({ ...(a.pointSelMode === 'straight' ? { label: 'Straight point', icon: 'straightpt' } : {}), ...(a.pointSelMode ? { title: 'Switch this point between straight and curved (or hold the point)' } : {}) }) },
+  { id: 'points.allstraight', label: 'All straight', title: 'Make every point straight: clean lines between the corners', icon: 'allstraight', contexts: ['points'], order: 20, run: (a) => a.straightenAllPoints() },
+  { id: 'points.widthscope', label: 'Width: whole line', name: 'Width: whole line, point or sections', title: 'Width for the whole line. Tap to switch: whole line, point, sections', icon: 'wline', contexts: ['points'], order: 30, run: (a) => a.setPointWidthScope(a.pointWidthScope === 'all' ? 'point' : a.pointWidthScope === 'point' ? 'section' : 'all'), isOn: (a) => a.pointWidthScope !== 'all',
+    face: (a) => a.pointWidthScope === 'point' ? { label: 'Width: this point', title: 'Width for the chosen point. Tap to switch: whole line, point, sections', icon: 'wpoint' }
+      : a.pointWidthScope === 'section' ? { label: 'Width: sections', title: 'Width for the sections you tap. Tap to switch: whole line, point, sections', icon: 'wsection' } : {} },
+  { id: 'points.done', label: 'Done', title: 'Finish editing points (Enter, or tap empty canvas)', icon: 'check', contexts: ['points'], order: 40, run: (a) => a.exitPointEdit() },
 ];
+
+/** The row names App settings uses for hidden controls. */
+export const ROW_NAMES: Partial<Record<CommandContext, string>> = { select: 'Select', transform: 'Transform', time: 'Timing', fill: 'Fill', smudge: 'Smudge', paint: 'Brush', points: 'Edit points' };
+
+/** What a menu or list calls the command. */
+export function commandName(c: Command): string {
+  return c.name ?? c.label;
+}
 
 /** Every command registered for a row, enabled or not, in order (for a Customize list). */
 export function commandsIn(context: CommandContext): Command[] {

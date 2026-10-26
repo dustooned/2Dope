@@ -57,6 +57,73 @@ function restore() {
 
 const SHAPES = ['Freehand', 'Rectangle', 'Ellipse', 'Automatic', 'Colour', 'New', 'Add', 'Subtract'];
 const WITH_SELECTION = ['Transform', 'Fill', 'Copy', 'Cut', 'Duplicate', 'Copy to layer', 'Cut to layer', 'Delete', 'Invert', 'Deselect'];
+const TRANSFORM = ['Apply', 'Cancel', 'Freeform', '−', '+', '⟲45', '⟳45', 'Flip ↔', 'Flip ↕', 'Fit', 'Reset', 'Customize'];
+const hint = (text: string) => [...document.querySelectorAll('.bub-ctx .bub-hint')].some((s) => s.textContent === text);
+
+/** Slice 2: the other rows come from the registry with the same chips, in the same order. */
+async function otherRows() {
+  // Transform: Freeform still flips its state and title; a hidden step leaves the rest in place
+  chip('Transform')!.click(); await settle();
+  const ff = chip('Freeform')!;
+  ff.click(); await settle();
+  check('Transform: Freeform still toggles (pressed, title)', app.transformFreeform && chip('Freeform')!.getAttribute('aria-pressed') === 'true' && chip('Freeform')!.title.startsWith('Freeform'));
+  chip('Freeform')!.click(); await settle();
+  const scale = app.transformParams!.scale;
+  chip('+')!.click(); await settle();
+  check('Transform: + still makes it bigger', app.transformParams!.scale > scale);
+  chip('−')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 100 })); await settle();
+  const hideSmaller = menuItem('Hide “Smaller” from this row');
+  check('A symbol chip is named in words in its hide menu', !!hideSmaller);
+  hideSmaller?.click(); await settle();
+  check('Hiding Smaller leaves the rest of the Transform row', labels().join() === TRANSFORM.filter((n) => n !== '−').join(), labels());
+  chip('Customize')!.click(); await settle();
+  check('Transform Customize lists its 11 commands by name', document.querySelectorAll('.ctxmenu button[role="menuitem"]').length === 11 && !!menuItem('Smaller'));
+  menuItem('Smaller')?.click(); await settle();
+  check('Customize brings Smaller back', labels().join() === TRANSFORM.join(), labels());
+  app.cancelTransform(); await settle();
+
+  // Fill: the style chips stay; Swap with a gradient; Fill selection with a selection
+  app.setTool('fill'); app.setFillMode('tap'); app.setFillStyle('solid'); await settle();
+  check('Fill row: tap modes, styles, Fill selection, Customize', labels().join() === 'Tap / drag,Leftovers,Solid,Linear,Radial,Fill selection,Customize', labels());
+  app.setFillStyle('linear'); await settle();
+  check('Fill row: Swap appears with a gradient', labels().includes('Swap') && labels().indexOf('Swap') < labels().indexOf('Fill selection'), labels());
+  app.setFillStyle('solid'); await settle();
+
+  // Smudge: Softer and Stronger around the strength readout
+  app.setTool('brush'); app.setSmudging(true); await settle();
+  check('Smudge row: Line, Fill, Softer, Stronger, Customize', labels().join() === 'Line,Fill,Softer,Stronger,Customize', labels());
+  const s0 = app.smudgeStrength;
+  chip('Softer')!.click(); await settle();
+  check('Smudge: Softer lowers the strength and the readout follows', app.smudgeStrength < s0 && hint(`Strength ${Math.round(app.smudgeStrength * 100)}%`));
+  chip('Stronger')!.click(); await settle();
+  app.setSmudging(false); await settle();
+
+  // Brush and Vector: Customize ends the row; Edit points with a vector line
+  check('Brush row ends with Customize', labels().at(-1) === 'Customize' && labels().includes('Brushes'), labels());
+  app.setTool('pen'); await settle();
+  check('Vector row without a line: no Edit points', !chip('Edit points'), labels());
+  pointer('pointerdown', 30, 60); for (let x = 32; x <= 100; x += 4) pointer('pointermove', x, 60 + (x % 8)); pointer('pointerup', 100, 60);
+  await settle(300);
+  check('Vector row with a line: Edit points before Customize', labels().slice(-2).join() === 'Edit points,Customize', labels());
+
+  // Points: the registry chips around the width meter
+  chip('Edit points')!.click(); await settle();
+  const pts = labels();
+  check('Points row: same chips in the same order, then Customize', pts.join() === 'Curved point,All straight,Point settings,Width: whole line,Thinner,Thicker,Done,Customize', pts);
+  chip('Width: whole line')!.click(); await settle();
+  check('Points: width scope still steps and shows it', !!chip('Width: this point') && chip('Width: this point')!.getAttribute('aria-pressed') === 'true', labels());
+  chip('Width: this point')!.click(); await settle(); chip('Width: sections')!.click(); await settle();
+  chip('Done')!.click(); await settle();
+  check('Points: Done still leaves point editing', !app.pointEditing);
+
+  // Timing: holds, steps and roles
+  app.setWorkspace('time'); await settle();
+  check('Timing row: holds, steps, roles, Customize', labels().join() === '1,2,3,4,−,+,Key,Breakdown,In-between,Customize', labels());
+  chip('2')!.click(); await settle();
+  check('Timing: 2 still sets the hold and lights', app.currentHold === 2 && chip('2')!.getAttribute('aria-pressed') === 'true');
+  chip('1')!.click(); await settle();
+  app.setWorkspace('draw'); await settle();
+}
 
 try {
   app.fit();
@@ -73,7 +140,7 @@ try {
     check('Copy still copies, and Paste appears before Customize', app.hasArtClip && labels().slice(-2).join() === 'Paste,Customize');
     chip('Transform')!.click(); await settle();
     const transformRow = labels();
-    check('Transform still starts a transform (its own row, no Customize)', app.transforming && !transformRow.includes('Customize'), transformRow);
+    check('Transform still starts a transform, with its own row from the registry', app.transforming && transformRow.join() === TRANSFORM.join(), transformRow);
     app.cancelTransform(); await settle();
     const toolsBefore = tools();
 
@@ -90,6 +157,9 @@ try {
     chip('Transform')!.click(); await settle();
     check('The transform row is untouched', labels().join() === transformRow.join());
     app.cancelTransform(); await settle();
+
+    await otherRows();
+    await selectRect();
 
     // reload the page; the second pass checks the chip is still hidden
     sessionStorage.setItem('commandrow.results', JSON.stringify(results));

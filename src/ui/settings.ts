@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import { defaultQuickMenu, QUICK_ACTIONS, type QuickMenuPrefs } from '../core/quickmenu';
 import { decorate } from './icons';
-import { commandById, commandPrefs, setHidden } from './commands';
+import { commandById, commandName, commandPrefs, ROW_NAMES, setHidden } from './commands';
 import { PROFILE_LIMIT, STUDENT_CONTROLS, STUDENT_PROFILES_KEY, STUDENT_TOOLS, profileName, readStudentProfiles, readStudentSetup, readStudentUI, type StudentSetup } from '../core/studentprefs';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string) => {
@@ -63,9 +63,9 @@ export class AppSettingsUI {
       hiddenControls.append(el('p','menu-note','Actions hidden from the options rows on this browser/device. Student profiles do not include them.'));
       for(const id of ids){
         const c=commandById(id),row=el('div','app-settings-field'),b=el('button','',toShow.has(id)?'Will show':'Show');b.type='button';
-        b.setAttribute('aria-label',`Show ${c?.label??id}`);b.setAttribute('aria-pressed',String(toShow.has(id)));
+        b.setAttribute('aria-label',`Show ${c?commandName(c):id}`);b.setAttribute('aria-pressed',String(toShow.has(id)));
         b.addEventListener('click',()=>{if(toShow.has(id))toShow.delete(id);else toShow.add(id);renderHidden();});
-        row.append(el('span','',c?`${c.label} (${c.contexts[0]} row)`:id),b);hiddenControls.append(row);
+        row.append(el('span','',c?`${commandName(c)} (${ROW_NAMES[c.contexts[0]!]??c.contexts[0]} row)`:id),b);hiddenControls.append(row);
       }
     };
     renderHidden();toolsSection.append(hiddenControls);

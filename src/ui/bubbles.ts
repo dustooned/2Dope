@@ -9,7 +9,7 @@ import { decorate } from './icons';
 import { STUDENT_TOOLS, type StudentTool } from '../core/studentprefs';
 import { isPaintingWorkspace, optionsRow, toolChoice, type OptionsState } from '../core/workspace';
 import { isCommandHidden } from '../core/commandprefs';
-import { commandPrefs, commandsFor, commandsIn, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
+import { commandById, commandName, commandPrefs, commandsFor, commandsIn, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
 import { attachContextMenu, showContextMenu } from './contextmenu';
 
 export type UiLevel = 'clean' | 'simple' | 'full';
@@ -249,16 +249,27 @@ export class Bubbles {
   private commandChips(context: CommandContext): HTMLButtonElement[] {
     const a = this.app, prefs = commandPrefs();
     const chips = commandsFor(context, a).filter((c) => !isCommandHidden(prefs, c.id)).map((c) => this.commandChip(c));
-    const customize = this.chip('Customize', 'Choose which actions this row shows', false, (b) => this.customize(context, b), 'more');
-    return [...chips, customize];
+    return [...chips, this.customizeChip(context)];
+  }
+
+  /** One registry command as a chip, or nothing while it is disabled or hidden (for rows that mix in other controls). */
+  private cmd(id: string): HTMLButtonElement[] {
+    const c = commandById(id);
+    if (!c || !(c.isEnabled?.(this.app) ?? true) || isCommandHidden(commandPrefs(), c.id)) return [];
+    return [this.commandChip(c)];
+  }
+
+  private customizeChip(context: CommandContext): HTMLButtonElement {
+    return this.chip('Customize', 'Choose which actions this row shows', false, (b) => this.customize(context, b), 'more');
   }
 
   private commandChip(c: Command): HTMLButtonElement {
-    const a = this.app;
-    const b = this.chip(c.label, c.title, c.isOn?.(a) ?? false, () => c.run(a), c.icon);
+    const a = this.app, f = c.face?.(a) ?? {};
+    // a command may change state no App callback reports (Freeform, Smudge strength): redraw if the row changed
+    const b = this.chip(f.label ?? c.label, f.title ?? c.title, c.isOn?.(a) ?? false, () => { c.run(a); this.update(); }, f.icon ?? c.icon);
     b.dataset.command = c.id;
     // right-click or hold: take it off this row (Customize brings it back)
-    attachContextMenu(b, () => [{ label: `Hide “${c.label}” from this row`, run: () => setHidden(c.id, true) }]);
+    attachContextMenu(b, () => [{ label: `Hide “${commandName(c)}” from this row`, run: () => setHidden(c.id, true) }]);
     return b;
   }
 
@@ -269,7 +280,7 @@ export class Bubbles {
       { title: 'Show in this row' },
       ...commandsIn(context).map((c) => {
         const hidden = isCommandHidden(prefs, c.id);
-        return { label: c.label, checked: !hidden, hint: hidden ? 'Show' : 'Hide', run: () => setHidden(c.id, !hidden) };
+        return { label: commandName(c), checked: !hidden, hint: hidden ? 'Show' : 'Hide', run: () => setHidden(c.id, !hidden) };
       }),
     ]);
   }
@@ -470,10 +481,9 @@ export class Bubbles {
     meter.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); a.nudgePointWidth(e.key === 'ArrowUp' ? 1.15 : 1 / 1.15); show(); }
     });
-    const sel = a.pointSelMode;
     return [
-      this.chip(sel === 'straight' ? 'Straight point' : 'Curved point', sel ? 'Switch this point between straight and curved (or hold the point)' : 'Tap a point first; hold a point to switch it', sel === 'straight', () => a.togglePoint(), sel === 'straight' ? 'straightpt' : 'curvept'),
-      this.chip('All straight', 'Make every point straight: clean lines between the corners', false, () => a.straightenAllPoints(), 'allstraight'),
+      ...this.cmd('points.toggle'),
+      ...this.cmd('points.allstraight'),
       this.chip('Point settings', 'Point settings: straight by default, snapping, joining, points after hold', this.pointSettings, () => { this.pointSettings = !this.pointSettings; this.sig = ''; this.update(); }, 'gear'),
       ...(this.pointSettings
         ? [
@@ -483,18 +493,14 @@ export class Bubbles {
             this.chip('Points after hold', 'Show a vector line\u2019s points right after a hold snaps it', a.pointsAfterHold, () => a.setPointsAfterHold(!a.pointsAfterHold)),
           ]
         : []),
-      this.chip(
-        a.pointWidthScope === 'point' ? 'Width: this point' : a.pointWidthScope === 'section' ? 'Width: sections' : 'Width: whole line',
-        `Width for ${a.pointWidthScope === 'point' ? 'the chosen point' : a.pointWidthScope === 'section' ? 'the sections you tap' : 'the whole line'}. Tap to switch: whole line, point, sections`,
-        a.pointWidthScope !== 'all',
-        () => a.setPointWidthScope(a.pointWidthScope === 'all' ? 'point' : a.pointWidthScope === 'point' ? 'section' : 'all'),
-        a.pointWidthScope === 'point' ? 'wpoint' : a.pointWidthScope === 'section' ? 'wsection' : 'wline',
-      ),
+      ...this.cmd('points.widthscope'),
+      // the width meter and its steps stay together, outside the registry
       this.chip('Thinner', 'A step thinner', false, () => { a.nudgePointWidth(1 / 1.15); show(); }, 'thinner'),
       meter,
       this.chip('Thicker', 'A step thicker', false, () => { a.nudgePointWidth(1.15); show(); }, 'thicker'),
       readout,
-      this.chip('Done', 'Finish editing points (Enter, or tap empty canvas)', false, () => a.exitPointEdit(), 'check'),
+      ...this.cmd('points.done'),
+      this.customizeChip('points'),
     ];
   }
 
@@ -551,7 +557,7 @@ export class Bubbles {
     // what changes from frame to frame: frozen while playing, so the bubbles are not rebuilt on every
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
-    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.transformFreeform, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
+    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.transformFreeform, a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]')?.setAttribute('aria-pressed', String(sharing));
@@ -599,12 +605,12 @@ export class Bubbles {
       // holds: how many frames the drawing stays (tap a number); marks; frame by frame
       const hold = a.currentHold;
       add(el('span', { class: 'bub-hint' }, '\u23f1 Hold'));
-      for (const n of [1, 2, 3, 4]) add(this.chip(`${n}`, `Show this drawing for ${n} frame${n > 1 ? 's' : ''} (animators call it \u201con ${['ones', 'twos', 'threes', 'fours'][n - 1]}\u201d)`, hold === n, () => a.setExposure(n)));
-      add(this.chip('\u2212', 'One frame shorter', false, () => a.changeHold(-1)));
+      for (const n of [1, 2, 3, 4]) add(...this.cmd(`time.hold${n}`));
+      add(...this.cmd('time.shorter'));
       add(el('span', { class: 'bub-hint bub-hold' }, hold === null ? 'mixed' : `${hold} frame${hold === 1 ? '' : 's'}`));
-      add(this.chip('+', 'One frame longer', false, () => a.changeHold(1)));
+      add(...this.cmd('time.longer'));
       add(el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
-      for (const [r, label, title] of [['key', 'Key', 'A key drawing: the main poses of the move'], ['breakdown', 'Breakdown', 'A breakdown: the drawing that shapes the move between two keys'], ['inbetween', 'In-between', 'An in-between: fills the gaps so the move is smooth']] as const) add(this.chip(label, title, a.currentRole === r, () => a.setRole(r)));
+      add(...this.cmd('time.key'), ...this.cmd('time.breakdown'), ...this.cmd('time.inbetween'), this.customizeChip('time'));
     } else if (row === 'layers') {
       // tight layer control: only this cel's linked layers, front first; tap one to draw on it
       const me = a.project.isPlaceholder ? '' : a.project.activeLayer;
@@ -614,33 +620,20 @@ export class Bubbles {
       add(this.chip('+ Layer', 'A new art layer for these cels: same frames and timing, its own drawing', false, () => { a.addCelLayer(); this.sig = ''; this.update(); }));
       if (!flip) add(this.chip('All layers', 'Every layer of the shot', false, (b) => this.hooks.layers(b)));
     } else if (row === 'transform' && xp) {
-      const step = (label: string, title: string, patch: () => Partial<XParams>) => this.chip(label, title, false, () => a.setTransform(patch()));
-      add(
-        this.chip('Apply', 'Keep it (Enter)', false, () => a.applyTransform(), 'check'),
-        this.chip('Cancel', 'Put it back (Esc)', false, () => a.cancelTransform(), 'close'),
-        this.chip('Freeform', a.transformFreeform ? 'Freeform: corners stretch freely. Tap for uniform' : 'Uniform: corners keep proportions. Tap for freeform', a.transformFreeform, () => { a.transformFreeform = !a.transformFreeform; this.sig = ''; this.update(); }, 'freeform'),
-        step('\u2212', 'Smaller', () => ({ scale: xp.scale / 1.1 })),
-        step('+', 'Bigger', () => ({ scale: xp.scale * 1.1 })),
-        step('\u27f245', 'Rotate left 45\u00b0', () => ({ rotate: xp.rotate - 45 })),
-        step('\u27f345', 'Rotate right 45\u00b0', () => ({ rotate: xp.rotate + 45 })),
-        this.chip('Flip \u2194', 'Mirror left to right', xp.flipH, () => a.flipTransform('h'), 'fliph'),
-        this.chip('Flip \u2195', 'Mirror top to bottom', xp.flipV, () => a.flipTransform('v'), 'flipv'),
-        this.chip('Fit', 'Fit to the page', false, () => a.fitTransform(), 'fit'),
-        this.chip('Reset', 'Back to where it started', false, () => a.resetTransform(), 'undo'),
-      );
+      add(...this.commandChips('transform'));
     } else if (row === 'adjust') {
       add(...this.adjustControls());
     } else if (row === 'smudge') {
-      const lbl = el('span', { class: 'bub-hint' }, `Strength ${Math.round(a.smudgeStrength * 100)}%`);
       add(
         this.chip('Line', 'Smudge the LINE', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }),
         this.chip('Fill', 'Smudge the FILL', a.plane === 'fill', () => { a.setPlane('fill'); a.setSmudging(true); }),
-        this.chip('Softer', 'Carry less paint', false, () => { a.smudgeStrength = Math.max(0.1, a.smudgeStrength - 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thinner'),
-        lbl,
-        this.chip('Stronger', 'Carry more paint', false, () => { a.smudgeStrength = Math.min(1, a.smudgeStrength + 0.1); lbl.textContent = `Strength ${Math.round(a.smudgeStrength * 100)}%`; }, 'thicker'),
+        ...this.cmd('smudge.softer'),
+        el('span', { class: 'bub-hint' }, `Strength ${Math.round(a.smudgeStrength * 100)}%`),
+        ...this.cmd('smudge.stronger'),
+        this.customizeChip('smudge'),
       );
     } else if (row === 'paint') {
-      if (a.studentUI.controls.inkPaint) add(this.chip('Ink & Paint', a.autoPaintSupported ? 'Ink & Paint: fill newly closed areas after inking. Existing paint stays.' : 'Ink & Paint: this page exceeds the automatic paint limit for this device.', a.inkPaint.enabled, () => a.setInkPaint(!a.inkPaint.enabled), 'inkpaint'));
+      add(...this.cmd('paint.inkpaint'));
       if (a.inkPaint.enabled && a.studentUI.controls.inkPaint) {
         const ink = el('label', { class: 'ink-paint-colour', title: 'Ink colour (automatic paint uses the main Colour)' }, 'Ink');
         const input = el('input', { type: 'color', 'aria-label': 'Ink colour', value: a.inkPaint.ink });
@@ -651,7 +644,7 @@ export class Bubbles {
       if (a.studentUI.controls.planes) add(this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')), this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
-      if (cur === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen')) add(this.chip('Edit points', 'Drag the corners and bends of a vector line; set its thickness', false, () => a.enterPointEdit()));
+      add(...this.cmd('paint.editpoints'), this.customizeChip('paint'));
     } else if (row === 'fill') {
       add(...this.gradChips());
       add(
@@ -669,9 +662,9 @@ export class Bubbles {
         input.addEventListener('input', () => { second.style.setProperty('--chip', input.value); });
         input.addEventListener('change', () => a.setColor2(input.value));
         second.append(input);
-        add(second, this.chip('Swap', 'Swap the two colours', false, () => a.swapColors()));
+        add(second, ...this.cmd('fill.swap'));
       }
-      if (sel) add(this.chip('Fill selection', 'Colour everything inside the selection', false, () => a.fillSelectedArea()));
+      add(...this.cmd('fill.selection'), this.customizeChip('fill'));
     } else if (row === 'select') {
       // how to select (Procreate's modes) and how a new selection combines with this one
       const shapes: [SelectShape, string, string, string][] = [

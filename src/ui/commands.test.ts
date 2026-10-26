@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { App } from '../app';
-import { COMMANDS, commandsFor, commandsIn } from './commands';
+import { COMMANDS, commandById, commandName, commandsFor, commandsIn } from './commands';
 
 /** Just the App state the Select commands read. */
 const app = (state: { selection?: boolean; reselect?: boolean; clip?: boolean }) =>
@@ -23,8 +23,38 @@ describe('command registry', () => {
   });
 
   it('filters by context', () => {
-    expect(commandsIn('transform')).toEqual([]);
-    expect(commandsIn('select').every((c) => c.contexts.includes('select'))).toBe(true);
+    for (const ctx of ['select', 'transform', 'time', 'fill', 'smudge', 'paint', 'points'] as const) {
+      const row = commandsIn(ctx);
+      expect(row.length).toBeGreaterThan(0);
+      expect(row.every((c) => c.contexts.includes(ctx) && c.id.startsWith(`${ctx}.`))).toBe(true);
+      const orders = row.map((c) => c.order);
+      expect(new Set(orders).size).toBe(orders.length);
+    }
+    expect(commandsIn('layers')).toEqual([]);
+  });
+
+  it('names symbol chips in words for menus', () => {
+    for (const c of COMMANDS) expect(commandName(c)).toMatch(/[A-Za-z]{2}/);
+    expect(commandName(commandById('transform.smaller')!)).toBe('Smaller');
+    expect(commandName(commandById('time.hold2')!)).toBe('Hold for 2');
+  });
+
+  it('keeps the transform and timing rows in their order', () => {
+    const t = { transformParams: { scale: 1, rotate: 0, flipH: false, flipV: false } } as unknown as App;
+    expect(ids(commandsFor('transform', t))).toEqual(['transform.apply', 'transform.cancel', 'transform.freeform', 'transform.smaller', 'transform.bigger', 'transform.rotateleft', 'transform.rotateright', 'transform.fliph', 'transform.flipv', 'transform.fit', 'transform.reset']);
+    expect(commandsFor('transform', { transformParams: null } as unknown as App)).toEqual([]);
+    expect(ids(commandsIn('time'))).toEqual(['time.hold1', 'time.hold2', 'time.hold3', 'time.hold4', 'time.shorter', 'time.longer', 'time.key', 'time.breakdown', 'time.inbetween']);
+  });
+
+  it('shows the state in the chip face', () => {
+    const p = (pointSelMode: string | null, pointWidthScope: string) => ({ pointSelMode, pointWidthScope }) as unknown as App;
+    const toggle = commandById('points.toggle')!, width = commandById('points.widthscope')!;
+    expect(toggle.face!(p(null, 'all'))).toEqual({});
+    expect(toggle.face!(p('straight', 'all')).label).toBe('Straight point');
+    expect(width.face!(p(null, 'point')).label).toBe('Width: this point');
+    expect(width.face!(p(null, 'section')).icon).toBe('wsection');
+    const freeform = commandById('transform.freeform')!;
+    expect(freeform.face!({ transformFreeform: true } as unknown as App).title).toMatch(/^Freeform/);
   });
 
   it('drops disabled commands, matching the row today', () => {

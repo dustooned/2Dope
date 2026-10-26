@@ -2,6 +2,43 @@
 
 ## Current state (2026-10-26) — read this first
 
+### Command registry, Slice 2: the other options rows (2026-10-26, merged into main and pushed)
+
+Slice 2 of [the command registry handoff](docs/CLAUDE-COMMAND-REGISTRY-HANDOFF.md). The Transform,
+Timing, Fill, Smudge, Brush/Vector (`paint`) and Edit points (`points`) rows now draw their action
+chips from `src/ui/commands.ts`, with the same labels, titles, icons, pressed states and order as
+before, and each row ends with the shared Customize chip. Layers and assets rows are left for Slice 3.
+
+- `Command` gained `name` (the word used in Customize, the hide menu and App settings when the chip
+  label is a symbol: `−` is "Smaller", `2` is "Hold for 2") and `face(app)` (label, title or icon that
+  follow state: Freeform's title, the straight/curved point chip, the width-scope chip). `ROW_NAMES`
+  and `commandName` name rows and commands in App settings.
+- Transform renders whole from the registry. The other rows mix commands with controls that stay
+  hand-built through `Bubbles.cmd(id)`, which returns nothing for a hidden or disabled command:
+  parameter groups (fill modes and styles, Line/Fill plane, select shapes and operations, symmetry and
+  guide steppers) wait for Slice 4 variants; hint text, the colour inputs, Brushes and Paint colour
+  (they need Bubbles hooks), Point settings and its toggles (Bubbles-local state) and the width meter
+  with Thinner/Thicker stay as they were.
+- A command chip calls `update()` after `run`, so state no App callback reports redraws through
+  `sig`: `transform.freeform` no longer resets `sig`, and `a.smudgeStrength` joined `sig` so the
+  strength readout follows Softer/Stronger.
+- Ids: `transform.apply|cancel|freeform|smaller|bigger|rotateleft|rotateright|fliph|flipv|fit|reset`,
+  `time.hold1..4|shorter|longer|key|breakdown|inbetween`, `fill.swap|selection`,
+  `smudge.softer|stronger`, `paint.inkpaint|editpoints`, `points.toggle|allstraight|widthscope|done`.
+- Manual sentence and the UPDATES entry "Hide actions in the other options rows".
+
+Checks (actual): `npm test` 65 files / 530 tests; `npm run build` passed (usual chunk-size warning);
+`git diff --check` clean. Headless Chrome fixtures: commandrow 37/0 at 1280×900 and at phone width
+(new checks for each row's order, Freeform, +, hiding and restoring Smaller by name, Swap, Fill
+selection, Softer readout, Edit points, the points row and width scope, Done, Timing holds);
+brushcontrols 26/0, paintinglayout 16/0, paintingplanes 36/0, paintingworkflow 20/0, playbackrange
+50/0 (and phone), pointedit 9/0, quickmenu 34/0 (and phone), selectionedit 29/0, selectionpaint 40/0,
+studentprofiles 28/0 (and phone), placement 13/0, assets 8/0. inkpaint still stalls on "Running…"
+in headless Chrome, as before this change.
+
+Not verified: hold-to-hide on a touch device, screen-reader wording of the Customize menus.
+Resume at Slice 3 (tool bubbles via `commandsFor('toolbar')`, context-menu ids, layers/assets rows).
+
 ### Command registry, Slice 1: the Select row (2026-10-26, `9552148`, merged into main and pushed)
 
 Implements Slice 1 of [the command registry handoff](docs/CLAUDE-COMMAND-REGISTRY-HANDOFF.md),
