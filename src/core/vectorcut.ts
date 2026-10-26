@@ -73,7 +73,7 @@ function crossings(rec: StrokeRecord, others: StrokeRecord[]): number[] {
 }
 
 /** The point at a fractional index (pressure and tilt interpolated). */
-function at(points: StrokePoint[], f: number): StrokePoint {
+export function at(points: StrokePoint[], f: number): StrokePoint {
   const i = Math.max(0, Math.min(points.length - 2, Math.floor(f)));
   const t = Math.max(0, Math.min(1, f - i));
   const a = points[i]!;

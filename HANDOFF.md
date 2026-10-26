@@ -2,6 +2,93 @@
 
 ## Current state (2026-10-26) — read this first
 
+### Slice 1: vector lines keep to the selection (2026-10-26, committed on branch `codex/vector-selection`, not pushed or merged)
+
+Implements Slice 1 of [the follow-up slices handoff](docs/CLAUDE-FOLLOWUP-SLICES-HANDOFF.md). It is
+on branch `codex/vector-selection` from `6491434`, committed there at the user's request (not pushed
+or merged). No source files were dirty before starting. Baseline: 62 files / 502 tests, and the
+build passed. Slice 2 was not started.
+
+- **New `src/core/vectorclip.ts`** (16 unit tests in `vectorclip.test.ts`).
+  - `clipStrokeToMask(rec, mask, w, h, keep = 'inside')`:
+    - It walks every segment in steps of at most 1px, so an unselected strip between two sparse
+      points is still found. Point centres alone missed it, and a fixture caught that.
+    - It bisects each crossing 8 times between neighbouring samples, and the cut point is taken on
+      the kept side.
+    - Pieces keep pressure, tilt and time and lose the taper at cut ends.
+    - A wholly kept stroke is the same record; nothing kept gives `[]`.
+    - Piece ids are `${id}~c${k}` (`vectorcut` uses `~${k}`).
+  - `eraseVectorsInMask(...)`:
+    - Only the parts of the eraser path inside the mask erase; they are found with
+      `clipStrokeToMask` and fed run by run to the existing `eraseVectors`.
+    - A touched line keeps its outside parts as they were.
+    - It returns null when the inside length is unchanged, so an eraser touching lines only outside
+      gives no vector change, in both Whole and Crossing modes.
+  - `vectorcut.ts` now exports its `at()` helper.
+- **`app.ts`.**
+  - New `clipToSelection(strokes, clip)`, which uses the pen-down `live.clip` (null while editing a
+    mask).
+  - The pen commit clips the record and its symmetry copies. If nothing survives, it shows the notice
+    "The stroke is outside the selection." and adds no undo step or `lastShape`. Point-edit-after-hold
+    opens the first surviving piece.
+  - The Line-plane erase uses `eraseVectorsInMask` when there is a clip. The raster half still clips
+    as before.
+  - `swapShape` (Edit shape) clips vector replacements with `lastShape.clip`. It refuses before
+    undoing if nothing would survive, with the notice "That shape would be outside the selection."
+  - The live vector preview is clipped the same way, so a pen line never shows outside while
+    drawing.
+- **Copy.** The Studio hint now includes Vector lines. The manual's selection paragraph replaces the
+  "Vector lines are not clipped" limit. New UPDATES entry: "Vector lines keep to the selection". The
+  earlier "Paint inside a selection" entry is left as the dated note it was.
+- **Fixtures.**
+  - `selectionpaint` check 11 (it asserted the old limit) is replaced by vector checks:
+    - one crossing stroke becomes one inside piece with ends on the edges;
+    - it is one undo step, and Undo removes it;
+    - a stroke across two selected areas becomes two records with none outside;
+    - point editing works on each piece;
+    - a stroke wholly outside adds nothing, no undo step, and gives the notice;
+    - the symmetry copy outside is dropped;
+    - QuickShape and Edit shape → Keep my stroke stay inside.
+  - Checks 13–14: the vector eraser outside changes nothing and adds no step; inside, it cuts only
+    inside and the outside ends stay; Undo restores the original single record.
+  - `inkpaint` "A selection restricts automatic paint without acting as a fake closing wall" was
+    already failing on `6491434`. The raster stencil (`2298783`) clips the square ink stroke that
+    crossed the selection, so the loop never closed. The app behaves as designed; the test setup was
+    stale. The check now seeds three sides as existing ink and draws the closing side inside the
+    selection. It asserts paint only inside the selection, and no paint when the shape is open (so
+    the selection edge is not a wall).
+
+**Checks.**
+- `npm test`: 63 files / 518 tests.
+- `npm run build` passed (existing chunk warning).
+- `git diff --check -- src tests` is clean. The whole tree flags a blank line at EOF in
+  `docs/feature-deconstruction/07-…`, another collaborator's uncommitted edit, left alone.
+
+Headless Chrome, fresh profile, 1280×900, against `127.0.0.1:5217`:
+
+| Fixture | Pass / Fail |
+|---|---|
+| selectionpaint | 40 / 0 |
+| selectionedit | 29 / 0 |
+| paintingplanes | 36 / 0 |
+| quickmenu | 34 / 0 |
+| paintingworkflow | 20 / 0 |
+| pointedit | 9 / 0 |
+| inkpaint | 21 / 0 until it stalls (see below) |
+
+inkpaint then stalls on "Running…", as it also does on a clean `6491434` checkout in headless
+Chrome. Its later checks (QuickShape, Edit shape enclosure, full-HD timing, Lite) are not verified
+here.
+
+**Not verified.**
+- iPad/Pencil.
+- The cost of per-pixel segment sampling on long full-HD vector strokes. The live preview reclips
+  every frame.
+- Vector erase in Crossing mode where a cut crossing lies exactly on the selection edge.
+- A selection made after a Transform (the transformed mask is used as it is).
+
+**Resume:** review this branch; Slice 2 (saved selections, then feather) waits until asked.
+
 ### Selection editing: colour wand, Reselect, Copy/Cut to layer (2026-10-26, committed and pushed to main at the user's request)
 
 The user asked to check the new research docs and implement from them. The new notes are

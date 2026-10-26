@@ -80,8 +80,13 @@ try {
   await fresh(); seededOpen(); const fill = planeCanvas(app.drawing,'fill').getContext('2d')!; fill.fillStyle='#2a9d8f';fill.fillRect(45,45,10,10); fill.fillStyle='rgba(10,20,30,.5)';fill.fillRect(65,65,5,5); const semi=pixel(66,66);
   stroke([[20,22],[108,22]]); await settle();
   check('Automatic paint preserves both opaque and translucent existing paint exactly', equals(pixel(48,48),[42,157,143]) && pixel(66,66).every((v,i)=>v===semi[i]) && equals(pixel(80,80),[230,57,70]));
-  await fresh(); app.setTool('fill'); app.setFillMode('lasso'); app.selectShape='rect'; stroke([[64,12],[120,120]]); app.setTool('brush');app.setPlane('line');stroke(square);await settle();
-  check('A selection restricts automatic paint without acting as a fake closing wall', !!app.spatialSelection && pixel(40,64)[3] === 0 && equals(pixel(80,64),[230,57,70]));
+  // a selection clips the ink too, so the closing stroke is drawn inside it (left, top and bottom are existing ink)
+  const openRight = () => { const g = app.drawing.line.getContext('2d')!; g.fillStyle = '#18181b'; g.fillRect(20,20,88,5); g.fillRect(20,20,5,88); g.fillRect(20,103,88,5); app.drawing.rev++; app.residency.touch(app.drawing); };
+  await fresh(); openRight(); app.setTool('fill'); app.setFillMode('lasso'); app.selectShape='rect'; stroke([[64,12],[120,120]]); app.setTool('brush');app.setPlane('line');stroke([[105,20],[105,108]]);await settle();
+  const closed = !!app.spatialSelection && pixel(40,64)[3] === 0 && equals(pixel(80,64),[230,57,70]);
+  await fresh(); const g0 = app.drawing.line.getContext('2d')!; g0.fillStyle = '#18181b'; g0.fillRect(20,20,88,5); g0.fillRect(20,103,88,5); app.drawing.rev++; app.residency.touch(app.drawing);
+  app.setTool('fill'); app.setFillMode('lasso'); app.selectShape='rect'; stroke([[64,12],[120,120]]); app.setTool('brush');app.setPlane('line');stroke([[105,20],[105,108]]);await settle();
+  check('A selection restricts automatic paint without acting as a fake closing wall', closed && pixel(80,64)[3] === 0);
   await fresh(); const mask=app.project.newDrawing();app.project.layer.mask=mask.id;const mg=mask.line.getContext('2d')!;mg.fillStyle='#000';mg.fillRect(0,0,64,128);mask.rev++;app.residency.touch(mask);stroke(square);await settle();
   check('A layer mask excludes fully hidden pixels from newly applied paint', pixel(40,64)[3] === 0 && equals(pixel(80,64),[230,57,70]));
   await fresh();const queuedMask=app.project.newDrawing();app.project.layer.mask=queuedMask.id;queuedMask.line.getContext('2d')!.fillRect(0,0,64,128);queuedMask.rev++;await park(queuedMask);stroke(square);await until(()=>!app.strokeActive&&app.residency.isReady(queuedMask));

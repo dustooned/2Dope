@@ -12,6 +12,7 @@ import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type To
 import { DabWalker } from './brush/dabs';
 import { maskCanvas } from './brush/clip';
 import { colorRegion } from './fill/wand';
+import { clipStrokeToMask, eraseVectorsInMask } from './core/vectorclip';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
@@ -580,23 +581,27 @@ export class App {
       const n = Math.max(1, outline.length - 1);
       pts = outline.map((q, i) => ({ x: q.x, y: q.y, pressure: sampleProfile(profile, i / n), tiltX: last.tiltX, tiltY: last.tiltY, t: i }));
     }
+    const rec: StrokeRecord = { ...s.rec, id: newStrokeId(), points: pts };
+    // a vector replacement stays inside the selection the shape was drawn in (its copies too)
+    const strokes = rec.tool === 'pen' ? this.clipToSelection([rec, ...this.symmetryVectors(rec)], s.clip) : [];
+    if (rec.tool === 'pen' && !strokes.length) {
+      this.onNotice?.('That shape would be outside the selection.');
+      return;
+    }
     // take the old shape away, then commit the new one
     this.history.undo();
     const d = s.drawing;
     const oldVectors = d.vectors;
-    const rec: StrokeRecord = { ...s.rec, id: newStrokeId(), points: pts };
     const label = choice === 'stroke' ? 'Keep my stroke' : (SHAPE_CHOICES.find((c) => c.id === choice)?.label ?? choice).replace(/^\S+\s/, '');
     if (rec.tool === 'pen') {
-      const id = rec.id;
-      const copies = this.symmetryVectors(rec);
-      const ids = new Set([id, ...copies.map((c) => c.id)]);
-      d.vectors = [...d.vectors, rec, ...copies];
+      const ids = new Set(strokes.map((v) => v.id));
+      d.vectors = [...d.vectors, ...strokes];
       this.recordInk(
         {
           label: `Vector ${label.toLowerCase()}`,
           drawings: [d],
           do: () => {
-            d.vectors = [...d.vectors, rec, ...copies];
+            d.vectors = [...d.vectors, ...strokes];
             this.touch(d);
           },
           undo: () => {
@@ -638,7 +643,7 @@ export class App {
     // a new shape is a new line: keep editing its points instead of dropping out
     if (rec.tool === 'pen' && (this.ve || this.pointsAfterHold)) {
       this.ve = null;
-      this.enterPointEdit(rec.id);
+      this.enterPointEdit(strokes.find((v) => v.id === rec.id || v.id.startsWith(`${rec.id}~`))?.id ?? strokes[0]!.id);
     }
   }
 
@@ -2024,6 +2029,11 @@ export class App {
   }
 
   /** A vector line's symmetry copies (its own lines), none without symmetry. */
+  /** Vector lines kept to a selection mask (unchanged without one). */
+  private clipToSelection(strokes: StrokeRecord[], clip: Uint8Array | null): StrokeRecord[] {
+    return clip ? strokes.flatMap((v) => clipStrokeToMask(v, clip, this.docW, this.docH)) : strokes;
+  }
+
   private symmetryVectors(rec: StrokeRecord): StrokeRecord[] {
     const sym = rec.sym;
     if (!sym || sym.mode === 'off') return [];
@@ -4762,17 +4772,26 @@ export class App {
     if (post > 0) rec.points = smoothStroke(rec.points, post);
     const d = live.drawing;
     const oldVectors = d.vectors;
+    let pointsOf = rec.id;
     if (rec.tool === 'pen') {
-      const id = rec.id;
-      const copies = this.symmetryVectors(rec);
-      const ids = new Set([id, ...copies.map((c) => c.id)]);
-      d.vectors = [...d.vectors, rec, ...copies];
+      // a selection keeps the line (and its symmetry copies) inside it
+      const strokes = this.clipToSelection([rec, ...this.symmetryVectors(rec)], live.clip);
+      if (!strokes.length) {
+        this.onNotice?.('The stroke is outside the selection.');
+        this.lastShape = null;
+        this.onShapeChange();
+        this.requestRender();
+        return;
+      }
+      pointsOf = strokes.find((v) => v.id === rec.id || v.id.startsWith(`${rec.id}~`))?.id ?? strokes[0]!.id;
+      const ids = new Set(strokes.map((v) => v.id));
+      d.vectors = [...d.vectors, ...strokes];
       this.recordInk(
         {
           label: live.shape ? `Vector ${SHAPE_NAMES[live.shape.base.kind].toLowerCase()}` : 'Vector stroke',
           drawings: [d],
           do: () => {
-            d.vectors = [...d.vectors, rec, ...copies];
+            d.vectors = [...d.vectors, ...strokes];
             this.touch(d);
           },
           undo: () => {
@@ -4795,7 +4814,10 @@ export class App {
       }
       // the eraser on the Line plane also cuts vector lines (up to their crossings, or whole)
       const vBefore = d.vectors;
-      const vAfter = rec.tool === 'eraser' && live.plane === 'line' ? eraseVectors(d.vectors, rec.points, rec.brush.size / 2, this.vectorErase) : null;
+      // (with a selection, only inside it: an eraser outside it leaves every line alone)
+      const vAfter = rec.tool !== 'eraser' || live.plane !== 'line' ? null
+        : live.clip ? eraseVectorsInMask(d.vectors, rec.points, rec.brush.size / 2, this.vectorErase, live.clip, this.docW, this.docH)
+        : eraseVectors(d.vectors, rec.points, rec.brush.size / 2, this.vectorErase);
       if (vAfter) d.vectors = vAfter;
       if (c || vAfter) {
         this.recordInk({
@@ -4818,7 +4840,7 @@ export class App {
     this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo(), autoPaint: live.autoPaint, clip: live.clip } : null;
     this.onShapeChange();
     // a vector line snapped by holding: show its points straight away (can be turned off)
-    if (live.shape && rec.tool === 'pen' && this.pointsAfterHold) this.enterPointEdit(rec.id);
+    if (live.shape && rec.tool === 'pen' && this.pointsAfterHold) this.enterPointEdit(pointsOf);
     this.residency.updateThumb(d);
     this.requestRender();
   }
@@ -6009,15 +6031,17 @@ export class App {
       if (ink?.record.tool === 'pen') {
         const extra = ink.record.brush.smoothing < 0.15 ? ink.predicted : [];
         const points = [...ink.record.points, ...extra];
-        vectors = [...vectors, { ...ink.record, points }];
+        const live: StrokeRecord[] = [{ ...ink.record, points }];
         const sym = ink.record.sym;
         if (sym && sym.mode !== 'off') {
           const n = symmetryCopies(sym.mode, sym.cx, sym.cy, 0, 0, 0).length;
-          for (let k = 1; k < n; k++) vectors.push({ ...ink.record, points: points.map((p) => {
+          for (let k = 1; k < n; k++) live.push({ ...ink.record, points: points.map((p) => {
             const c = symmetryCopies(sym.mode, sym.cx, sym.cy, p.x, p.y, 0)[k]!;
             return { ...p, x: c.x, y: c.y };
           }) });
         }
+        // the preview keeps to the selection as the committed line will
+        vectors = [...vectors, ...this.clipToSelection(live, ink.clip)];
       }
       return {
         line: raster?.plane === 'line' ? liveSrc(drawing.line) : drawing.line,

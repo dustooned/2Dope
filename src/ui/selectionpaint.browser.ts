@@ -5,7 +5,7 @@ import { Bubbles } from './bubbles';
 
 // device preferences this page changes, put back exactly as they were at the end
 const saved = Object.keys(localStorage).filter((k) => k.startsWith('2dope.')).map((k) => [k, localStorage.getItem(k)!] as const);
-for (const k of ['2dope.symmetry', '2dope.guide', '2dope.guide.assist', '2dope.inkpaint', '2dope.quickshape', '2dope.fill.mode', '2dope.select.shape', '2dope.ui.level']) localStorage.removeItem(k);
+for (const k of ['2dope.symmetry', '2dope.guide', '2dope.guide.assist', '2dope.inkpaint', '2dope.quickshape', '2dope.fill.mode', '2dope.select.shape', '2dope.ui.level', '2dope.eraser.vector']) localStorage.removeItem(k);
 const stage = document.querySelector<HTMLElement>('#stage')!, canvas = document.querySelector<HTMLCanvasElement>('#canvas')!;
 const app = new App(canvas, stage);
 app.loadProject(new Project(128, 128));
@@ -16,6 +16,8 @@ const bubbles = new Bubbles(app, stage, { brushLibrary() {}, colorPanel() {}, la
 bubbles.setLevel('simple', false);
 const refresh = () => bubbles.update();
 app.onFrameChange = refresh; app.onCompChange = refresh; app.onToolChange = refresh; app.onBrushChange = refresh; app.onShapeChange = refresh; app.history.onChange = refresh;
+const notices: string[] = [];
+app.onNotice = (m) => notices.push(m);
 const settle = (ms = 140) => new Promise<void>((r) => setTimeout(r, ms));
 const options = () => document.querySelector<HTMLElement>('.bub-ctx')!;
 const chip = (name: string) => [...options().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.getAttribute('aria-label') === name) ?? null;
@@ -168,13 +170,73 @@ try {
   stroke([[72, 50], [96, 50]]); await settle();
   check('Without the selection the mirror paints (the check above is meaningful)', alpha(84, 50) > 0 && alpha(44, 50) > 0);
 
-  // 11. Vector is not clipped (documented limitation)
+  // 11. Vector pen strokes keep to the selection
+  const inSel = (x: number, y: number) => app.spatialSelection?.mask[Math.floor(y) * 128 + Math.floor(x)] === 1;
+  const allInside = (vs: { points: { x: number; y: number }[] }[]) => vs.every((v) => v.points.every((p) => inSel(p.x, p.y)));
   await fresh();
   await selectRect(40, 8, 88, 120);
   brush('pen');
+  const top11 = app.history.peekUndo();
   stroke(across(64)); await settle();
-  const v = app.drawing.vectors[app.drawing.vectors.length - 1];
-  check('A vector stroke in a selection is kept whole (not clipped)', !!v && Math.min(...v.points.map((p) => p.x)) < 40 && Math.max(...v.points.map((p) => p.x)) > 88);
+  const one = app.drawing.vectors;
+  const xs = one.flatMap((v) => v.points.map((p) => p.x));
+  check('A vector stroke across the selection keeps only its inside part, with both ends on the edges', one.length === 1 && allInside(one) && Math.min(...xs) < 41 && Math.max(...xs) > 87, { n: one.length, min: Math.min(...xs), max: Math.max(...xs) });
+  check('The clipped vector stroke is one undo step', app.history.peekUndo() !== top11 && app.history.peekUndo()?.label === 'Vector stroke');
+  app.undo(); await settle();
+  check('Undo removes the clipped vector stroke', app.drawing.vectors.length === 0);
+  // two separate selected areas: one stroke becomes two records
+  app.setSelectOp('add'); app.setTool('fill'); app.setFillMode('lasso');
+  stroke([[96, 8], [120, 120]]); await settle();
+  app.setSelectOp('new');
+  brush('pen');
+  stroke(across(64)); await settle();
+  const two = app.drawing.vectors;
+  check('A vector stroke crossing two selected areas becomes two records, none outside', two.length === 2 && allInside(two) && new Set(two.map((v) => v.id)).size === 2, two.map((v) => v.id));
+  check('Point editing works on each clipped piece', two.every((v) => { const ok = app.enterPointEdit(v.id) && app.pointStroke?.id === v.id; app.exitPointEdit(); return ok; }));
+  await settle();
+  // a stroke wholly outside: nothing, no undo step
+  const n11 = app.drawing.vectors.length, top11b = app.history.peekUndo();
+  notices.length = 0;
+  stroke([[4, 30], [30, 30]]); await settle();
+  check('A vector stroke outside the selection adds nothing and no undo step', app.drawing.vectors.length === n11 && app.history.peekUndo() === top11b && notices.includes('The stroke is outside the selection.'), notices);
+  // symmetry: the mirrored copy outside the selection is dropped
+  await fresh();
+  await selectRect(64, 8, 120, 120);
+  brush('pen');
+  app.setSymmetry('vertical');
+  stroke([[72, 40], [96, 40]]); await settle();
+  check('Symmetry + selection: the vector copy outside is dropped', app.drawing.vectors.length === 1 && allInside(app.drawing.vectors));
+  app.setSymmetry('off');
+
+  // a vector QuickShape and Edit shape → Keep my stroke stay inside too
+  await fresh();
+  await selectRect(40, 8, 88, 120);
+  brush('pen');
+  app.quickShape = true;
+  stroke(across(64), false); await settle(560); pointer('pointerup', 108, 64); await settle();
+  const snapped = app.drawing.vectors;
+  check('A vector QuickShape in a selection is clipped', !!app.lastShape && snapped.length === 1 && allInside(snapped));
+  app.swapShape('stroke'); await settle();
+  check('Edit shape → Keep my stroke keeps the vector line inside the selection, as one undo step', app.lastShape?.choice === 'stroke' && app.drawing.vectors.length === 1 && allInside(app.drawing.vectors) && app.history.peekUndo()?.label === 'Vector keep my stroke');
+  app.quickShape = false;
+
+  // 13–14. The vector eraser keeps to the selection
+  await fresh();
+  brush('pen');
+  stroke(across(64)); await settle();
+  const original = app.drawing.vectors[0]!;
+  await selectRect(40, 8, 88, 120);
+  app.setVectorErase('crossing');
+  brush('eraser');
+  const top13v = app.history.peekUndo();
+  stroke([[4, 64], [30, 64]]); await settle();
+  check('A vector eraser outside the selection changes no vector and adds no undo step', app.drawing.vectors.length === 1 && app.drawing.vectors[0] === original && app.history.peekUndo() === top13v);
+  stroke([[50, 64], [70, 64]]); await settle();
+  const left = app.drawing.vectors;
+  const insideLeft = left.flatMap((v) => v.points).filter((p) => inSel(p.x, p.y) && p.x > 41 && p.x < 87);
+  check('A vector eraser inside the selection cuts only inside; the outside ends stay', left.length >= 2 && insideLeft.length === 0 && left.some((v) => v.points.some((p) => p.x < 30)) && left.some((v) => v.points.some((p) => p.x > 100)), left.map((v) => v.id));
+  app.undo(); await settle();
+  check('Undo restores the original single vector record', app.drawing.vectors.length === 1 && app.drawing.vectors[0] === original);
 
   // 12. QuickShape and Edit shape keep the clip
   await fresh();
