@@ -2,7 +2,38 @@
 
 ## Current state (2026-10-26) — read this first
 
-**Latest step: UI consistency pass.**
+**Latest step: sizing, corner and text-size pass (follows f94e90a).**
+The user authorized committing and pushing this pass to main on 2026-10-26.
+The user reported the live site looked unchanged and asked to also fix the button sizes and the
+corner/text-size drift. The deployed CSS/JS did contain f94e90a (checked by fetching the live
+assets); Pages sends `Cache-Control: max-age=600`, so a browser can show the old page for up to
+10 minutes. A hard refresh loads the new one.
+
+- Menu dock and level button: 40px to 44px. They now sit 5px below the 8px bar top, which centres
+  them on the 54px bubble rows and painting header (desktop centre 35px in every workspace and
+  level). Over the Full top bar (`ui-full`, not quick/hidden/collapsed/painting) the dock sits at
+  4px and the top bar's min-height is 52px. At 480px and below, the 46px bubble rows outside the
+  painting workspace use +1px. Neighbouring offsets moved from 56px to 60px: bub-modes, bub-tools, bub-ctx,
+  painting header, and the `bub-stack` width check in `bubbles.ts`. Also: the top bar's left padding
+  is 60px, the menu sits at +55px and the level menu at 63px.
+- Corners: new `--radius-xs` 4px, `--radius` 8px, `--radius-md` 12px, `--radius-lg` 16px, `--pill`.
+  Every `border-radius` maps onto them: 3-5px go to xs; 6, 7, 10 and 11px go to 8px (controls in
+  panels); 14-28px panels go to 16px; pill-shaped controls use `--pill`; 1-2px hairlines and 50%
+  are kept. The boot-failure box in index.html is now 12px.
+- Text: 9px to 10px (5 labels); a manual h4 and the colour panel title went from 14px to 15px.
+  The App settings title (17px) and Share title (18px) are now 16px, like other dialog titles.
+  16px inputs are kept to stop iOS zooming in.
+- Release note: the 2026-10-26 entry gained an item.
+
+Checks: 59 files / 482 tests, strict TypeScript and build passed. On 127.0.0.1:5217 at
+1440x900, all five workspaces at all three levels have the dock, level button and adjacent bar
+sharing a centre line, with an 8px gap. At 375x812 the Draw and Time centres match
+(35 and 31), there is no horizontal page overflow, and there are no console errors. Browser
+fixtures were not re-run, and the Board, gallery, share and effects panels were not inspected
+one by one.
+
+### Earlier step (2026-10-26): UI consistency pass, f94e90a
+
 The user authorized committing and pushing this checked pass to main on 2026-10-26.
 The user asked to clean up inconsistent UI. Scope was styling and one class bug; no behaviour,
 data, file format or History changes.

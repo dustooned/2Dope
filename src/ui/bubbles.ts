@@ -154,7 +154,7 @@ export class Bubbles {
     // the mode and tool rows side by side need the stage's width; when they do not fit (a tablet
     // upright, a split screen) the tools go under the modes, as on a phone
     const mw = this.modes.offsetParent ? this.modes.offsetWidth : 0, tw = this.tools.offsetParent && !this.tools.hidden ? this.tools.offsetWidth : 0;
-    const stack = !narrow && mw > 0 && tw > 0 && mw + tw + 56 + 56 + 12 > s.width;
+    const stack = !narrow && mw > 0 && tw > 0 && mw + tw + 60 + 60 + 12 > s.width;
     if (stack !== this.stage.classList.contains('bub-stack')) this.stage.classList.toggle('bub-stack', stack);
     const tools = Math.max(bottomOf(this.modes), bottomOf(this.tools));
     if (!tools) {
