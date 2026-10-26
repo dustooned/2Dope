@@ -10,6 +10,7 @@ import { AUTO_PAINT_KEY, autoPaintLimit, newlyEnclosed, readInkPaint } from './f
 import { newSeed } from './core/rng';
 import { newStrokeId, strokeLength, type StrokePoint, type StrokeRecord, type Tool } from './core/stroke';
 import { DabWalker } from './brush/dabs';
+import { maskCanvas } from './brush/clip';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
@@ -143,6 +144,8 @@ interface LiveStroke {
   assist?: { x: number; y: number; dir: number | null };
   /** Set once QuickShape snapped the stroke: the recognised shape and the pen point at the snap. */
   shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; profile: number[]; raw: StrokePoint[] };
+  /** The selection a raster stroke paints inside, fixed at pen-down (never while editing a mask). */
+  clip: Uint8Array | null;
 }
 
 interface AutoPaintStroke { color: string; selection: Uint8Array | null; mask: Drawing | null }
@@ -222,6 +225,7 @@ export class App {
       if (this.gradEdit) this.applyGradEdit();
       const l = selected ? this.editor.layer(selected) : null;
       this.editor.select(l && this.isAssetPlacement(l) ? l.id : null);
+      if (!was && !this.project.comp.layers.some(l => this.isAssetPlacement(l))) this.onNotice?.('Nothing is placed in this shot yet. Open Assets and place one, then Move assets can arrange it.');
     } else if (was) this.editor.select(null);
     if (was !== this.arrangingAssets) this.fit();
     this.updateCursor(); this.onToolChange(); this.onFrameChange(); this.requestRender();
@@ -531,7 +535,7 @@ export class App {
    * The last snapped shape while it can still be changed (Edit shape): the hand-drawn points, the
    * stroke it became and its undo step. Cleared by any other stroke or edit.
    */
-  lastShape: { raw: StrokePoint[]; choice: ShapeChoice | 'stroke'; rec: StrokeRecord; drawing: Drawing; plane: Plane; canvas: HTMLCanvasElement; cmd: ReturnType<History['peekUndo']>; autoPaint?: AutoPaintStroke } | null = null;
+  lastShape: { raw: StrokePoint[]; choice: ShapeChoice | 'stroke'; rec: StrokeRecord; drawing: Drawing; plane: Plane; canvas: HTMLCanvasElement; cmd: ReturnType<History['peekUndo']>; autoPaint?: AutoPaintStroke; clip: Uint8Array | null } | null = null;
   /** Main shows or hides the Edit shape button. */
   onShapeChange: () => void = () => {};
 
@@ -599,7 +603,8 @@ export class App {
       );
     } else {
       this.raster.bind(s.canvas);
-      this.raster.begin(rec);
+      // the replacement stays inside the selection the shape was drawn in
+      this.raster.begin(rec, s.clip);
       const walker = new DabWalker(rec.brush, rec.seed);
       for (const q of pts) this.raster.addDabs(walker.push(q));
       const c = this.raster.commit(false);
@@ -862,6 +867,15 @@ export class App {
   exitPointEdit(): void {
     if (!this.ve) return;
     this.commitPointWidth();
+    // a point or handle still being dragged keeps where it is, as one undo step like letting go (no snap join)
+    const ve = this.ve, vd = ve.drag, hd = ve.hdrag;
+    if (vd) { clearTimeout(vd.timer); if (vd.moved) this.pushVectors('Move point', ve.d, vd.before); }
+    if (hd) {
+      let m = this.pointHandles.get(hd.base.id);
+      if (!m) this.pointHandles.set(hd.base.id, (m = new Map()));
+      m.set(hd.anchors[hd.k]!, hd.h);
+      this.pushVectors('Curve handle', ve.d, hd.before);
+    }
     this.ve = null;
     this.requestRender();
     this.onToolChange();
@@ -1056,7 +1070,9 @@ export class App {
   smudging = false;
   /** How much paint each smudge dab carries, 0..1. */
   smudgeStrength = 0.7;
-  private smudge: { id: number; d: Drawing; canvas: HTMLCanvasElement; before: ImageData; last: { x: number; y: number }; box: { x0: number; y0: number; x1: number; y1: number }; dab: HTMLCanvasElement } | null = null;
+  private smudge: { id: number; d: Drawing; canvas: HTMLCanvasElement; before: ImageData; last: { x: number; y: number }; box: { x0: number; y0: number; x1: number; y1: number }; dab: HTMLCanvasElement; clip: HTMLCanvasElement | null } | null = null;
+  /** The selection as an alpha canvas for Smudge, reused between strokes. */
+  private smudgeClip: HTMLCanvasElement | null = null;
 
   setSmudging(on: boolean): void {
     this.smudging = on;
@@ -1071,7 +1087,10 @@ export class App {
     const canvas = planeCanvas(d, this.plane);
     const p = this.toPoint(e, e.timeStamp);
     const dab = this.smudge?.dab ?? document.createElement('canvas');
-    this.smudge = { id: e.pointerId, d, canvas, before: canvas.getContext('2d')!.getImageData(0, 0, this.docW, this.docH), last: { x: p.x, y: p.y }, box: { x0: p.x, y0: p.y, x1: p.x, y1: p.y }, dab };
+    // a selection is a stencil for smudging too (fixed at pen-down)
+    const sel = this.spatialSelection;
+    const clip = sel ? (this.smudgeClip = maskCanvas(sel.mask, this.docW, this.docH, this.smudgeClip ?? undefined)) : null;
+    this.smudge = { id: e.pointerId, d, canvas, before: canvas.getContext('2d')!.getImageData(0, 0, this.docW, this.docH), last: { x: p.x, y: p.y }, box: { x0: p.x, y0: p.y, x1: p.x, y1: p.y }, dab, clip };
     this.onStrokeState(true);
   }
 
@@ -1094,9 +1113,16 @@ export class App {
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     dg.fillStyle = grad;
     dg.fillRect(0, 0, size, size);
+    // clipped: whole-pixel placement, so the selection edge stays hard
+    let dx = x - r, dy = y - r;
+    if (s.clip) {
+      dx = Math.round(dx);
+      dy = Math.round(dy);
+      dg.drawImage(s.clip, -dx, -dy);
+    }
     const g = s.canvas.getContext('2d')!;
     g.globalAlpha = this.smudgeStrength;
-    g.drawImage(dab, x - r, y - r);
+    g.drawImage(dab, dx, dy);
     g.globalAlpha = 1;
     s.last = { x, y };
     s.box = { x0: Math.min(s.box.x0, x - r), y0: Math.min(s.box.y0, y - r), x1: Math.max(s.box.x1, x + r), y1: Math.max(s.box.y1, y + r) };
@@ -1139,6 +1165,8 @@ export class App {
       before.data.set(s.before.data.subarray(from, from + w * 4), row * w * 4);
     }
     const after = g.getImageData(x, y, w, h);
+    // nothing moved (all of it outside the selection, or on empty paper): no undo step
+    if (after.data.every((v, i) => v === before.data[i])) return;
     const d = s.d, canvas = s.canvas;
     this.history.push({
       label: 'Smudge',
@@ -1200,9 +1228,6 @@ export class App {
     return true;
   }
 
-  /** The Select tool (not Fill > Select area): a finished loop goes straight into transform, like Procreate. */
-  selectMoves = false;
-
   /** Select the whole drawing and start transforming it (move / scale / rotate everything). */
   moveAll(): void {
     if (this.strokeActive || this.playing || this.project.layer.locked || this.blankPage) return;
@@ -1245,7 +1270,6 @@ export class App {
     const points: [number, number][] = [[x0, y0], [x1 + 1, y0], [x1 + 1, y1 + 1], [x0, y1 + 1]];
     this.setTool('fill');
     this.setFillMode('lasso');
-    this.selectMoves = true;
     this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: d, frame: this.frame, area: { mask, x0, y0, x1, y1 }, points, exact: true };
     this.beginTransform();
     this.onToolChange();
@@ -1512,7 +1536,6 @@ export class App {
     this.takeSelection({ mask: r.mask, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 }, boxPoints(r), true);
     this.requestRender();
     this.onToolChange();
-    if (this.selectMoves && this.selectOp === 'new' && this.spatial) this.beginTransform();
   }
 
   /** Invert: select everything that was not selected (everything, when nothing was). */
@@ -1640,7 +1663,6 @@ export class App {
       this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: d, frame: this.frame, area, points: boxPoints(area), exact: true };
       this.setTool('fill');
       this.setFillMode('lasso');
-      this.selectMoves = true;
       this.beginTransform();
     }
     this.onToolChange();
@@ -1975,8 +1997,6 @@ export class App {
 
   setFillMode(m: FillMode): void {
     if (this.fillG) this.endFill(true);
-    // Fill's own modes never auto-transform; the Select bubble turns that on after choosing
-    this.selectMoves = false;
     this.fillMode = m;
     saveJSON(FILL_MODE_KEY, m);
     this.onToolChange();
@@ -2392,8 +2412,8 @@ export class App {
         this.takeSelection(polygonMask(pts, this.docW, this.docH), pts, false);
       }
       this.requestRender();
+      // a new selection stays a selection; Transform is its own action
       this.onToolChange();
-      if (!cancel && this.selectMoves && this.selectOp === 'new' && this.spatial) this.beginTransform();
       return;
     }
     const target = planeCanvas(d, 'fill');
@@ -4485,6 +4505,8 @@ export class App {
     if (mask && !this.residency.isReady(mask)) { this.waitForPixels(e, drawing, mask); return; }
     const canvas = planeCanvas(drawing, plane);
     this.raster.bind(canvas);
+    // a selection is a stencil for the artwork; a layer mask is painted whole
+    const clip = this.editingMask ? null : this.spatialSelection?.mask.slice() ?? null;
     const record: StrokeRecord = {
       id: newStrokeId(),
       tool,
@@ -4497,8 +4519,9 @@ export class App {
     const t0 = e.timeStamp;
     const first = this.toPoint(e, t0);
     this.live = {
-      ...(combined && !this.project.layer.alphaLock ? { autoPaint: { color: this.color, selection: this.spatialSelection?.mask.slice() ?? null, mask } } : {}),
+      ...(combined && !this.project.layer.alphaLock ? { autoPaint: { color: this.color, selection: clip, mask } } : {}),
       record,
+      clip,
       drawing,
       canvas,
       plane,
@@ -4514,7 +4537,7 @@ export class App {
       predicted: [],
       still: { x: e.clientX, y: e.clientY },
     };
-    if (tool !== 'pen') this.raster.begin(record);
+    if (tool !== 'pen') this.raster.begin(record, clip);
     if (this.assist && this.guide.mode !== 'off') this.live.assist = { x: first.x, y: first.y, dir: null };
     this.feed(first);
     this.armShape(e);
@@ -4652,7 +4675,7 @@ export class App {
       }
     }
     // a snapped shape can be changed from the Edit shape button until something else happens
-    this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo(), autoPaint: live.autoPaint } : null;
+    this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo(), autoPaint: live.autoPaint, clip: live.clip } : null;
     this.onShapeChange();
     // a vector line snapped by holding: show its points straight away (can be turned off)
     if (live.shape && rec.tool === 'pen' && this.pointsAfterHold) this.enterPointEdit(rec.id);

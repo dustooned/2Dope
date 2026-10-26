@@ -96,8 +96,8 @@ try {
   key(canvas, 'KeyQ', 'q'); click('My Assets'); check('My Assets invokes the supplied library action exactly once', assetsOpened === 1 && !popup());
   customize(['brushes', 'layers', 'fill', 'pen', 'smudge', 'plane']); key(canvas, 'KeyQ', 'q'); click('Brushes'); key(canvas, 'KeyQ', 'q'); click('Layers');
   check('Configured Brushes and Layers use their existing UI callbacks', brushesOpened === 1 && layersOpened === 1 && !popup());
-  app.setFillMode('lasso'); app.selectMoves = true; key(canvas, 'KeyQ', 'q'); click('Bucket fill');
-  check('Bucket fill exits area selection and selects the normal Fill plane', app.tool === 'fill' && app.fillMode === 'tap' && !app.selectMoves && app.plane === 'fill');
+  app.setFillMode('lasso'); key(canvas, 'KeyQ', 'q'); click('Bucket fill');
+  check('Bucket fill exits area selection and selects the normal Fill plane', app.tool === 'fill' && app.fillMode === 'tap' && app.plane === 'fill');
   key(canvas, 'KeyQ', 'q'); click('Vector'); key(canvas, 'KeyQ', 'q'); click('Line / Fill');
   check('Vector and Line/Fill keep existing plane/tool compatibility', app.plane === 'fill' && app.tool === 'brush');
   key(canvas, 'KeyQ', 'q'); click('Smudge'); check('Smudge uses the shared brush state', app.smudging && app.tool === 'brush'); app.setSmudging(false);

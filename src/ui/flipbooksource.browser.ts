@@ -24,6 +24,8 @@ function refresh() { painting.update(); sheet.update(); strip.update(); assets.u
 app.onFrameChange = () => { flip.update(); refresh(); }; app.onCompChange = refresh; app.onToolChange = refresh; app.onBrushChange = refresh; app.editor.onChange = refresh; app.history.onChange = refresh;
 app.onWorkspaceChange = () => { sheet.restore(); flip.update(); refresh(); }; flip.onChange = refresh; app.onFlipKey = e => flip.onKey(e);
 const settle = (ms = 140) => new Promise<void>(r => setTimeout(r, ms));
+// A hidden or background tab runs no animation frames, so playback cannot advance; wait for one at most half a second.
+const nextFrame = () => new Promise<boolean>(r => { const t = setTimeout(() => r(false), 500); requestAnimationFrame(() => { clearTimeout(t); r(true); }); });
 const button = (name: string) => { const scope = document.querySelector('dialog[open]') ?? document; const b = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(b => b.offsetParent && !b.disabled && [b.getAttribute('aria-label'), b.textContent?.trim()].includes(name)); if (!b) throw new Error(`Missing ${name}`); return b; };
 const click = (name: string) => button(name).click();
 function key(target: HTMLElement, k: string, shift = false) { target.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: k, shiftKey: shift, bubbles: true, cancelable: true })); }
@@ -40,6 +42,7 @@ function pixel(comp: typeof app.project.comp, frame: number) { const c = documen
 let passed = 0, failed = 0;
 function check(name: string, ok: boolean) { const li = document.createElement('li'); li.textContent = `${ok ? 'PASS' : 'FAIL'}: ${name}`; if (!ok) li.textContent += JSON.stringify({ ex: app.project.exposures.map(e => e.length), frame: app.frame, focus: document.activeElement?.outerHTML.slice(0, 160), playing: app.playing, workspace: app.workspace, comp: app.project.comp.name, stroke: app.strokeActive, classes: document.body.className, flip: flip.row.offsetHeight, stage: stage.offsetHeight, reserve: stage.style.getPropertyValue('--flip-h') }); document.querySelector('#results')!.append(li); if (ok) passed++; else failed++; }
 try {
+  if (!await nextFrame()) check('Animation frames run (this tab is hidden or in the background: show it and reload)', false);
   flip.set(false); await settle(); const shot = app.project.activeComp, shotLayer = app.project.activeLayer;
   click('Assets (0)'); click('New asset'); const input = document.querySelector<HTMLInputElement>('input[aria-label="New asset name"]')!; input.value = 'Animated source'; key(input, 'Enter'); await settle();
   const source = app.project.comp, sourceLayer = app.project.activeLayer; app.setFps(6); click('Flipbook'); await settle();
@@ -74,13 +77,13 @@ try {
   check('Source/shot navigation adds no document history beyond Place', app.history.peekUndo()?.label === 'Place artwork asset' && app.history.peekUndo() !== history);
   app.setFrame(2); click('Track'); click('Track'); click('Track'); click('Track'); await settle();
   app.pickLayer(sourceLayer); flip.update(); await settle();
-  await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+  await nextFrame(); await nextFrame();
   const scroll = document.querySelector<HTMLElement>('.flip-scroll')!, row = document.querySelector<HTMLElement>('.flip-track.active')!, sr = scroll.getBoundingClientRect(), rr = row.getBoundingClientRect();
   check('Selecting a lower track scrolls it into the available strip', rr.top >= sr.top - 1 && rr.bottom <= sr.bottom + 1);
-  scroll.style.maxHeight = '74px'; await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+  scroll.style.maxHeight = '74px'; await nextFrame(); await nextFrame();
   const resized = scroll.getBoundingClientRect(), selected = row.getBoundingClientRect();
   check('Resizing the track list keeps the active lower track visible', selected.top >= resized.top - 1 && selected.bottom <= resized.bottom + 1);
-  scroll.style.maxHeight = ''; await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+  scroll.style.maxHeight = ''; await nextFrame(); await nextFrame();
   check('Short screens limit the track list to one row while taller screens show up to three', innerHeight > 500 || scroll.clientHeight <= 75);
   const stageH = stage.getBoundingClientRect().height, measured = parseFloat(stage.style.getPropertyValue('--flip-h'));
   check('Canvas fitting tracks the measured Flipbook height', Math.abs(measured - (flip.row.offsetHeight + 16)) < 1 && measured < stageH);

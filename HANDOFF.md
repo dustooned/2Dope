@@ -2,6 +2,97 @@
 
 ## Current state (2026-10-26) — read this first
 
+### Selection as a painting stencil (2026-10-26, committed and pushed to main at the user's request)
+
+Implements the Must scope of [the stencil handoff](docs/CLAUDE-SELECTION-STENCIL-HANDOFF.md), plus
+its Smudge stretch. Baseline `1c06f0c`, on top of the quick-cleanup pass that is also uncommitted.
+Committed together with the quick-cleanup pass.
+
+- **A new selection stays a selection.** `selectMoves` is removed everywhere (`app.ts`, `main.ts`,
+  `bubbles.ts`, `quickmenu.ts`, two fixtures). `endFill`/`autoSelect` no longer call
+  `beginTransform()`. Move all, Select contents and Paste still start Transform themselves.
+- **Explicit chips.** The Select row has one chip per shape (Freehand, Rectangle, Ellipse,
+  Automatic) and per combination (New, Add, Subtract), with `aria-pressed`. Transform is the first
+  action chip. The cycling chips and their `.bub-cycle` dot CSS are gone.
+- **Clip helper.** New `src/brush/clip.ts`: `anySelected` (pure, 6 tests in `clip.test.ts`) and
+  `maskCanvas` (browser only).
+- **`RasterEngine`.** `begin(record, clip?)`: an array sets the clip, `null` clears it, `undefined`
+  keeps it. `cancel()` (and so `commit()`) clears it. `apply()` returns early when no selected pixel
+  is in the rect. Otherwise it copies the stroke image into a new `stencil` canvas and uses
+  `destination-in` with the mask canvas (built once per stroke; `clipImageCanvas` and `stencil` are
+  resized with the engine). The shared buffers are never masked in place. Predicted-input ghosts
+  (`drawGhost`) go through the stencil too. `commit()` returns null when the pixels did not change,
+  so there is no undo step.
+- **App.** `beginStroke` slices the selection mask once at pen-down into `live.clip` (null while
+  `editingMask`) and passes it to `raster.begin`. Ink & Paint's `autoPaint.selection` reuses it.
+  `redrawShape` keeps it (`undefined`). `lastShape.clip` is passed again by `swapShape` (Edit shape).
+- **Smudge.** Clipped: `beginSmudge` builds a reused mask canvas. `smudgeDab` places the dab on
+  whole pixels when clipped and masks it with `destination-in`. A smudge that changes nothing adds
+  no undo step (also without a selection).
+- **Copy.** Studio hint (`panel.ts`), manual tool-bar line and Select paragraph, and a new UPDATES
+  entry "Paint inside a selection" that names the limits.
+
+**Limits (documented in the manual and release note).** Vector pen strokes are not clipped. The
+Eraser on the Line plane still cuts vector lines outside the selection (`eraseVectors`), so an
+eraser stroke outside can still add an Erase step when it crosses vectors. Painting a layer mask
+ignores the selection by design. Adjustments are not clipped (out of scope).
+
+**Checks run.** `npm test`: 60 files / 494 tests. `npm run build`: passed with the existing
+large-chunk warning. `git diff --check` is clean. Fixtures, run in headless Chrome with a fresh
+profile against `127.0.0.1:5217` (the in-app pane was hidden, so animation frames would not run):
+
+| Fixture | Result |
+|---|---|
+| New `tests/selectionpaint.html` | 29/0. Covers acceptance checks 1–12, plus Smudge and mask editing. |
+| paintingplanes | 36/0 |
+| quickmenu | 34/0 |
+| paintingworkflow | 20/0 |
+| artworkworkflow | 31/0 |
+| pointedit | 9/0 |
+| brushreturn | 24/0 at 1280×900 (one 44px-scroll layout check fails at 1024×768) |
+
+`inkpaint` stays on "Running…" in headless Chrome after "Alpha Lock never introduces…" or "Cancelled
+Pencil…". A clean worktree of `1c06f0c` stalls the same way, so this predates this change. It is not
+verified in a visible tab.
+
+The Select row was looked at in the real app at the Simple and Full levels and at 375px, where it
+scrolls inside its bar and the page does not scroll sideways. Its chips stay at the existing compact
+height (under 44px), like the other option rows.
+
+**Not verified.** iPad/Pencil feel and Lite memory with two extra full-page canvases. Clipping with
+a textured or image-tip brush (the fixture uses a plain round brush). Ellipse and Automatic
+selections as stencils (only rectangles were painted through). Save/reopen (no schema change).
+
+### Quick cleanup pass (2026-10-26, committed and pushed to main with the stencil work at the user's request)
+
+The user asked to fix the two broken browser fixtures, add the missing Move assets notice and test
+the point-edit workspace-switch fix with a real vector line. Kept local for review.
+
+- **flipbooksource / artworklibrary were not app bugs.** Both pass in a visible or headless Chrome
+  (26/0 and 34/0; artworklibrary-responsive 34/0). They failed only in a *hidden* in-app browser
+  pane, where `requestAnimationFrame` never fires. Playback could not advance, and bare
+  `await new Promise(requestAnimationFrame)` hung the page on "Running…". Both fixtures now wait for a
+  frame for at most 500ms (`nextFrame()`) and first report
+  `FAIL: Animation frames run (this tab is hidden or in the background: show it and reload)` instead of
+  hanging. Run fixtures in a visible tab or in headless Chrome. The in-app pane must be on screen.
+- **Move assets with nothing placed** now gives the notice "Nothing is placed in this shot yet. Open Assets
+  and place one, then Move assets can arrange it." (`App.setArrangeAssets`, only when turning on).
+  Covered by a new first check in `artworkworkflow`.
+- **Point edit settle, tested on a real pen line** (new `tests/pointedit.html`,
+  `src/ui/pointedit.browser.ts`, 9 checks). A finished point drag and a pending live width change are
+  kept on a workspace switch, as `Move point` / `Line width`, with Undo/Redo correct. **Bug found and
+  fixed:** switching workspace *during* a point or handle drag moved the point with no history step,
+  so the next Undo skipped it. `exitPointEdit()` now pushes the unfinished drag as one `Move point`
+  (or `Curve handle`) step, like letting go, but without a snap-join. The later pointerup is ignored.
+- The UPDATES "One way to switch workspaces" entry has one more sentence for these two changes.
+
+Checks: `npm test` 59 files / 488 passed; `npm run build` passed (existing large-chunk warning).
+Headless Chrome (fresh profile, http://127.0.0.1:5218, a separate test origin): paintingworkflow
+20/0, artworkworkflow 31/0, flipbooksource 26/0, artworklibrary 34/0, artworklibrary-responsive
+34/0, pointedit 9/0. The hidden in-app pane was confirmed to report the new RAF failure. Not done:
+the rest of the fixture suite, real touch/Pencil hardware, and the logo session's files. The
+point-edit check uses synthetic mouse pointer events.
+
 ### App logo and site icon (2026-10-26, committed and pushed to main at the user's request)
 
 The user supplied `2dopeLogo.svg` (an Affinity export with embedded gradient images) for the site
@@ -13,28 +104,6 @@ crumbs). `public/404.html` shows it and resolves its path from the `/2Dope/` roo
 added. Checks: 59 files / 488 tests and the build passed; `dist/index.html` uses `./` paths. The menu
 and Projects header were viewed on the 127.0.0.1:5217 test server at desktop width. Not checked: a
 real iPad home-screen add, Safari's tab icon, phone-width Projects header, and the deployed 404 page.
-
-**Latest step: easy delete for imported sounds and movies.**
-The user authorized committing and pushing this to main on 2026-10-26.
-The user reported no easy way to delete imported sound and video. Sounds could only be deleted from
-the folded Settings controls; movies/pictures are ordinary drawing layers whose delete sat in the
-Flipbook hold menu, Layers and Motion. No data/format change: delete reuses the existing audio
-History edit and `CompEditor.deleteLayers`.
-
-- `core/audio.ts` `withoutClip` (2 unit tests). `AudioTracks.deleteClip` (one "Delete sound" undo
-  step, closes the card, notice "Deleted … Undo brings it back.") and `soundMenu` (Settings…,
-  Mute, Delete sound). Trash buttons on Clips rail sound rows, Motion sound rows, Audio lane rows
-  and the sound card header; the controls' "Delete clip" is now "Delete sound". Hold/right-click
-  menus on sound blocks (Clips/Motion) and Story timeline sounds (`Board.setSoundMenu`).
-- `rails.ts`: hold/right-click on a top-level layer name tag in Clips offers Rename… and Delete
-  layer (confirm, undoable). Import notices for movies, pictures and sounds say how to remove them.
-- Manual (Layers media list, Audio) and release note "Easy delete for sounds and movies".
-
-Checks: 59 files / 488 unit tests, strict TypeScript and build passed. Browser on 127.0.0.1:5217 with a generated 1 s WAV and a
-generated WebM: the Clips trash, the block menu, the card trash, the Motion trash, the Audio lane
-trash and the Story timeline menu each removed the sound, with one Undo restoring it. The Clips
-layer menu's Delete layer confirmed and removed the movie layer; Undo restored it. Not checked on
-touch hardware (hold timing) and the movie had no sound track, so movie+sound import was not re-run.
 
 ### Earlier step (2026-10-26): shared workspace navigation, ebee0fc
 

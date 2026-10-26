@@ -4328,8 +4328,6 @@ body:not(.ui-full) .sidebar, body.ui-full.bar-collapsed .sidebar, body.ui-full.t
 .cp-palsel { flex: 1; min-width: 0; min-height: 32px; border-radius: var(--radius); background: var(--panel-2); color: inherit; border: 1px solid var(--line); }
 .cp-palbtn { min-width: 32px; min-height: 32px; padding: 0; border-radius: 50%; border: 0; background: var(--panel-2); color: inherit; font-size: 18px; }
 /* a chip that steps through choices: a small dot says there is more */
-.bub-chip.bub-cycle { position: relative; }
-.bub-chip.bub-cycle::after { content: ''; position: absolute; right: 5px; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .6; }
 
 /* ---- Share: the last mode ---- */
 .share { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: var(--bg); color: var(--text); }

@@ -32,6 +32,10 @@ function sourceHeaderFits(){
 let passed=0,failed=0;
 function check(name:string,ok:boolean){const li=document.createElement('li');li.textContent=`${ok?'PASS':'FAIL'}: ${name}`;document.querySelector('#results')!.append(li);if(ok)passed++;else failed++;}
 try{
+  const notices:string[]=[];app.onNotice=m=>{notices.push(m);};
+  app.setWorkspace('animate');app.setArrangeAssets(true);
+  check('Move assets with nothing placed explains how to place one',app.arrangingAssets&&notices.some(n=>n.startsWith('Nothing is placed in this shot yet')));
+  app.setArrangeAssets(false);app.setWorkspace('draw');app.setFrame(7);await settle();
   const shot=app.project.activeComp,layer=app.project.activeLayer;
   click('New asset');const input=document.querySelector<HTMLInputElement>('input[aria-label="New asset name"]')!;
   check('New asset opens a named modal with text focus',document.activeElement===input&&!!document.querySelector('dialog[open]'));

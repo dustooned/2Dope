@@ -1,3 +1,4 @@
+import { anySelected, maskCanvas } from './clip';
 import { symmetryCopies } from '../core/adjust';
 import type { StrokeRecord } from '../core/stroke';
 import { hash01 } from '../core/rng';
@@ -281,6 +282,13 @@ export class RasterEngine {
   private pullFrom: Uint8ClampedArray | null = null;
   private paper: CanvasPattern | null = null;
   private shadePaper: CanvasPattern | null = null;
+  /** The selection the stroke is clipped to (document pixels, 1 = selected), fixed at pen-down. */
+  private clipMask: Uint8Array | null = null;
+  /** `clipMask` as an alpha canvas, built once per stroke when first needed. */
+  private readonly clipImageCanvas: HTMLCanvasElement;
+  private clipReady = false;
+  /** The stroke image masked by the selection (the shared buffers are never masked in place). */
+  private readonly stencil: HTMLCanvasElement;
 
   constructor(
     public width: number,
@@ -292,6 +300,8 @@ export class RasterEngine {
     this.grained = makeCanvas(width, height);
     this.scratch = makeCanvas(width, height);
     this.work = makeCanvas(width, height);
+    this.clipImageCanvas = makeCanvas(width, height);
+    this.stencil = makeCanvas(width, height);
     this.bctx = ctx2d(this.buffer);
     this.sctx = ctx2d(this.shadeBuffer);
   }
@@ -301,10 +311,11 @@ export class RasterEngine {
     if (width === this.width && height === this.height) return;
     this.width = width;
     this.height = height;
-    for (const c of [this.buffer, this.shadeBuffer, this.grained, this.scratch, this.work]) {
+    for (const c of [this.buffer, this.shadeBuffer, this.grained, this.scratch, this.work, this.clipImageCanvas, this.stencil]) {
       c.width = width;
       c.height = height;
     }
+    this.clipReady = false;
   }
 
   /** The canvas strokes paint onto. */
@@ -327,8 +338,16 @@ export class RasterEngine {
     return (b.tipImage ? imageTipSprite(b.tipImage, color) : null) ?? tipSprite(b.hardness, color);
   }
 
-  begin(record: StrokeRecord): void {
+  /**
+   * Start a stroke. `clip` is the selection it paints inside: an array sets it, `null` clears it,
+   * and leaving it out keeps the current one (a QuickShape re-render of the same live stroke).
+   */
+  begin(record: StrokeRecord, clip?: Uint8Array | null): void {
     this.record = record;
+    if (clip !== undefined) {
+      this.clipMask = clip && clip.length === this.width * this.height ? clip : null;
+      this.clipReady = false;
+    }
     const b = record.brush;
     let color = record.tool === 'eraser' ? '#000000' : record.color;
     const jit = { hue: b.hueJitter ?? 0, sat: b.satJitter ?? 0, bright: b.brightJitter ?? 0 };
@@ -407,11 +426,30 @@ export class RasterEngine {
   drawGhost(ctx: CanvasRenderingContext2D, dabs: Dab[]): void {
     if (!this.tip || !this.shadeTip || !this.record || this.record.tool === 'eraser') return;
     const b = this.record.brush;
+    // a clipped stroke previews its predicted dabs through the selection too
+    const out = this.clipMask ? ctx2d(this.stencil) : ctx;
+    if (this.clipMask) out.clearRect(0, 0, this.width, this.height);
     for (const d of mirrored(dabs, this.record)) {
-      if (d.shade < 1) this.stamp(ctx, d, this.tip, b.grain, this.paper, (1 - d.shade) * b.opacity);
-      if (d.shade > 0) this.stamp(ctx, d, this.shadeTip, b.tiltShade.grain, this.shadePaper, d.shade * b.opacity);
+      if (d.shade < 1) this.stamp(out, d, this.tip, b.grain, this.paper, (1 - d.shade) * b.opacity);
+      if (d.shade > 0) this.stamp(out, d, this.shadeTip, b.tiltShade.grain, this.shadePaper, d.shade * b.opacity);
     }
-    ctx.globalAlpha = 1;
+    out.globalAlpha = 1;
+    if (out !== ctx) {
+      this.maskTo(out, { x: 0, y: 0, w: this.width, h: this.height });
+      ctx.drawImage(this.stencil, 0, 0);
+    }
+  }
+
+  /** Keep only the selected pixels of `r` on a canvas (the stencil). */
+  private maskTo(g: CanvasRenderingContext2D, r: Rect): void {
+    if (!this.clipReady) {
+      maskCanvas(this.clipMask!, this.width, this.height, this.clipImageCanvas);
+      this.clipReady = true;
+    }
+    g.save();
+    g.globalCompositeOperation = 'destination-in';
+    g.drawImage(this.clipImageCanvas, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+    g.restore();
   }
 
   private grow(d: Dab): void {
@@ -467,7 +505,15 @@ export class RasterEngine {
   private apply(target: CanvasRenderingContext2D, r: Rect): void {
     const rec = this.record;
     if (!rec) return;
-    const img = this.strokeImage(r);
+    let img = this.strokeImage(r);
+    if (this.clipMask) {
+      if (!anySelected(this.clipMask, this.width, r)) return;
+      const st = ctx2d(this.stencil);
+      st.clearRect(r.x, r.y, r.w, r.h);
+      st.drawImage(img, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+      this.maskTo(st, r);
+      img = this.stencil;
+    }
     target.save();
     target.globalAlpha = rec.brush.opacity;
     target.globalCompositeOperation = rec.tool === 'eraser' ? 'destination-out' : 'source-over';
@@ -512,7 +558,8 @@ export class RasterEngine {
       const before = tctx.getImageData(r.x, r.y, r.w, r.h);
       this.apply(tctx, r);
       const after = tctx.getImageData(r.x, r.y, r.w, r.h);
-      result = { rect: r, before, after };
+      // nothing changed (all of it outside the selection): no undo step
+      if (!samePixels(before.data, after.data)) result = { rect: r, before, after };
     }
     this.cancel();
     return result;
@@ -520,6 +567,8 @@ export class RasterEngine {
 
   cancel(): void {
     this.record = null;
+    this.clipMask = null;
+    this.clipReady = false;
     this.bbox = null;
     this.hasShade = false;
     this.paper = this.shadePaper = null;
@@ -527,4 +576,10 @@ export class RasterEngine {
     this.bctx.clearRect(0, 0, this.width, this.height);
     this.sctx.clearRect(0, 0, this.width, this.height);
   }
+}
+
+function samePixels(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }

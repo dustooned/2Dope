@@ -152,7 +152,7 @@ for (const b of toolButtons)
     const t = b.dataset.tool as Tool;
     if (app.transforming) app.cancelTransform();
     if (t === 'brush' && app.smudging) app.setSmudging(false);
-    else if (t === 'fill' && app.tool === 'fill' && app.fillMode === 'lasso') { app.selectMoves = false; app.setFillMode('tap'); }
+    else if (t === 'fill' && app.tool === 'fill' && app.fillMode === 'lasso') app.setFillMode('tap');
     else if (t === app.tool && t !== 'fill') brushLib.toggle(b);
     else app.setTool(t);
   });
@@ -162,7 +162,6 @@ for (const b of toolXButtons)
     else if (b.dataset.toolX === 'select') {
       app.setTool('fill');
       app.setFillMode('lasso');
-      app.selectMoves = true;
       app.onToolChange();
     } else if (!app.adjusting) app.beginAdjust('hsb');
   });

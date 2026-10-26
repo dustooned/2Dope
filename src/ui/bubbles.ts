@@ -355,14 +355,12 @@ export class Bubbles {
         break;
       case 'smudge': a.setSmudging(true); break;
       case 'fill':
-        a.selectMoves = false;
         a.setTool('fill');
         if (a.fillMode === 'lasso') a.setFillMode('tap');
         break;
       case 'select':
         a.setTool('fill');
         a.setFillMode('lasso');
-        a.selectMoves = true;
         break;
       case 'color': this.hooks.colorPanel(b); break;
       case 'layers':
@@ -648,20 +646,13 @@ export class Bubbles {
         ['ellipse', 'Ellipse', 'Drag an ellipse', 'selellipse'],
         ['auto', 'Automatic', 'Tap an area between lines', 'selauto'],
       ];
-      // one button each: tap to step through (fewer buttons, the same choices)
-      const si = shapes.findIndex(([k]) => k === a.selectShape);
-      const [, sLabel, sTitle, sIcon] = shapes[si]!;
-      const sNext = shapes[(si + 1) % shapes.length]!;
-      const shapeChip = this.chip(sLabel, `${sLabel}: ${sTitle.toLowerCase()}. Tap for ${sNext[1]}.`, false, () => a.setSelectShape(sNext[0]), sIcon);
-      shapeChip.classList.add('bub-cycle');
-      const ops = [['new', 'New', 'a new selection', 'selnew'], ['add', 'Add', 'adds to the selection', 'seladd'], ['subtract', 'Subtract', 'takes away from the selection', 'selsub']] as const;
-      const oi = ops.findIndex(([k]) => k === a.selectOp);
-      const [, oLabel, oTitle, oIcon] = ops[oi]!;
-      const oNext = ops[(oi + 1) % ops.length]!;
-      const opChip = this.chip(oLabel, `${oLabel}: ${oTitle}. Tap for ${oNext[1]}.`, a.selectOp !== 'new', () => a.setSelectOp(oNext[0]), oIcon);
-      opChip.classList.add('bub-cycle');
+      // one chip per choice, the current one pressed
+      const shapeChips = shapes.map(([k, label, title, icon]) => this.chip(label, `${label}: ${title.toLowerCase()}`, a.selectShape === k, () => a.setSelectShape(k), icon));
+      const ops = [['new', 'New', 'Start a new selection', 'selnew'], ['add', 'Add', 'Add to the selection', 'seladd'], ['subtract', 'Subtract', 'Take away from the selection', 'selsub']] as const;
+      const opChips = ops.map(([k, label, title, icon]) => this.chip(label, title, a.selectOp === k, () => a.setSelectOp(k), icon));
+      const sep = () => el('span', { class: 'bub-sep', 'aria-hidden': 'true' });
       // Fill in the selection with a gradient style starts a gradient edit here too
-      add(...this.gradChips(), shapeChip, opChip, el('span', { class: 'bub-sep', 'aria-hidden': 'true' }));
+      add(...this.gradChips(), ...shapeChips, sep(), ...opChips, sep());
       if (sel) {
         add(
           this.chip('Transform', 'Move, size, rotate or flip what is selected (drag the canvas to move)', false, () => a.beginTransform(), 'motion'),

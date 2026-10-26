@@ -136,7 +136,7 @@ export class QuickMenu {
       case 'brush': a.setSmudging(false); a.setTool('brush'); break;
       case 'eraser': case 'pen': a.setTool(id); break;
       case 'smudge': a.setSmudging(true); break;
-      case 'fill': a.selectMoves = false; a.setFillMode('tap'); a.setTool('fill'); break;
+      case 'fill': a.setFillMode('tap'); a.setTool('fill'); break;
       case 'eyedropper': a.armEyedropper(); break;
       case 'newFrame': a.flipAddFrame(true); break;
       case 'flipView': a.flipView(); break;

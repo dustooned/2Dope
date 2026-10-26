@@ -427,7 +427,7 @@ function fillEditor(app: App, refreshers: (() => void)[]): HTMLElement {
   fs.insertBefore(modes, acrossRow);
   fs.insertBefore(selectionActions, acrossRow);
   fs.insertBefore(xbox, acrossRow);
-  fs.append(el('p', { class: 'hint' }, 'Selection bounds fills on this frame; brushes stay unrestricted. Change frames/layers or press Esc to clear. Shift+G switches modes. Colors stay under your ink.'));
+  fs.append(el('p', { class: 'hint' }, 'A selection keeps fills, Brush, Eraser and Smudge inside it on this frame (Vector lines are not clipped). Change frames/layers or press Esc to clear. Shift+G switches modes. Colors stay under your ink.'));
   return fs;
 }
 

@@ -29,7 +29,9 @@ const projects = new MemoryStore(), files = new FileUI(app, projects, false); as
 const notices: string[] = []; app.onNotice = m => { notices.push(m); };
 function refresh() { painting.update(); assets.update(); }
 app.onFrameChange = () => { flip.update(); refresh(); }; app.onCompChange = refresh; app.onWorkspaceChange = () => { flip.update(); refresh(); }; app.editor.onChange = refresh; app.history.onChange = refresh; flip.onChange = refresh;
-const settle = async () => { await new Promise<void>(r => setTimeout(r, 100)); await new Promise(requestAnimationFrame); };
+// A hidden or background tab runs no animation frames; wait for one at most half a second so the page reports instead of hanging.
+const nextFrame = () => new Promise<boolean>(r => { const t = setTimeout(() => r(false), 500); requestAnimationFrame(() => { clearTimeout(t); r(true); }); });
+const settle = async () => { await new Promise<void>(r => setTimeout(r, 100)); await nextFrame(); };
 async function until(predicate: () => boolean) { const end = performance.now() + 10000; while (!predicate()) { if (performance.now() > end) throw new Error('Timed out waiting for UI'); await settle(); } }
 const button = (name: string, scope: ParentNode = [...document.querySelectorAll('dialog[open]')].at(-1) ?? document) => { const b = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(b => b.offsetParent && [b.getAttribute('aria-label'), b.textContent?.trim()].includes(name)); if (!b) throw new Error(`Missing ${name}`); return b; };
 const click = (name: string) => { const b = button(name); if (b.disabled) throw new Error(`Disabled ${name}`); b.click(); };
@@ -40,6 +42,7 @@ const hit = (e: HTMLElement) => { const r = e.getBoundingClientRect(); return r.
 let passed = 0, failed = 0;
 function check(name: string, ok: boolean) { const li = document.createElement('li'); li.textContent = `${ok ? 'PASS' : 'FAIL'}: ${name}`; document.querySelector('#results')!.append(li); if (ok) passed++; else failed++; }
 try {
+  if (!await nextFrame()) check('Animation frames run (this tab is hidden or in the background: show it and reload)', false);
   await files.newProject({ name: 'First project', width: 16, height: 16, fps: 12, frames: 24 }); app.setWorkspace('draw'); app.setFrame(5); await settle();
   const originalProject = app.project, originalCard = files.current!.id;
   assets.assets.create('Library landscape');
