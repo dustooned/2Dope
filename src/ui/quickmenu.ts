@@ -33,7 +33,7 @@ export class QuickMenu {
       catch { app.onNotice?.('QuickMenu changed for this session. This browser could not save your settings.'); }
       this.update();
     });
-    this.trigger = button('QuickMenu', 'quick', () => this.toggle()); this.trigger.className = 'quick-menu-trigger';
+    this.trigger = button('QuickMenu', 'quick', () => this.toggle()); this.trigger.classList.add('quick-menu-trigger');
     this.trigger.title = 'QuickMenu (Q) · customize in App settings'; this.trigger.setAttribute('aria-haspopup', 'dialog');
     this.trigger.setAttribute('aria-controls', 'quick-menu-popup'); this.trigger.setAttribute('aria-expanded', 'false');
     stage.append(this.trigger);

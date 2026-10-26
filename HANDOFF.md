@@ -1,8 +1,42 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-10-24) — read this first
+## Current state (2026-10-26) — read this first
 
-**Latest step: code and UI cleanup after 206e7fb.**
+**Latest step: UI consistency pass.**
+The user authorized committing and pushing this checked pass to main on 2026-10-26.
+The user asked to clean up inconsistent UI. Scope was styling and one class bug; no behaviour,
+data, file format or History changes.
+
+- `style.css`: new `:root` tokens `--on-accent` (#fff), `--key` (#ffd24a), `--board` (#f0c040)
+  and `--danger` (#ff7b7b). Text on accent backgrounds was split between #1d1d22/#15151b (classic
+  toolbar, pressed buttons, tabs, Play, primary, menu dock, gallery check, video save) and white
+  (bubbles, painting views, dialogs); all now use `--on-accent`. Role chips (key/breakdown/
+  inbetween) keep dark text on purpose. Near-duplicate yellows (#ffd25a, #e8c45a) now use `--key`,
+  #ff6b6b uses `--danger`, and hardcoded #ff5a8a / rgba(255, 90, 138, a) now derive from
+  `--accent` (via `color-mix`). Greens (#3fbf8f group/sound, #4ade80 share OK) and the canvas/
+  tag palettes in TypeScript were left alone.
+- QuickMenu trigger: `quickmenu.ts` replaced `className`, dropping `has-ico`, so the icon and label
+  sat at different heights. It now adds the class; radius/font match the other edge handles.
+- Menu: the five workspace buttons use a new `.menu-grid.workspaces` (3 + 2) instead of a
+  4-column grid that left Motion alone on a row. Sidebar eyedropper radius matches Undo/Redo.
+- Release note "More consistent controls" added. `.claude/launch.json` gained a `2dope-test`
+  entry serving 127.0.0.1:5217 as an isolated test origin.
+
+Not changed: the 40px menu dock and level buttons (their offsets line up with the top bar, bubbles
+and painting header in different modes), and general radius/font-size drift across panels.
+Contrast note: white on #ff5a8a is about 3:1; setting `--on-accent` to #1d1d22 would give about
+5.7:1 if that is preferred.
+
+Fresh checks: **59 files / 482 unit tests**, strict TypeScript and production build passed
+(existing large-bundle warning). Dev server on isolated 127.0.0.1:5217, new 1080p test project at
+1440x900: QuickMenu icon and label centred on the same line, workspace grid 3 + 2, selected menu
+button text white, no console errors. Browser fixtures were not re-run; Board, Time, Motion,
+share and gallery panels were not reviewed visually.
+
+**Next:** user review of the colours and menu layout.
+
+### Previous step (2026-10-24): code and UI cleanup after 206e7fb
+
 The user authorized committing and pushing this checked cleanup to main on 2026-10-24.
 The user asked to clean up the code and UI. The scope was dead code, dead CSS and leftover
 colour emoji. No behaviour, data, file format or History changes.
@@ -51,7 +85,8 @@ A synthetic Escape dispatched on `document` threw in QuickMenu's key handler
 Browser fixtures were not re-run, and the effects, board and gallery labels were not checked
 visually. User project storage was not touched.
 
-Release prepared for the authorized main push; verify Pages for the exact pushed SHA.
+Committed and pushed to main as 97e6e1e. Pages run 40119614142 succeeded for exact SHA
+`97e6e1ecab1a4641019818f2ede88669b598e6ac`, and the public site served the new "Tidier labels" note.
 
 **Next:** user review of the cleaned-up labels and icons.
 

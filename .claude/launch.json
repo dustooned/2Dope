@@ -6,6 +6,13 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "5181", "--strictPort"],
       "port": 5181
+    },
+    {
+      "name": "2dope-test",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--host", "127.0.0.1", "--port", "5217", "--strictPort"],
+      "port": 5217,
+      "url": "http://127.0.0.1:5217"
     }
   ]
 }
