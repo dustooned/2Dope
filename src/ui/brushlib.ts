@@ -1,4 +1,4 @@
-import { BrushImportError, readBrushFile, type ImportedBrush, type ImportedTip } from '../io/brushimport';
+import type { ImportedBrush, ImportedTip } from '../io/brushimport';
 import { loadGrain, loadTip } from '../brush/raster';
 import { loadBrushes, saveBrushes } from '../io/brushstore';
 import type { App } from '../app';
@@ -265,6 +265,11 @@ export class BrushLibrary {
     let added = 0, round = 0, grained = 0, failed = 0, full = 0;
     const names: string[] = [];
     let lastSet: string | null = null;
+    // the brush readers load on first import, not with the app
+    let reader: typeof import('../io/brushimport');
+    try { reader = await import('../io/brushimport'); }
+    catch { this.app.onNotice?.('Brush import could not load. Reload 2Dope and try again.'); return; }
+    const { BrushImportError, readBrushFile } = reader;
     for (const f of files) {
       const before = names.length;
       try {

@@ -42,7 +42,6 @@ import { ColorPanel } from './ui/colorpanel';
 import { BrushLibrary } from './ui/brushlib';
 import { showContextMenu, closeContextMenu } from './ui/contextmenu';
 import { SHAPE_CHOICES } from './core/quickshape';
-import { hasNewUpdates, openManual } from './ui/manual';
 
 const $ = <T extends HTMLElement>(sel: string) => {
   const e = document.querySelector<T>(sel);
@@ -543,17 +542,22 @@ try {
   // default: toolbar shown
 }
 /** The manual and What's new; a dot on the menu button until new update notes are opened. */
+// the manual is a large text, loaded on first use instead of with the app
+const manual = () => import('./ui/manual');
 function syncNews(): void {
-  const news = hasNewUpdates();
-  dock.classList.toggle('has-news', news);
-  menu.querySelector('.news-btn')?.classList.toggle('has-news', news);
+  void manual().then((m) => {
+    const news = m.hasNewUpdates();
+    dock.classList.toggle('has-news', news);
+    menu.querySelector('.news-btn')?.classList.toggle('has-news', news);
+  }, () => {});
 }
 function showManual(at = 'overview'): void {
   setMenu(false);
-  openManual(at, syncNews);
+  // a tab left open across an update cannot fetch the old manual file any more
+  manual().then((m) => m.openManual(at, syncNews), () => app.onNotice?.('The manual could not load. Reload 2Dope to open it.'));
 }
 app.onOpenManual = () => showManual();
-syncNews();
+setTimeout(syncNews, 1000);
 try {
   // first time on this device: point at the manual once
   if (!localStorage.getItem('2dope.manual.hinted')) {
