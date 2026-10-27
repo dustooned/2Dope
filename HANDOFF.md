@@ -2,6 +2,36 @@
 
 ## Current state (2026-10-26) — read this first
 
+### Adjust inside a selection and a smaller main bundle (2026-10-26, merged into main and pushed)
+
+The user asked for the remaining improvements from the Draw audit before committing and pushing.
+Painting, colour selection and vector clipping were already on main. What was left:
+
+- **Adjust (HSB and Gaussian blur) is limited to the active selection.** `beginAdjust` copies the
+  selection mask (`adjusting.mask`) and finds the drawn box only inside it. `previewAdjust` puts the
+  pixels outside it back (`keepOutside` in `src/core/adjust.ts`, unit-tested). Blur still reads pixels
+  just outside the edge, so it blends, but writes only inside. Vector lines are split once with
+  `clipStrokeToMask` (`adjusting.parts`). Only inside parts change colour. A line that crosses the
+  edge becomes inside and outside pieces (outside pieces renamed `~o<k>` so ids stay unique); one
+  wholly inside or outside stays the same record. One undo step as before. Nothing drawn inside the
+  selection gives a notice instead of starting an adjustment. Seven new checks in
+  `selectionpaint`.
+- **Bundle split.** The manual (`manual.ts` + `manualtext.ts` + figures) and brush import
+  (`io/brushimport.ts`) load on first use. The main chunk went from 878 kB / 281 kB gzip to
+  735 kB / 231 kB gzip. The What's new dot is set 1 s after boot from the lazily loaded manual.
+  If a chunk cannot load (a tab left open across a deploy), a notice asks to reload. The
+  large-chunk warning remains: `app.ts` itself is about 270 kB of source, and Share, export and
+  Motion are built at boot. Splitting those needs constructor changes.
+- Manual and UPDATES: Adjust in the feature table and the selection paragraph; new "Adjust inside a
+  selection" release note.
+
+Checks (actual, rebased on `bc6c56f`): `npm test` 66 files / 536 passed. `npm run build` passed
+(main chunk 740 kB / 232 kB gzip after Slice 3; the warning remains). Every `tests/*.html` page in
+real-time headless Chrome against a dev server on this branch: 35 pages, 873 checks, 0 failed
+(selectionpaint 46, pointedit 9, artworklibrary 34, assetlayers 9). The manual opening and the What's
+new dot were checked in the real app. Not checked: brush import of a real file after the split, and a
+tab left open across a deploy (the reload notice path). iPad/Pencil and touch were not tested.
+
 ### Asset layers, command registry Slice 3 and a real-time fixture runner (2026-10-26, merged into main and pushed)
 
 **Layers in Move assets.** With a placement chosen in Move assets, `LayerCards` shows that artwork's
