@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adjustHex, adjustRGB, applyBlur, applyHSB, symmetryCopies } from './adjust';
+import { adjustHex, adjustRGB, applyBlur, applyHSB, keepOutside, symmetryCopies } from './adjust';
 
 describe('adjustments', () => {
   it('leaves colours alone at zero and turns hue around the wheel', () => {
@@ -54,5 +54,17 @@ describe('symmetry', () => {
     expect(r).toHaveLength(8);
     expect(Math.round(r[2]!.x)).toBe(90);
     expect(Math.round(r[2]!.y)).toBe(50);
+  });
+});
+
+describe('keepOutside', () => {
+  it('puts back the pixels outside the selection and keeps the adjusted ones inside', () => {
+    // a 4×2 document, block = columns 1..2 of both rows; only document pixel (2, 1) is selected
+    const mask = new Uint8Array(8); mask[1 * 4 + 2] = 1;
+    const rect = { x: 1, y: 0, w: 2, h: 2 };
+    const before = new Uint8ClampedArray(16).fill(10), out = new Uint8ClampedArray(16).fill(200);
+    keepOutside(out, before, mask, 4, rect);
+    const block = (x: number, y: number) => out[(y * 2 + x) * 4];
+    expect([block(0, 0), block(1, 0), block(0, 1), block(1, 1)]).toEqual([10, 10, 10, 200]);
   });
 });

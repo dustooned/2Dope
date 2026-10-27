@@ -1,6 +1,6 @@
 import { gradientAt, type Grad } from './fill/gradient';
 import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection, vanishingPoints, type Guide } from './core/guides';
-import { adjustHex, applyBlur, applyHSB, isNoHSB, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
+import { adjustHex, applyBlur, applyHSB, isNoHSB, keepOutside, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
 import { loadGrain, loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
@@ -1893,7 +1893,13 @@ export class App {
   // drawing (Line and Fill; Hue / Saturation / Brightness recolours vector lines too). Previewed
   // live from a kept copy of the drawn area; Apply is one undo step.
 
-  adjusting: { kind: 'hsb' | 'blur'; d: Drawing; rect: Rect | null; planes: { c: HTMLCanvasElement; before: ImageData }[]; vectors: StrokeRecord[]; hsb: HSB; blur: number } | null = null;
+  adjusting: {
+    kind: 'hsb' | 'blur'; d: Drawing; rect: Rect | null; planes: { c: HTMLCanvasElement; before: ImageData }[]; vectors: StrokeRecord[]; hsb: HSB; blur: number;
+    /** The selection it is limited to (a copy), or null for the whole drawing. */
+    mask: Uint8Array | null;
+    /** The vector lines, split on the selection edge; only parts inside change colour. */
+    parts: { rec: StrokeRecord; inside: boolean }[];
+  } | null = null;
   private adjustTimer = 0;
   /** Largest blur radius (px); the kept area is padded so the blur can spread. */
   static readonly BLUR_MAX = 40;
@@ -1913,7 +1919,18 @@ export class App {
       this.onNotice?.('This drawing is still loading. Try again in a moment.');
       return;
     }
-    // the drawn area (both planes), padded for the blur's spread
+    // with a selection, only what is inside it changes (pixels and the parts of vector lines)
+    const mask = this.spatialSelection?.mask.slice() ?? null;
+    const parts = d.vectors.flatMap((v) => {
+      if (!mask) return [{ rec: v, inside: true }];
+      const inside = clipStrokeToMask(v, mask, this.docW, this.docH);
+      if (inside.length === 1 && inside[0] === v) return [{ rec: v, inside: true }];
+      if (!inside.length) return [{ rec: v, inside: false }];
+      // outside pieces are numbered from 0 too, so give them their own ids
+      const outside = clipStrokeToMask(v, mask, this.docW, this.docH, 'outside').map((o) => ({ ...o, id: o.id.replace('~c', '~o') }));
+      return [...inside.map((rec) => ({ rec, inside: true })), ...outside.map((rec) => ({ rec, inside: false }))];
+    });
+    // the drawn area (both planes, inside the selection), padded for the blur's spread
     const pad = kind === 'blur' ? Math.ceil(App.BLUR_MAX * 1.8) : 0;
     let box: { x0: number; y0: number; x1: number; y1: number } | null = null;
     for (const c of [d.line, d.fill]) {
@@ -1921,7 +1938,7 @@ export class App {
       const px = c.getContext('2d')!.getImageData(0, 0, this.docW, this.docH).data;
       for (let y = 0; y < this.docH; y++)
         for (let x = 0; x < this.docW; x++) {
-          if (!px[(y * this.docW + x) * 4 + 3]) continue;
+          if (!px[(y * this.docW + x) * 4 + 3] || (mask && mask[y * this.docW + x] !== 1)) continue;
           if (!box) box = { x0: x, y0: y, x1: x, y1: y };
           else {
             if (x < box.x0) box.x0 = x;
@@ -1936,13 +1953,13 @@ export class App {
       rect.w = Math.min(this.docW, box.x1 + 1 + pad) - rect.x;
       rect.h = Math.min(this.docH, box.y1 + 1 + pad) - rect.y;
     }
-    if (!rect && !(kind === 'hsb' && d.vectors.length)) {
-      this.onNotice?.('Draw something first, then adjust it.');
+    if (!rect && !(kind === 'hsb' && parts.some((p) => p.inside))) {
+      this.onNotice?.(mask ? 'Nothing is drawn inside the selection. Select some of the drawing, or Deselect to adjust all of it.' : 'Draw something first, then adjust it.');
       return;
     }
     void this.residency.pin(d);
     const planes = rect ? [d.line, d.fill].filter((c): c is HTMLCanvasElement => !!c).map((c) => ({ c, before: c.getContext('2d')!.getImageData(rect.x, rect.y, rect.w, rect.h) })) : [];
-    this.adjusting = { kind, d, rect, planes, vectors: d.vectors, hsb: { ...NO_HSB }, blur: 0 };
+    this.adjusting = { kind, d, rect, planes, vectors: d.vectors, hsb: { ...NO_HSB }, blur: 0, mask, parts };
     this.onToolChange();
   }
 
@@ -1965,9 +1982,10 @@ export class App {
       const out = new ImageData(p.before.width, p.before.height);
       if (a.kind === 'hsb') applyHSB(p.before.data, out.data, a.hsb);
       else applyBlur(p.before.data, out.data, p.before.width, p.before.height, a.blur);
+      if (a.mask) keepOutside(out.data, p.before.data, a.mask, this.docW, a.rect!);
       p.c.getContext('2d')!.putImageData(out, a.rect!.x, a.rect!.y);
     }
-    if (a.kind === 'hsb') a.d.vectors = isNoHSB(a.hsb) ? a.vectors : a.vectors.map((v) => ({ ...v, color: adjustHex(v.color, a.hsb) }));
+    if (a.kind === 'hsb') a.d.vectors = isNoHSB(a.hsb) ? a.vectors : a.parts.map((p) => (p.inside ? { ...p.rec, color: adjustHex(p.rec.color, a.hsb) } : p.rec));
     a.d.rev += 1;
     this.residency.touch(a.d);
     this.requestRender();

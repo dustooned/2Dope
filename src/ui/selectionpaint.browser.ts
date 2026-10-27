@@ -269,6 +269,36 @@ try {
   check('Smudge across the edge moves paint only inside the selection, with a hard edge', outsideUnchanged(0, 128, 40, 88, before13) && inside > 0, { inside });
   app.setSmudging(false);
 
+  // Adjust: colour and blur change only what is inside the selection
+  await fresh();
+  stroke(across(64)); await settle();
+  await selectRect(40, 8, 88, 120);
+  const before14 = snapshot();
+  app.beginAdjust('hsb'); app.setAdjust({ hue: 180 }); await settle(); app.applyAdjust(); await settle();
+  const red = (x: number) => { const [r, g] = px(app.drawing.line, x, 64); return r! > 200 && g! < 60; };
+  check('Adjust colour changes only the paint inside the selection, as one undo step', red(30) && red(100) && !red(64) && alpha(64, 64) > 0 && outsideUnchanged(0, 128, 40, 88, before14) && app.history.peekUndo()?.label === 'Hue, saturation, brightness', { at: [px(app.drawing.line, 30, 64), px(app.drawing.line, 64, 64)] });
+  app.undo(); await settle();
+  check('Undo puts the selected colour back', red(64));
+  const before15 = snapshot();
+  app.beginAdjust('blur'); app.setAdjust({ blur: 12 }); await settle(); app.applyAdjust(); await settle();
+  let softened = false;
+  for (let y = 50; y < 78 && !softened; y++) { const a = alpha(64, y); if (a > 0 && a < 250 && before15[(y * 128 + 64) * 4 + 3] !== a) softened = true; }
+  check('Blur softens only inside the selection', softened && outsideUnchanged(0, 128, 40, 88, before15));
+  await fresh();
+  brush('pen'); stroke(across(40)); await settle();
+  await selectRect(40, 8, 88, 120);
+  app.beginAdjust('hsb'); app.setAdjust({ hue: 180 }); await settle(); app.applyAdjust(); await settle();
+  const colours = app.drawing.vectors.map((v) => v.color.toLowerCase());
+  check('A vector line across the edge changes colour only inside the selection', colours.length >= 2 && colours.includes('#ff0000') && colours.some((c) => c !== '#ff0000') && new Set(app.drawing.vectors.map((v) => v.id)).size === colours.length, { colours });
+  app.undo(); await settle();
+  check('Undo puts the whole vector line back', app.drawing.vectors.length === 1 && app.drawing.vectors[0]!.color.toLowerCase() === '#ff0000');
+  await fresh();
+  stroke([[4, 64], [30, 64]]); await settle();
+  await selectRect(40, 8, 88, 120);
+  notices.length = 0;
+  app.beginAdjust('hsb');
+  check('Adjust with nothing drawn inside the selection says so', !app.adjusting && notices.some((n) => n.startsWith('Nothing is drawn inside the selection')), { notices });
+
   // mask editing is never clipped by the artwork selection
   await fresh();
   app.addMask(); await settle();

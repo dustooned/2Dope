@@ -151,6 +151,22 @@ export function applyBlur(src: Uint8ClampedArray, dst: Uint8ClampedArray, w: num
   }
 }
 
+/**
+ * Limit an adjusted block to a selection: pixels of `out` whose document pixel is not selected
+ * (mask 1 = selected) go back to `before`. `rect` places the block in a document `width` wide.
+ */
+export function keepOutside(out: Uint8ClampedArray, before: Uint8ClampedArray, mask: Uint8Array, width: number, rect: { x: number; y: number; w: number; h: number }): void {
+  for (let y = 0; y < rect.h; y++)
+    for (let x = 0; x < rect.w; x++) {
+      if (mask[(rect.y + y) * width + rect.x + x] === 1) continue;
+      const i = (y * rect.w + x) * 4;
+      out[i] = before[i]!;
+      out[i + 1] = before[i + 1]!;
+      out[i + 2] = before[i + 2]!;
+      out[i + 3] = before[i + 3]!;
+    }
+}
+
 // ---- Symmetry (Procreate's Drawing Guide > Symmetry) ----
 
 export type SymmetryMode = 'off' | 'vertical' | 'horizontal' | 'quadrant' | 'radial';
