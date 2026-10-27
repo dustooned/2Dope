@@ -10,6 +10,8 @@ import { COMMANDS_HIDDEN_KEY } from '../core/commandprefs';
 import { STUDENT_PROFILES_KEY } from '../core/studentprefs';
 import { Bubbles } from './bubbles';
 import { AppSettingsUI } from './settings';
+import { closeContextMenu, showContextMenu } from './contextmenu';
+import { frameMenu } from './framemenu';
 
 const PASS_KEY = 'commandrow.pass';
 const second = sessionStorage.getItem(PASS_KEY) === '2';
@@ -194,6 +196,37 @@ try {
     const profilesAfter = localStorage.getItem(STUDENT_PROFILES_KEY) ?? '';
     check('Student profiles do not store hidden controls', !profilesAfter.includes('select.') && !(profilesBefore ?? '').includes('select.'));
     check('The project file has no hidden controls', !JSON.stringify(app.project.comp).includes('select.'));
+    document.querySelectorAll('dialog[open]').forEach((d) => (d as HTMLDialogElement).close());
+
+    // Slice 3: the frame and canvas menus hide entries by id, with Customize at the end
+    const menuLabels = () => [...document.querySelectorAll<HTMLButtonElement>('.ctxmenu button[role="menuitem"]')].map((b) => (b.firstChild?.textContent ?? '').replace(/^✓ /, '').trim());
+    showContextMenu(100, 100, frameMenu(app)); await settle();
+    const frameBefore = menuLabels();
+    check('The frame menu ends with Customize this menu…', frameBefore.at(-1) === 'Customize this menu…' && frameBefore.includes('Insert frame before'), frameBefore);
+    menuItem('Customize this menu…')!.click(); await settle();
+    check('Customize lists every frame menu entry', menuLabels().length === 13 && !!menuItem('✓ Insert frame before'), menuLabels());
+    menuItem('✓ Insert frame before')!.click(); await settle();
+    showContextMenu(100, 100, frameMenu(app)); await settle();
+    check('A hidden frame entry leaves the menu, the rest stay in order', menuLabels().join() === frameBefore.filter((n) => n !== 'Insert frame before').join(), menuLabels());
+    closeContextMenu();
+    app.openCanvasMenu(200, 200); await settle();
+    const canvasBefore = menuLabels();
+    check('The canvas menu ends with Customize this menu…', canvasBefore.at(-1) === 'Customize this menu…' && canvasBefore.includes('Fit view'), canvasBefore);
+    menuItem('Customize this menu…')!.click(); await settle();
+    menuItem('✓ Fit view')!.click(); await settle();
+    app.openCanvasMenu(200, 200); await settle();
+    check('A hidden canvas entry leaves the menu', !menuLabels().includes('Fit view') && menuLabels().length === canvasBefore.length - 1, menuLabels());
+    closeContextMenu();
+    const settings2 = new AppSettingsUI(app, canvas, () => defaultQuickMenu(), () => {});
+    settings2.show(); await settle();
+    const dialog2 = [...document.querySelectorAll<HTMLDialogElement>('dialog.app-settings')].at(-1)!;
+    check('App settings names hidden menu entries and their menu', dialog2.textContent!.includes('Insert frame before (frame menu)') && dialog2.textContent!.includes('Fit view (canvas menu)'));
+    dialog2.querySelector<HTMLButtonElement>('button[aria-label="Show Insert frame before"]')!.click();
+    dialog2.querySelector<HTMLButtonElement>('button[aria-label="Show Fit view"]')!.click();
+    [...dialog2.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Apply settings')!.click(); await settle();
+    showContextMenu(100, 100, frameMenu(app)); await settle();
+    check('Apply puts the menu entries back', menuLabels().join() === frameBefore.join() && JSON.parse(localStorage.getItem(COMMANDS_HIDDEN_KEY) ?? '{}').hidden?.length === 0, menuLabels());
+    closeContextMenu();
   }
 } catch (e) {
   check(String(e), false);

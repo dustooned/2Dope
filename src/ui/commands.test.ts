@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { App } from '../app';
-import { COMMANDS, commandById, commandName, commandsFor, commandsIn } from './commands';
+import { COMMANDS, MENU_ENTRIES, commandById, commandName, commandsFor, commandsIn, controlInfo, customizable } from './commands';
 
 /** Just the App state the Select commands read. */
 const app = (state: { selection?: boolean; reselect?: boolean; clip?: boolean }) =>
@@ -9,7 +9,7 @@ const ids = (cs: { id: string }[]) => cs.map((c) => c.id);
 
 describe('command registry', () => {
   it('has unique, namespaced ids', () => {
-    const all = COMMANDS.map((c) => c.id);
+    const all = [...COMMANDS, ...MENU_ENTRIES].map((c) => c.id);
     expect(new Set(all).size).toBe(all.length);
     for (const id of all) expect(id).toMatch(/^[a-z][a-z0-9]*\.[a-z][a-z0-9-]*$/);
   });
@@ -62,5 +62,17 @@ describe('command registry', () => {
     expect(ids(commandsFor('select', app({ selection: true, clip: true }))).at(-1)).toBe('select.paste');
     expect(ids(commandsFor('select', app({})))).toEqual(['select.moveall', 'select.selectall']);
     expect(ids(commandsFor('select', app({ reselect: true, clip: true })))).toEqual(['select.reselect', 'select.moveall', 'select.selectall', 'select.paste']);
+  });
+
+  it('lists rows and menus for Customize, in order', () => {
+    expect(customizable('smudge')).toEqual([{ id: 'smudge.softer', name: 'Softer' }, { id: 'smudge.stronger', name: 'Stronger' }]);
+    expect(customizable('frame').map((e) => e.id).slice(0, 3)).toEqual(['frame.duplicate', 'frame.insertafter', 'frame.insertbefore']);
+    expect(customizable('canvas').at(-1)!.id).toBe('canvas.flipview');
+  });
+
+  it('names a hidden control and where it lives', () => {
+    expect(controlInfo('transform.smaller')).toEqual({ name: 'Smaller', where: 'Transform row' });
+    expect(controlInfo('frame.delete')).toEqual({ name: 'Delete', where: 'frame menu' });
+    expect(controlInfo('gone.thing')).toBeNull();
   });
 });

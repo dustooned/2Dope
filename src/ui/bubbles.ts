@@ -4,13 +4,13 @@ import { GUIDE_NAMES, type GuideMode } from '../core/guides';
 import { EASINGS } from '../core/anim';
 import type { App, Workspace } from '../app';
 import type { Tool } from '../core/stroke';
-import type { XParams } from '../core/selxform';
 import { decorate } from './icons';
 import { STUDENT_TOOLS, type StudentTool } from '../core/studentprefs';
 import { isPaintingWorkspace, optionsRow, toolChoice, type OptionsState } from '../core/workspace';
 import { isCommandHidden } from '../core/commandprefs';
-import { commandById, commandName, commandPrefs, commandsFor, commandsIn, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
-import { attachContextMenu, showContextMenu } from './contextmenu';
+import { commandById, commandName, commandPrefs, commandsFor, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
+import { attachContextMenu } from './contextmenu';
+import { showCustomize } from './customize';
 
 export type UiLevel = 'clean' | 'simple' | 'full';
 const LEVEL_KEY = '2dope.ui.level';
@@ -273,16 +273,9 @@ export class Bubbles {
     return b;
   }
 
-  /** Every command of a row, ticked when shown: tap to hide or show it. */
   private customize(context: CommandContext, anchor: HTMLElement): void {
-    const prefs = commandPrefs(), r = anchor.getBoundingClientRect();
-    showContextMenu(r.left, r.bottom, [
-      { title: 'Show in this row' },
-      ...commandsIn(context).map((c) => {
-        const hidden = isCommandHidden(prefs, c.id);
-        return { label: commandName(c), checked: !hidden, hint: hidden ? 'Show' : 'Hide', run: () => setHidden(c.id, !hidden) };
-      }),
-    ]);
+    const r = anchor.getBoundingClientRect();
+    showCustomize(context, r.left, r.bottom);
   }
 
   /** Drawing Guide: one button that steps through the symmetries. */

@@ -2,7 +2,45 @@
 
 ## Current state (2026-10-26) — read this first
 
-### Command registry, Slice 2: the other options rows (2026-10-26, merged into main and pushed)
+### Asset layers, command registry Slice 3 and a real-time fixture runner (2026-10-26, merged into main and pushed)
+
+**Layers in Move assets.** With a placement chosen in Move assets, `LayerCards` shows that artwork's
+own layers (`assetLayers`) instead of the shot's tracks: thumbnails at the placement's clock, a
+"‹ Shot tracks" button for the usual list (which then offers "‹ Layers of <name>" back), and a tap on
+a layer opens the source on that layer through the new `App.editAssetSource` hook (main wires it to
+`ArtworkAssetsUI.openSource`, now public; `ArtworkAssets.open(id, layerId?)` takes the layer). Done
+returns to the shot as before. Drawing inside a source already listed only the source's layers;
+outside Move assets nothing changed. `editor.onChange` now refreshes the cards so a new placement
+choice shows at once.
+
+**Slice 3 (menus).** `CtxItem` label entries take an optional `id`; `showContextMenu` drops entries
+this device hides, then the titles and separators they leave (`visibleItems`, unit-tested). The
+frame menu (`framemenu.ts`) and the canvas menu (`App.openCanvasMenu`) carry ids
+(`frame.*`, `canvas.*`, registered for naming in `MENU_ENTRIES`) and end with
+"Customize this menu…", the same tick list as a row's Customize (`src/ui/customize.ts`,
+`customizable()`). App settings → Hidden controls names each entry and where it lives
+(`controlInfo`, `CONTEXT_NAMES`). Hide interface and the chip rows inside menus are not hideable.
+Not done from the Slice 3 plan: the tool bubbles stay on `toolsFor` and student tool visibility
+(`STUDENT_TOOLS` / App settings), so tools do not gain a second hide mechanism; layers/assets rows
+are dynamic lists with no fixed actions worth registering; the Motion canvas menu has no ids yet.
+
+**Cleanup.** Removed an unused `XParams` import (`--noUnusedLocals` is otherwise clean apart from
+the public `comps` parameter of `assetTimingChange`, kept for its callers). No `console.log`,
+`debugger` or TODOs in `src`. Fixtures that stood on "Running…" or failed under
+`--virtual-time-budget` (inkpaint, inkpaint-responsive, artworklibrary(+responsive),
+assetindependent, assetnames, assetpreviews, brushprefs(+responsive), colourreturn, flipbooksource)
+fail the same way on `b30b052` and all **pass in real time**: virtual time does not wait for
+IndexedDB, image encoding or animation frames. New `npm run test:browser`
+(`scripts/fixtures.mjs`) drives headless Chrome over the DevTools protocol in real time against a
+dev server on 127.0.0.1:5217 and exits non-zero on any failure; use it instead of `--dump-dom`.
+
+Checks (actual): `npm test` 66 files / 535 tests; `npm run build` passed; `git diff --check` clean.
+Fixtures: `npm run test:browser` **35 of 35 passed, 0 failures** (887 checks), including the new assetlayers 9/0 and commandrow 44/0 (menu checks added).
+
+Not verified: hold-to-hide on a touch device; screen-reader wording of the Customize menus; the asset
+Layers view on a phone-width layout (the panel is the same component as before).
+
+### Command registry, Slice 2: the other options rows (2026-10-26, `b30b052`, merged into main and pushed)
 
 Slice 2 of [the command registry handoff](docs/CLAUDE-COMMAND-REGISTRY-HANDOFF.md). The Transform,
 Timing, Fill, Smudge, Brush/Vector (`paint`) and Edit points (`points`) rows now draw their action
@@ -37,7 +75,7 @@ studentprofiles 28/0 (and phone), placement 13/0, assets 8/0. inkpaint still sta
 in headless Chrome, as before this change.
 
 Not verified: hold-to-hide on a touch device, screen-reader wording of the Customize menus.
-Resume at Slice 3 (tool bubbles via `commandsFor('toolbar')`, context-menu ids, layers/assets rows).
+Slice 3 followed; see the section above.
 
 ### Command registry, Slice 1: the Select row (2026-10-26, `9552148`, merged into main and pushed)
 

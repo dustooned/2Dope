@@ -248,8 +248,9 @@ export class ArtworkAssetsUI {
     }
     this.update();
   }
-  private openSource(id: string): void {
-    if (this.assets.open(id)) { this.update(); this.app.focusCanvas(); }
+  /** Draw in a source (on one of its layers, when given). */
+  openSource(id: string, layer?: string): void {
+    if (this.assets.open(id, layer)) { this.update(); this.app.focusCanvas(); }
   }
   private async renameSelected(): Promise<void> {
     const a=this.app,l=a.placedAsset,project=a.project,comp=project.activeComp;

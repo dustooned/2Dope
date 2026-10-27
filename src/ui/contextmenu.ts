@@ -5,8 +5,12 @@
  * On a narrow screen it opens as a sheet from the bottom, within thumb reach.
  */
 
+import { isCommandHidden } from '../core/commandprefs';
+import { commandPrefs } from './commands';
+
 export type CtxItem =
-  | { label: string; run: () => unknown; hint?: string; danger?: boolean; disabled?: boolean; checked?: boolean }
+  /** `id`: a registered menu entry (see MENU_ENTRIES) that this device can hide. */
+  | { label: string; run: () => unknown; hint?: string; danger?: boolean; disabled?: boolean; checked?: boolean; id?: string }
   | { chips: { label: string; run: () => unknown; title?: string; on?: boolean }[] }
   | { title: string }
   | { sep: true };
@@ -17,6 +21,26 @@ export const HOLD_MS = 450;
 export const HOLD_SLOP = 10;
 
 let open: { root: HTMLElement; close: () => void } | null = null;
+/** Where the last menu opened (a follow-up menu, such as Customize, opens there too). */
+let last = { x: 0, y: 0 };
+
+export function lastMenuPoint(): { x: number; y: number } {
+  return last;
+}
+
+/** The items to show: hidden entries left out, then titles and separators that no longer head anything. */
+export function visibleItems(items: CtxItem[], hidden: (id: string) => boolean): CtxItem[] {
+  const kept = items.filter((it) => !('label' in it && it.id && hidden(it.id)));
+  const out: CtxItem[] = [];
+  kept.forEach((it, i) => {
+    const next = kept[i + 1];
+    if ('title' in it && (!next || 'sep' in next || 'title' in next)) return;
+    if ('sep' in it && (!out.length || !next || 'sep' in next || 'sep' in out[out.length - 1]!)) return;
+    out.push(it);
+  });
+  while (out.length && 'sep' in out[out.length - 1]!) out.pop();
+  return out;
+}
 
 export function closeContextMenu(): void {
   open?.close();
@@ -30,9 +54,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 }
 
 /** Show a menu at a screen point (css px). Empty lists show nothing. */
-export function showContextMenu(x: number, y: number, items: CtxItem[]): void {
+export function showContextMenu(x: number, y: number, all: CtxItem[]): void {
   closeContextMenu();
+  const prefs = commandPrefs(), items = visibleItems(all, (id) => isCommandHidden(prefs, id));
   if (!items.length) return;
+  last = { x, y };
   const sheet = window.innerWidth < 600;
   const root = el('div', `ctxmenu${sheet ? ' sheet' : ''}`);
   root.setAttribute('role', 'menu');

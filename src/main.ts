@@ -673,10 +673,11 @@ const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
 paintingUI.onReset = () => artworkUI.resetLayout();
+app.editAssetSource = (comp, layer) => artworkUI.openSource(comp, layer);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => artworkUI.update());
 app.onFrameChange = chain(app.onFrameChange, () => artworkUI.update());
 app.history.onChange = chain(app.history.onChange, () => artworkUI.update());
-app.editor.onChange = chain(app.editor.onChange, () => { artworkUI.update(); if (app.arrangingAssets) strip.update(); });
+app.editor.onChange = chain(app.editor.onChange, () => { artworkUI.update(); if (app.arrangingAssets) strip.update(); layerCards.update(); });
 app.onToolChange = chain(app.onToolChange, () => bubbles.update());
 app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });

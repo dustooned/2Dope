@@ -28,6 +28,7 @@ import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type I
 import { BRUSH_PREFS_KEY, readBrushPreferences, rememberBrush, recalledBrush, usedBrush, favoriteBrush, forgetBrush, renameBrush } from './core/brushprefs';
 import { staticProp, valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
+import { showCustomize } from './ui/customize';
 import { guardTouchContextMenus } from './ui/touchcontext';
 import { CompEditor } from './compedit';
 import { clipGroups, drawClipGroup, drawComp, drawEditingLayer, drawLayerAround, drawLayersAround, type DrawingSource } from './view/composite';
@@ -2792,6 +2793,8 @@ export class App {
 
   /** Opens the Layers popover next to a button (set by main). */
   openLayers: ((anchor: HTMLElement) => void) | null = null;
+  /** Draw inside an asset's source, on one of its layers; set by the shell (Assets). */
+  editAssetSource: ((comp: string, layer?: string) => void) | null = null;
   /** Open a layer's Effects card; set by the shell. */
   openEffects: ((layerId: string) => void) | null = null;
   /** Open the media picker (pictures, movies, sounds); set by the shell. */
@@ -5208,7 +5211,7 @@ export class App {
       const picked = this.colorAt(doc.x, doc.y);
       const tool = (t: Tool, label: string) => ({ label, on: this.tool === t, run: () => this.setTool(t) });
       items = [
-        ...(picked ? [{ label: 'Pick this colour', hint: picked, run: () => this.setColor(picked) }] : []),
+        ...(picked ? [{ id: 'canvas.pickcolour', label: 'Pick this colour', hint: picked, run: () => this.setColor(picked) }] : []),
         { title: 'Tool' },
         { chips: [tool('brush', 'Brush'), tool('eraser', 'Eraser'), tool('pen', 'Vector'), tool('fill', 'Fill')] },
         ...(this.tool === 'eraser'
@@ -5254,8 +5257,8 @@ export class App {
             ]
           : []),
         { sep: true },
-        { label: 'Undo', run: () => this.undo(), disabled: !this.history.canUndo, hint: '2 fingers' },
-        { label: 'Redo', run: () => this.redo(), disabled: !this.history.canRedo, hint: '3 fingers' },
+        { id: 'canvas.undo', label: 'Undo', run: () => this.undo(), disabled: !this.history.canUndo, hint: '2 fingers' },
+        { id: 'canvas.redo', label: 'Redo', run: () => this.redo(), disabled: !this.history.canRedo, hint: '3 fingers' },
         { title: 'Frame' },
         {
           chips: [
@@ -5264,15 +5267,17 @@ export class App {
             { label: 'Delete', run: () => this.deleteFrame() },
           ],
         },
-        { label: 'Show lines', checked: this.partVisible('line'), run: () => this.togglePart('line') },
-        { label: 'Show colour (fills)', checked: this.partVisible('fill'), run: () => this.togglePart('fill') },
-        { label: 'Onion skin', checked: this.onion.enabled, run: () => this.toggleOnion(), hint: 'O' },
-        { label: 'New page after the last drawing', checked: this.flipbook, run: () => this.setFlipbook(!this.flipbook) },
-        { label: 'Scrub lock here', checked: this.lockFrame !== null, run: () => this.toggleLock(), hint: 'L' },
+        { id: 'canvas.showlines', label: 'Show lines', checked: this.partVisible('line'), run: () => this.togglePart('line') },
+        { id: 'canvas.showfills', label: 'Show colour (fills)', checked: this.partVisible('fill'), run: () => this.togglePart('fill') },
+        { id: 'canvas.onion', label: 'Onion skin', checked: this.onion.enabled, run: () => this.toggleOnion(), hint: 'O' },
+        { id: 'canvas.newpage', label: 'New page after the last drawing', checked: this.flipbook, run: () => this.setFlipbook(!this.flipbook) },
+        { id: 'canvas.scrublock', label: 'Scrub lock here', checked: this.lockFrame !== null, run: () => this.toggleLock(), hint: 'L' },
         { sep: true },
-        { label: 'Fit view', run: () => this.fit(), hint: 'F' },
-        { label: 'Flip view', run: () => this.flipView(), hint: 'H' },
+        { id: 'canvas.fit', label: 'Fit view', run: () => this.fit(), hint: 'F' },
+        { id: 'canvas.flipview', label: 'Flip view', run: () => this.flipView(), hint: 'H' },
         { label: this.uiHidden ? 'Show interface' : 'Hide interface', run: () => this.toggleUI(), hint: '4 fingers' },
+        { sep: true },
+        { label: 'Customize this menu…', run: () => showCustomize('canvas', clientX, clientY, 'Show in this menu') },
       ];
     }
     showContextMenu(clientX, clientY, items);

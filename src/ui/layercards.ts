@@ -44,6 +44,8 @@ export class LayerCards {
   private readonly picked = new Set<string>();
   /** Paint / art layer stacks folded shut (by stack id). */
   private readonly foldedStacks = new Set<string>();
+  /** In Move assets: the shot's tracks instead of the chosen artwork's layers. */
+  private showTracks = false;
 
   constructor(private readonly app: App) {
     document.body.append(this.root);
@@ -66,6 +68,7 @@ export class LayerCards {
     this.anchor = anchor;
     this.root.hidden = false;
     this.menuFor = null;
+    this.showTracks = false;
     this.sig = '';
     this.update();
     this.place();
@@ -215,6 +218,9 @@ export class LayerCards {
   update(): void {
     if (this.root.hidden || this.drag) return;
     const app = this.app;
+    // Move assets with a placement chosen: the layers of that artwork, not the shot's tracks
+    const placed = app.placedAsset;
+    if (placed && !this.showTracks) return this.assetLayers(placed);
     const layers = app.project.comp.layers.filter((l) => l.kind === 'drawings' || l.kind === 'comp');
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // options belong to the layer you draw on; picking another closes them
@@ -257,6 +263,12 @@ export class LayerCards {
     close.addEventListener('click', () => { this.close(); app.focusCanvas(); });
     head.append(others, add, close);
     this.root.append(head);
+    const placedNow = app.placedAsset;
+    if (placedNow) {
+      const back = el('button', { type: 'button', class: 'lc-back', title: `Back to the layers of ${placedNow.name}` }, `‹ Layers of ${placedNow.name}`);
+      back.addEventListener('click', () => { this.showTracks = false; this.sig = ''; this.update(); });
+      this.root.append(back);
+    }
     const crumbs = app.editor.crumbs();
     if (crumbs.length > 1) {
       const back = el('button', { type: 'button', class: 'lc-back', title: 'Back out of this group' }, `\u2039 ${crumbs[crumbs.length - 2]!.comp.name}`);
@@ -482,6 +494,46 @@ export class LayerCards {
   }
 
   /** A folded-open group's layers: tap one to draw on it (inside the group). */
+  /** The placed artwork's own layers, front first: tap one to draw on it in its source. */
+  private assetLayers(placed: Extract<Layer, { kind: 'comp' }>): void {
+    const app = this.app, source = app.project.comps.get(placed.comp);
+    const layers = (source?.layers ?? []).filter((x) => x.kind === 'drawings' || x.kind === 'comp');
+    const sig = `asset|${placed.id}|${placed.name}|${placed.start}|${app.frame}|${layers.map((x) => { const id = this.shownDrawing(x, placed.start); return `${x.id}:${x.name}:${x.visible}:${x.locked}:${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`; }).join(',')}`;
+    if (sig === this.sig) return;
+    this.sig = sig;
+    this.root.replaceChildren();
+    const head = el('div', { class: 'lc-head' });
+    head.append(el('span', { class: 'lc-title' }, 'Layers'));
+    const close = el('button', { type: 'button', class: 'lc-icon', title: 'Close layers', 'aria-label': 'Close layers' }, 'Close');
+    decorate(close, 'close');
+    close.addEventListener('click', () => { this.close(); app.focusCanvas(); });
+    head.append(close);
+    const tracks = el('button', { type: 'button', class: 'lc-back', title: 'Every track of this shot' }, `‹ Shot tracks`);
+    tracks.append(el('span', { class: 'lc-back-in' }, ` · asset ${placed.name}`));
+    tracks.addEventListener('click', () => { this.showTracks = true; this.sig = ''; this.update(); });
+    const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': `Layers of ${placed.name}` });
+    for (const x of layers) {
+      const card = el('div', { class: `lc-card${x.visible ? '' : ' off'}`, role: 'option', 'aria-selected': 'false', tabindex: '0', title: `Draw on ${x.name} (opens ${source!.name} to edit)` });
+      card.dataset.id = x.id;
+      const info = el('div', { class: 'lc-info' });
+      info.append(el('span', { class: 'lc-name' }, x.name));
+      const tags = [x.kind === 'comp' ? 'group' : x.kind === 'drawings' && x.still ? 'still' : '', x.visible ? '' : 'hidden', x.locked ? 'locked' : ''].filter(Boolean);
+      if (tags.length) info.append(el('span', { class: 'lc-tags' }, tags.join(' · ')));
+      card.append(this.thumb(x, placed.start), info);
+      const draw = () => {
+        if (app.strokeActive || !app.editAssetSource) return;
+        this.close();
+        app.editAssetSource(placed.comp, x.kind === 'drawings' ? x.id : undefined);
+      };
+      card.addEventListener('click', draw);
+      card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); draw(); } });
+      list.append(card);
+    }
+    if (!layers.length) list.append(el('p', { class: 'hint' }, 'This artwork has no layers yet.'));
+    this.root.append(head, tracks, el('p', { class: 'hint lc-swipe-hint' }, `The layers of ${placed.name}. Tap one to draw on it; Done returns to the shot. Edits update every placement.`), list);
+    this.place();
+  }
+
   private children(g: Extract<Layer, { kind: 'comp' }>): HTMLElement[] {
     const app = this.app;
     const inner = app.project.comps.get(g.comp);

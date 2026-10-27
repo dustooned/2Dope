@@ -8,7 +8,7 @@ import { COMMANDS_HIDDEN_KEY, readCommandPrefs, setCommandHidden, type CommandPr
  */
 export type CommandContext =
   | 'select' | 'fill' | 'transform' | 'smudge' | 'paint' | 'time' | 'points' | 'adjust'
-  | 'layers' | 'assets' | 'board' | 'motion' | 'toolbar';
+  | 'layers' | 'assets' | 'board' | 'motion' | 'toolbar' | 'canvas' | 'frame';
 
 export interface Command {
   /** Namespaced, permanent: renaming the label never changes this. */
@@ -96,12 +96,44 @@ export const COMMANDS: readonly Command[] = [
   { id: 'points.done', label: 'Done', title: 'Finish editing points (Enter, or tap empty canvas)', icon: 'check', contexts: ['points'], order: 40, run: (a) => a.exitPointEdit() },
 ];
 
-/** The row names App settings uses for hidden controls. */
-export const ROW_NAMES: Partial<Record<CommandContext, string>> = { select: 'Select', transform: 'Transform', time: 'Timing', fill: 'Fill', smudge: 'Smudge', paint: 'Brush', points: 'Edit points' };
+/**
+ * Context-menu entries this device can hide. The menus still build their own items (with these ids);
+ * the registry only names them, so Customize and App settings can list them.
+ */
+export interface MenuEntry { id: `${string}.${string}`; name: string; contexts: readonly CommandContext[]; order: number }
+
+export const MENU_ENTRIES: readonly MenuEntry[] = [
+  ...([
+    ['pickcolour', 'Pick this colour'], ['undo', 'Undo'], ['redo', 'Redo'], ['showlines', 'Show lines'], ['showfills', 'Show colour (fills)'],
+    ['onion', 'Onion skin'], ['newpage', 'New page after the last drawing'], ['scrublock', 'Scrub lock here'], ['fit', 'Fit view'], ['flipview', 'Flip view'],
+  ] as const).map(([k, name], i): MenuEntry => ({ id: `canvas.${k}`, name, contexts: ['canvas'], order: (i + 1) * 10 })),
+  ...([
+    ['duplicate', 'Duplicate'], ['insertafter', 'Insert frame after'], ['insertbefore', 'Insert frame before'], ['split', 'Split here'], ['filltoend', 'Fill to the end'],
+    ['copy', 'Copy'], ['cut', 'Cut'], ['paste', 'Paste (same drawings)'], ['pastenew', 'Paste as new drawings'], ['earlier', 'Move earlier'], ['later', 'Move later'],
+    ['clear', 'Clear frame'], ['delete', 'Delete'],
+  ] as const).map(([k, name], i): MenuEntry => ({ id: `frame.${k}`, name, contexts: ['frame'], order: (i + 1) * 10 })),
+];
+
+/** Where a hidden control lives, for App settings. */
+export const CONTEXT_NAMES: Partial<Record<CommandContext, string>> = { select: 'Select row', transform: 'Transform row', time: 'Timing row', fill: 'Fill row', smudge: 'Smudge row', paint: 'Brush row', points: 'Edit points row', canvas: 'canvas menu', frame: 'frame menu' };
 
 /** What a menu or list calls the command. */
 export function commandName(c: Command): string {
   return c.name ?? c.label;
+}
+
+/** Everything a Customize list offers for one row or menu: id and name, in order. */
+export function customizable(context: CommandContext): { id: string; name: string }[] {
+  return [...commandsIn(context).map((c) => ({ id: c.id, name: commandName(c), order: c.order })), ...MENU_ENTRIES.filter((m) => m.contexts.includes(context))]
+    .sort((x, y) => x.order - y.order).map(({ id, name }) => ({ id, name }));
+}
+
+/** A hidden control's name and where it lives (App settings), or null when the id is unknown. */
+export function controlInfo(id: string): { name: string; where: string } | null {
+  const c = commandById(id), m = c ? null : MENU_ENTRIES.find((x) => x.id === id);
+  const ctx = c?.contexts[0] ?? m?.contexts[0];
+  if (!ctx) return null;
+  return { name: c ? commandName(c) : m!.name, where: CONTEXT_NAMES[ctx] ?? ctx };
 }
 
 /** Every command registered for a row, enabled or not, in order (for a Customize list). */

@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import { defaultQuickMenu, QUICK_ACTIONS, type QuickMenuPrefs } from '../core/quickmenu';
 import { decorate } from './icons';
-import { commandById, commandName, commandPrefs, ROW_NAMES, setHidden } from './commands';
+import { commandPrefs, controlInfo, setHidden } from './commands';
 import { PROFILE_LIMIT, STUDENT_CONTROLS, STUDENT_PROFILES_KEY, STUDENT_TOOLS, profileName, readStudentProfiles, readStudentSetup, readStudentUI, type StudentSetup } from '../core/studentprefs';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string) => {
@@ -59,13 +59,13 @@ export class AppSettingsUI {
     const renderHidden=()=>{
       hiddenControls.replaceChildren(el('h4','','Hidden controls'));
       const ids=commandPrefs().hidden;
-      if(!ids.length){hiddenControls.append(el('p','menu-note','Nothing is hidden. Hold or right-click an action in an options row, or use its Customize button, to hide it.'));return;}
-      hiddenControls.append(el('p','menu-note','Actions hidden from the options rows on this browser/device. Student profiles do not include them.'));
+      if(!ids.length){hiddenControls.append(el('p','menu-note','Nothing is hidden. Hold or right-click an action in an options row, or use Customize in a row or menu, to hide it.'));return;}
+      hiddenControls.append(el('p','menu-note','Actions hidden from the options rows and menus on this browser/device. Student profiles do not include them.'));
       for(const id of ids){
-        const c=commandById(id),row=el('div','app-settings-field'),b=el('button','',toShow.has(id)?'Will show':'Show');b.type='button';
-        b.setAttribute('aria-label',`Show ${c?commandName(c):id}`);b.setAttribute('aria-pressed',String(toShow.has(id)));
+        const c=controlInfo(id),row=el('div','app-settings-field'),b=el('button','',toShow.has(id)?'Will show':'Show');b.type='button';
+        b.setAttribute('aria-label',`Show ${c?.name??id}`);b.setAttribute('aria-pressed',String(toShow.has(id)));
         b.addEventListener('click',()=>{if(toShow.has(id))toShow.delete(id);else toShow.add(id);renderHidden();});
-        row.append(el('span','',c?`${commandName(c)} (${ROW_NAMES[c.contexts[0]!]??c.contexts[0]} row)`:id),b);hiddenControls.append(row);
+        row.append(el('span','',c?`${c.name} (${c.where})`:id),b);hiddenControls.append(row);
       }
     };
     renderHidden();toolsSection.append(hiddenControls);

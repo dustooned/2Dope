@@ -30,7 +30,8 @@ export class ArtworkAssets {
     return id;
   }
 
-  open(id: string): boolean {
+  /** Draw in a source: on `layerId` when given, else where you last were in it. */
+  open(id: string, layerId?: string): boolean {
     const a = this.app, p = a.project, c = p.comps.get(id);
     if (a.strokeActive || !c?.asset || id === p.main) return false;
     this.rememberPosition();
@@ -39,8 +40,9 @@ export class ArtworkAssets {
     };
     a.setWorkspace('draw');
     const position = this.positions.get(p)?.get(id);
+    const chosen = c.layers.find(l => l.kind === 'drawings' && l.id === layerId);
     const layer = c.layers.find(l => l.kind === 'drawings' && l.id === position?.layer);
-    this.switchTo(id, layer?.id ?? c.layers.find(l => l.kind === 'drawings')?.id, layer ? position!.frame : 0);
+    this.switchTo(id, chosen?.id ?? layer?.id ?? c.layers.find(l => l.kind === 'drawings')?.id, layer ? position!.frame : 0);
     return true;
   }
 
