@@ -10,7 +10,8 @@
 
 export const PEN_PREFS_KEY = '2dope.pen';
 
-export type BarrelAction = 'menu' | 'pan';
+export type BarrelAction = 'menu' | 'pan' | 'zoom' | 'eraser';
+const BARREL: BarrelAction[] = ['menu', 'pan', 'zoom', 'eraser'];
 
 export interface PenPrefs {
   version: 1;
@@ -48,7 +49,7 @@ export function readPenPrefs(value: unknown): PenPrefs {
     full: Math.max(threshold + 0.05, num(v.full, 0.2, 1, d.full)),
     tilt: typeof v.tilt === 'boolean' ? v.tilt : d.tilt,
     eraserEnd: typeof v.eraserEnd === 'boolean' ? v.eraserEnd : d.eraserEnd,
-    barrel: v.barrel === 'pan' ? 'pan' : 'menu',
+    barrel: BARREL.includes(v.barrel as BarrelAction) ? v.barrel as BarrelAction : 'menu',
   };
 }
 

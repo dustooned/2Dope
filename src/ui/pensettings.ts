@@ -36,7 +36,7 @@ export function penSettingsSection(app: App): { section: HTMLDetailsElement; rea
   const check = (text: string) => { const row = el('label', 'app-settings-check'), input = el('input'); input.type = 'checkbox'; input.setAttribute('aria-label', text); row.append(input, document.createTextNode(text)); return { row, input }; };
   const tilt = check('Use pen tilt'), eraserEnd = check('Eraser end picks the Eraser');
   const barrelRow = el('label', 'app-settings-field'), barrel = el('select'); barrel.setAttribute('aria-label', 'Pen side button');
-  for (const [v, t] of [['menu', 'Opens the canvas menu'], ['pan', 'Moves the page (hold and drag)']]) { const o = el('option', '', t); o.value = v!; barrel.append(o); }
+  for (const [v, t] of [['menu', 'Opens the canvas menu'], ['pan', 'Moves the page (hold and drag)'], ['zoom', 'Zooms (hold and drag up or down)'], ['eraser', 'Erases while held']]) { const o = el('option', '', t); o.value = v!; barrel.append(o); }
   barrelRow.append(el('span', '', 'Side button'), barrel);
   const actions = el('div', 'student-profile-actions');
   const fromPad = el('button', '', 'Set from my test strokes'), clear = el('button', '', 'Clear pad'), reset = el('button', '', 'Restore pen defaults');
@@ -44,7 +44,7 @@ export function penSettingsSection(app: App): { section: HTMLDetailsElement; rea
   fromPad.title = 'Full strength at your strongest stroke on the pad';
   actions.append(fromPad, clear, reset);
   section.append(firm.row, threshold.row, full.row, tilt.row, eraserEnd.row, barrelRow, actions,
-    el('p', 'menu-note', 'Turning the pen over to its eraser end switches to the Eraser; the tip brings back your tool. Tilt off helps when a driver reports a tilt that never changes. Each brush’s own pressure settings still apply on top of these.'));
+    el('p', 'menu-note', 'Turning the pen over to its eraser end switches to the Eraser; the tip brings back your tool. A tablet button set to Erase in the driver works the same way; one set to zoom with Ctrl + and Ctrl − zooms the canvas. Tilt off helps when a driver reports a tilt that never changes. Each brush’s own pressure settings still apply on top of these.'));
 
   const read = (): PenPrefs => readPenPrefs({
     version: 1, firmness: Number(firm.input.value) / 100, threshold: Number(threshold.input.value) / 100, full: Number(full.input.value) / 100,

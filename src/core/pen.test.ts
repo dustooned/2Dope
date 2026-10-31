@@ -34,7 +34,7 @@ describe('pen prefs', () => {
     expect(r.tilt).toBe(false);
     expect(r.eraserEnd).toBe(true);
     expect(r.barrel).toBe('menu');
-    expect(readPenPrefs({ version: 1, barrel: 'pan' }).barrel).toBe('pan');
+    for (const b of ['pan', 'zoom', 'eraser'] as const) expect(readPenPrefs({ version: 1, barrel: b }).barrel).toBe(b);
   });
 });
 

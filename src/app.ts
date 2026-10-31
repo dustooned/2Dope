@@ -379,8 +379,8 @@ export class App {
   readonly penProbe = new PenProbe();
   /** The tool (and Smudge) to return to when the pen turns back from its eraser end. */
   private penTool: { tool: Tool; smudging: boolean } | null = null;
-  /** The pen's side button started a pan: its context menu stays closed. */
-  private barrelPan = false;
+  /** The pen's side button did something else (pan, zoom, erase): its context menu stays closed. */
+  private barrelUsed = false;
   setPenPrefs(p: PenPrefs): void {
     this.penPrefs = readPenPrefs(p); saveJSON(PEN_PREFS_KEY, this.penPrefs);
   }
@@ -4903,7 +4903,7 @@ export class App {
     c.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       if (Date.now() - this.lastHold < 1000) return; // the hold already opened it
-      if (this.barrelPan) { this.barrelPan = false; return; } // the side button panned instead
+      if (this.barrelUsed) { this.barrelUsed = false; return; } // the side button did something else
       this.openCanvasMenu(e.clientX, e.clientY);
     });
     // Safari's own pinch-zoom gestures must not move the page.
@@ -5134,12 +5134,13 @@ export class App {
 
     // Pen or mouse: the pen always wins over an ongoing touch gesture.
     this.pinch = null;
-    this.barrelPan = false;
     const pen = e.pointerType === 'pen';
-    if (pen) this.penEnd(e);
+    const barrel = pen && e.button === 2 ? this.penPrefs.barrel : 'menu';
+    this.barrelUsed = barrel !== 'menu';
+    if (pen) this.penEnd(e, barrel === 'eraser');
     const p = this.local(e);
-    if (pen && e.button === 2 && this.penPrefs.barrel === 'pan') this.barrelPan = true;
-    const mode: NavMode | null = e.button === 1 || this.barrelPan || this.held.has('Space') ? 'pan' : this.held.has('KeyR') ? 'rotate' : this.held.has('KeyZ') ? 'zoom' : null;
+    const mode: NavMode | null = barrel === 'zoom' ? 'zoom'
+      : e.button === 1 || barrel === 'pan' || this.held.has('Space') ? 'pan' : this.held.has('KeyR') ? 'rotate' : this.held.has('KeyZ') ? 'zoom' : null;
     if (mode) {
       if (mode === 'pan' && this.held.has('Space')) this.spacePanned = true;
       const c = { x: this.viewW / 2, y: this.viewH / 2 };
@@ -5155,8 +5156,8 @@ export class App {
       };
       return;
     }
-    // (the pen's eraser end presses button 5)
-    if (e.button !== 0 && !(pen && e.button === 5)) return;
+    // (the pen's eraser end presses button 5; the side button can be set to erase)
+    if (e.button !== 0 && !(pen && (e.button === 5 || barrel === 'eraser'))) return;
     if (this.arrangingAssets) { this.assetDown(e); return; }
     if (this.workspace === 'motion') {
       this.motionDown(e);
@@ -5754,6 +5755,15 @@ export class App {
       this.redo();
       return;
     }
+    // Ctrl/Cmd + and - zoom the canvas, Ctrl/Cmd 0 fits it (not the browser page, and not the
+    // frame hold that + and - change): tablet drivers send these for their zoom buttons
+    if (mod && !e.altKey && ['Equal', 'NumpadAdd', 'Minus', 'NumpadSubtract', 'Digit0', 'Numpad0'].includes(e.code)) {
+      e.preventDefault();
+      if (e.code === 'Digit0' || e.code === 'Numpad0') this.fit();
+      else this.view.zoomAt(this.viewW / 2, this.viewH / 2, e.code === 'Equal' || e.code === 'NumpadAdd' ? 1.25 : 0.8);
+      this.requestRender();
+      return;
+    }
     if (this.arrangingAssets) {
       if (e.code === 'Escape' || e.code === 'Enter') {
         e.preventDefault();
@@ -5949,10 +5959,13 @@ export class App {
     this.onNotice?.('Your pen is not reporting pressure, so lines keep one width. Menu → App settings → Pen and tablet has tips for your tablet driver.');
   }
 
-  /** The pen's eraser end picks the Eraser; the tip brings back the tool it replaced. */
-  private penEnd(e: PointerEvent): void {
-    if (!this.penPrefs.eraserEnd || this.workspace === 'motion' || this.arrangingAssets || this.timingOnly) return;
-    const eraser = (e.buttons & ERASER_BUTTONS) !== 0;
+  /**
+   * The pen's eraser end (or its side button, when set to erase) picks the Eraser; the tip alone
+   * brings back the tool it replaced. A Wacom side button set to Erase reports the eraser end.
+   */
+  private penEnd(e: PointerEvent, barrelErase: boolean): void {
+    if (this.workspace === 'motion' || this.arrangingAssets || this.timingOnly) return;
+    const eraser = barrelErase || (this.penPrefs.eraserEnd && (e.buttons & ERASER_BUTTONS) !== 0);
     if (eraser && this.tool !== 'eraser') {
       this.penTool = { tool: this.tool, smudging: this.smudging };
       this.setTool('eraser');

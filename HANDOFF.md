@@ -42,6 +42,29 @@ seen, rounded to a power of two) is approximate. A pen whose driver sends mouse 
 apart from a mouse; the pad only shows the Windows Ink tip when a mouse draws on it. No browser
 fixture covers the pen section yet.
 
+### Tablet buttons: zoom keys and side-button choices (2026-10-30, uncommitted)
+
+A tester using a Wacom reported that their programmed side buttons (zoom and erase) did nothing.
+Cause, from the code; not reproduced on hardware: Wacom's Erase function reports the eraser bit,
+which `onDown` dropped before `30fd0e5` (button 5). Wacom zoom presets send Ctrl +/−, which fell
+through `onKey` to `changeHold` (the frame hold changed and the browser zoomed the page).
+
+- `onKey`: Ctrl/Cmd + = / NumpadAdd and − / NumpadSubtract zoom the canvas about its centre
+  (×1.25 and ×0.8); Ctrl/Cmd 0 fits it. All call `preventDefault`. Plain + and − still change the hold.
+- `BarrelAction` adds `zoom` (NavMode zoom while held) and `eraser` (Eraser while held; `penEnd`
+  takes `barrelErase`, and the tip alone restores the tool). `barrelPan` was renamed `barrelUsed`
+  and suppresses the context menu for every choice except `menu`.
+- Pen and tablet select, manual, UPDATES ("Tablet buttons") and `docs/testing/pen-tablet-test.md`
+  (steps 5 and 6 cover programmed buttons).
+
+Checks (actual): `npm test` 546 passed; `npm run build` passed (753 kB main chunk);
+`npm run test:browser` 35 of 35 passed. In the dev app with synthetic events: Ctrl+=, Ctrl+− and
+Ctrl+0 were prevented and zoomed or fit without adding an undo step. Side-button zoom changed the
+zoom, pan moved the view, and eraser switched to the Eraser with the tip restoring Brush. Those
+three kept the menu closed; `menu` still opened it. Not verified: a real Wacom (whether Chrome
+receives the driver's keystroke and Erase as expected, with Windows Ink on and off) and Wacom
+Pan/Scroll, which sends wheel events (plain wheel zooms the canvas).
+
 ## Earlier state (2026-10-26)
 
 ### Adjust inside a selection and a smaller main bundle (2026-10-26, merged into main and pushed)
