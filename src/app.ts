@@ -1643,6 +1643,20 @@ export class App {
   }
 
   /** Invert: select everything that was not selected (everything, when nothing was). */
+  /** Ctrl+A: the whole page as a selection, so Delete, Cut, Fill and Transform act on all of it. */
+  selectCanvas(): void {
+    if (this.strokeActive || this.xf || this.blankPage || this.fillG || this.wandG) return;
+    if (this.project.layer.locked) { this.onNotice?.(`“${this.project.layer.name}” is locked. Unlock it in Layers to select on it.`); return; }
+    const W = this.docW, H = this.docH;
+    const area = boxOf(new Uint8Array(W * H).fill(1), W, H);
+    const op = this.selectOp;
+    this.selectOp = 'new';
+    this.takeSelection(area, area ? boxPoints(area) : [], true);
+    this.selectOp = op;
+    this.requestRender();
+    this.onToolChange();
+  }
+
   invertSelection(): void {
     if (this.strokeActive || this.xf) return;
     const W = this.docW, H = this.docH;
@@ -5776,7 +5790,9 @@ export class App {
     }
     if (mod && e.code === 'KeyA') {
       e.preventDefault();
-      this.selectAll();
+      // on the canvas: the whole page with marching ants; Motion and Timing pick every frame
+      if (this.workspace === 'motion' || this.timingOnly) this.selectAll();
+      else this.selectCanvas();
       return;
     }
     // Motion: Ctrl+Shift+D splits the selected layers at the playhead
@@ -5878,7 +5894,9 @@ export class App {
       case 'Delete':
       case 'Backspace':
         e.preventDefault();
-        this.deleteFrame();
+        // with part of the canvas selected, Delete removes what is inside it, not the frame
+        if (this.spatialSelection) this.deleteSelectedArt();
+        else this.deleteFrame();
         break;
       case 'Equal':
       case 'NumpadAdd':

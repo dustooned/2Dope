@@ -42,6 +42,25 @@ seen, rounded to a power of two) is approximate. A pen whose driver sends mouse 
 apart from a mouse; the pad only shows the Windows Ink tip when a mouse draws on it. No browser
 fixture covers the pen section yet.
 
+### Ctrl+A selects the page; Delete respects a canvas selection (2026-10-30, uncommitted)
+
+The user reported that Ctrl+A showed no marching ants, but Delete then removed everything. Cause:
+Ctrl+A ran `selectAll()` (every timeline exposure), and Delete/Backspace always ran `deleteFrame()`,
+which deleted all selected frames (undoable), even with a lasso selection or during a transform.
+
+- New `App.selectCanvas()`: the whole page as an exact spatial selection (marching ants at the page
+  edge). Ctrl/Cmd+A uses it in Draw and Animate; Motion and `timingOnly` keep the frame `selectAll()`.
+  A locked layer gives a notice; a blank page, open stroke or transform does nothing.
+- Delete/Backspace: `deleteSelectedArt()` when there is a canvas selection, else `deleteFrame()` as before.
+- Manual shortcut table (Ctrl+A/Esc, Ctrl + − 0, Delete wording) and UPDATES "Ctrl+A selects the page".
+
+Checks (actual): `npm test` 546 passed; `npm run build` passed; `npm run test:browser` 35 of 35.
+In the dev app: Ctrl+A selected 1920×1080 with marching ants (screenshot) and left the frame
+selection empty. Delete then cleared the line pixels as one "Delete selected" step with 13 frames
+kept, and Undo brought them back. Without a selection, Delete still made "Delete frame (ripple)",
+and Undo restored it. Not checked: Ctrl+A in Timing/Motion after this change (same code path as
+before), Cmd+A on a Mac, or touch keyboards.
+
 ### Tablet buttons: zoom keys and side-button choices (2026-10-30, uncommitted)
 
 A tester using a Wacom reported that their programmed side buttons (zoom and erase) did nothing.

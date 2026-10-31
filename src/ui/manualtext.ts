@@ -387,7 +387,7 @@ export const MANUAL: ManualSection[] = [
           ['↑ ↓', 'Next / previous drawing'],
           ['N', 'New frame (new panel in Story)'],
           ['D', 'Duplicate'],
-          ['Delete', 'Delete the selected frames'],
+          ['Delete', 'Delete what is selected on the canvas; with nothing selected there, the selected frames'],
           ['+ −, 1–4', 'Longer / shorter hold, or set it'],
           ['B, P, E, G', 'Brush, Pen, Eraser, Fill (Shift+G changes the fill mode)'],
           ['I', 'Eyedropper: pick a colour from the page'],
@@ -396,6 +396,8 @@ export const MANUAL: ManualSection[] = [
           ['X', 'Paint on Line or Fill (Shift+X shows the X-sheet)'],
           ['O, L', 'Onion skin, lock frame'],
           ['F, Shift+1, 0, H', 'Fit, 100%, straighten, flip the view'],
+          ['Ctrl+A, Esc', 'Select the whole page (marching ants; in Motion and Timing, every frame), deselect'],
+          ['Ctrl+ + − 0', 'Zoom the canvas in, out, fit'],
           ['Ctrl+Z, Ctrl+Shift+Z', 'Undo, redo'],
           ['Ctrl+C / X / V', 'Copy, cut, paste frames'],
           ['Alt+← →', 'Move the selected frames'],
@@ -435,6 +437,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-10-30', title: 'Ctrl+A selects the page', items: ['In Draw and Animate, Ctrl+A (Cmd+A on a Mac) now selects the whole page, with marching ants round the edge, so Delete, Cut, Copy, Fill and Transform act on all of it. Before, it silently selected every frame in the timeline.', 'Delete and Backspace now remove what is selected on the canvas instead of deleting the frame. With nothing selected on the canvas they delete the selected frames as before. In Motion and Timing, Ctrl+A still selects every frame.'] },
   { date: '2026-10-30', title: 'Tablet buttons', items: ['Ctrl + and Ctrl − (Cmd on a Mac) now zoom the canvas and Ctrl 0 fits it, instead of zooming the whole page and changing how long the drawing is held. Tablet buttons set to zoom in the Wacom or other tablet driver send these keys, so they now work. Plain + and − still change the hold.', 'App settings → Pen and tablet: the side button can also zoom (hold and drag up or down) or erase while held. A side button set to Erase in the tablet driver now picks the Eraser too.'] },
   { date: '2026-10-30', title: 'Pen and tablet settings', items: ['App settings → Pen and tablet has a test pad. Draw on it to see what your pen reports: pressure (and roughly how many levels), tilt, twist, an eraser end, a side button and hover. When something is missing it says what to change in the tablet driver, such as turning on Windows Ink for Wacom, Huion and XP-Pen tablets on Windows.', 'Set the pressure feel (soft or firm), a light-touch threshold and the pressure that gives full strength, or let Set from my test strokes match your hand. These apply to every brush on this device, before each brush’s own pressure settings.', 'Turning the pen over to its eraser end now switches to the Eraser, and the tip brings back your tool. The side button can open the canvas menu or move the page. Tilt can be turned off for drivers that report a tilt that never changes.', 'If your pen draws without any pressure, 2Dope tells you once and points to these tips.'] },
   { date: '2026-10-26', title: 'Adjust inside a selection', items: ['With something selected, Adjust colour and blur change only what is inside it, with a hard edge, and leave the rest of the drawing as it was. A vector line that crosses the edge changes colour only inside it and is split at the edge. Blur still reads the pixels just outside the edge, so it blends in. With nothing drawn inside the selection, Adjust says so instead of doing nothing.'] },
