@@ -4,7 +4,6 @@ import { CanvasViewUI } from './ui/canvasview';
 import { ArtworkAssetsUI } from './ui/artworkassets';
 import { EffectsPanel } from './ui/effectspanel';
 import { scrollArrows } from './ui/scrollarrows';
-import { openBoardExport } from './ui/boardexport';
 import './style.css';
 import { AudioPlayback } from './audio';
 import { AudioTracks } from './ui/audiotracks';
@@ -38,6 +37,7 @@ import { applyIcons } from './ui/icons';
 import { Sidebar } from './ui/sidebar';
 import { drawRailState } from './ui/rails';
 import { LayersPopover } from './ui/layerspop';
+import { boardCues, cueAt } from './core/dialogue';
 import { BoardPanel } from './ui/board';
 import { ColorPanel } from './ui/colorpanel';
 import { BrushLibrary } from './ui/brushlib';
@@ -333,7 +333,9 @@ drawRailState.onChange = () => { layersPop.update(); strip.update(); };
 // Timing tools (holds, marks, onion settings, layer toggles) belong to the Time workspace
 $('#tab-xsheet').prepend(strip.timingBar);
 const motion = new MotionPanel(app, $('#motion'));
-const board = new BoardPanel(app, $('#board'));
+// Story's Export opens Share on the story formats (Storyboard, or Animatic when that was picked last)
+const exportStory = (): void => share.show(share.lastKind === 'animatic' ? 'animatic' : 'board');
+const board = new BoardPanel(app, $('#board'), () => exportStory());
 const audioPlayback = new AudioPlayback(app);
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 // In the tracks sheet, sounds are rows under the layers; their settings open in a floating card.
@@ -370,24 +372,27 @@ app.pickMedia = mediaPicker(app, audioTracks);
 }
 board.setAudio(audioPlayback);
 board.setSoundMenu((id) => audioTracks.soundMenu(id));
-// the panel's dialogue as a subtitle under the picture (Board, and while playing with a board)
+// the panel's dialogue line showing now, as a subtitle under the picture (Board, and while playing
+// with a board): the same lines and timing as the animatic export
 const subtitle = $('#subtitle');
+let subtitleSig = '';
 const showSubtitle = () => {
   const b = app.board;
-  let text = '';
-  if (b && (app.workspace === 'board' || app.playing)) {
-    const f = app.frame - b.start;
-    let at = 0;
-    for (const e of b.exposures) {
-      if (f >= at && f < at + e.length) {
-        text = e.dialogue ?? '';
-        break;
-      }
-      at += e.length;
-    }
+  const cue = b && (app.workspace === 'board' || app.playing) ? cueAt(boardCues(b.exposures, b.start), app.frame) : null;
+  const sig = cue ? `${cue.who}
+${cue.text}` : '';
+  if (sig === subtitleSig) return;
+  subtitleSig = sig;
+  subtitle.hidden = !cue;
+  subtitle.replaceChildren();
+  if (!cue) return;
+  if (cue.who) {
+    const who = document.createElement('span');
+    who.className = 'subtitle-who';
+    who.textContent = `${cue.who}: `;
+    subtitle.append(who);
   }
-  subtitle.hidden = !text;
-  subtitle.textContent = text;
+  subtitle.append(cue.text);
 };
 
 // The handle between the canvas and the timeline; each workspace remembers its own height.
@@ -487,7 +492,6 @@ const videoExporter = new VideoExportUI(app, (message) => files?.toast(message),
 let onShareChange = (): void => {};
 const share = new ShareView(app, {
   sounds: audioPlayback.bank,
-  board: () => openBoardExport(app, (m) => files?.toast(m)),
   blender: () => void exportForBlender(),
   backup: () => void files?.exportProject(),
   onOpenChange: () => onShareChange(),
@@ -660,7 +664,7 @@ const bubbles = new Bubbles(app, $('#stage'), {
     view: () => board.currentView,
     setView: (v) => board.setView(v),
     images: () => { if (!app.board) app.createBoard(); board.pickImages(); },
-    exportBoard: () => openBoardExport(app, (m) => app.onNotice?.(m)),
+    exportBoard: () => exportStory(),
   },
   motion: { group: () => motion.group(), split: () => motion.split() },
   editShape: (anchor) => openShapeMenu(anchor),

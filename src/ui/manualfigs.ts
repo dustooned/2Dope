@@ -108,7 +108,7 @@ export const FIGURES: Record<string, () => string> = {
       `<rect x="10" y="6" width="130" height="98" rx="6"/>${txt(22, 20, '2', 'currentColor', 'start')}<rect x="34" y="11" width="28" height="12" rx="2" stroke="${M}"/>${txt(48, 20, '24', M)}
        <rect x="18" y="28" width="114" height="40" rx="2" stroke="${M}"/><path d="M40 60c8-18 22-20 30-8s20 6 26-6" stroke="currentColor"/>
        <path d="M18 76h80M18 84h60M18 92h70M18 100h40" stroke="${M}"/>
-       ${txt(150, 20, '← panel number and length (frames)', M, 'start')}${txt(150, 50, '← the picture: draw it above', M, 'start')}${txt(150, 84, '← dialogue, action, slugging, notes', M, 'start')}${txt(150, 96, '   (Return = same box, next panel)', M, 'start')}`,
+       ${txt(150, 20, '← panel number and length (frames)', M, 'start')}${txt(150, 50, '← the picture: draw it above', M, 'start')}${txt(150, 76, '← dialogue lines: who · what is said', M, 'start')}${txt(150, 88, '   then action, shot, camera, timing, notes', M, 'start')}${txt(150, 100, '   (Return = next line, then next panel)', M, 'start')}`,
       'A storyboard card: number, length, picture and captions',
     ),
   // Motion: a layer box with handles and keyframes on its bar

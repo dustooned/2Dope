@@ -4944,3 +4944,17 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .bub-ctx .bub-row-title { font-weight: 600; color: var(--text); padding-right: 2px; }
 .bub-tool-drawer .bub-drawer-hint { flex-basis: 100%; margin: -2px 0 4px; font-size: 12px; color: var(--muted); }
 body.painting-workspace .painting-views .painting-handle.folded { opacity: 0.75; border-style: dashed; }
+/* Story cards: panel header, and the dialogue as subtitle lines (who · what is said · time) */
+body .bcard { flex-basis: 230px; }
+.bunit { margin-left: -3px; font-size: 12px; color: var(--muted); }
+.bwhen { margin-left: auto; font-size: 11px; white-space: nowrap; }
+.bdialogue .blines { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.bline-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'who time del' 'say say say'; gap: 3px 4px; align-items: center; padding: 3px; border-radius: var(--radius); background: color-mix(in srgb, var(--board) 7%, transparent); }
+.bline-row .bspeaker { grid-area: who; font-weight: 700; min-height: 28px; text-transform: none; }
+.bline-row .bsay { grid-area: say; min-height: 30px; }
+.bline-row .btime { grid-area: time; justify-self: end; font-size: 11px; }
+.bline-row .bline-del { grid-area: del; min-width: 28px; min-height: 28px; padding: 0; line-height: 1; }
+.bline-add { align-self: flex-start; margin-top: 4px; min-height: 28px; padding: 0 10px; font-size: 12px; }
+.subtitle-who { font-weight: 700; color: #ffd84a; }
+.share-subtitles { margin: 4px 0; }
+.share-save-subs { align-self: center; }

@@ -54,6 +54,10 @@ export interface CompositeOptions {
   alpha?: number;
   /** A final render: guide layers (the storyboard) are left out unless set to export. */
   export?: boolean;
+  /** A guide layer of the top comp to render even in a final render (the board in an animatic). */
+  guide?: string;
+  /** With `guide`: draw only that layer of the top comp (a board-only animatic). */
+  onlyGuide?: boolean;
   /** Draw this drawing's pixels from other canvases (the stroke being painted right now). */
   source?: (d: Drawing) => DrawingSource | null;
 }
@@ -292,7 +296,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
   }
   const view = depth === 0 && opt.camera === false ? ([1, 0, 0, 1, 0, 0] as Mat) : viewMatrix(c, frame, comps);
   const groups = clipGroups(c.layers);
-  const shows = (l: Layer) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps) || (depth === 0 && opt.skip === l.id) || (opt.export && skippedInExport(l)));
+  const shows = (l: Layer) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps) || (depth === 0 && opt.skip === l.id) || (depth === 0 && opt.onlyGuide && l.id !== opt.guide) || (opt.export && skippedInExport(l) && !(depth === 0 && l.id === opt.guide)));
   const alphaOf = (l: Layer) => opacityAt(l, frame) * (depth === 0 ? (opt.alpha ?? 1) : 1);
   const matOf = (l: Layer) => base.multiply(toDom(mul(view, worldMatrix(c, l, frame))));
   for (let i = c.layers.length - 1; i >= 0; i--) {

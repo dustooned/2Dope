@@ -1,5 +1,16 @@
 # Architecture
 
+Story export and subtitles (2026-10-30): `core/dialogue.ts` reads a panel's existing `dialogue`
+caption as subtitle lines ("Speaker: words", one per line; no schema change), shares a panel's
+frames between its lines (`splitPanel`/`boardCues`), and writes SRT/WebVTT. `ui/board.ts` edits
+the lines per card (`dialogueBlock`); `main.ts` shows the cue under the canvas; `boardtimeline.ts`
+shows them on blocks. `io/animatic.ts` paints an animatic frame (board only, or the shot with its
+board via `CompositeOptions.guide`/`onlyGuide`) plus burned-in subtitles, and hands
+`exportVideo` a `VideoPicture` (length, drawings, painter) so it reuses the same encoder, audio
+mix and limits. `ui/share.ts` now owns both story formats (Animatic and inline Storyboard
+settings, replacing `ui/boardexport.ts`); Story's Export opens Share on the last story format.
+`tests/storyexport.html` covers the card editor and both exports in the real App.
+
 Canvas view (2026-10-30): `core/canvasview.ts` validates the device-only `2dope.canvas.view`
 preference (Overscan, safe areas, centre cross, frame overview), safe-frame geometry (90%/80%)
 and overview neighbours. `App.render` clips Draw/Animate art to the page unless Overscan is on;
@@ -408,7 +419,7 @@ Residency parks offscreen planes as PNG bytes or stored asset keys, shrinking ca
 
 - PNG output uses drawings directly for a plain flipbook or the shared Canvas 2D compositor for a composed shot. Sequences provide Combined/Lines/Fills/Matte passes and a manifest.
 - Quick Share video encodes every main-shot frame with the same compositor and residency pins at explicit timestamps, and mixes the shot's audio clips (AAC in MP4, Opus in WebM). It is opaque; controls/cancel keep the project modal. Output bytes are capped (32 MiB Lite, 64 MiB Full), with a conservative preflight estimate. The video library is loaded only when this export is opened.
-- Storyboard export produces PDF or panel PNGs/captions CSV. PDF uses built-in WinAnsi text, with limited Unicode support.
+- Storyboard export (Share > Storyboard) produces PDF or panel PNGs/captions CSV (+ subtitles.srt). PDF uses built-in WinAnsi text, with limited Unicode support. Share > Animatic encodes the board on its timing through `exportVideo` with a `VideoPicture` from `io/animatic.ts`.
 - Blender packages include images, `scene.json` and the importer. See `docs/blender.md` for supported mappings and simplifications.
 - Vite uses relative asset paths for static hosting. `.github/workflows/pages.yml` installs with Node 22, tests, builds and deploys `dist/` on `main` pushes/manual dispatch.
 - Colocated Vitest tests run in Node, with stubs for browser-dependent pieces. They are not a full browser, Safari, or Blender integration suite.

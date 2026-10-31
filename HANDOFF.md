@@ -2,6 +2,60 @@
 
 ## Current state (2026-10-30) — read this first
 
+### Animatic / storyboard export and Story subtitle lines (2026-10-30, uncommitted)
+
+User asked for storyboard and animatic exports as options (not rendered automatically; a choice
+made at export carries across modes), Story polish, and much cleaner subtitle/dialogue entry.
+
+**Data decision (no schema change).** Dialogue stays in the existing exposure `dialogue` caption,
+now read as one subtitle per line, `Speaker: words` when named (`core/dialogue.ts`). Old free text
+loads as lines without a speaker; older builds still show the text as written. A panel's frames
+are shared between its lines by text length (min one frame each); nothing extra is stored. A
+line like "Wait: what" without a speaker is shown with "Wait" as the speaker (stored text is
+unchanged either way).
+
+- `core/dialogue.ts` (+ tests): parse/format lines, `splitPanel`, `boardCues`, `cueAt`,
+  `boardSpeakers`, SRT and WebVTT writers.
+- Story cards (`ui/board.ts`, `style.css`): a Dialogue / subtitles block directly under the
+  picture with Who (speaker datalist of names already used) + What is said rows, per-line screen
+  time, `+ Line` / Shift+Return to add, `×` to remove, Return through lines then to the next
+  panel's first line, Escape reverts. Other captions keep their fields and labels.
+  Polish: Images button uses the picture icon (was the export icon), header shows `fr` and
+  `@ start · length`, the thumbnail has a role/label/title, the Split view is called Both (as in
+  the bubbles), cards are 230px wide. Board timeline blocks show the lines as subtitles read.
+- Live subtitle (`main.ts`): one cue at a time with the speaker highlighted, same timing as the
+  animatic.
+- Exports (`ui/share.ts`): new **Animatic** format (board panels, or Board + animation; burn-in
+  subtitles on by default; optional `.srt` beside the video; size/file/background are the shared
+  Video settings, never see-through; ends at the last panel). **Storyboard** settings are now
+  inline in Share (PDF sheets or panel ZIP; same `2dope.board.export` key, so earlier choices carry
+  over); `ui/boardexport.ts` was removed. Story's Export button / bubble opens Share on the last
+  story format (Storyboard or Animatic); Share remembers the pick for every mode. Video, GIF,
+  Animated PNG, PNG frames and Picture offer "Put the storyboard in it", which is the existing
+  project-level `setBoardExport` (one Undo step; Blender and all renders follow it).
+- `io/animatic.ts` (+ tests) paints a frame and builds a `VideoPicture`; `io/exportvideo.ts`
+  accepts that optional picture (length, drawings, painter) and `planVideo` an optional length.
+  `view/composite.ts` gained `guide` / `onlyGuide` options. `io/storyboardexport.ts` prints
+  dialogue lines with bold speakers and adds `subtitles.srt` to the panel ZIP when there is
+  dialogue.
+- Manual (Story and Share sections, Story card figure), UPDATES entry, ARCHITECTURE note,
+  `docs/project-format.md` note. New fixture `tests/storyexport.html` (41 checks: line editing,
+  keyboard flow, Escape, undo, speaker list, old free text, Story Export → Share, PDF text, ZIP
+  with `subtitles.srt`, animatic checks, board-only vs Board + animation pixels, burn-in, a real
+  WebM encode with duration = board length and the `.srt` link, remembered picks across modes, the
+  include-storyboard toggle and its Undo).
+
+Checks (actual): `npm test` 72 files / 573 passed; `npm run build` passed (existing chunk-size
+warning); `git diff --check` clean. `npm run test:browser` (`--base http://127.0.0.1:5220`):
+**44/44 fixtures passed**, including the new `storyexport` (41/41); it also passed in the
+in-app browser pane. After that run, a notice for dialogue past the panel's 1000-character
+caption cap was added; unit tests, build and `tsc` were re-run and pass. Visually checked in the
+dev app on test origin 127.0.0.1:5220: Story card with the Dialogue block under the picture,
+Share opened from Story on Storyboard, Animatic preview with the burned-in "Sam: …" line, checks
+and subtitle switches. Not checked: MP4/H.264 animatic encode (the fixture uses WebM), audio in an
+animatic with real clips (same mixer as Video, untested here), phone/narrow layout of the line
+rows, touch/Pencil, iPad. No commit or push.
+
 ### Overscan / canvas view options and Animate toolbar polish (2026-10-30, uncommitted)
 
 User asked for a toggle letting artists draw and see art outside the canvas, with title/action-safe

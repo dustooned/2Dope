@@ -1,5 +1,6 @@
 import { makeCanvas } from '../brush/raster';
 import { frameContent, type DrawingsLayer } from '../core/comp';
+import { boardCues, parseDialogue, toSrt } from '../core/dialogue';
 import { CAPTION_FIELDS } from '../core/timeline';
 import { paintDrawing, type Drawing, type Project } from '../core/project';
 import { drawComp, releaseScratch } from '../view/composite';
@@ -122,6 +123,23 @@ export async function storyboardPdf(ctx: BoardExportContext, opts: StoryboardOpt
           if (room < 1) break;
           const label = `${CAPTION_LABEL[f.key]}: `;
           const lw = bold(label);
+          if (f.key === 'dialogue') {
+            // one line per subtitle under the label, the speaker in bold
+            page.text(c.text.x, y, label, SIZE, { bold: true, gray: 0.3 });
+            y += LEAD;
+            for (const d of parseDialogue(v)) {
+              const left = Math.floor((bottom - y) / LEAD) + 1;
+              if (left < 1) break;
+              const who = d.who ? `${d.who}: ` : '';
+              const ww = who ? bold(who) : 0;
+              const lines = wrapText(d.text, c.text.w - 8, reg, left, ww);
+              if (who) page.text(c.text.x + 8, y, who, SIZE, { bold: true });
+              lines.forEach((line, j) => page.text(c.text!.x + 8 + (j === 0 ? ww : 0), y + j * LEAD, line, SIZE));
+              y += lines.length * LEAD;
+            }
+            y += 3;
+            continue;
+          }
           const lines = wrapText(v, c.text.w, reg, room, lw);
           page.text(c.text.x, y, label, SIZE, { bold: true, gray: 0.3 });
           lines.forEach((line, j) => page.text(c.text!.x + (j === 0 ? lw : 0), y + j * LEAD, line, SIZE));
@@ -137,7 +155,7 @@ export async function storyboardPdf(ctx: BoardExportContext, opts: StoryboardOpt
   return { pdf: writePdf(pages, images, title), pages: pages.length };
 }
 
-/** Every panel as a full-size PNG (on white) plus captions.csv, in one ZIP. */
+/** Every panel as a full-size PNG (on white) plus captions.csv (and subtitles.srt when there is dialogue), in one ZIP. */
 export async function storyboardPngs(ctx: BoardExportContext, opts: StoryboardOptions, name: string): Promise<{ zip: Uint8Array; panels: number }> {
   const panels = boardPanels(ctx.board.exposures, ctx.board.start);
   if (!panels.length) throw new Error('The storyboard has no panels.');
@@ -156,5 +174,9 @@ export async function storyboardPngs(ctx: BoardExportContext, opts: StoryboardOp
   }
   const csv = captionsCsv(panels, ctx.fmt, ctx.fmtDur, (n) => `panels/${panelFile(n, panels.length)}`);
   files.push({ name: `${name}/captions.csv`, data: new TextEncoder().encode(csv) });
+  // the dialogue lines as subtitles on the panels' timing, for an edit or a video player
+  const cues = boardCues(ctx.board.exposures, ctx.board.start);
+  const fps = ctx.project.comps.get(ctx.compId)?.fps ?? ctx.project.comp.fps;
+  if (cues.length) files.push({ name: `${name}/subtitles.srt`, data: new TextEncoder().encode(toSrt(cues, fps)) });
   return { zip: writeZip(files), panels: panels.length };
 }

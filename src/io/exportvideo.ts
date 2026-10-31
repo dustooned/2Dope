@@ -10,6 +10,13 @@ type VideoCodec = 'avc' | 'vp9' | 'vp8';
 export interface VideoSupport { codec: VideoCodec | null; message: string }
 export interface VideoProgress { done: number; total: number; label: string }
 export interface VideoResult { blob: Blob; extension: 'mp4' | 'webm'; frames: number; duration: number }
+/** Another picture on the same clock and encoder (the animatic): its length, its drawings and how a frame paints. */
+export interface VideoPicture {
+  frames: number;
+  drawings(frame: number): Iterable<string>;
+  /** Paint frame `frame` into the output canvas (identity transform, output pixels, background already filled). */
+  paint(g: CanvasRenderingContext2D, frame: number, plan: VideoPlan): void;
+}
 
 /** Codec support is checked for the actual dimensions, frame rate and bitrate, not browser names. */
 export async function videoSupport(plan: VideoPlan): Promise<VideoSupport> {
@@ -55,10 +62,11 @@ export async function exportVideo(
   hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void },
   maxBytes = VIDEO_MAX_BYTES,
   sounds?: SoundBank,
+  picture?: VideoPicture,
 ): Promise<VideoResult> {
   const check = () => { if (signal.aborted) throw new DOMException('Video export cancelled', 'AbortError'); };
   check();
-  const plan = planVideo(project, rawOptions, maxBytes);
+  const plan = planVideo(project, rawOptions, maxBytes, picture?.frames);
   onProgress({ done: 0, total: plan.frames, label: 'Checking video support…' });
   const support = await videoSupport(plan);
   check();
@@ -106,8 +114,8 @@ export async function exportVideo(
       check();
       const pinned: Drawing[] = [];
       try {
-        const content = frameContent(project.comps, plan.comp, frame);
-        for (const id of content.drawings) {
+        const ids = picture ? picture.drawings(frame) : frameContent(project.comps, plan.comp, frame).drawings;
+        for (const id of ids) {
           check();
           const drawing = project.drawings.get(id);
           if (!drawing) throw new Error(`Drawing ${id} is missing.`);
@@ -122,9 +130,12 @@ export async function exportVideo(
           g.fillStyle = plan.options.background === 'black' ? '#000000' : '#ffffff';
           g.fillRect(0, 0, plan.width, plan.height);
         }
-        g.setTransform(plan.scale, 0, 0, plan.scale, plan.x, plan.y);
         g.imageSmoothingQuality = 'high';
-        drawComp(g, project, plan.comp, frame, { backgrounds: true, export: true });
+        if (picture) picture.paint(g, frame, plan);
+        else {
+          g.setTransform(plan.scale, 0, 0, plan.scale, plan.x, plan.y);
+          drawComp(g, project, plan.comp, frame, { backgrounds: true, export: true });
+        }
         // Await backpressure before reusing the canvas or unpinning this frame's drawings.
         await source.add(frame / plan.fps, 1 / plan.fps);
         if (audio && sounds) {

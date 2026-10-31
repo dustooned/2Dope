@@ -150,6 +150,10 @@ assets/<hash>.wav       normalized PCM audio assets
             "opacity":  { "value": 100 }                   // percent
           },
           "exposures": [ { "drawing": "d1", "length": 2, "note": "walks in" }, { "drawing": "d2", "length": 1 } ],
+          // optional exposure captions (storyboard panels): "shot", "camera", "dialogue", "action",
+          // "slug", "note". "dialogue" holds one subtitle per line, "Speaker: words" when someone is
+          // named (core/dialogue.ts); free text from older files reads as lines without a speaker.
+          // The animatic shares a panel's frames between its lines by length; nothing extra is stored.
           // optional, drawings and comp layers: "play" once | loop | pingpong | single (default once),
           // "speed" (default 1), "single" (the held frame, 0-based), "timeRemap" (keys: which content
           // frame to show, 0-based; hold keys = swaps; overrides play and speed)

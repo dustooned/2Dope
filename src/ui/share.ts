@@ -2,6 +2,8 @@ import type { App, Workspace } from '../app';
 import { compLength, frameContent } from '../core/comp';
 import { soundStart } from '../core/audio';
 import type { Drawing } from '../core/project';
+import { boardCues, toSrt } from '../core/dialogue';
+import { animaticLength, animaticOptions, animaticPicture, boardOf, paintAnimatic, type AnimaticOptions } from '../io/animatic';
 import { DEFAULT_APNG, exportApng, planApng, type ApngOptions } from '../io/apng';
 import { exportGif, planGif } from '../io/exportgif';
 import { DEFAULT_EXPORT, PASSES, sanitizeName, type ExportOptions, type Pass } from '../io/exportplan';
@@ -9,6 +11,8 @@ import { exportSequence } from '../io/exportseq';
 import { exportVideo, videoSupport } from '../io/exportvideo';
 import type { SoundBank } from '../io/sound';
 import { planVideo, videoOptions, VIDEO_LITE_MAX_BYTES, VIDEO_MAX_BYTES, type VideoOptions } from '../io/videoplan';
+import { DEFAULT_STORYBOARD, type StoryboardOptions } from '../io/storyboard';
+import { storyboardPdf, storyboardPngs } from '../io/storyboardexport';
 import { drawComp, releaseScratch, setExportStamp } from '../view/composite';
 import { decorate } from './icons';
 
@@ -19,6 +23,9 @@ const APNG_KEY = '2dope.share.apng';
 const FRAMES_KEY = '2dope.share.frames';
 const PICTURE_KEY = '2dope.share.picture';
 const STAMP_KEY = '2dope.share.stamp';
+const ANIMATIC_KEY = '2dope.share.animatic';
+/** The storyboard sheet settings (the key the Story export dialog used, so earlier choices carry over). */
+const BOARD_KEY = '2dope.board.export';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -34,24 +41,37 @@ function save(key: string, v: unknown): void {
   try { localStorage.setItem(key, typeof v === 'string' ? v : JSON.stringify(v)); } catch { /* optional */ }
 }
 
-type Kind = 'video' | 'gif' | 'apng' | 'frames' | 'picture' | 'board' | 'blender' | 'backup';
+export type ShareKind = 'video' | 'animatic' | 'gif' | 'apng' | 'frames' | 'picture' | 'board' | 'blender' | 'backup';
+type Kind = ShareKind;
 const KINDS: { id: Kind; label: string; hint: string; icon: string }[] = [
   { id: 'video', label: 'Video', hint: 'MP4 or WebM, with sound', icon: 'play' },
+  { id: 'animatic', label: 'Animatic', hint: 'board panels on their timing, with sound', icon: 'board' },
   { id: 'gif', label: 'GIF', hint: 'looping, plays anywhere', icon: 'flipbook' },
   { id: 'apng', label: 'Animated PNG', hint: 'looping, see-through, full colour', icon: 'layers' },
   { id: 'frames', label: 'PNG frames', hint: 'a ZIP of numbered pictures', icon: 'copy' },
   { id: 'picture', label: 'Picture', hint: 'this frame as a PNG', icon: 'gallery' },
-  { id: 'board', label: 'Storyboard', hint: 'PDF or panel images', icon: 'board' },
+  { id: 'board', label: 'Storyboard', hint: 'PDF sheets or panel images', icon: 'board' },
   { id: 'blender', label: 'Blender', hint: 'an editable scene package', icon: 'motion' },
   { id: 'backup', label: 'Project file', hint: 'a .2dope backup to keep', icon: 'export' },
 ];
 
 interface FrameOpts { passes: Pass[]; scale: number; background: 'transparent' | 'white'; start: number; name: string }
 interface PictureOpts { scale: number; background: 'transparent' | 'white' }
+interface BoardOpts extends StoryboardOptions { format: 'pdf' | 'png' }
+
+function boardOpts(raw: unknown): BoardOpts {
+  const r = raw && typeof raw === 'object' ? (raw as Partial<BoardOpts>) : {};
+  return {
+    format: r.format === 'png' ? 'png' : 'pdf',
+    paper: r.paper === 'a4' ? 'a4' : DEFAULT_STORYBOARD.paper,
+    perPage: r.perPage === 2 || r.perPage === 6 ? r.perPage : 4,
+    captions: r.captions !== false,
+    picture: r.picture === 'shot' ? 'shot' : 'board',
+  };
+}
 
 export interface ShareHooks {
   sounds: SoundBank;
-  board(): void;
   blender(): void;
   backup(): void;
   onOpenChange(open: boolean): void;
@@ -83,6 +103,10 @@ export class ShareView {
   }
   private frames: FrameOpts = load(FRAMES_KEY, { passes: ['combined'] as Pass[], scale: 1, background: 'transparent' as const, start: 1, name: '' });
   private picture: PictureOpts = load(PICTURE_KEY, { scale: 1, background: 'transparent' as const });
+  /** One set of animatic and storyboard choices, whichever mode Share was opened from. */
+  private animatic: AnimaticOptions = (() => { try { return animaticOptions(JSON.parse(localStorage.getItem(ANIMATIC_KEY) ?? 'null')); } catch { return animaticOptions(null); } })();
+  private sheets: BoardOpts = (() => { try { return boardOpts(JSON.parse(localStorage.getItem(BOARD_KEY) ?? 'null')); } catch { return boardOpts(null); } })();
+  private extraUrl: string | null = null;
   private advancedOpen = false;
   private prevWs: Workspace | null = null;
   private abort: AbortController | null = null;
@@ -125,8 +149,14 @@ export class ShareView {
     return !this.root.hidden;
   }
 
-  show(): void {
+  /** The format picked last (Story opens on its own formats: Storyboard or Animatic). */
+  get lastKind(): ShareKind {
+    return this.kind;
+  }
+
+  show(kind?: ShareKind): void {
     if (this.open || this.app.strokeActive) return;
+    if (kind && kind !== this.kind) { this.kind = kind; save(KIND_KEY, kind); }
     const app = this.app;
     // always the whole shot: step out of any group, and let Motion keep the shot's drawings loaded
     while (app.editor.crumbs().length > 1) if (!app.editor.exit()) break;
@@ -154,7 +184,18 @@ export class ShareView {
 
   private releaseUrl(): void {
     if (this.url) URL.revokeObjectURL(this.url);
-    this.url = null;
+    if (this.extraUrl) URL.revokeObjectURL(this.extraUrl);
+    this.url = this.extraUrl = null;
+  }
+
+  /** The shot's storyboard (the main comp's guide layer), or null. */
+  private get board() {
+    return boardOf(this.comp);
+  }
+
+  /** The animatic's video settings: the Video choices, never see-through (the panels sit on paper). */
+  private get animaticVideo(): VideoOptions {
+    return videoOptions({ ...this.opts, background: this.opts.background === 'transparent' ? 'white' : this.opts.background });
   }
 
   private togglePlay(): void {
@@ -211,14 +252,23 @@ export class ShareView {
       const s = Math.max(8, Math.round(12 * dpr));
       for (let y = 0; y < h; y += s) for (let x = 0; x < w; x += s) { g.fillStyle = ((x + y) / s) % 2 ? '#d7d7de' : '#f4f4f7'; g.fillRect(x, y, s, s); }
     } else {
-      const black = (this.kind === 'video' && this.opts.background === 'black') || (this.kind === 'apng' && this.apng.background === 'black');
+      const black = ((this.kind === 'video' || this.kind === 'animatic') && this.opts.background === 'black') || (this.kind === 'apng' && this.apng.background === 'black');
       g.fillStyle = black ? '#000' : '#fff';
       g.fillRect(0, 0, w, h);
     }
     g.setTransform(w / c.width, 0, 0, h / c.height, 0, 0);
-    const stamped = this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture';
+    const stamped = this.kind === 'video' || this.kind === 'animatic' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture';
     setExportStamp(stamped ? this.stampText : null);
+    const board = this.board;
     try {
+      if ((this.kind === 'animatic' || this.kind === 'board') && board) {
+        // what the animatic (or a sheet's picture) shows at this frame, subtitles included
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        const o = this.kind === 'animatic' ? this.animatic : { picture: this.sheets.picture, burn: false, srt: false };
+        const frame = Math.min(this.app.frame, Math.max(0, animaticLength(board) - 1));
+        paintAnimatic(g, this.app.project, c, board, frame, o, boardCues(board.exposures, board.start), w, h);
+        return;
+      }
       drawComp(g, this.app.project, c.id, Math.min(this.app.frame, compLength(c, this.app.project.comps) - 1), { camera: true, export: true });
     } finally {
       setExportStamp(null);
@@ -248,16 +298,25 @@ export class ShareView {
     out.push({ ok: len / c.fps >= 1, text: `${len} frames · ${(len / c.fps).toFixed(1)} seconds at ${c.fps} fps${len / c.fps < 1 ? ' (very short)' : ''}` });
     const hidden = c.layers.filter((l) => (l.kind === 'drawings' || l.kind === 'comp') && !l.visible && !(l.kind === 'drawings' && l.guide));
     if (hidden.length) out.push({ ok: false, text: `Hidden, so not included: ${hidden.map((l) => l.name).slice(0, 4).join(', ')}${hidden.length > 4 ? ` and ${hidden.length - 4} more` : ''}` });
-    const board = c.layers.find((l) => l.kind === 'drawings' && l.guide);
-    if (board && board.kind === 'drawings') out.push({ ok: true, text: board.guideExport ? 'The storyboard is included' : 'The storyboard stays out (it is a guide)' });
+    const board = this.board;
     const clips = c.audio ?? [];
-    if (this.kind === 'video') {
+    if (this.kind === 'animatic') {
+      out.length = 0;
+      if (!board) return [{ ok: false, text: 'No storyboard yet: add panels in Story first' }];
+      const n = board.exposures.length, end = animaticLength(board);
+      out.push({ ok: true, text: `${n} panel${n === 1 ? '' : 's'} · ${(end / c.fps).toFixed(1)} seconds at ${c.fps} fps` });
+      const cues = boardCues(board.exposures, board.start);
+      const said = new Set(cues.map((q) => q.panel)).size;
+      out.push(cues.length ? { ok: true, text: `${cues.length} subtitle line${cues.length === 1 ? '' : 's'} on ${said} of ${n} panels` } : { ok: false, text: 'No dialogue lines yet: type them on the Story cards' });
+      if (end < len) out.push({ ok: true, text: `It ends with the last panel (the shot runs ${((len - end) / c.fps).toFixed(1)} s longer)` });
+    } else if (board) out.push({ ok: true, text: board.guideExport ? 'The storyboard is included' : 'The storyboard stays out (it is a guide)' });
+    if (this.kind === 'video' || this.kind === 'animatic') {
       const muted = clips.filter((s) => s.muted);
       if (muted.length) out.push({ ok: false, text: `Muted sound: ${muted.map((s) => s.name).join(', ')}` });
       const late = clips.filter((s) => { const st = soundStart(s, c); return st !== null && st + (s.trimOut - s.trimIn) * c.fps > len + 1; });
       if (late.length) out.push({ ok: false, text: `Sound runs past the end and is cut: ${late.map((s) => s.name).join(', ')}` });
       if (!clips.length) out.push({ ok: true, text: 'No sound' });
-      if (this.opts.background === 'transparent') out.push({ ok: true, text: 'See-through video is WebM: it plays in browsers and video editors; for Photos use a background' });
+      if (this.kind === 'video' && this.opts.background === 'transparent') out.push({ ok: true, text: 'See-through video is WebM: it plays in browsers and video editors; for Photos use a background' });
     } else if (clips.some((s) => !s.muted) && (this.kind === 'gif' || this.kind === 'apng' || this.kind === 'frames')) {
       out.push({ ok: false, text: 'This format has no sound: make a video to keep it' });
     }
@@ -353,12 +412,57 @@ export class ShareView {
       select(main, 'Background', this.picture.background, [['transparent', 'See-through'], ['white', 'White']], (v) => { this.picture = { ...this.picture, background: v as PictureOpts['background'] }; save(PICTURE_KEY, this.picture); });
       select(advBody, 'Size', String(this.picture.scale), [['1', 'Full size'], ['0.5', 'Half'], ['2', 'Double']], (v) => { this.picture = { ...this.picture, scale: Number(v) }; save(PICTURE_KEY, this.picture); });
       main.append(el('p', { class: 'hint' }, 'The frame the preview shows: move the slider under it to pick one.'));
+    } else if (this.kind === 'animatic') {
+      const setAnim = (patch: Partial<AnimaticOptions>) => { this.animatic = animaticOptions({ ...this.animatic, ...patch }); save(ANIMATIC_KEY, this.animatic); };
+      if (!this.board) main.append(el('p', { class: 'hint' }, 'An animatic plays the storyboard panels on their timing. Make some panels in Story first.'));
+      select(main, 'Picture', this.animatic.picture, [['board', 'Board panels'], ['shot', 'Board + animation']], (v) => setAnim({ picture: v as AnimaticOptions['picture'] }));
+      const subs = el('fieldset', { class: 'share-passes share-subtitles' });
+      subs.append(el('legend', {}, 'Subtitles (the dialogue lines)'));
+      for (const [key, text] of [['burn', 'Burn into the picture'], ['srt', 'Also save a subtitle file (.srt)']] as const) {
+        const row = el('label', { class: 'share-row toggle' });
+        const box = el('input', { type: 'checkbox', 'data-sub': key });
+        box.checked = this.animatic[key];
+        box.addEventListener('change', () => { setAnim({ [key]: box.checked }); this.draw(); });
+        row.append(box, el('span', {}, text));
+        subs.append(row);
+      }
+      main.append(subs);
+      select(advBody, 'Background', this.animaticVideo.background, [['white', 'White'], ['black', 'Black']], (v) => setVideo({ background: v as VideoOptions['background'] }));
+      select(advBody, 'Size', this.opts.size, [['720p', '720p · smaller file'], ['1080p', '1080p · full HD'], ['original', 'Original size']], (v) => setVideo({ size: v as VideoOptions['size'] }));
+      select(advBody, 'File', this.animaticVideo.format, [['mp4', 'MP4 · plays everywhere'], ['webm', 'WebM']], (v) => setVideo({ format: v as VideoOptions['format'] }));
+      advBody.append(el('p', { class: 'hint' }, 'Size, file and background are the Video settings: changing them here changes them there too.'));
+    } else if (this.kind === 'board') {
+      movie = false;
+      const setSheets = (patch: Partial<BoardOpts>) => { this.sheets = boardOpts({ ...this.sheets, ...patch }); save(BOARD_KEY, this.sheets); };
+      if (!this.board) main.append(el('p', { class: 'hint' }, 'No storyboard yet. Make some panels in Story first.'));
+      select(main, 'Format', this.sheets.format, [['pdf', 'PDF sheets'], ['png', 'Panel PNGs + captions (ZIP)']], (v) => { setSheets({ format: v as BoardOpts['format'] }); this.renderSide(); });
+      select(main, 'Picture', this.sheets.picture, [['board', 'Board drawing'], ['shot', 'Board + animation']], (v) => setSheets({ picture: v as BoardOpts['picture'] }));
+      if (this.sheets.format === 'pdf') {
+        select(advBody, 'Layout', String(this.sheets.perPage), [['2', '2 per page, captions beside'], ['4', '4 per page'], ['6', '6 per page']], (v) => setSheets({ perPage: Number(v) as BoardOpts['perPage'] }));
+        select(advBody, 'Paper', this.sheets.paper, [['letter', 'Letter, landscape'], ['a4', 'A4, landscape']], (v) => setSheets({ paper: v as BoardOpts['paper'] }));
+        const row = el('label', { class: 'share-row toggle' });
+        const box = el('input', { type: 'checkbox', 'data-captions': '' });
+        box.checked = this.sheets.captions;
+        box.addEventListener('change', () => setSheets({ captions: box.checked }));
+        row.append(box, el('span', {}, 'Captions: shot, camera, dialogue lines, action, timing, notes'));
+        main.append(row);
+      } else main.append(el('p', { class: 'hint' }, 'Each panel as a PNG, captions.csv for a spreadsheet and, when panels have dialogue, subtitles.srt on the panel timing.'));
     } else {
       movie = false;
-      const text = { board: 'Panels with their captions and timing, as a PDF or panel pictures.', blender: 'The shot as an editable Blender scene: layers, drawings as images, camera and timing.', backup: 'The whole project as one .2dope file, to keep or to open on another device.' }[this.kind];
+      const text = { blender: 'The shot as an editable Blender scene: layers, drawings as images, camera and timing.', backup: 'The whole project as one .2dope file, to keep or to open on another device.' }[this.kind];
       main.append(el('p', { class: 'hint' }, text));
     }
-    if (this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture') {
+    const board = this.board;
+    if (board && (this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'frames' || this.kind === 'picture')) {
+      // one project setting (an undo step), so Motion, Blender and every final render follow it
+      const row = el('label', { class: 'share-row toggle' });
+      const box = el('input', { type: 'checkbox', 'data-include-board': '' });
+      box.checked = !!board.guideExport;
+      box.addEventListener('change', () => { this.app.setBoardExport(box.checked); this.renderSide(); this.draw(); });
+      row.append(box, el('span', {}, 'Put the storyboard in it (for every export, not just this one)'));
+      main.append(row);
+    }
+    if (this.kind === 'video' || this.kind === 'animatic' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture') {
       // for handing in: the student's name, class and the date, burned into the corner
       const box = el('fieldset', { class: 'share-stamp' });
       box.append(el('legend', {}, 'Hand in'));
@@ -393,7 +497,7 @@ export class ShareView {
     s.append(el('p', { class: 'share-summary', 'aria-live': 'polite' }));
     s.append(el('progress', { class: 'share-progress', hidden: '', max: '1', value: '0', 'aria-label': 'Making progress' }));
     s.append(el('p', { class: 'share-status', role: 'status' }));
-    const label = { video: 'Make video', gif: 'Make GIF', apng: 'Make animated PNG', frames: 'Make ZIP of frames', picture: 'Make picture', board: 'Storyboard export…', blender: 'Make Blender package', backup: 'Save project file' }[this.kind];
+    const label = { video: 'Make video', animatic: 'Make animatic', gif: 'Make GIF', apng: 'Make animated PNG', frames: 'Make ZIP of frames', picture: 'Make picture', board: this.sheets.format === 'pdf' ? 'Make storyboard PDF' : 'Make panel ZIP', blender: 'Make Blender package', backup: 'Save project file' }[this.kind];
     const go = el('button', { type: 'button', class: 'share-go primary', disabled: '' }, label);
     go.addEventListener('click', () => void this.make());
     const foot = el('div', { class: 'share-foot' });
@@ -413,8 +517,11 @@ export class ShareView {
     sum.textContent = '';
     const c = this.comp;
     try {
-      if (this.kind === 'video') {
-        const plan = planVideo(this.app.project, this.opts, this.maxBytes);
+      if (this.kind === 'video' || this.kind === 'animatic') {
+        const anim = this.kind === 'animatic';
+        const board = this.board;
+        if (anim && !board) return;
+        const plan = planVideo(this.app.project, anim ? this.animaticVideo : this.opts, this.maxBytes, anim && board ? animaticLength(board) : undefined);
         sum.textContent = `${plan.width} × ${plan.height} · ${plan.options.format.toUpperCase()} · about ${fileSize(plan.estimatedBytes)}`;
         status.textContent = 'Checking this device can make it…';
         const support = await videoSupport(plan);
@@ -432,6 +539,12 @@ export class ShareView {
       } else if (this.kind === 'frames') {
         const len = compLength(c, this.app.project.comps);
         sum.textContent = `${len} frames × ${this.frames.passes.length} pass${this.frames.passes.length === 1 ? '' : 'es'} · ${Math.round(c.width * this.frames.scale)} × ${Math.round(c.height * this.frames.scale)} · one ZIP`;
+        go.disabled = false;
+      } else if (this.kind === 'board') {
+        const board = this.board;
+        if (!board) return;
+        const n = board.exposures.length, pages = Math.ceil(n / this.sheets.perPage);
+        sum.textContent = this.sheets.format === 'pdf' ? `${n} panel${n === 1 ? '' : 's'} on ${pages} page${pages === 1 ? '' : 's'}` : `${n} PNG${n === 1 ? '' : 's'} at ${this.app.project.width} × ${this.app.project.height} and captions.csv, in a ZIP`;
         go.disabled = false;
       } else if (this.kind === 'picture') {
         sum.textContent = `Frame ${this.app.frame + 1} · ${Math.round(c.width * this.picture.scale)} × ${Math.round(c.height * this.picture.scale)} PNG`;
@@ -478,7 +591,6 @@ export class ShareView {
   private async make(): Promise<void> {
     if (this.abort) return;
     // the formats with their own flow
-    if (this.kind === 'board') return this.hooks.board();
     if (this.kind === 'blender') return this.hooks.blender();
     if (this.kind === 'backup') return this.hooks.backup();
     if (this.app.playing) this.app.togglePlay();
@@ -497,10 +609,37 @@ export class ShareView {
     const name = sanitizeName(this.app.project.name);
     const progress = (n: number, total: number, label: string) => { bar.max = total; bar.value = n; status.textContent = label; };
     // the hand-in label goes on what you watch (not on PNG frames: those are for compositing)
-    if (this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture') setExportStamp(this.stampText);
+    if (this.kind === 'video' || this.kind === 'animatic' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture') setExportStamp(this.stampText);
+    let extra: { blob: Blob; file: string } | undefined;
     try {
       let blob: Blob, file: string;
-      if (this.kind === 'video') {
+      if (this.kind === 'animatic') {
+        const pic = animaticPicture(this.app.project, this.animatic);
+        const r = await exportVideo(this.app.project, this.animaticVideo, (p) => progress(p.done, p.total, p.label), controller.signal, this.app.residency, this.maxBytes, this.hooks.sounds, pic);
+        blob = r.blob;
+        file = `${name}-animatic.${r.extension}`;
+        const board = this.board!;
+        const cues = boardCues(board.exposures, board.start);
+        if (this.animatic.srt && cues.length) extra = { blob: new Blob([toSrt(cues, this.comp.fps)], { type: 'application/x-subrip' }), file: `${name}-animatic.srt` };
+      } else if (this.kind === 'board') {
+        const board = this.board;
+        if (!board) throw new Error('There is no storyboard yet. Make some panels in Story first.');
+        const ctx = {
+          project: this.app.project, board, compId: this.comp.id,
+          fmt: (f: number) => this.app.fmt(f), fmtDur: (n: number) => this.app.fmtDur(n),
+          hold: this.app.residency, signal: controller.signal,
+          onProgress: (n: number, t: number) => progress(n, t, `Panel ${n} of ${t}`),
+        };
+        if (this.sheets.format === 'pdf') {
+          const r = await storyboardPdf(ctx, this.sheets, this.app.project.name);
+          blob = new Blob([r.pdf as BlobPart], { type: 'application/pdf' });
+          file = `${name}-storyboard.pdf`;
+        } else {
+          const r = await storyboardPngs(ctx, this.sheets, name);
+          blob = new Blob([r.zip as BlobPart], { type: 'application/zip' });
+          file = `${name}-storyboard.zip`;
+        }
+      } else if (this.kind === 'video') {
         const r = await exportVideo(this.app.project, this.opts, (p) => progress(p.done, p.total, p.label), controller.signal, this.app.residency, this.maxBytes, this.hooks.sounds);
         blob = r.blob;
         file = `${name}.${r.extension}`;
@@ -522,7 +661,7 @@ export class ShareView {
       }
       if (controller.signal.aborted || !this.open) return;
       this.abort = null;
-      this.result(blob, file);
+      this.result(blob, file, extra);
     } catch (e) {
       if (!this.open) return;
       const msg = controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError') ? 'Stopped. Change the settings and try again.' : `Could not make it: ${e instanceof Error ? e.message : String(e)}`;
@@ -536,18 +675,23 @@ export class ShareView {
   }
 
   /** The finished file: look at it, then save it or send it. */
-  private result(blob: Blob, file: string): void {
+  private result(blob: Blob, file: string, extra?: { blob: Blob; file: string }): void {
     this.releaseUrl();
     this.url = URL.createObjectURL(blob);
     const s = this.side;
     s.replaceChildren(el('h3', {}, 'Ready'));
     let media: HTMLElement;
-    if (this.kind === 'video') media = el('video', { controls: '', playsinline: '', loop: '', src: this.url, class: 'share-result', 'aria-label': 'Your video' });
+    if (this.kind === 'board') media = el('p', { class: 'share-zip' }, this.sheets.format === 'pdf' ? 'Storyboard sheets: each panel with its number, timing, picture and captions.' : 'A ZIP of panel PNGs with captions.csv (and subtitles.srt when panels have dialogue).');
+    else if (this.kind === 'video' || this.kind === 'animatic') media = el('video', { controls: '', playsinline: '', loop: '', src: this.url, class: 'share-result', 'aria-label': 'Your video' });
     else if (this.kind === 'frames') media = el('p', { class: 'share-zip' }, 'A ZIP of numbered PNG frames, one folder per pass.');
     else media = el('img', { src: this.url, class: `share-result${this.seeThrough ? ' checker' : ''}`, alt: 'Your file' });
     s.append(media, el('p', { class: 'share-summary' }, `${file} · ${fileSize(blob.size)}`));
     const foot = el('div', { class: 'share-foot' });
     foot.append(el('a', { class: 'share-save primary', href: this.url, download: file }, 'Save'));
+    if (extra) {
+      this.extraUrl = URL.createObjectURL(extra.blob);
+      foot.append(el('a', { class: 'share-save-subs', href: this.extraUrl, download: extra.file, title: 'The dialogue lines as subtitles, timed to the panels' }, 'Save subtitles (.srt)'));
+    }
     const type = blob.type || 'application/octet-stream';
     const asFile = new File([blob], file, { type });
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };

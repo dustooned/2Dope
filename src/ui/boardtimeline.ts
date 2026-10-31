@@ -1,3 +1,4 @@
+import { cueText, parseDialogue } from '../core/dialogue';
 import type { App } from '../app';
 import type { AudioPlayback } from '../audio';
 import { paintWaveform } from './waveform';
@@ -268,7 +269,9 @@ export class BoardTimeline {
     const sel = new Set(app.selection);
     let at = b.start;
     b.exposures.forEach((e, i) => {
-      const blk = el('div', { class: `btl-panel${sel.has(i) ? ' selected' : ''}`, 'data-i': String(i), title: `Panel ${i + 1} · ${app.fmtDur(e.length)}${e.dialogue ? ` · “${e.dialogue}”` : ''}` });
+      // the dialogue lines as they read in subtitles, one after another
+      const said = parseDialogue(e.dialogue).map(cueText).join(' / ');
+      const blk = el('div', { class: `btl-panel${sel.has(i) ? ' selected' : ''}`, 'data-i': String(i), title: `Panel ${i + 1} · ${app.fmtDur(e.length)}${said ? ` · “${said}”` : ''}` });
       blk.style.left = `${at * cell}px`;
       blk.style.width = `${Math.max(2, e.length * cell - 2)}px`;
       const w = e.length * cell;
@@ -285,7 +288,7 @@ export class BoardTimeline {
       }
       blk.append(el('span', { class: 'btl-num' }, String(i + 1)));
       if (w >= 60) blk.append(el('span', { class: 'btl-len' }, app.fmtDur(e.length)));
-      if (e.dialogue && w >= 50) blk.append(el('span', { class: 'btl-line' }, e.dialogue));
+      if (said && w >= 50) blk.append(el('span', { class: 'btl-line' }, said));
       blk.append(el('span', { class: 'btl-edge', title: 'Drag to make this panel longer or shorter' }));
       this.inner.append(blk);
       at += e.length;

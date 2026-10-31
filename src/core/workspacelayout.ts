@@ -15,7 +15,7 @@ export const WORKSPACE_TOOL_NAMES: Record<WorkspaceTool, string> = {
   brush: 'Brush', smudge: 'Smudge', eraser: 'Eraser', select: 'Select', transform: 'Transform',
   pen: 'Vector', fill: 'Bucket fill', adjust: 'Adjustments', color: 'Colour', layers: 'Layers',
   reference: 'Reference', assets: 'Move assets', panel: 'New panel', images: 'Import panels',
-  dup: 'Duplicate', del: 'Delete', play: 'Play', export: 'Export storyboard', onion: 'Onion skin',
+  dup: 'Duplicate', del: 'Delete', play: 'Play', export: 'Export storyboard / animatic', onion: 'Onion skin',
   insert: 'New drawing', addlayer: 'New layer', camera: 'Camera', group: 'Group', split: 'Split',
   autokey: 'Auto-key', look: 'Camera view', flipbook: 'Edit flipbook', fx: 'Effects',
 };
