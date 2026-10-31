@@ -26,5 +26,6 @@ Start with the dated current-state section at the top of `HANDOFF.md` and its li
 
 - Run meaningful checks, including tests and production build for source changes. Passing unit tests alone does not prove the entry point compiles.
 - For input, layout, storage, or rendering changes, check the affected browser flow using a separate test origin. Never clear an existing project's browser storage as a testing shortcut.
+- Browser fixtures (`tests/*.html`): start a dev server on `127.0.0.1:5217`, then `npm run test:browser` runs them all in real time (`scripts/fixtures.mjs`). Chrome's `--virtual-time-budget` leaves IndexedDB/encode-heavy fixtures on "Running…", so do not read that as a failure or a pass.
 - Distinguish new checks from historical reports. Desktop Chromium does not verify Apple Pencil feel, iPad Safari memory, or Blender import/render behavior.
 - Report changed files, actual checks, and limitations. Committing or pushing `main` is a separate action; its push workflow deploys to GitHub Pages.

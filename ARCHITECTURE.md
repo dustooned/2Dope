@@ -361,7 +361,8 @@ Client-only TypeScript and Vite, native DOM controls and Canvas 2D. No UI framew
 | `core/cellink.ts` | Linked art layers: layers sharing a `cel` group keep identical cels; `syncExposures` maps a timing edit onto each member (used by `App.editTimeline`). |
 | `core/vecedit.ts` | Vector point editing maths: anchors (RDP), falloff / straight / curved moves, Bezier spans, snapping and joining, per-point and per-section width. The session (`App.ve`) and its anchor cache live in `App`. |
 | `ui/bubbles.ts` | Simple-screen navigation: mode bubbles, tool bubbles, the one-row context bar, the clean / simple / full level button (body classes `ui-clean` / `ui-simple` / `ui-full`). |
-| `ui/flipmode.ts`, `ui/layercards.ts`, `ui/sheet.ts` | Flip beginner mode (drawing bubbles row), Procreate-style layer cards for Draw, the tracks sheet handle bar (Draw / Time). |
+| `ui/flipmode.ts`, `ui/layercards.ts`, `ui/sheet.ts` | Flip beginner mode (drawing bubbles row), Procreate-style layer cards for Draw (in Move assets they list the chosen placement's source layers; a tap opens it through `App.editAssetSource`), the tracks sheet handle bar (Draw / Time). |
+| `ui/commands.ts`, `core/commandprefs.ts`, `ui/customize.ts` | Command registry for the options rows (stable ids, contexts, order, `face` for state labels) and named context-menu entries (`MENU_ENTRIES`); the device-local hidden set (`2dope.commands.hidden`, never in projects or student profiles); the shared Customize tick list. `showContextMenu` drops hidden `id` entries via `visibleItems`. |
 | `io/gif.ts`, `io/exportgif.ts`, `ui/exporthub.ts` | Bounded looping GIF writer (fixed palette, optional 1-bit transparency) and the Export and finish hub. |
 
 ## Document and clocks
