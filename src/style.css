@@ -5023,3 +5023,6 @@ body.presenting .subtitle { bottom: 132px; font-size: clamp(16px, 2.4vw, 26px); 
 @media (max-width: 700px) { .bgrid-tip { display: none; } }
 /* Story timeline: the length of a panel while its edge is dragged */
 .btl-panel.timing::after { content: attr(data-len); position: absolute; right: 6px; top: 4px; padding: 1px 6px; border-radius: var(--pill); background: var(--accent); color: var(--on-accent, #fff); font-size: 11px; font-variant-numeric: tabular-nums; pointer-events: none; }
+/* Script to panels: a wide box for pasting */
+dialog.long-text { width: min(640px, calc(100vw - 32px)); }
+.long-textbox { width: 100%; min-height: 220px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }

@@ -137,3 +137,30 @@ export function askNumbers(title: string, fields: { label: string; value: number
     inputs[0]?.select();
   });
 }
+
+/**
+ * Ask for a block of text (a pasted script), with a live line under it saying what it will make.
+ * `describe` returns that line and whether the text can be used. Resolves to null when cancelled.
+ */
+export function askLongText(title: string, intro: string, placeholder: string, okLabel: string, describe: (text: string) => { summary: string; ok: boolean }): Promise<string | null> {
+  return new Promise((resolve) => {
+    const { dialog, body, foot, done } = modal<string | null>(title, null, resolve);
+    dialog.classList.add('long-text');
+    const area = el('textarea', { rows: '12', 'aria-label': title, placeholder, class: 'textbox long-textbox', spellcheck: 'false' });
+    const summary = el('p', { class: 'hint', 'aria-live': 'polite' });
+    body.append(el('p', {}, intro), area, summary);
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    const ok = el('button', { type: 'button', class: 'primary' }, okLabel);
+    foot.append(cancel, ok);
+    const refresh = () => { const d = describe(area.value); summary.textContent = d.summary; ok.disabled = !d.ok; };
+    area.addEventListener('input', refresh);
+    // the app's shortcuts stay out of the box; Return makes new lines (Ctrl / ⌘ + Return adds)
+    area.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !ok.disabled) done(area.value); });
+    area.addEventListener('keyup', (e) => e.stopPropagation());
+    cancel.addEventListener('click', () => done(null));
+    ok.addEventListener('click', () => done(area.value));
+    refresh();
+    dialog.showModal();
+    area.focus();
+  });
+}

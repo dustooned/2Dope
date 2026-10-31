@@ -4,6 +4,8 @@ import { CAPTION_FIELDS, type CaptionField } from '../core/timeline';
 import type { AudioPlayback } from '../audio';
 import { BoardTimeline } from './boardtimeline';
 import { BoardGrid } from './boardgrid';
+import { parseScript, SCRIPT_MAX_PANELS } from '../core/script';
+import { askLongText } from './dialogs';
 import { attachContextMenu, type CtxItem } from './contextmenu';
 import { frameMenu } from './framemenu';
 import { autoIcon, decorate, setLabel } from './icons';
@@ -99,6 +101,7 @@ export class BoardPanel {
       btn('Earlier', 'Move the selected panels earlier', () => app.moveSelection(-1), 'prev'),
       btn('Later', 'Move the selected panels later', () => app.moveSelection(1), 'next'),
       btn('Images', 'Import images as panels (board sketches, photos)', () => this.fileIn.click(), 'gallery'),
+      btn('Script', 'Paste a script: each action and line of dialogue becomes a panel with its caption', () => this.pasteScript(), 'paste'),
       this.playBtn,
       btn('Present', 'Present: the board full screen, playing on its timing with dialogue and action (tap to pause, swipe for the next panel, Escape to stop)', () => this.present(), 'board'),
       btn('Export', 'Export the storyboard (PDF sheets, panel images) or an animatic video', () => this.exportStory(), 'export'),
@@ -179,11 +182,14 @@ export class BoardPanel {
         start.addEventListener('click', () => app.createBoard());
         const imp = el('button', { type: 'button' }, 'Import board images…');
         imp.addEventListener('click', () => this.fileIn.click());
+        const script = el('button', { type: 'button' }, 'Paste a script…');
+        script.addEventListener('click', () => void this.pasteScript());
         empty.append(
           el('p', {}, 'Plan the shot first: rough panels, dialogue, action and timing.'),
           el('p', { class: 'hint' }, 'The board plays under your drawing as a guide and stays out of the final render. You can also skip it and go straight to Draw.'),
           start,
           imp,
+          script,
         );
         this.cards.replaceChildren(empty);
       }
@@ -417,6 +423,31 @@ export class BoardPanel {
     (document.activeElement as HTMLElement | null)?.blur();
     this.sig = '';
     this.update();
+  }
+
+  /** Script → panels: paste, see what it makes, add (after the selected panel). */
+  async pasteScript(): Promise<void> {
+    const app = this.app;
+    const fps = app.project.comp.fps;
+    const text = await askLongText(
+      'Script to panels',
+      'Paste a script. Scene headings (INT. / EXT.) start scenes; each action paragraph and each spoken line (SAM on its own line, or Sam: words) becomes a panel with its caption. Lengths are a first guess you can change.',
+      'INT. HALLWAY - NIGHT\n\nSam creeps toward the door.\n\nSAM\nIs anyone there?',
+      'Add panels',
+      (t) => {
+        const r = parseScript(t, fps);
+        if (!r.panels.length) return { summary: t.trim() ? 'No panels found yet: separate actions and lines with blank lines.' : 'Nothing pasted yet.', ok: false };
+        const frames = r.panels.reduce((n, p) => n + p.length, 0);
+        const more = r.dropped ? ` (the first ${SCRIPT_MAX_PANELS}; ${r.dropped} more left out)` : '';
+        return { summary: `${r.panels.length} panel${r.panels.length === 1 ? '' : 's'} in ${r.scenes} scene${r.scenes === 1 ? '' : 's'}, about ${app.fmtDur(frames)}${more}.`, ok: true };
+      },
+    );
+    if (text === null) return;
+    const n = app.addScriptPanels(parseScript(text, fps).panels);
+    if (n) {
+      app.onNotice?.(`${n} panel${n === 1 ? '' : 's'} added from the script. Undo takes them out.`);
+      this.update();
+    }
   }
 
   /** Open a panel to write on: the Panels view, scrolled to its card, its first line focused. */

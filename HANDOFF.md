@@ -2,6 +2,45 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Story C iteration 1: Script to panels (2026-10-31, uncommitted)
+
+Before this: the Story views work was checked (vitest 576, build, 44/44 fixtures) and committed as
+`d79bb9e` (not pushed). Nothing from another session was pending, so nothing was left out.
+
+Backlog item C (next-phase Story 3, then 8 "Animate this", then stickers/scenes). First iteration:
+**Script → panels**.
+
+- New `src/core/script.ts` (+ `script.test.ts`, 5 tests): `parseScript(text, fps)` reads plain text
+  or Fountain in blank-line blocks. Scene headings (INT/EXT/EST/INT./EXT/I/E, or a forced `.Heading`)
+  start scenes; a NAME cue block (extensions like (V.O.) and parentheticals dropped, `@` forced cues,
+  ALL-CAPS names title-cased by `speakerName`) → one Dialogue panel "Name: words"; consecutive
+  `Name: words` lines in plain text → one panel with several lines; any other paragraph → an Action
+  panel (`!` forces action). Skipped: title page (only at the start), transitions (`… TO:`, `>`,
+  FADE IN/OUT, CUT TO BLACK, THE END), `[[notes]]`, `/* boneyard */`, `#` sections, `=` synopses,
+  `===` page breaks. Shot / scene = `Sc N · Sh M`, the first shot of a scene adds the heading (cut to
+  60 chars). Lengths: `guessSeconds` (speech ~2.5 words/s + 0.5 s, action ~3 words/s, 2–8 s in half
+  seconds). At most 300 panels (`dropped` reports the rest). Captions capped at 1000 chars.
+- `App.addScriptPanels(panels)` (Story only): new drawings + exposures with shot/action/dialogue via
+  `editTimeline` — one Undo step, inserted after the selected panel. With no board, it starts one
+  (its own Undo step, as before) and the script panels replace its blank starter panel.
+- `ui/dialogs.ts` `askLongText` (modal with a textarea and a live summary; Ctrl/⌘+Return adds);
+  `ui/board.ts` **Script** button in the Story bar and **Paste a script…** on the empty board; the
+  dialog says "N panels in M scenes, about …" before adding. CSS for the wide dialog in `style.css`.
+- Manual (Story) and an UPDATES entry.
+
+Checks (actual): `npx vitest run` **581 passed** (+5); `npm run build` passed; browser fixtures **44/44**.
+Dev app on 127.0.0.1:5217 (test project at 12 fps, 5-panel board): empty dialog said "Nothing pasted
+yet." with Add disabled; a Fountain sample (2 headings, an action, SAM with a parenthetical, MRS. LEE
+(V.O.), CUT TO:, a second action) read "4 panels in 2 scenes, about 102f"; Add inserted them after
+panel 1 with shots "Sc 1 · Sh 1 · INT. HALLWAY - NIGHT", "Sc 1 · Sh 2", "Sc 1 · Sh 3",
+"Sc 2 · Sh 1 · EXT. STREET - CONTINUOUS", dialogue "Sam: Is anyone there?" / "Mrs. Lee: Go home,
+Sam." and the notice; one Undo went back to 5 panels, Redo to 9 (screenshot of the dialog). Not
+checked: the no-board path (starter panel replaced) in the browser, pasting on iPad, very long
+scripts in the browser, real Fountain files with dual dialogue (`^` is stripped, both speak in turn).
+
+Still open for C: "Animate this" (panel → shot), shot-type and camera-move stickers, scenes with
+colour labels and per-scene numbering in exports.
+
 ### Story views iteration 2: Grid, and Strip timing that snaps (2026-10-31, uncommitted)
 
 The user asked to continue item B with Grid and Strip after Present. 8bf6b47 and 95f29d2 were pushed

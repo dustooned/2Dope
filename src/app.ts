@@ -73,6 +73,7 @@ import { drawingBox } from './view/contentbox';
 import { constrainShape, editShape, fitAs, pressureProfile, recognizeShape, sampleProfile, SHAPE_CHOICES, SHAPE_NAMES, shapeOutline, type Shape, type ShapeChoice } from './core/quickshape';
 import { drawVectorStroke, clearVectorRenderCache, hasVisibleVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
+import type { ScriptPanel } from './core/script';
 import { snapRotation, Viewport } from './view/viewport';
 
 const BRUSH_KEY = '2dope.m0.brush';
@@ -3873,6 +3874,31 @@ export class App {
       ),
     );
     return made.length;
+  }
+
+  /**
+   * Script → panels: new panels with their captions after the selected one (or replacing the blank
+   * first panel of a board started for them). Starting the board is its own Undo step; the panels
+   * are one more. Returns how many were added.
+   */
+  addScriptPanels(panels: readonly ScriptPanel[]): number {
+    if (this.live || !panels.length || this.workspace !== 'board') return 0;
+    const fresh = !this.board;
+    if (fresh) this.createBoard();
+    if (!this.board) return 0;
+    const p = this.project;
+    const items: Exposure[] = panels.map((s) => ({
+      drawing: p.newDrawing().id,
+      length: s.length,
+      shot: s.shot,
+      ...(s.action ? { action: s.action } : {}),
+      ...(s.dialogue ? { dialogue: s.dialogue } : {}),
+    }));
+    const t = this.targets;
+    this.editTimeline(items.length > 1 ? `Script: ${items.length} panels` : 'Script: 1 panel', (ex) =>
+      fresh ? { ex: items, frame: 0, selection: items.map((_, i) => i) } : insertAt(ex, t.length ? t[t.length - 1]! + 1 : ex.length, items),
+    );
+    return items.length;
   }
 
   /** From the board to animation: Draw on the shot's first real layer, with the board faintly underneath. */
