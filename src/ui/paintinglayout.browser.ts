@@ -20,7 +20,7 @@ const source=assets.assets.create('Background')!;assets.assets.place(source);app
 let passed=0,failed=0;
 const check=(name:string,ok:boolean)=>{const li=document.createElement('li');li.textContent=`${ok?'PASS':'FAIL'}: ${name}`;document.querySelector('#results')!.append(li);if(ok)passed++;else failed++;};
 const settle=()=>new Promise<void>(r=>setTimeout(r,120));
-const click=(name:string)=>{const b=document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);if(!b||b.disabled)throw new Error(`Missing enabled ${name}`);b.click();};
+const click=(name:string)=>{if(name==='Toggle options')name='Toggle tool settings';const b=document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);if(!b||b.disabled)throw new Error(`Missing enabled ${name}`);b.click();};
 const visible=(e:Element)=>{const r=e.getBoundingClientRect(),s=stage.getBoundingClientRect();return r.width>0&&r.height>=40&&r.top>=s.top&&r.bottom<=s.bottom+1;};
 const view=()=>JSON.stringify([app.view.x,app.view.y,app.view.zoom,app.view.rot,app.frame]);
 try{
@@ -48,7 +48,7 @@ try{
   check('Reset layout restores recoverable collapsed asset options',document.querySelector<HTMLElement>('.asset-placement-details')!.hidden&&document.querySelector('button[aria-label="Asset options"]')!.getAttribute('aria-expanded')==='false');
   app.setWorkspace('draw');flip.set(true);await settle();app.view.x=31;app.view.y=47;app.view.zoom=1.4;app.view.rot=0.1;const draw=view();
   for(const name of ['Toggle tools','Toggle options','Toggle brush controls','Toggle editor']){click(name);await settle();click(name);await settle();}
-  check('Draw folding handles recover every panel without changing a panned/zoomed view',view()===draw&&[...document.querySelectorAll<HTMLButtonElement>('.painting-handle')].every(b=>!b.hidden&&b.getAttribute('aria-expanded')==='true'));
+  check('Draw folding handles recover their initial panel state without changing a panned/zoomed view',view()===draw&&[...document.querySelectorAll<HTMLButtonElement>('.painting-handle')].every(b=>!b.hidden&&b.getAttribute('aria-expanded')===(b.classList.contains('painting-options-handle')?'false':'true')));
   check('Layout changes add no document edits or history',!app.history.canUndo&&JSON.stringify([...app.project.comps.values()])===doc);
   app.setWorkspace('animate');flip.set(false);app.setArrangeAssets(true);assets.resetLayout();click('Done arranging assets');check('Done remains usable while options are collapsed',!app.arrangingAssets);
 }catch(e){check(String(e),false);}

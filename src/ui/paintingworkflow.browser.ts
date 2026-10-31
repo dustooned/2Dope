@@ -31,7 +31,7 @@ function refresh(){painting.update();sheet.update();strip.update();assets.update
 app.onFrameChange=()=>{flip.update();refresh();};app.onCompChange=refresh;app.onToolChange=refresh;app.onBrushChange=refresh;app.onShapeChange=refresh;app.editor.onChange=refresh;app.history.onChange=refresh;
 app.onColorChange=()=>{colours.sync();refresh();};app.onWorkspaceChange=()=>{sheet.restore();flip.update();refresh();};flip.onChange=refresh;
 const settle=()=>new Promise<void>(r=>setTimeout(r,140));
-const button=(name:string,scope:ParentNode=document)=>{const b=[...scope.querySelectorAll<HTMLButtonElement>('button')].find(b=>!b.disabled&&[b.getAttribute('aria-label'),b.textContent?.trim(),b.title].includes(name));if(!b)throw new Error(`Missing ${name}`);return b;};
+const button=(name:string,scope:ParentNode=document)=>{if(scope===options())name=name==='Fill'?'Colour target':name==='Line'?'Ink target':name;const b=[...scope.querySelectorAll<HTMLButtonElement>('button')].find(b=>!b.disabled&&[b.getAttribute('aria-label'),b.textContent?.trim(),b.title].includes(name));if(!b)throw new Error(`Missing ${name}`);return b;};
 const click=(name:string,scope:ParentNode=document)=>button(name,scope).click();
 const options=()=>document.querySelector('.bub-ctx')!;
 function key(target:HTMLElement,k:string,shift=false){target.dispatchEvent(new KeyboardEvent('keydown',{key:k,code:k,bubbles:true,cancelable:true,shiftKey:shift}));}

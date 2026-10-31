@@ -2,6 +2,87 @@
 
 ## Current state (2026-10-30) — read this first
 
+### Workspace UI release scope (2026-10-30)
+
+The user authorized committing and pushing the mode-first workspace cleanup, per-mode
+customization/student-profile support, clearer Story labels and distinct Transform icon,
+including their documentation and regression fixtures. Earlier "uncommitted" / "no push"
+notes below describe their implementation-time status. Validation: 562 unit tests and
+production build passed; 42/42 browser fixtures passed for the workspace change, followed
+by 44 command-row and 20 workspace checks after the icon update. Physical stylus/iPad
+testing remains unverified. Pushing `main` runs `.github/workflows/pages.yml`.
+
+### Distinct Transform graphic (2026-10-30; completed locally, uncommitted)
+
+User noted Transform looked like Motion. Added a dedicated 24px bounding-box icon with
+four square corner handles in `ui/icons.ts`. The painting toolbar (`ui/bubbles.ts`) and
+selection Transform / Move all commands (`ui/commands.ts`) now use it; Motion retains its
+connected keyframe diamonds. Manual/UPDATES describe the distinction. No behavior changes.
+Checks: 562 unit tests passed; production build passed (existing chunk warning); focused
+`commandrow` (44 checks) and `workspacelayout` (20 checks) browser fixtures passed. Visually
+verified the production Draw toolbar at isolated `127.0.0.1:5262` without changing the
+user's current drawing at `5261`. No commit, push or deployment.
+
+### Mode-first workspaces (2026-10-30; completed locally, uncommitted)
+
+The user authorized implementation with "go" after selecting the Mode-first design and
+reinforcing Procreate-like Draw, Dreams-like Animate/Flipbook, editing flexibility and
+customizable tool access. This is a workspace refinement using existing artwork commands.
+
+- Draw and Animate have distinct compact pinned toolbars plus a separate More tools drawer
+  for Vector, Bucket fill, adjustments and Reference. The current unpinned tool stays visible
+  until switching away. Narrow painting rows scroll, keeping More at the edge. Tray recovery
+  and Tool settings moved into the footer rather than overlapping brush controls.
+- Workspace / App settings offers per-mode tool pinning, drag or Move-button reordering,
+  top/left/right toolbar docks, brush rail edge, optional labels and explicit ink/colour targets.
+  `core/workspacelayout.ts` validates bounded preferences at `2dope.workspace.layouts`.
+  Existing version-1 student profiles now include validated `workspaces` snapshots; old
+  profiles receive defaults. Draft Apply/Cancel and default restoration leave artwork alone.
+  Failed workspace storage retains the draft and restores prior profile storage.
+- Ink target / Colour target distinguish paint destinations from Bucket fill. The footer
+  names the tool and paint layer/part; adjustments explicitly name current drawing or selected
+  area scope. Selection/transform/adjustment/point-edit controls remain available when ordinary
+  settings are folded. Canvas fit accounts for side docks. Shared source paint layers and
+  Flipbook/Clips/source-return commands are reused, preserving the shot/frame/artwork.
+- Story cards retain their layout and captions, with permanent visible/accessibility labels:
+  Shot / scene, Camera / framing, Dialogue / narration, Action, Timing / beats, Production notes.
+  The manual, release notes, architecture and linked direction note describe the new UI.
+
+Checks: **562 unit tests / 69 files passed**, production build passed (existing chunk warning),
+**42/42 browser fixtures passed** on isolated `127.0.0.1:5261`. New `workspacelayout.html` passes
+20 real-App checks; its responsive wrapper passes **80 checks** across 390x844, 320x568,
+834x1112 and 844x390. Coverage includes pin/order, dock collision and touch targets, extra-tool
+recovery, per-mode persistence/fresh-App reads, profile snapshots, Cancel/defaults, storage
+failure, Flipbook stage budget, no document History edits and absence from portable projects.
+Existing source/painting/selection/playback/browser fixtures passed with intentional UI-label
+and tool-menu path updates. Actual app entry reviewed in the in-app browser: default Draw,
+custom docks, Animate/Flipbook, and Story labels. Documentation whitespace checked.
+
+Changed areas: `src/app.ts`, `main.ts`, `style.css`, `core/studentprefs*`, new
+`core/workspacelayout*` and `ui/workspacesettings.ts`, `ui/bubbles.ts`, `paintingworkspace.ts`,
+`settings.ts`, `board.ts`, `manualtext.ts`, new workspace browser fixtures and the affected
+UI regression fixtures. No dependency or project-schema change. Preferences remain device-local.
+
+Limits: arbitrary freely floating tool groups / a general panel builder are not implemented;
+reorder/docking happens in Workspace, while existing movable Reference/Flipbook windows remain.
+Physical pen/iPad Safari feel is unverified. No commit, push or deployment of this UI work.
+
+### Accepted UI direction (2026-10-30; implemented scope above)
+
+The user selected the Mode-first proposal: Draw follows a canvas-first Procreate-like
+layout; Animate uses Dreams-like Flipbook/Clips working areas; Story retains its cards
+with clearer writing labels. They explicitly require extra settings and easy ways to
+move tools and add controls. Requirements, recovery rules and implementation order are
+recorded in [mode-context UI direction](docs/MODE-CONTEXT-UI-DIRECTION-2026-10-30.md).
+Extend existing student profiles/QuickMenu with per-mode layouts; preserve shared Assets
+and source-edit return context. The implementation and validation are recorded above.
+The user reinforced experience closeness to Procreate in Draw and Dreams in Animate/
+Flipbook, including editing flexibility. The linked note now makes the everyday drawing,
+frame/playback and source-edit loops explicit acceptance requirements, retaining vectors,
+source layers and customization without flattening or duplicating artwork on mode switches.
+The initial direction-recording follow-up changed documentation only; the later "go"
+authorized the application implementation above. No commit/push/deployment of this UI work.
+
 ### Release scope (2026-10-30)
 
 The user authorized committing and pushing this snapshot: editable vector brushes and custom tips,

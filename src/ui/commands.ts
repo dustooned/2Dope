@@ -40,7 +40,7 @@ export const COMMANDS: readonly Command[] = [
   { id:'paint.restyle',label:'Apply brush to lines',title:'Preview the current brush on complete selected vector lines',contexts:['paint'],order:115,run:a=>a.openVectorRestyle(),isEnabled:a=>a.tool==='pen' },
   { id:'points.restyle',label:'Apply brush to line',title:'Preview the current brush on this editable vector line',contexts:['points'],order:115,run:a=>a.openVectorRestyle() },
   // with something selected
-  { id: 'select.transform', label: 'Transform', title: 'Move, size, rotate or flip what is selected (drag the canvas to move)', icon: 'motion', contexts: ['select'], order: 10, run: (a) => a.beginTransform(), isEnabled: selected },
+  { id: 'select.transform', label: 'Transform', title: 'Move, size, rotate or flip what is selected (drag the canvas to move)', icon: 'transform', contexts: ['select'], order: 10, run: (a) => a.beginTransform(), isEnabled: selected },
   { id: 'select.fill', label: 'Fill', title: 'Colour everything inside the selection', icon: 'fill', contexts: ['select'], order: 20, run: (a) => a.fillSelectedArea(), isEnabled: selected },
   { id: 'select.copy', label: 'Copy', title: 'Copy what is selected (paste on any drawing)', icon: 'copy', contexts: ['select'], order: 30, run: (a) => a.copyArt(), isEnabled: selected },
   { id: 'select.cut', label: 'Cut', title: 'Copy what is selected and remove it', icon: 'scissors', contexts: ['select'], order: 40, run: (a) => a.cutArt(), isEnabled: selected },
@@ -52,7 +52,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'select.deselect', label: 'Deselect', title: 'Drop the selection', icon: 'deselect', contexts: ['select'], order: 100, run: (a) => a.clearSpatialSelection(), isEnabled: selected },
   // with nothing selected
   { id: 'select.reselect', label: 'Reselect', title: 'Bring back the selection you dropped', icon: 'recent', contexts: ['select'], order: 110, run: (a) => a.reselect(), isEnabled: (a) => a.canReselect },
-  { id: 'select.moveall', label: 'Move all', title: 'Move, size or rotate the whole drawing', icon: 'motion', contexts: ['select'], order: 120, run: (a) => a.moveAll(), isEnabled: unselected },
+  { id: 'select.moveall', label: 'Move all', title: 'Move, size or rotate the whole drawing', icon: 'transform', contexts: ['select'], order: 120, run: (a) => a.moveAll(), isEnabled: unselected },
   { id: 'select.selectall', label: 'Select all', title: 'Select everything on this drawing', icon: 'selnew', contexts: ['select'], order: 130, run: (a) => a.invertSelection(), isEnabled: unselected },
   // either way
   { id: 'select.paste', label: 'Paste', title: 'Paste what you copied, ready to move', icon: 'paste', contexts: ['select'], order: 140, run: (a) => a.pasteArt(), isEnabled: (a) => a.hasArtClip },

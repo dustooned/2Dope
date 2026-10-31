@@ -4766,6 +4766,83 @@ body.painting-workspace .painting-header.editing-asset { width: min(620px, calc(
   .artwork-card .artwork-preview { grid-row: span 2; height: 100%; min-height: 100px; }
 }
 
+/* Mode-first workspaces: compact creation tools; additional tools never expand the main row. */
+.workspace-tool-row { display: flex; align-items: center; gap: 4px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.workspace-tool-row > label { flex: 1; min-width: 0; margin: 0; }
+.workspace-tool-row > button { width: 44px; padding: 0; flex: 0 0 auto; }
+.workspace-tool-row[draggable=true] { cursor: grab; }
+.workspace-tool-list { margin-bottom: 12px; }
+.board-writing-field { display: block; margin-top: 8px; }
+.board-writing-field > span { display: block; font-size: 12px; font-weight: 600; padding: 2px 1px; color: var(--muted); }
+.board-writing-field .bfield { width: 100%; margin-top: 2px; box-sizing: border-box; }
+.bub-tool-drawer { position: absolute; z-index: 65; top: var(--tools-bottom, 120px); right: 8px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; width: min(370px, calc(100% - 16px)); max-height: max(80px, calc(100% - var(--tools-bottom, 120px) - 8px)); padding: 12px; box-sizing: border-box; overflow-y: auto; touch-action: pan-y; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); box-shadow: 0 8px 24px #0006; }
+.bub-tool-drawer[hidden], body.ui-hidden .bub-tool-drawer, body.quick .bub-tool-drawer { display: none !important; }
+.bub-tool-drawer > strong { flex-basis: 100%; font-size: 14px; }
+.bub-tool-drawer .bub-chip { min-height: 44px; }
+.bub-tool-drawer .bub-chip.icon { width: auto; padding: 0 12px; }
+.bub-tool-drawer .bub-chip.icon .lbl { display: inline; }
+.workspace-tool-labels .bub-tools .bub:not(.bub-color) { width: auto; padding: 0 10px; gap: 6px; border-radius: var(--radius-md); font-size: 12px; }
+.workspace-tool-labels .bub-tools .lbl { display: inline; }
+.workspace-tool-labels .bub-ctx .bub-chip.icon { width: auto; padding: 0 10px; gap: 6px; }
+.workspace-tool-labels .bub-ctx .bub-chip.icon .lbl { display: inline; }
+body.painting-workspace .bub-modes { max-width: calc(100% - 120px); flex-wrap: wrap; border-radius: var(--radius-lg); }
+body.painting-workspace .bub-tools { left: 8px; right: 8px; max-width: calc(100% - 16px); width: fit-content; margin-left: auto; border-radius: var(--radius-lg); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; touch-action: pan-x; }
+body.painting-workspace .stage[data-tool-dock=top] .bub-tools [data-tool-key=more] { position: sticky; right: 0; z-index: 2; background: var(--panel); box-shadow: -4px 0 8px var(--panel); }
+body.painting-workspace .bub-tools .bub { width: 44px; height: 44px; min-height: 44px; }
+body.painting-workspace .bub-ctx { top: var(--chrome-bottom, 126px); right: var(--context-right, 8px); max-width: calc(100% - var(--context-left, 8px) - var(--context-right, 8px)); z-index: 15; max-height: max(54px, calc(100% - var(--chrome-bottom, 126px) - var(--flip-h, 0px) - 12px)); overflow-y: auto; }
+body.painting-workspace .bub-ctx[data-essential=true] { flex-wrap: wrap; touch-action: pan-y; }
+body.painting-workspace .adjustment-scope { flex-basis: 100%; }
+body.painting-workspace .bub-ctx .bub-slider { flex: 1 1 180px; min-width: 0; }
+body.painting-workspace .bub-ctx .bub-slider input { min-width: 0; }
+body.painting-options-folded:not(.quick):not(.ui-hidden) .bub-ctx[data-essential=true], body.painting-options-folded.workspace-advanced-targets:not(.quick):not(.ui-hidden) .bub-ctx[data-row=paint] { display: flex !important; }
+body.painting-workspace:is(.quick,.ui-hidden) .bub-tools { display: none !important; }
+body.painting-options-folded.workspace-advanced-targets .bub-ctx[data-row=paint][data-essential=false] > :not([aria-label='Ink target']):not([aria-label='Colour target']) { display: none; }
+body.painting-workspace .painting-tools-handle { top: var(--chrome-bottom, 126px); }
+body.painting-workspace .painting-options-handle { top: calc(var(--chrome-bottom, 126px) + 48px); }
+body.painting-workspace .painting-views { flex-wrap: wrap; overflow: visible; white-space: normal; }
+body.painting-workspace .painting-views button { min-width: 44px; }
+body.painting-workspace .painting-views .painting-handle { position: static; inset: auto; border-radius: var(--radius-md); width: auto; }
+body.painting-still .painting-editor-handle { display: none; }
+body.painting-workspace .painting-header { max-width: calc(100% - var(--ph-left, 60px) - 60px); }
+body.painting-workspace .painting-purpose { display: block; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.painting-workspace .sidebar { top: var(--side-top, 126px); transform: none; max-height: calc(100% - var(--side-top, 126px) - var(--flip-h, 0px) - 8px); }
+body.painting-workspace.workspace-brush-right .sidebar { left: auto; right: 8px; }
+body.painting-workspace.workspace-brush-right .painting-brush-handle { left: auto; right: 72px; border-radius: var(--radius-md); }
+/* Side docks scroll within the available stage and leave navigation and Flipbook clear. */
+.stage[data-tool-dock=left] .bub-tools, .stage[data-tool-dock=right] .bub-tools { top: var(--dock-top, 70px); bottom: calc(var(--flip-h, 0px) + 8px); width: 54px; max-width: min(160px, 38%); max-height: none; flex-direction: column; flex-wrap: nowrap; overflow-y: auto; overflow-x: hidden; justify-content: flex-start; margin: 0; touch-action: pan-y; }
+.stage[data-tool-dock=left] .bub-tools { left: 8px; right: auto; }
+.stage[data-tool-dock=right] .bub-tools { left: auto; right: 8px; }
+.stage.workspace-tool-labels:is([data-tool-dock=left], [data-tool-dock=right]) .bub-tools { width: 154px; }
+.stage:is([data-tool-dock=left], [data-tool-dock=right]) .bub-tools .bub { flex-shrink: 0; }
+.stage.workspace-tool-labels:is([data-tool-dock=left], [data-tool-dock=right]) .bub-tools .bub:not(.bub-color) { width: 100%; justify-content: flex-start; }
+body.painting-workspace:not(.workspace-brush-right) .stage[data-tool-dock=left] .sidebar { left: calc(var(--edge-tool-width, 54px) + 16px); }
+body.painting-workspace.workspace-brush-right .stage[data-tool-dock=right] .sidebar { right: calc(var(--edge-tool-width, 54px) + 16px); }
+@media (min-width: 1000px) {
+  body.painting-workspace .bub-modes .bub { width: auto; padding: 0 8px; gap: 5px; border-radius: var(--radius-md); font-size: 12px; }
+  body.painting-workspace .bub-modes .lbl { display: inline; }
+  body.painting-workspace .bub-name { display: none; }
+}
+@media (max-width: 700px) {
+  body.painting-workspace .bub-modes { max-width: calc(100% - 16px); left: 8px; top: var(--mode-top, 66px); }
+  body.painting-workspace .bub-modes .bub { width: 44px; min-height: 44px; height: 44px; }
+  body.painting-workspace .bub-tools { gap: 4px; }
+  body.painting-workspace .painting-purpose { order: 2; max-width: none; width: 100%; font-size: 12px; }
+  body.painting-workspace .painting-views { gap: 4px; padding: 4px; }
+  body.painting-workspace .painting-views button { padding: 0 8px; }
+  body.painting-workspace .painting-views button[aria-label='Edit workspace'] .lbl { display: none; }
+  body.painting-workspace .painting-views .painting-brush-handle .lbl { display: none; }
+  .stage.workspace-tool-labels:is([data-tool-dock=left], [data-tool-dock=right]) .bub-tools { width: 54px; }
+  .stage.workspace-tool-labels:is([data-tool-dock=left], [data-tool-dock=right]) .bub-tools .bub .lbl { display: none; }
+  .stage.workspace-tool-labels:is([data-tool-dock=left], [data-tool-dock=right]) .bub-tools .bub { justify-content: center; padding: 0; }
+}
+@media (max-width: 1000px) { body.painting-workspace .painting-views .painting-brush-handle .lbl, body.painting-workspace .painting-views button[aria-label='Edit workspace'] .lbl { display: none; } }
+@media (max-height: 500px) {
+  body.painting-workspace .painting-purpose { display: none; }
+  body.painting-workspace .painting-views { padding: 1px 4px; }
+  body.painting-workspace :is(.bub-modes,.bub-tools,.painting-header) { padding: 2px; }
+  body.painting-workspace .flip-row:not(.mini) { padding: 2px; gap: 2px; }
+}
+
 /* Arrangement is an explicit canvas tool; its document edits use the Motion transform model. */
 .asset-placement-tools { position: absolute; z-index: 14; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 6px; max-width: calc(100% - 24px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: 0 8px 24px #0005; }
 .asset-placement-tools[hidden], body.quick .asset-placement-tools, body.ui-hidden .asset-placement-tools { display: none; }

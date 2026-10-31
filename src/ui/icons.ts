@@ -64,6 +64,7 @@ const P: Record<string, string> = {
   draw: '<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>',
   time: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M5 8h14M5 12.5h14M5 17h14M10 3.5v17"/>',
   motion: '<path d="M3 12h18"/><path d="M7 8.5L10.5 12 7 15.5 3.5 12z"/><path d="M17 8.5l3.5 3.5-3.5 3.5-3.5-3.5z"/>',
+  transform: '<path d="M7.5 5.5h9M18.5 7.5v9M16.5 18.5h-9M5.5 16.5v-9"/><rect x="3.5" y="3.5" width="4" height="4"/><rect x="16.5" y="3.5" width="4" height="4"/><rect x="3.5" y="16.5" width="4" height="4"/><rect x="16.5" y="16.5" width="4" height="4"/>',
   brush: '<path d="M14 4l6 6-6.5 6.5-6-6z"/><path d="M7.5 10.5L5 13c-1.5 1.5-1 4-3 6 3 .5 5.5 0 7-1.5l2.5-2.5"/>',
   eraser: '<path d="M8 20h12"/><path d="M4.5 15.5l9-9a2 2 0 012.8 0l2.2 2.2a2 2 0 010 2.8L11 19H8z"/><path d="M9 11l5 5"/>',
   pen: '<path d="M12 3l5 9-5 9-5-9z"/><path d="M12 12v9"/><circle cx="12" cy="11" r="1.4"/>',

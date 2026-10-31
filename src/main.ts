@@ -652,6 +652,7 @@ app.onFrameChange = chain(app.onFrameChange, () => reference.refresh());
 // Bubbles: mode and tool bubbles plus a context bar; the level button steps clean / simple / full.
 const layerCards = new LayerCards(app);
 closePopovers = () => layerCards.close();
+let editWorkspace = (_anchor: HTMLElement): void => {};
 const bubbles = new Bubbles(app, $('#stage'), {
   layerCards: (anchor) => layerCards.toggle(anchor),
   story: {
@@ -665,6 +666,7 @@ const bubbles = new Bubbles(app, $('#stage'), {
   flip: { on: () => flipMode.on, set: (on) => flipMode.set(on) },
   share: { open: () => share.open, show: () => share.show() },
   resetUi: () => resetUi(),
+  editWorkspace: anchor => editWorkspace(anchor),
   brushLibrary: (anchor) => brushLib.toggle(anchor),
   reference: () => reference.toggle(),
   colorPanel: (anchor) => colorPanel.toggle(anchor),
@@ -674,6 +676,7 @@ const bubbles = new Bubbles(app, $('#stage'), {
 const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
   flipMode.update(); sheet.update(); strip.update(); bubbles.update(); app.requestRender();
 });
+paintingUI.editWorkspace = anchor => editWorkspace(anchor);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
 paintingUI.onReset = () => artworkUI.resetLayout();
@@ -682,7 +685,7 @@ app.onWorkspaceChange = chain(app.onWorkspaceChange, () => artworkUI.update());
 app.onFrameChange = chain(app.onFrameChange, () => artworkUI.update());
 app.history.onChange = chain(app.history.onChange, () => artworkUI.update());
 app.editor.onChange = chain(app.editor.onChange, () => { artworkUI.update(); if (app.arrangingAssets) strip.update(); layerCards.update(); });
-app.onToolChange = chain(app.onToolChange, () => bubbles.update());
+app.onToolChange = chain(app.onToolChange, () => { paintingUI.update(); bubbles.update(); });
 app.onShapeChange = chain(app.onShapeChange, () => bubbles.update());
 app.onFrameChange = chain(app.onFrameChange, () => { bubbles.update(); flipMode.update(); layerCards.update(); });
 app.history.onChange = chain(app.history.onChange, () => layerCards.update());
@@ -746,6 +749,7 @@ const quickMenu = new QuickMenu(app, $('#stage'), $<HTMLCanvasElement>('#canvas'
   assets: () => artworkUI.library.show(),
 });
 openSettings = () => { closeForQuickMenu(); quickMenu.close(false); quickMenu.settings.show(dock); };
+editWorkspace = anchor => { closeForQuickMenu(); quickMenu.close(false); quickMenu.settings.show(anchor, 'workspace'); };
 {
   const changed = flipMode.onChange;
   flipMode.onChange = () => { changed(); quickMenu.update(); };

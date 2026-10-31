@@ -31,6 +31,9 @@ describe('student profiles and visibility', () => {
     const setup=readStudentSetup({ui:{tools:{pen:false}},level:'full',inkPaint:true,rangeGesture:true});
     const store=readStudentProfiles({version:1,profiles:[{id:'a',name:'A',setup},{id:'b',name:'B',setup}]});
     store.profiles[0]!.setup.ui.tools.pen=true;store.profiles[0]!.setup.quickMenu.actions[0]='brush';
+    store.profiles[0]!.setup.workspaces.draw.tools.push('pen');
+    expect(store.profiles[1]!.setup.workspaces.draw.tools).not.toContain('pen');
+    expect(setup.workspaces.draw.tools).not.toContain('pen');
     expect(store.profiles[1]!.setup.ui.tools.pen).toBe(false);expect(setup.ui.tools.pen).toBe(false);expect(setup.quickMenu.actions[0]).toBe('undo');
   });
 });

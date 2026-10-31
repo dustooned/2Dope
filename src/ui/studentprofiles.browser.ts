@@ -11,7 +11,7 @@ import { RANGE_GESTURE_KEY } from '../core/playback';
 import { AUTO_PAINT_KEY } from '../fill/autopaint';
 import { captureProject } from '../io/projectio';
 
-const keys=[STUDENT_PROFILES_KEY,STUDENT_UI_KEY,FINGER_PAINT_KEY,QUICK_MENU_KEY,RANGE_GESTURE_KEY,AUTO_PAINT_KEY,'2dope.quickshape','2dope.ui.level','2dope.draw.view','2dope.animate.view','2dope.flip.mini'];
+const keys=['2dope.workspace.layouts',STUDENT_PROFILES_KEY,STUDENT_UI_KEY,FINGER_PAINT_KEY,QUICK_MENU_KEY,RANGE_GESTURE_KEY,AUTO_PAINT_KEY,'2dope.quickshape','2dope.ui.level','2dope.draw.view','2dope.animate.view','2dope.flip.mini'];
 const saved=keys.map(k=>localStorage.getItem(k));keys.forEach(k=>localStorage.removeItem(k));
 const stage=document.querySelector<HTMLElement>('#stage')!,canvas=document.querySelector<HTMLCanvasElement>('#canvas')!;
 const app=new App(canvas,stage);app.loadProject(new Project(128,128));app.setWorkspace('draw');
@@ -36,7 +36,7 @@ function draftBackground(){toggle('Show Vector tool',false);toggle('Show Smudge 
 let passed=0,failed=0;function check(name:string,ok:boolean){const li=document.createElement('li');li.textContent=`${ok?'PASS':'FAIL'}: ${name}`;document.querySelector('#results')!.append(li);if(ok)passed++;else failed++;}
 try{
   quick.settings.show();await settle();const original=live(),history=app.history.peekUndo();
-  check('Settings starts at Student profiles with Brush protected and defaults visible',document.activeElement===select('Student profile')&&input('Show Brush tool').disabled&&input('Show Brush tool').checked&&!!tool('Vector'));
+  check('Settings starts at Student profiles with Brush protected and compact defaults visible',document.activeElement===select('Student profile')&&input('Show Brush tool').disabled&&input('Show Brush tool').checked&&!!tool('Brush')&&!!tool('More tools')&&!tool('Vector'));
   const r=dialog()!.getBoundingClientRect();check('Settings frame and fixed actions fit this viewport',r.left>=0&&r.top>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&[...dialog()!.querySelectorAll<HTMLElement>('.app-settings-foot button')].every(b=>{const r=b.getBoundingClientRect();return r.height>=44&&r.bottom<=innerHeight+1;}));
   draftBackground();click('Save as new profile');
   check('Creating a profile stays a draft until Apply',profiles().profiles.length===0&&localStorage.getItem(STUDENT_PROFILES_KEY)===null&&live()===original&&docs===0);

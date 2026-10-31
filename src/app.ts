@@ -28,6 +28,7 @@ import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
 import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type InterfaceLevel } from './core/studentprefs';
+import { WORKSPACE_LAYOUT_KEY, readWorkspaceLayouts, type WorkspaceLayouts } from './core/workspacelayout';
 import { ERASER_BUTTONS, mapPressure, PEN_PREFS_KEY, PenProbe, readPenPrefs, type PenPrefs, type PenSample } from './core/pen';
 import { BRUSH_PREFS_KEY, readBrushPreferences, rememberBrush, recalledBrush, usedBrush, favoriteBrush, forgetBrush, renameBrush } from './core/brushprefs';
 import { staticProp, valueAt } from './core/anim';
@@ -370,6 +371,18 @@ export class App {
   }
   fingerPaint = loadJSON<unknown>(FINGER_PAINT_KEY) === true;
   studentUI = readStudentUI(loadJSON<unknown>(STUDENT_UI_KEY));
+  workspaceLayouts = readWorkspaceLayouts(loadJSON<unknown>(WORKSPACE_LAYOUT_KEY));
+  setWorkspaceLayouts(value: WorkspaceLayouts): boolean {
+    if (this.strokeActive || this.adjusting || this.gradEditing) return false;
+    const next = readWorkspaceLayouts(value);
+    if (JSON.stringify(next) === JSON.stringify(this.workspaceLayouts)) return true;
+    try { localStorage.setItem(WORKSPACE_LAYOUT_KEY, JSON.stringify(next)); }
+    catch { this.onNotice?.('Your workspace could not be saved. Free browser storage and try again.'); return false; }
+    this.preserveCanvasView();
+    this.workspaceLayouts = next;
+    this.onToolChange(); this.requestRender();
+    return true;
+  }
   interfaceLevel: InterfaceLevel = (() => { try { const v = localStorage.getItem('2dope.ui.level'); return v === 'clean' || v === 'full' ? v : 'simple'; } catch { return 'simple'; } })();
   onInterfaceLevelChange: () => void = () => {};
   setStudentUI(value: StudentUI): void {
@@ -4658,14 +4671,21 @@ export class App {
       flipH=Math.max(flipH,s.bottom-r.bottom+choice.getBoundingClientRect().height+
         parseFloat(css.paddingTop)+parseFloat(css.paddingBottom)+placement.offsetHeight-placement.clientHeight);
     }
-    this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top, flipH);
+    const painting = isPaintingWorkspace(this.workspace);
+    const left = painting ? Math.max(0, (parseFloat(this.stage.style.getPropertyValue('--context-left')) || 8) - 8) : 0;
+    const right = painting ? Math.max(0, (parseFloat(this.stage.style.getPropertyValue('--context-right')) || 8) - 8) : 0;
+    const fitPage = (extraTop = 0) => {
+      this.view.fit(this.docW, this.docH, Math.max(80, this.viewW - left - right), this.viewH, bubbles ? 24 : 40, top + extraTop, flipH);
+      this.view.x += left;
+    };
+    fitPage();
     // the layer label floats under the bubble rows: when the page would reach under it (an upright
     // tablet, a phone), fit again a little lower
     const label = this.stage.querySelector<HTMLElement>('.paint-target');
     if (label?.offsetParent && label.offsetWidth) {
       const s = this.stage.getBoundingClientRect(), r = label.getBoundingClientRect();
       const bottom = r.bottom - s.top + 6, right = r.right - s.left;
-      if (this.view.x < right && this.view.y < bottom) this.view.fit(this.docW, this.docH, this.viewW, this.viewH, bubbles ? 24 : 40, top + (bottom - this.view.y), flipH);
+      if (this.view.x < right && this.view.y < bottom) fitPage(bottom - this.view.y);
     }
     this.fitSig = this.viewSig();
     this.requestRender();

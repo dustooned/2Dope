@@ -1,5 +1,21 @@
 # Architecture
 
+Mode-context UI (2026-10-30): `core/workspacelayout.ts` validates bounded per-mode tool
+order/pinning, top/side docking, brush edge, labels and optional paint targets. App reads
+`2dope.workspace.layouts` and applies validated preferences outside document History.
+`StudentSetup.workspaces` adds the same snapshots to existing version-1 device profiles;
+older snapshots receive defaults. `ui/workspacesettings.ts` edits detached drafts with
+dragging and keyboard/tap Move buttons through App settings. Failed workspace writes keep
+the draft open and restore previous profile storage before changing live preferences.
+`Bubbles` uses ordered tool ids and a separate More drawer, retaining an active unpinned
+tool until switching away. Painting toolbars scroll horizontally when needed, keeping More
+at the edge; side docks scroll vertically. `PaintingWorkspaceUI` keeps tray recovery and
+workspace entry in the footer. Selection/transform/adjustment/point-edit controls override
+ordinary settings folding; canvas fit accounts for docked side controls. Source and timeline
+commands are reused. Board writing labels wrap existing caption inputs without field/schema
+changes. `workspacelayout.html` exercises real UI/storage/profile/cancel/recovery behavior;
+its responsive wrapper covers phone, small phone, tablet and short landscape.
+
 Motion/Draw fixes (2026-10-30): `App.setFps` is an undoable comp edit that rebases playback,
 invalidates onion previews and requests a redraw; `MotionPanel` includes FPS/time-format in its
 ruler signature. The painting viewport is saved before Motion and restored on return to the same

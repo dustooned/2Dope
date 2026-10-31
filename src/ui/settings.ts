@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { defaultQuickMenu, QUICK_ACTIONS, type QuickMenuPrefs } from '../core/quickmenu';
 import { decorate } from './icons';
 import { penSettingsSection } from './pensettings';
+import { workspaceSettings } from './workspacesettings';
 import { commandPrefs, controlInfo, setHidden } from './commands';
 import { PROFILE_LIMIT, STUDENT_CONTROLS, STUDENT_PROFILES_KEY, STUDENT_TOOLS, profileName, readStudentProfiles, readStudentSetup, readStudentUI, type StudentSetup } from '../core/studentprefs';
 
@@ -13,7 +14,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: stri
 export class AppSettingsUI {
   private dialog: HTMLDialogElement | null = null;
   constructor(private app: App, private canvas: HTMLCanvasElement, private prefs: () => QuickMenuPrefs, private apply: (prefs: QuickMenuPrefs) => void) {}
-  show(anchor?: HTMLElement, focus: 'profiles' | 'quickmenu' | 'pen' = 'profiles'): void {
+  show(anchor?: HTMLElement, focus: 'profiles' | 'quickmenu' | 'pen' | 'workspace' = 'profiles'): void {
     if (this.dialog || this.app.strokeActive || document.querySelector('dialog[open]')) return;
     if (this.app.adjusting || this.app.gradEditing) { this.app.onNotice?.('Finish or cancel the current adjustment before opening App settings.'); return; }
     if (this.app.playing) this.app.togglePlay();
@@ -25,7 +26,7 @@ export class AppSettingsUI {
     section.open = focus === 'quickmenu';
     const liveSetup = (): StudentSetup => readStudentSetup({ ui: this.app.studentUI, level: this.app.interfaceLevel,
       quickMenu: this.prefs(), rangeGesture: this.app.rangeGestureEnabled, inkPaint: this.app.inkPaint.enabled,
-      quickShape: this.app.quickShape, fingerPaint: this.app.fingerPaint });
+      quickShape: this.app.quickShape, fingerPaint: this.app.fingerPaint, workspaces: this.app.workspaceLayouts });
     const initial = liveSetup();
     let stored: unknown; try { stored = JSON.parse(localStorage.getItem(STUDENT_PROFILES_KEY) ?? 'null'); } catch { /* recover invalid preferences */ }
     const profiles = readStudentProfiles(stored);
@@ -40,6 +41,8 @@ export class AppSettingsUI {
     const message = el('p', 'student-profile-message'); message.setAttribute('role', 'status');
     profileSection.append(profileTitle, el('p', 'menu-note', 'Choose a profile to preview it. Apply settings updates that profile; Save as new profile keeps a separate setup. Changes and deletion stay in draft until Apply. Profiles save on this browser/device.'), chooser, name, profileActions);
     body.append(profileSection);
+    const workspace = workspaceSettings(initial.workspaces, this.app.workspace); workspace.section.open = focus === 'workspace';
+    body.append(workspace.section);
     const toolsSection = el('details', 'student-settings-section');
     toolsSection.append(el('summary', '', 'Visible tools and controls'), el('p', 'menu-note', 'Choose what appears in Draw and Animate at your interface level. Shortcuts and QuickMenu remain available. The current tool stays visible until you switch. Brush always stays available.'));
     const toolGrid = el('div', 'student-tools-grid'), toolChecks = new Map<string,HTMLInputElement>(), controlChecks = new Map<string,HTMLInputElement>();
@@ -108,8 +111,10 @@ export class AppSettingsUI {
       ui:{tools:Object.fromEntries([...toolChecks].map(([id,c])=>[id,c.checked])),controls:Object.fromEntries([...controlChecks].map(([id,c])=>[id,c.checked]))},
       level:level.value,quickMenu:{showButton:show.checked,edge:edge.value,actions:selects.map(s=>s.value)},
       rangeGesture:rangeGesture.checked,inkPaint:inkPaint.input.checked,quickShape:quickShape.input.checked,fingerPaint:fingerPaint.input.checked,
+      workspaces: workspace.read(),
     });
     const fillSetup = (setup:StudentSetup) => {
+      workspace.fill(setup.workspaces);
       fill(setup.quickMenu);level.value=setup.level;rangeGesture.checked=setup.rangeGesture;
       inkPaint.input.checked=setup.inkPaint;quickShape.input.checked=setup.quickShape;fingerPaint.input.checked=setup.fingerPaint;
       for(const [id,c] of toolChecks)c.checked=setup.ui.tools[id as keyof StudentSetup['ui']['tools']];
@@ -154,6 +159,11 @@ export class AppSettingsUI {
       if(setup.inkPaint&&!this.app.autoPaintSupported&&setup.inkPaint!==this.app.inkPaint.enabled){message.textContent='Auto Paint is not available at this canvas size on this device. Turn it off for this setup, or use a smaller canvas.';return;}
       const p=selected();if(p)p.setup=setup;profiles.active=p?.id??null;
       try{localStorage.setItem(STUDENT_PROFILES_KEY,JSON.stringify(profiles));}catch{message.textContent='This browser could not save profiles. Your draft is still here; free storage and try Apply again, or Cancel.';return;}
+      if (!this.app.setWorkspaceLayouts(setup.workspaces)) {
+        // Keep profile storage coherent if saving the larger arrangement fails.
+        try { if (stored == null) localStorage.removeItem(STUDENT_PROFILES_KEY); else localStorage.setItem(STUDENT_PROFILES_KEY, JSON.stringify(stored)); } catch { /* show the original failure */ }
+        message.textContent = 'This browser could not save your workspace. Your draft is still here; try again or Cancel.'; return;
+      }
       if(JSON.stringify(setup.ui)!==JSON.stringify(this.app.studentUI))this.app.setStudentUI(readStudentUI(setup.ui));
       if(setup.level!==this.app.interfaceLevel)this.app.setInterfaceLevel(setup.level);
       if(setup.rangeGesture!==this.app.rangeGestureEnabled)this.app.setRangeGestureEnabled(setup.rangeGesture);
@@ -166,6 +176,7 @@ export class AppSettingsUI {
     });
     close.addEventListener('click', done); cancel.addEventListener('click', done);
     d.addEventListener('cancel', e => { e.preventDefault(); done(); }); d.addEventListener('close', done);
-    d.append(header, body, footer); document.body.append(d); d.showModal(); (focus === 'quickmenu' ? show : chooser).focus();
+    d.append(header, body, footer); document.body.append(d); d.showModal();
+    (focus === 'quickmenu' ? show : focus === 'workspace' ? workspace.section.querySelector<HTMLSelectElement>('select')! : chooser).focus();
   }
 }

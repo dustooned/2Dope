@@ -1,10 +1,12 @@
 import type { App } from '../app';
 import { isPaintingWorkspace } from '../core/workspace';
 import type { FlipMode } from './flipmode';
+import { defaultWorkspaceLayout } from '../core/workspacelayout';
+import { decorate } from './icons';
 
 type Fold = 'tools' | 'options' | 'brush' | 'editor';
 type Prefs = Record<Fold, boolean>;
-const defaults = (): Prefs => ({ tools: false, options: false, brush: false, editor: false });
+const defaults = (): Prefs => ({ tools: false, options: true, brush: false, editor: false });
 
 /**
  * The two painting layouts: view-only controls, independent of document history and assets.
@@ -13,6 +15,7 @@ const defaults = (): Prefs => ({ tools: false, options: false, brush: false, edi
  */
 export class PaintingWorkspaceUI {
   onReset: () => void = () => {};
+  editWorkspace: (anchor: HTMLElement) => void = () => {};
   private header = document.createElement('nav');
   private footer = document.createElement('nav');
   private viewButtons: HTMLButtonElement[] = [];
@@ -32,7 +35,7 @@ export class PaintingWorkspaceUI {
     for (const ws of ['draw', 'animate'] as const) {
       try {
         const saved = JSON.parse(localStorage.getItem(`2dope.painting.layout.${ws}`) ?? '{}');
-        for (const k of Object.keys(this.prefs[ws]) as Fold[]) this.prefs[ws][k] = saved?.[k] === true;
+        for (const k of Object.keys(this.prefs[ws]) as Fold[]) if (typeof saved?.[k] === 'boolean') this.prefs[ws][k] = saved[k];
       } catch { /* defaults */ }
     }
     this.header.className = 'painting-header'; this.header.setAttribute('aria-label', 'Artwork assets');
@@ -56,17 +59,22 @@ export class PaintingWorkspaceUI {
         this.save(); this.update(); this.refresh();
       });
       b.className = `painting-handle painting-${key}-handle`;
+      if (key === 'brush') decorate(b, 'brush');
+      if (key === 'tools') decorate(b, 'more');
       b.setAttribute('aria-label', `Toggle ${label.toLowerCase()}`);
       this.handles.set(key, b);
-      if (key === 'editor') this.footer.append(b); else stage.append(b);
+      this.footer.append(b);
     }
-    this.footer.append(button('Fit canvas', () => app.fit()), button('Reset layout', () => this.reset()));
+    const customize = button('Workspace', () => this.editWorkspace(customize)); customize.setAttribute('aria-label', 'Edit workspace'); decorate(customize, 'gear');
+    this.footer.append(customize, button('Fit canvas', () => app.fit()));
     stage.after(this.footer);
     this.update();
   }
 
   reset(): void {
     if (!isPaintingWorkspace(this.app.workspace)) return;
+    const layouts = { ...this.app.workspaceLayouts, [this.app.workspace]: defaultWorkspaceLayout(this.app.workspace) };
+    if (!this.app.setWorkspaceLayouts(layouts)) return;
     this.prefs[this.app.workspace] = defaults(); this.save(); this.update(); this.refresh();
     this.onReset();
     setTimeout(() => this.app.fit(), 60);
@@ -80,17 +88,28 @@ export class PaintingWorkspaceUI {
     const ws = this.app.workspace, active = isPaintingWorkspace(ws);
     document.body.classList.toggle('painting-workspace', active);
     this.header.hidden = this.footer.hidden = !active;
+    const essential = active && (this.app.transforming || !!this.app.adjusting || this.app.pointEditing || this.app.arrangingAssets || this.app.gradEditing || this.app.guideEdit || (this.app.tool === 'fill' && this.app.fillMode === 'lasso'));
     for (const [key, handle] of this.handles) {
       const folded = active && this.prefs[ws][key];
       document.body.classList.toggle(`painting-${key}-folded`, folded);
-      handle.hidden = !active; handle.setAttribute('aria-expanded', String(!folded));
+      handle.hidden = !active; handle.disabled = key === 'options' && !!essential;
+      handle.setAttribute('aria-expanded', String(!folded || (key === 'options' && essential)));
     }
     document.body.classList.toggle('painting-still', active && ws === 'draw' && !this.flip.on);
     if (!active) return;
+    const layout = this.app.workspaceLayouts[ws];
+    document.body.classList.toggle('workspace-brush-right', layout.brushEdge === 'right');
+    document.body.classList.toggle('workspace-advanced-targets', layout.advancedTargets);
     for (const b of this.viewButtons) {
       b.hidden = ws === 'draw' ? b.textContent === 'Clips' : b.textContent === 'Canvas';
       b.setAttribute('aria-pressed', String(this.flip.on ? b.textContent === 'Flipbook' : b.textContent === (ws === 'draw' ? 'Canvas' : 'Clips')));
     }
-    this.footer.querySelector('.painting-purpose')!.textContent = ws === 'draw' ? 'Paint · backgrounds · assets' : 'Draw frames · arrange clips';
+    const a = this.app;
+    const tool = a.arrangingAssets ? 'Move placement' : a.transforming ? 'Transform' : a.adjusting ? 'Adjust artwork' : a.tool === 'pen' ? 'Vector' : a.tool === 'fill' ? a.fillMode === 'lasso' ? 'Select area' : 'Bucket fill' : a.smudging ? 'Smudge' : a.tool === 'eraser' ? 'Eraser' : 'Brush';
+    const target = a.editingMask ? 'Mask' : a.project.isPlaceholder ? 'New paint layer' : `${a.project.layer.name} · ${a.plane === 'line' ? 'Ink' : 'Colour'}`;
+    const hint = this.footer.querySelector<HTMLElement>('.painting-purpose')!;
+    hint.textContent = `${tool} · ${target}`; hint.title = `${a.project.comp.name} · ${hint.textContent}`;
+    this.handles.get('options')!.textContent = 'Tool settings';
+    this.handles.get('options')!.setAttribute('aria-label', 'Toggle tool settings');
   }
 }

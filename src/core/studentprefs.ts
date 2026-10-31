@@ -1,4 +1,5 @@
 import { readQuickMenu, type QuickMenuPrefs } from './quickmenu';
+import { readWorkspaceLayouts, type WorkspaceLayouts } from './workspacelayout';
 
 export const STUDENT_UI_KEY = '2dope.student.ui';
 export const STUDENT_PROFILES_KEY = '2dope.student.profiles';
@@ -19,6 +20,7 @@ export type InterfaceLevel = 'clean' | 'simple' | 'full';
 export interface StudentUI { tools: Record<StudentTool, boolean>; controls: Record<StudentControl, boolean> }
 export interface StudentSetup {
   ui: StudentUI; level: InterfaceLevel; quickMenu: QuickMenuPrefs;
+  workspaces: WorkspaceLayouts;
   rangeGesture: boolean; inkPaint: boolean; quickShape: boolean; fingerPaint: boolean;
 }
 export interface StudentProfile { id: string; name: string; setup: StudentSetup }
@@ -33,7 +35,7 @@ export function readStudentUI(value: unknown): StudentUI {
 }
 export function readStudentSetup(value: unknown): StudentSetup {
   const v = obj(value);
-  return { ui: readStudentUI(v.ui), level: v.level === 'full' || v.level === 'clean' ? v.level : 'simple',
+  return { ui: readStudentUI(v.ui), workspaces: readWorkspaceLayouts(v.workspaces), level: v.level === 'full' || v.level === 'clean' ? v.level : 'simple',
     quickMenu: readQuickMenu(v.quickMenu), rangeGesture: v.rangeGesture === true, inkPaint: v.inkPaint === true,
     quickShape: v.quickShape !== false, fingerPaint: v.fingerPaint === true };
 }

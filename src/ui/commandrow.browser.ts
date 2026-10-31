@@ -93,7 +93,7 @@ async function otherRows() {
 
   // Smudge: Softer and Stronger around the strength readout
   app.setTool('brush'); app.setSmudging(true); await settle();
-  check('Smudge row: Line, Fill, Softer, Stronger, Customize', labels().join() === 'Line,Fill,Softer,Stronger,Customize', labels());
+  check('Smudge row: Ink target, Colour target, Softer, Stronger, Customize', labels().join() === 'Ink target,Colour target,Softer,Stronger,Customize', labels());
   const s0 = app.smudgeStrength;
   chip('Softer')!.click(); await settle();
   check('Smudge: Softer lowers the strength and the readout follows', app.smudgeStrength < s0 && hint(`Strength ${Math.round(app.smudgeStrength * 100)}%`));

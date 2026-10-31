@@ -11,6 +11,7 @@ import { isCommandHidden } from '../core/commandprefs';
 import { commandById, commandName, commandPrefs, commandsFor, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
 import { attachContextMenu } from './contextmenu';
 import { showCustomize } from './customize';
+import { WORKSPACE_TOOL_NAMES, type WorkspaceTool } from '../core/workspacelayout';
 
 export type UiLevel = 'clean' | 'simple' | 'full';
 const LEVEL_KEY = '2dope.ui.level';
@@ -44,9 +45,10 @@ export interface BubbleHooks {
   share?: { open(): boolean; show(): void };
   /** Hold the interface button: put the whole screen back to its starting layout. */
   resetUi?: () => void;
+  editWorkspace?: (anchor: HTMLElement) => void;
 }
 
-type ToolKey = 'assets' | 'more' | 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
+type ToolKey = 'assets' | 'more' | 'transform' | 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
   | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
 /**
@@ -59,6 +61,7 @@ export class Bubbles {
   private readonly modes = el('div', { class: 'bub-modes', role: 'toolbar', 'aria-label': 'Mode' });
   private readonly tools = el('div', { class: 'bub-tools', role: 'toolbar', 'aria-label': 'Tools' });
   private readonly ctx = el('div', { class: 'bub-ctx', role: 'toolbar', 'aria-label': 'Options' });
+  private readonly extraTools = el('section', { class: 'bub-tool-drawer', 'aria-label': 'More tools', hidden: '' });
   private readonly levelBtn = el('button', { type: 'button', class: 'bub bub-level' });
   private readonly modeName = el('span', { class: 'bub-name' });
   level: UiLevel = 'simple';
@@ -71,6 +74,7 @@ export class Bubbles {
 
   /** How far down the bubble rows reach (px from the stage top); the canvas fits below it. */
   private topClear = -1;
+  private lastWorkspace: Workspace | null = null;
 
   constructor(private readonly app: App, private readonly stage: HTMLElement, private readonly hooks: BubbleHooks) {
     // the order of a shot: plan it (Story), draw it (frame by frame, in the flipbook), time it, move it
@@ -104,7 +108,7 @@ export class Bubbles {
     const choices: [UiLevel, string, string][] = [
       ['clean', 'Focus', 'Just the canvas and your tools'],
       ['simple', 'Simple', 'Modes, tools and the timeline'],
-      ['full', 'Full', 'Every control, the classic layout'],
+      ['full', 'Full', 'Classic panels and detailed timeline controls'],
     ];
     const fill = () => {
       menu.replaceChildren(...choices.map(([id, name, what]) => {
@@ -136,7 +140,15 @@ export class Bubbles {
       menu.hidden = true;
     }, true);
     stage.append(menu);
-    stage.append(this.modes, this.tools, this.ctx);
+    stage.append(this.modes, this.tools, this.ctx, this.extraTools);
+    stage.addEventListener('pointerdown', e => {
+      if (this.moreTools && !this.extraTools.contains(e.target as Node) && !this.tools.contains(e.target as Node)) {
+        this.moreTools = false; this.sig = ''; this.update();
+      }
+    }, true);
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && this.moreTools) { e.preventDefault(); e.stopImmediatePropagation(); this.moreTools = false; this.sig = ''; this.update(); this.tools.querySelector<HTMLButtonElement>('[data-tool-key="more"]')?.focus(); }
+    }, true);
     // inside the stage, so it never sits on a side panel
     stage.append(this.levelBtn);
     this.level = app.interfaceLevel;
@@ -155,16 +167,29 @@ export class Bubbles {
    */
   private measure(): void {
     const s = this.stage.getBoundingClientRect();
-    const bottomOf = (e: HTMLElement) => (e.offsetParent && !e.hidden ? e.getBoundingClientRect().bottom - s.top : 0);
+    const bottomOf = (e: HTMLElement | null) => (e?.offsetParent && !e.hidden ? e.getBoundingClientRect().bottom - s.top : 0);
     const narrow = window.innerWidth <= 700;
     const painting = document.body.classList.contains('painting-workspace');
     if (painting) this.placePaintingRows(s);
+    this.stage.style.setProperty('--edge-tool-width', `${this.tools.offsetWidth}px`);
+    let left = 8, right = 8;
+    if (painting) {
+      const obstacles = [...this.stage.querySelectorAll<HTMLElement>('.sidebar:not(.compact)')];
+      if (this.app.workspaceLayouts[this.app.workspace].toolDock !== 'top') obstacles.push(this.tools);
+      for (const e of obstacles) {
+        if (!e.offsetParent || e.hidden) continue;
+        const r = e.getBoundingClientRect();
+        if (r.left + r.width / 2 < s.left + s.width / 2) left = Math.max(left, r.right - s.left + 8);
+        else right = Math.max(right, s.right - r.left + 8);
+      }
+    }
+    this.stage.style.setProperty('--context-left', `${left}px`); this.stage.style.setProperty('--context-right', `${right}px`);
     // the mode and tool rows side by side need the stage's width; when they do not fit (a tablet
     // upright, a split screen) the tools go under the modes, as on a phone
     const mw = this.modes.offsetParent ? this.modes.offsetWidth : 0, tw = this.tools.offsetParent && !this.tools.hidden ? this.tools.offsetWidth : 0;
     const stack = !painting && !narrow && mw > 0 && tw > 0 && mw + tw + 60 + 60 + 12 > s.width;
     if (stack !== this.stage.classList.contains('bub-stack')) this.stage.classList.toggle('bub-stack', stack);
-    const tools = Math.max(bottomOf(this.modes), bottomOf(this.tools));
+    const tools = Math.max(bottomOf(this.modes), this.app.workspaceLayouts[this.app.workspace].toolDock === 'top' ? bottomOf(this.tools) : 0);
     if (!tools) {
       // Full level with its top bar: only the options row floats over the stage
       const ctx = bottomOf(this.ctx);
@@ -178,10 +203,14 @@ export class Bubbles {
     }
     // on a phone the context row sits under the tools, and the layer label under that; elsewhere
     // the page is kept clear of the context row too (Timing's and Fill's rows reach the middle)
-    const clear = Math.round(narrow ? tools + 58 : Math.max(tools + 8, bottomOf(this.ctx) + 6));
+    const clear = Math.round(painting ? Math.max(bottomOf(this.modes), bottomOf(this.stage.querySelector<HTMLElement>('.painting-header')!),
+      this.app.workspaceLayouts[this.app.workspace].toolDock === 'top' ? bottomOf(this.tools) : 0) + 8
+      : narrow ? tools + 58 : Math.max(tools + 8, bottomOf(this.ctx) + 6));
     const label = 0; // the layer label is kept clear by the fit itself
-    this.stage.style.setProperty('--tools-bottom', `${Math.round(tools + 6)}px`);
-    this.stage.style.setProperty('--side-top', `${clear + (narrow ? 40 : 0)}px`);
+    this.stage.style.setProperty('--tools-bottom', `${painting ? clear : Math.round(tools + 6)}px`);
+    this.stage.style.setProperty('--chrome-bottom', `${clear}px`);
+    if (!painting) this.stage.style.setProperty('--dock-top', `${bottomOf(this.modes) + 8}px`);
+    this.stage.style.setProperty('--side-top', `${clear + (narrow && !painting ? 40 : 0)}px`);
     if (clear + label === this.topClear) return;
     this.topClear = clear + label;
     this.stage.style.setProperty('--top-clear', `${clear}px`);
@@ -197,6 +226,15 @@ export class Bubbles {
   private placePaintingRows(s: DOMRect): void {
     const header = this.stage.querySelector<HTMLElement>('.painting-header');
     if (!this.modes.offsetParent) return;
+    if (window.innerWidth <= 700) {
+      this.stage.style.setProperty('--ph-left', '60px'); this.stage.style.setProperty('--ph-top', '8px');
+      const headerBottom = header?.offsetParent ? header.getBoundingClientRect().bottom - s.top : 60;
+      this.stage.style.setProperty('--mode-top', `${Math.max(60, headerBottom + 6)}px`);
+      const modesBottom = this.modes.getBoundingClientRect().bottom - s.top;
+      this.stage.style.setProperty('--pt-top', `${modesBottom + 6}px`);
+      this.stage.style.setProperty('--dock-top', `${modesBottom + 6}px`);
+      return;
+    }
     const m = this.modes.getBoundingClientRect();
     const modesLeft = Math.round(m.left - s.left), modesRight = Math.round(m.right - s.left), modesBottom = Math.round(m.bottom - s.top);
     const shown = !!header && !header.hidden && header.offsetParent !== null;
@@ -214,6 +252,8 @@ export class Bubbles {
       if (toolsLeft < hLeft + hw + 8) top = hTop + hh + 6;
     }
     this.stage.style.setProperty('--pt-top', `${top}px`);
+    // Side docks start below both navigation and source controls, never on top of them.
+    this.stage.style.setProperty('--dock-top', `${Math.max(modesBottom, shown ? hTop + hh : 0) + 8}px`);
   }
 
   setLevel(l: UiLevel, remember = true): void {
@@ -361,15 +401,16 @@ export class Bubbles {
   }
 
   private toolsFor(ws: Workspace, expanded = false): [ToolKey, string, string][] {
-    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ['select', 'Select', 'lasso'], ['adjust', 'Adjust: hue, saturation, brightness, blur', 'adjust']];
+    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Bucket fill', 'fill'], ['select', 'Select', 'lasso'], ['transform', 'Transform', 'transform'], ['adjust', 'Adjustments', 'adjust']];
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
-    if (expanded && (ws === 'draw' || ws === 'animate')) return [...draw, ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'image']];
-    if ((ws === 'draw' || ws === 'animate') && this.level === 'clean') return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Fill', 'fill'], ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', '']];
-    if (ws === 'animate' && this.level !== 'full' && !this.moreTools) return [draw[0]!, draw[3]!, draw[4]!, draw[5]!, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['more', 'More tools', 'gear']];
-    if (ws === 'animate') return [...draw, assets, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'image'], ['more', 'Fewer tools', 'gear']];
-    if (ws === 'draw') return [...draw, ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference: pictures to draw from, or the whole canvas', 'image']];
+    if (ws === 'draw' || ws === 'animate') {
+      const all: [ToolKey, string, string][] = [...draw, ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference', 'image']];
+      if (expanded) return all;
+      const pinned = this.app.workspaceLayouts[ws].tools;
+      return [...pinned.flatMap(id => all.filter(([k]) => k === id)), ['more', 'More tools', 'more']];
+    }
     // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
     if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
     if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard', 'export']];
@@ -383,10 +424,12 @@ export class Bubbles {
     if (k === 'assets') { a.setArrangeAssets(!a.arrangingAssets); return; }
     if (a.arrangingAssets && ['brush', 'pen', 'eraser', 'smudge', 'fill', 'select', 'adjust'].includes(k)) a.setArrangeAssets(false);
     if (k === 'more') { this.moreTools = !this.moreTools; this.sig = ''; this.update(); return; }
+    this.moreTools = false;
     if (a.transforming && k !== 'select') a.cancelTransform();
     if (a.adjusting && k !== 'adjust' && k !== 'color' && k !== 'layers') a.applyAdjust();
     switch (k) {
       case 'adjust': if (!a.adjusting) a.beginAdjust('hsb'); break;
+      case 'transform': if (a.spatialSelection) a.beginTransform(); else a.moveAll(); break;
       case 'brush': case 'pen': case 'eraser':
         if (a.tool === k && !arranging && !(k === 'brush' && a.smudging)) this.hooks.brushLibrary(b);
         else { a.setTool(k as Tool); if (k === 'brush') a.setSmudging(false); }
@@ -536,6 +579,10 @@ export class Bubbles {
   update(): void {
     const a = this.app;
     const ws = a.workspace;
+    if (ws !== this.lastWorkspace) { this.moreTools = false; this.layersOpen = false; this.lastWorkspace = ws; }
+    const layout = a.workspaceLayouts[ws];
+    this.stage.dataset.toolDock = layout.toolDock;
+    this.stage.classList.toggle('workspace-tool-labels', layout.labels);
     const cur = this.current();
     const sel = !!a.spatialSelection;
     const xp = a.transformParams;
@@ -555,21 +602,25 @@ export class Bubbles {
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]')?.setAttribute('aria-pressed', String(sharing));
     this.modeName.textContent = sharing ? 'Share' : { animate: 'Animate', draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
-    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}`;
+    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}`;
     if (paintingSig === this.sig) return;
     this.sig = paintingSig;
 
     // tool bubbles for this mode
     this.tools.replaceChildren();
-    const tools = this.toolsFor(ws);
-    if ((ws === 'draw' || ws === 'animate') && !tools.some(([k]) => k === cur) && STUDENT_TOOLS.some(([id]) => id === cur) && !a.studentUI.tools[cur as StudentTool]) {
-      const active = this.toolsFor(ws, true).find(([k]) => k === cur); if (active) tools.push(active);
+    const tools = drawWs ? this.toolsFor(ws) : [...layout.tools.flatMap(id => this.toolsFor(ws, true).filter(([k]) => k === id)), ['more', 'More tools', 'more'] as [ToolKey, string, string]];
+    if (drawWs && !tools.some(([k]) => k === cur)) {
+      const active = this.toolsFor(ws, true).find(([k]) => k === cur); if (active) tools.splice(Math.max(0, tools.length - 1), 0, active);
     }
     for (const [k, label0, icon0] of tools) {
       if ((ws === 'draw' || ws === 'animate') && STUDENT_TOOLS.some(([id]) => id === k) && !a.studentUI.tools[k as StudentTool] && k !== cur) continue;
       const pause = k === 'play' && a.playing;
       const label = pause ? 'Pause' : label0, icon = pause ? 'pause' : icon0;
       const b = icon ? this.bubble(label, icon, label) : el('button', { type: 'button', class: 'bub bub-color', title: 'Colour', 'aria-label': 'Colour' });
+      const visibleLabel = b.querySelector('.lbl');
+      if (visibleLabel) visibleLabel.textContent = pause ? label : WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label;
+      b.dataset.toolKey = k;
+      if (k === 'more') { b.setAttribute('aria-expanded', String(this.moreTools)); b.setAttribute('aria-controls', 'workspace-extra-tools'); }
       if (k === 'color') {
         b.style.setProperty('--chip', a.color);
         this.bindColorDrop(b);
@@ -578,15 +629,28 @@ export class Bubbles {
         : k === 'autokey' ? a.editor.autoKey
         : k === 'look' ? a.editor.throughCamera
         : k === 'play' ? a.playing
-        : k === cur || (k === 'onion' && a.onion.enabled);
+        : k === 'more' ? this.moreTools : k === 'transform' ? a.transforming : k === cur || (k === 'onion' && a.onion.enabled);
       b.setAttribute('aria-pressed', String(on));
       b.addEventListener('click', () => this.pickTool(k, b));
       this.tools.append(b);
     }
+    this.extraTools.id = 'workspace-extra-tools'; this.extraTools.hidden = !this.moreTools;
+    this.extraTools.replaceChildren(el('strong', {}, 'More tools'));
+    const allTools = this.toolsFor(ws, true);
+    for (const [k, label] of allTools) {
+      const b = this.chip(WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label, label, k === cur, b => this.pickTool(k, b));
+      b.dataset.extraTool = k; this.extraTools.append(b);
+    }
+    if (this.hooks.editWorkspace) this.extraTools.append(this.chip('Edit workspace', 'Move and pin tools, add controls and restore defaults', false, () => {
+      this.moreTools = false; this.sig = ''; this.update(); this.hooks.editWorkspace!(this.tools);
+    }, 'gear'));
+    this.extraTools.append(this.chip('Close tools', 'Close additional tools', false, () => { this.moreTools = false; this.sig = ''; this.update(); }, 'close'));
 
     // context: only what the chosen tool needs, and only in the workspace it belongs to
     this.ctx.replaceChildren();
     const row = optionsRow(this.optionsState());
+    this.ctx.dataset.essential = String(['select', 'transform', 'adjust', 'points', 'assets'].includes(row) || !!a.gradEditing || a.guideEdit || shape);
+    this.ctx.dataset.row = row;
     const add = (...c: HTMLElement[]) => this.ctx.append(...c);
     // right after a snap: change the shape from here (no floating button on the simple screen)
     if (shape) add(this.chip('Edit shape', 'Change what the stroke snapped to, or keep your own stroke', false, (b) => this.hooks.editShape!(b), 'editpoints'));
@@ -615,11 +679,12 @@ export class Bubbles {
     } else if (row === 'transform' && xp) {
       add(...this.commandChips('transform'));
     } else if (row === 'adjust') {
+      add(el('span', { class: 'bub-hint adjustment-scope' }, a.adjusting?.mask ? 'Adjust: selected area · current drawing' : 'Adjust: current drawing · ink + colour'));
       add(...this.adjustControls());
     } else if (row === 'smudge') {
       add(
-        this.chip('Line', 'Smudge the LINE', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }),
-        this.chip('Fill', 'Smudge the FILL', a.plane === 'fill', () => { a.setPlane('fill'); a.setSmudging(true); }),
+        this.chip('Ink target', 'Smudge the LINE', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }),
+        this.chip('Colour target', 'Smudge the FILL', a.plane === 'fill', () => { a.setPlane('fill'); a.setSmudging(true); }),
         ...this.cmd('smudge.softer'),
         el('span', { class: 'bub-hint' }, `Strength ${Math.round(a.smudgeStrength * 100)}%`),
         ...this.cmd('smudge.stronger'),
@@ -634,7 +699,7 @@ export class Bubbles {
         add(this.chip('Paint colour', `Automatic paint: ${a.color}. Choose paint colour.`, false, b => this.hooks.colorPanel(b), 'palette'));
       }
       add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b), 'brushes'));
-      if (a.studentUI.controls.planes) add(this.chip('Line', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')), this.chip('Fill', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
+      if (a.studentUI.controls.planes) add(this.chip('Ink target', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')), this.chip('Colour target', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
       add(...this.cmd('paint.editpoints'), this.customizeChip('paint'));

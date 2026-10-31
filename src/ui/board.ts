@@ -16,6 +16,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 
 const ROWS: Record<CaptionField, number> = { shot: 1, camera: 1, dialogue: 2, action: 2, slug: 1, note: 2 };
 const HINT: Record<CaptionField, string> = { shot: 'Shot (e.g. Sc 1 \u00b7 Sh 2)', camera: 'Camera (e.g. Wide, pan left)', dialogue: 'What is said', action: 'What happens', slug: 'Timing (e.g. hold, beat)', note: 'Notes' };
+const WRITING_LABEL: Record<CaptionField, string> = { shot: 'Shot / scene', camera: 'Camera / framing', dialogue: 'Dialogue / narration', action: 'Action', slug: 'Timing / beats', note: 'Production notes' };
 /** Quick picks for the camera field (type anything, or pick one). */
 const CAMERA_PICKS = ['Wide', 'Medium', 'Close-up', 'Extreme close-up', 'Over the shoulder', 'Point of view', 'Bird\u2019s eye', 'Low angle', 'Static', 'Pan left', 'Pan right', 'Tilt up', 'Tilt down', 'Dolly in', 'Dolly out', 'Zoom in', 'Zoom out', 'Truck left', 'Truck right', 'Shake'];
 
@@ -229,8 +230,8 @@ export class BoardPanel {
         // shot and camera are one line (camera offers quick picks); the rest are small text boxes
         const line = f.key === 'shot' || f.key === 'camera';
         const t = line
-          ? el('input', { type: 'text', class: `bfield bline${f.key === 'camera' ? ' bcam' : ''}`, placeholder: HINT[f.key], 'aria-label': `Panel ${i + 1} ${f.label}`, 'data-field': f.key, maxlength: String(f.max), ...(f.key === 'camera' ? { list: 'board-camera-picks' } : {}) })
-          : el('textarea', { class: 'bfield', rows: String(ROWS[f.key]), placeholder: HINT[f.key], 'aria-label': `Panel ${i + 1} ${f.label}`, 'data-field': f.key, maxlength: String(f.max) });
+          ? el('input', { type: 'text', class: `bfield bline${f.key === 'camera' ? ' bcam' : ''}`, placeholder: HINT[f.key], 'aria-label': `Panel ${i + 1} ${WRITING_LABEL[f.key]}`, 'data-field': f.key, maxlength: String(f.max), ...(f.key === 'camera' ? { list: 'board-camera-picks' } : {}) })
+          : el('textarea', { class: 'bfield', rows: String(ROWS[f.key]), placeholder: HINT[f.key], 'aria-label': `Panel ${i + 1} ${WRITING_LABEL[f.key]}`, 'data-field': f.key, maxlength: String(f.max) });
         t.value = e[f.key] ?? '';
         t.addEventListener('focus', () => {
           if (!app.selection.includes(i) || app.selection.length > 1) app.goPanel(i);
@@ -256,7 +257,9 @@ export class BoardPanel {
           }
         });
         t.addEventListener('blur', () => setTimeout(() => this.update(), 0));
-        card.append(t);
+        const field = el('label', { class: 'board-writing-field' });
+        field.append(el('span', {}, WRITING_LABEL[f.key]), t);
+        card.append(field);
       }
       frag.append(card);
     });
