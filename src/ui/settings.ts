@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { defaultQuickMenu, QUICK_ACTIONS, type QuickMenuPrefs } from '../core/quickmenu';
 import { decorate } from './icons';
+import { penSettingsSection } from './pensettings';
 import { commandPrefs, controlInfo, setHidden } from './commands';
 import { PROFILE_LIMIT, STUDENT_CONTROLS, STUDENT_PROFILES_KEY, STUDENT_TOOLS, profileName, readStudentProfiles, readStudentSetup, readStudentUI, type StudentSetup } from '../core/studentprefs';
 
@@ -12,7 +13,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: stri
 export class AppSettingsUI {
   private dialog: HTMLDialogElement | null = null;
   constructor(private app: App, private canvas: HTMLCanvasElement, private prefs: () => QuickMenuPrefs, private apply: (prefs: QuickMenuPrefs) => void) {}
-  show(anchor?: HTMLElement, focus: 'profiles' | 'quickmenu' = 'profiles'): void {
+  show(anchor?: HTMLElement, focus: 'profiles' | 'quickmenu' | 'pen' = 'profiles'): void {
     if (this.dialog || this.app.strokeActive || document.querySelector('dialog[open]')) return;
     if (this.app.adjusting || this.app.gradEditing) { this.app.onNotice?.('Finish or cancel the current adjustment before opening App settings.'); return; }
     if (this.app.playing) this.app.togglePlay();
@@ -101,6 +102,8 @@ export class AppSettingsUI {
     rangeRow.append(rangeGesture, document.createTextNode('Hold ruler to set playback range'));
     gestures.append(gestureTitle, rangeRow, el('p', 'menu-note', 'In Flipbook or Clips, hold still on the frame-number ruler, then drag to the other end of your loop. Lift to apply. Quick drags still scrub; use Range → Whole animation to clear the loop. This option applies to this browser/device.'));
     body.append(gestures);
+    // device-only, like Hidden controls: not part of student profiles
+    const pen = penSettingsSection(this.app); pen.section.open = focus === 'pen'; body.append(pen.section);
     const readDraft = (): StudentSetup => readStudentSetup({
       ui:{tools:Object.fromEntries([...toolChecks].map(([id,c])=>[id,c.checked])),controls:Object.fromEntries([...controlChecks].map(([id,c])=>[id,c.checked]))},
       level:level.value,quickMenu:{showButton:show.checked,edge:edge.value,actions:selects.map(s=>s.value)},
@@ -158,6 +161,7 @@ export class AppSettingsUI {
       if(setup.fingerPaint!==this.app.fingerPaint)this.app.setFingerPaint(setup.fingerPaint);
       if(setup.inkPaint!==this.app.inkPaint.enabled)this.app.setInkPaint(setup.inkPaint);
       for(const id of toShow)setHidden(id,false);
+      this.app.setPenPrefs(pen.read());
       this.apply(setup.quickMenu); done();
     });
     close.addEventListener('click', done); cancel.addEventListener('click', done);

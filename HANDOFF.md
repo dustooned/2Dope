@@ -1,6 +1,48 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-10-26) — read this first
+## Current state (2026-10-30) — read this first
+
+### Pen and tablet settings (2026-10-30, uncommitted on main)
+
+The user asked to optimise for Wacom and other tablet drivers with custom pen settings. Browsers
+do not expose the tablet brand or driver, so detection works from what the pen reports through
+Pointer Events.
+
+- **`src/core/pen.ts`** (unit-tested in `pen.test.ts`, 10 tests): `PenPrefs` (`2dope.pen` in
+  localStorage, device-only, not in student profiles), `mapPressure` (threshold, full-strength
+  point, soft/firm gamma; the defaults return pressure unchanged), `PenProbe` (pressure that changes
+  or stays flat across strokes, an approximate level count, tilt, twist, eraser bit 32, side button,
+  hover, strongest pressure) and `diagnosePen` with platform tips (Windows Ink for
+  Wacom/Huion/Gaomon/XP-Pen, Windows press-and-hold, macOS Accessibility, Linux libinput).
+- **`app.ts`**: `toPoint` maps pen pressure through the prefs and zeroes tilt when tilt is off (this
+  covers strokes, smudge, predicted points and QuickShape). The eraser end (`buttons & 32`) switches
+  to the Eraser on pen-down and the tip restores the previous tool and Smudge (`penEnd`). Button 5
+  (the eraser end) no longer bails out of `onDown`; before this the eraser end did nothing. The side
+  button can pan (`barrelPan`, which suppresses the context menu that follows) instead of opening
+  the menu. A pen that reports flat pressure for two strokes gives one notice.
+- **`src/ui/pensettings.ts`**: App settings → Pen and tablet. A test pad drawn with the draft curve
+  (the eraser end erases), a curve graph, a live readout, the diagnosis and tips, sliders, tilt and
+  eraser-end switches, the side-button choice, Set from my test strokes, Clear pad and Restore pen
+  defaults. Applies with Apply settings. `AppSettingsUI.show` accepts `focus: 'pen'`, but nothing
+  calls it yet.
+- Manual (Getting started) and UPDATES entry "Pen and tablet settings". CSS `.pen-*`.
+
+Checks (actual): `npm test` 67 files / 546 passed. `npm run build` passed (main chunk 752 kB /
+237 kB gzip, up from 740 kB; the existing warning remains). `npm run test:browser` 35 of 35 passed.
+In the dev app on the 127.0.0.1:5217 test origin with synthetic pen PointerEvents, these worked: the
+eraser end switched to the Eraser and the tip went back to Brush; mapped pressure (firmness -1,
+0.25 to 0.613) and tilt off; the no-pressure notice after two flat strokes; the pad diagnosis and
+tips; the phone-width layout with no horizontal overflow. No console errors. Synthetic strokes went
+into that test origin's project (two were undone).
+
+Not verified: real Wacom, Huion or XP-Pen hardware with Windows Ink on or off, real eraser-end and
+side-button events across browsers (Firefox and Safari report these differently), the
+side-button pan with a real pen, and Apple Pencil. The level estimate (the smallest pressure step
+seen, rounded to a power of two) is approximate. A pen whose driver sends mouse input cannot be told
+apart from a mouse; the pad only shows the Windows Ink tip when a mouse draws on it. No browser
+fixture covers the pen section yet.
+
+## Earlier state (2026-10-26)
 
 ### Adjust inside a selection and a smaller main bundle (2026-10-26, merged into main and pushed)
 

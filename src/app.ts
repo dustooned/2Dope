@@ -25,6 +25,7 @@ import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
 import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type InterfaceLevel } from './core/studentprefs';
+import { ERASER_BUTTONS, mapPressure, PEN_PREFS_KEY, PenProbe, readPenPrefs, type PenPrefs, type PenSample } from './core/pen';
 import { BRUSH_PREFS_KEY, readBrushPreferences, rememberBrush, recalledBrush, usedBrush, favoriteBrush, forgetBrush, renameBrush } from './core/brushprefs';
 import { staticProp, valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
@@ -371,6 +372,17 @@ export class App {
   setFingerPaint(enabled: boolean): void {
     if (this.strokeActive) return;
     this.fingerPaint = enabled; saveJSON(FINGER_PAINT_KEY, enabled); this.onToolChange();
+  }
+  /** This device's pen setup: pressure curve, tilt, eraser end and side button. */
+  penPrefs: PenPrefs = readPenPrefs(loadJSON<unknown>(PEN_PREFS_KEY));
+  /** What the pen has shown it reports (App settings → Pen and tablet). */
+  readonly penProbe = new PenProbe();
+  /** The tool (and Smudge) to return to when the pen turns back from its eraser end. */
+  private penTool: { tool: Tool; smudging: boolean } | null = null;
+  /** The pen's side button started a pan: its context menu stays closed. */
+  private barrelPan = false;
+  setPenPrefs(p: PenPrefs): void {
+    this.penPrefs = readPenPrefs(p); saveJSON(PEN_PREFS_KEY, this.penPrefs);
   }
   uiHidden = false;
 
@@ -4594,6 +4606,7 @@ export class App {
     const d = this.view.screenToDoc(e.clientX - r.left, e.clientY - r.top);
     let pressure = e.pointerType === 'mouse' ? 1 : e.pressure;
     if (e.pointerType === 'touch' && (pressure === 0 || pressure === 0.5)) pressure = 0.6;
+    if (e.pointerType === 'pen') pressure = mapPressure(pressure, this.penPrefs);
     let tiltX = e.tiltX || 0;
     let tiltY = e.tiltY || 0;
     const alt = (e as PointerEvent & { altitudeAngle?: number }).altitudeAngle;
@@ -4603,6 +4616,7 @@ export class App {
       tiltX = mag * Math.cos(az);
       tiltY = mag * Math.sin(az);
     }
+    if (e.pointerType === 'pen' && !this.penPrefs.tilt) tiltX = tiltY = 0;
     // Mouse users can test side-of-pencil shading: hold Alt to simulate a pen lying at ~65°.
     if (e.pointerType === 'mouse' && e.altKey) {
       tiltX = 55;
@@ -4889,6 +4903,7 @@ export class App {
     c.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       if (Date.now() - this.lastHold < 1000) return; // the hold already opened it
+      if (this.barrelPan) { this.barrelPan = false; return; } // the side button panned instead
       this.openCanvasMenu(e.clientX, e.clientY);
     });
     // Safari's own pinch-zoom gestures must not move the page.
@@ -4936,6 +4951,7 @@ export class App {
 
   private onDown(e: PointerEvent): void {
     e.preventDefault();
+    if (e.pointerType === 'pen') this.notePen(e);
     this.focusCanvas();
     try {
       this.canvas.setPointerCapture(e.pointerId);
@@ -5118,8 +5134,12 @@ export class App {
 
     // Pen or mouse: the pen always wins over an ongoing touch gesture.
     this.pinch = null;
+    this.barrelPan = false;
+    const pen = e.pointerType === 'pen';
+    if (pen) this.penEnd(e);
     const p = this.local(e);
-    const mode: NavMode | null = e.button === 1 || this.held.has('Space') ? 'pan' : this.held.has('KeyR') ? 'rotate' : this.held.has('KeyZ') ? 'zoom' : null;
+    if (pen && e.button === 2 && this.penPrefs.barrel === 'pan') this.barrelPan = true;
+    const mode: NavMode | null = e.button === 1 || this.barrelPan || this.held.has('Space') ? 'pan' : this.held.has('KeyR') ? 'rotate' : this.held.has('KeyZ') ? 'zoom' : null;
     if (mode) {
       if (mode === 'pan' && this.held.has('Space')) this.spacePanned = true;
       const c = { x: this.viewW / 2, y: this.viewH / 2 };
@@ -5135,7 +5155,8 @@ export class App {
       };
       return;
     }
-    if (e.button !== 0) return;
+    // (the pen's eraser end presses button 5)
+    if (e.button !== 0 && !(pen && e.button === 5)) return;
     if (this.arrangingAssets) { this.assetDown(e); return; }
     if (this.workspace === 'motion') {
       this.motionDown(e);
@@ -5333,6 +5354,7 @@ export class App {
   }
 
   private onMove(e: PointerEvent): void {
+    if (e.pointerType === 'pen') this.notePen(e);
     if (this.gradEdit?.drag && e.pointerId === this.gradEdit.drag.id) return this.moveGradDrag(e);
     if (this.tscrub && e.pointerId === this.tscrub.id) return this.moveTimeScrub(e);
     if (this.guideDrag && e.pointerId === this.guideDrag.id) return this.moveGuideDrag(e);
@@ -5462,6 +5484,7 @@ export class App {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (e.pointerType === 'pen' && this.penProbe.endStroke()) this.penNoPressure();
     if (this.gradEdit?.drag && e.pointerId === this.gradEdit.drag.id) {
       this.gradEdit.drag = null;
       this.residency.updateThumb(this.gradEdit.d);
@@ -5918,6 +5941,30 @@ export class App {
     this.canvas.style.cursor = this.held.has('Space') ? 'grab' : this.held.has('KeyR') ? 'alias' : this.held.has('KeyZ') ? 'zoom-in' : 'crosshair';
   }
 
+  private notePen(e: PointerEvent): void {
+    if (this.penProbe.observe(penSample(e))) this.penNoPressure();
+  }
+
+  private penNoPressure(): void {
+    this.onNotice?.('Your pen is not reporting pressure, so lines keep one width. Menu → App settings → Pen and tablet has tips for your tablet driver.');
+  }
+
+  /** The pen's eraser end picks the Eraser; the tip brings back the tool it replaced. */
+  private penEnd(e: PointerEvent): void {
+    if (!this.penPrefs.eraserEnd || this.workspace === 'motion' || this.arrangingAssets || this.timingOnly) return;
+    const eraser = (e.buttons & ERASER_BUTTONS) !== 0;
+    if (eraser && this.tool !== 'eraser') {
+      this.penTool = { tool: this.tool, smudging: this.smudging };
+      this.setTool('eraser');
+    } else if (!eraser && this.penTool) {
+      const back = this.penTool;
+      this.penTool = null;
+      if (this.tool !== 'eraser') return; // a tool was chosen meanwhile
+      this.setTool(back.tool);
+      if (back.smudging) this.setSmudging(true);
+    }
+  }
+
   private trackStats(e: PointerEvent, coalesced: number): void {
     this.moveCount += 1;
     this.coalescedCount += coalesced;
@@ -6325,6 +6372,10 @@ function boxOf(mask: Uint8Array, w: number, h: number): Area | null {
 /** The corners of an area's box (its outline on screen when the mask itself is the selection). */
 function boxPoints(a: { x0: number; y0: number; x1: number; y1: number }): [number, number][] {
   return [[a.x0, a.y0], [a.x1 + 1, a.y0], [a.x1 + 1, a.y1 + 1], [a.x0, a.y1 + 1]];
+}
+
+function penSample(e: PointerEvent): PenSample {
+  return { type: e.pointerType, pressure: e.pressure, tiltX: e.tiltX || 0, tiltY: e.tiltY || 0, twist: e.twist || 0, buttons: e.buttons };
 }
 
 /**

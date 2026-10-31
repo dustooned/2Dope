@@ -4830,3 +4830,13 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
   .asset-placement-choice .asset-timing-toggle { flex: 0 0 44px; width: 44px; padding: 0; justify-content: center; }
   .asset-timing-toggle .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
+.pen-pad-wrap { display: flex; gap: 8px; margin: 8px 0; }
+.pen-pad { flex: 1; min-width: 0; height: 140px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg, transparent); color: var(--text); touch-action: none; cursor: crosshair; }
+.pen-curve { width: 96px; height: 96px; align-self: center; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--text); flex: 0 0 auto; }
+.pen-live { font: 12px/1.4 ui-monospace, monospace; margin: 4px 0; min-height: 1.4em; overflow-wrap: anywhere; }
+.pen-summary { font-weight: 600; font-size: 13px; margin: 8px 0 4px; }
+.pen-tips { margin: 0 0 8px; padding-left: 18px; font-size: 13px; line-height: 1.5; }
+.pen-tips:empty { display: none; }
+.pen-slider input { flex: 0 1 45%; min-width: 0; }
+.pen-slider output { width: 44px; text-align: right; font-size: 12px; }
+@media (max-width: 420px) { .pen-curve { width: 72px; height: 72px; } }
