@@ -24,7 +24,7 @@ const THUMB_W = 64, THUMB_H = 36;
  * every toggle is a device preference in App.canvasView, outside History and the project.
  */
 export class CanvasViewUI {
-  readonly button = el('button', { type: 'button', class: 'canvas-view-btn', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'canvas-view-options', title: 'Canvas view: Overscan, safe areas, centre and frame overview' }, 'View');
+  readonly button = el('button', { type: 'button', class: 'canvas-view-btn', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'canvas-view-options', title: 'Canvas view: fit, overscan, safe areas, centre and frame overview' }, 'View');
   private readonly pop = el('section', { id: 'canvas-view-options', class: 'canvas-view-pop', role: 'group', 'aria-label': 'Canvas view', hidden: '' });
   private readonly strip = el('nav', { class: 'canvas-overview', 'aria-label': 'Frame overview', hidden: '' });
   private sig = '';
@@ -69,7 +69,11 @@ export class CanvasViewUI {
       b.addEventListener('click', () => { this.app.setCanvasView({ [k]: !this.app.canvasView[k] }); this.render(); this.pop.querySelector<HTMLButtonElement>(`[data-view="${k}"]`)?.focus(); });
       this.pop.append(b);
     }
-    this.pop.append(el('p', { class: 'canvas-view-note' }, 'Guides and the pasteboard never appear in exports.'));
+    // Fit lives here with the other view choices (F does the same), not as its own bottom-bar button
+    const fit = el('button', { type: 'button', class: 'canvas-view-fit', title: 'Fit the page to the screen (F)' }, 'Fit canvas');
+    decorate(fit, 'fit');
+    fit.addEventListener('click', () => { this.app.fit(); this.close(true); });
+    this.pop.append(fit, el('p', { class: 'canvas-view-note' }, 'Guides and the pasteboard never appear in exports.'));
   }
 
   /** Refresh after a frame, tool, thumbnail or workspace change (cheap when nothing changed). */

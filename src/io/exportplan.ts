@@ -12,8 +12,8 @@ export type Pass = 'combined' | 'lines' | 'fills' | 'matte';
 
 export const PASSES: { id: Pass; label: string; hint: string; folder: string; suffix: string }[] = [
   { id: 'combined', label: 'Combined', hint: 'The finished image', folder: 'combined', suffix: '' },
-  { id: 'lines', label: 'Lines', hint: 'Linework and vector strokes only, with alpha', folder: 'lines', suffix: '_lines' },
-  { id: 'fills', label: 'Fills', hint: 'Flat color only, with alpha', folder: 'fills', suffix: '_fills' },
+  { id: 'lines', label: 'Ink (lines)', hint: 'Linework and vector strokes only, with alpha', folder: 'lines', suffix: '_lines' },
+  { id: 'fills', label: 'Colour (fills)', hint: 'Flat color only, with alpha', folder: 'fills', suffix: '_fills' },
   { id: 'matte', label: 'Matte', hint: 'White silhouette of the whole drawing, with alpha', folder: 'matte', suffix: '_matte' },
 ];
 

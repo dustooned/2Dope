@@ -26,7 +26,7 @@ import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareF
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
-import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, PART_LABEL, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
 import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type InterfaceLevel } from './core/studentprefs';
 import { WORKSPACE_LAYOUT_KEY, readWorkspaceLayouts, type WorkspaceLayouts } from './core/workspacelayout';
@@ -2951,8 +2951,8 @@ export class App {
   /** Open the media picker (pictures, movies, sounds); set by the shell. */
   pickMedia: (() => void) | null = null;
 
-  /** Shows a short message to the person (the file UI sets it to a toast). */
-  onNotice: ((message: string) => void) | null = null;
+  /** Shows a short message to the person (the file UI sets it to a toast), with an optional fix button. */
+  onNotice: ((message: string, action?: { label: string; run: () => void }) => void) | null = null;
 
   /** Fires when the colour changes (the toolbar's colour circle follows). */
   onColorChange: () => void = () => {};
@@ -4787,6 +4787,26 @@ export class App {
     return { x: d.x, y: d.y, pressure, tiltX, tiltY, t: e.timeStamp - t0 };
   }
 
+  /**
+   * A stroke on a hidden layer, or on its hidden Line/Fill part, would land where nobody can see
+   * it. Say so where the pencil touched, with a Show button, instead of silently painting.
+   */
+  private hiddenTarget(): boolean {
+    if (this.project.isPlaceholder || this.editingMask || (this.guideEdit && this.guide.mode !== 'off')) return false;
+    const l = this.project.layer;
+    if (!l.visible) {
+      this.onNotice?.(`“${l.name}” is hidden, so nothing would show.`, { label: 'Show it', run: () => this.editor.setFlag(l.id, 'visible', true) });
+      return true;
+    }
+    const part: PartName = this.tool === 'pen' ? 'line' : this.plane;
+    if (!partOf(l, part).visible) {
+      const name = PART_LABEL[part];
+      this.onNotice?.(`The ${name} of “${l.name}” is hidden, so nothing would show.`, { label: `Show ${name}`, run: () => this.editor.setPart(l.id, part, { visible: true }) });
+      return true;
+    }
+    return false;
+  }
+
   private beginStroke(e: PointerEvent): void {
     if (this.gradEdit) this.applyGradEdit();
     if (this.playing) {
@@ -4797,6 +4817,7 @@ export class App {
       this.onNotice?.(`“${this.project.layer.name}” is locked. Unlock it in Layers to draw on it.`);
       return;
     }
+    if (this.hiddenTarget()) return;
     if (this.tool === 'fill') {
       if (this.editingMask) {
         this.onNotice?.('Paint the mask with the Brush (hide) or the Eraser (reveal).');
@@ -5422,7 +5443,7 @@ export class App {
       items = [
         ...(picked ? [{ id: 'canvas.pickcolour', label: 'Pick this colour', hint: picked, run: () => this.setColor(picked) }] : []),
         { title: 'Tool' },
-        { chips: [tool('brush', 'Brush'), tool('eraser', 'Eraser'), tool('pen', 'Vector'), tool('fill', 'Fill')] },
+        { chips: [tool('brush', 'Brush'), tool('eraser', 'Eraser'), tool('pen', 'Vector'), tool('fill', 'Bucket fill')] },
         ...(this.tool === 'eraser'
           ? [
               { title: 'Eraser on vector lines' },
@@ -5453,8 +5474,8 @@ export class App {
         { title: 'Draw on' },
         {
           chips: [
-            { label: 'Line', on: this.plane === 'line', run: () => this.setPlane('line') },
-            { label: 'Fill', on: this.plane === 'fill', run: () => this.setPlane('fill') },
+            { label: 'Ink', on: this.plane === 'line', run: () => this.setPlane('line') },
+            { label: 'Colour', on: this.plane === 'fill', run: () => this.setPlane('fill') },
           ],
         },
         ...(this.drawing.vectors.length
@@ -5476,7 +5497,7 @@ export class App {
             { label: 'Delete', run: () => this.deleteFrame() },
           ],
         },
-        { id: 'canvas.showlines', label: 'Show lines', checked: this.partVisible('line'), run: () => this.togglePart('line') },
+        { id: 'canvas.showlines', label: 'Show ink', checked: this.partVisible('line'), run: () => this.togglePart('line') },
         { id: 'canvas.showfills', label: 'Show colour (fills)', checked: this.partVisible('fill'), run: () => this.togglePart('fill') },
         { id: 'canvas.onion', label: 'Onion skin', checked: this.onion.enabled, run: () => this.toggleOnion(), hint: 'O' },
         { id: 'canvas.newpage', label: 'New page after the last drawing', checked: this.flipbook, run: () => this.setFlipbook(!this.flipbook) },

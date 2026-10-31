@@ -10,7 +10,7 @@
 
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 
-export type EffectType = 'boil' | 'grain' | 'texture' | 'turbulence' | 'dither';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither';
 export type EffectTarget = 'line' | 'fill' | 'layer';
 export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
 
@@ -64,15 +64,17 @@ export interface EffectDef {
 
 export const EFFECT_TYPES: EffectDef[] = [
   { id: 'boil', label: 'Line boil', hint: 'Lines wiggle a little every few frames, like hand-drawn animation', target: 'line', amount: 1.6, size: 22, hold: 2, amountRange: [0, 16], sizeRange: [4, 160], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
+  { id: 'roughen', label: 'Roughen edges', hint: 'Edges crumble and break up a little, like dry ink or a photocopy (roughen edges)', target: 'line', amount: 3, size: 34, hold: 2, amountRange: [0, 20], sizeRange: [8, 160], amountLabel: 'Roughness', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
   { id: 'turbulence', label: 'Ripple', hint: 'Swirling, rippling warp: heat haze, water, wobbly shapes (turbulent displace)', target: 'layer', amount: 6, size: 90, hold: 2, amountRange: [0, 40], sizeRange: [8, 300], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
   { id: 'grain', label: 'Film grain', hint: 'Tiny specks in the paint that change every frame, like old film (noise)', target: 'layer', amount: 35, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Strength', sizeLabel: 'Speck', amountUnit: '%', sizeUnit: ' px', animated: true },
+  { id: 'blur', label: 'Gaussian blur', hint: 'Softens the layer like a camera out of focus, or a dreamy glow (Gaussian blur)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [0, 40], sizeRange: [0, 0], amountLabel: 'Blur', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false },
   { id: 'texture', label: 'Texture', hint: 'Paper, hatching, dots or canvas weave in the paint (best on the Fill)', target: 'fill', amount: 60, size: 14, hold: 1, amountRange: [0, 100], sizeRange: [3, 80], amountLabel: 'Strength', sizeLabel: 'Scale', amountUnit: '%', sizeUnit: ' px', animated: false },
   { id: 'dither', label: 'Retro pixels', hint: 'Old-console look: chunky pixels and a few colours, mixed with a dot pattern (dither)', target: 'layer', amount: 100, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Mix', sizeLabel: 'Pixel size', amountUnit: '%', sizeUnit: ' px', animated: false },
 ];
 
 export const EFFECT_LIMITS = { hold: [1, 8] as const };
 
-export const TARGET_NAMES: Record<EffectTarget, string> = { line: 'Line', fill: 'Fill', layer: 'Whole layer' };
+export const TARGET_NAMES: Record<EffectTarget, string> = { line: 'Ink', fill: 'Colour', layer: 'Whole layer' };
 
 /** An effect's name without its emoji (for undo steps and notices). */
 export function plainName(d: EffectDef): string {
@@ -93,7 +95,7 @@ export function newEffect(type: EffectType, id: string, seed: number): LayerEffe
 
 /** Which pattern of an effect shows at a layer frame (changes every `hold` frames). */
 export function effectTick(e: LayerEffect, frame: number): number {
-  if (e.type === 'texture' || e.type === 'dither') return 0;
+  if (e.type === 'texture' || e.type === 'dither' || e.type === 'blur') return 0;
   return Math.floor(frame / Math.max(1, Math.round(e.hold)));
 }
 

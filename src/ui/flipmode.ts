@@ -5,6 +5,7 @@ import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick, type Ctx
 import { askText, confirmBox } from './dialogs';
 import { frameMenu } from './framemenu';
 import { decorate } from './icons';
+import { onionHold } from './onionpop';
 import { PlaybackRangeControl, markPlaybackRange } from './playbackrange';
 import { PlaybackRangeGesture } from './playbackrangegesture';
 
@@ -87,6 +88,7 @@ export class FlipMode {
     const track = btn('Track', 'Add a track right above this one, from frame 1 (drag a track\u2019s box up or down to reorder)', 'layers', () => this.app.addFlipTrack(), undefined, 'flip-btn flip-adv');
     const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
     onion.classList.add('flip-onion');
+    onionHold(this.app, onion);
     const fit = btn('Fit', 'Fit the page to the screen', 'fit', () => this.app.fit(), undefined, 'flip-btn flip-icon flip-adv', '');
     this.actions.append(prev, this.count, next, this.range.button, add, onion, track, fit, done);
     this.head.append(this.play, this.actions);

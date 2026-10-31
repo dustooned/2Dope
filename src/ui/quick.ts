@@ -1,6 +1,7 @@
 import { decorate } from './icons';
 import type { App } from '../app';
 import { autoIcon, setLabel } from './icons';
+import { onionHold } from './onionpop';
 import { FPS_PRESETS } from '../core/project';
 import type { Tool } from '../core/stroke';
 
@@ -72,11 +73,12 @@ export class Quick {
     this.redoBtn = btn('Redo', 'Redo', () => app.redo());
     this.playBtn = btn('Play', 'Play / pause (Enter)', () => app.togglePlay(), 'play');
     this.onionBtn = btn('Onion', 'Onion skin (O)', () => app.toggleOnion());
+    onionHold(app, this.onionBtn);
     this.fps = el('select', { 'aria-label': 'Frames per second', title: 'Frames per second' });
     for (const f of FPS_PRESETS) this.fps.append(el('option', { value: String(f) }, `${f}`));
     this.fps.addEventListener('change', () => app.setFps(Number(this.fps.value)));
 
-    this.planeBtn = btn('Line', 'Switch Line / Fill (X): Line selects Pen; Fill selects Bucket (Tap / drag).', () => app.togglePlane());
+    this.planeBtn = btn('Draw on: Ink', 'Switch between Ink and Colour (X): what brushes and the eraser paint on.', () => app.togglePlane());
     this.lockBtn = btn('Lock', 'Scrub lock (L)', () => app.toggleLock());
     this.flipBtn = btn('Flipbook', 'Flipbook: a fresh blank page after the last drawing. Draw on it to add the frame, tap again for the next.', () => app.flipToBlank());
 
@@ -166,7 +168,7 @@ export class Quick {
     if (document.activeElement !== this.size) this.size.value = String(Math.round(app.brush.size));
     if (document.activeElement !== this.color) this.color.value = app.color;
     this.fps.value = String(app.project.fps);
-    this.planeBtn.textContent = app.plane === 'line' ? 'Draw on: Line' : 'Draw on: Fill';
+    this.planeBtn.textContent = app.plane === 'line' ? 'Draw on: Ink' : 'Draw on: Colour';
     this.planeBtn.setAttribute('aria-pressed', String(app.plane === 'fill'));
     setLabel(this.lockBtn, app.lockFrame === null ? 'Lock' : `Home ${app.lockFrame + 1}`);
     this.lockBtn.setAttribute('aria-pressed', String(app.lockFrame !== null));

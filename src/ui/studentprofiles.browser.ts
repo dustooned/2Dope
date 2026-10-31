@@ -32,7 +32,7 @@ const tool=(label:string)=>document.querySelector(`.bub-tools [aria-label="${lab
 const option=(label:string)=>document.querySelector(`.bub-ctx [aria-label="${label}"]`);
 const settle=()=>new Promise<void>(r=>setTimeout(r,100));
 const live=()=>JSON.stringify({ui:app.studentUI,level:app.interfaceLevel,ink:app.inkPaint.enabled,range:app.rangeGestureEnabled,finger:app.fingerPaint,shape:app.quickShape});
-function draftBackground(){toggle('Show Vector tool',false);toggle('Show Smudge tool',false);toggle('Show Line / Fill controls',false);toggle('Show Symmetry controls',false);toggle('Enable Ink & Paint',true);toggle('Enable QuickShape',false);toggle('Enable finger painting',true);toggle('Hold ruler to set playback range',true);select('QuickMenu action 3').value='colour';input('Profile name').value=' Background painting ';}
+function draftBackground(){toggle('Show Vector tool',false);toggle('Show Smudge tool',false);toggle('Show Ink / Colour target controls',false);toggle('Show Symmetry controls',false);toggle('Enable Ink & Paint',true);toggle('Enable QuickShape',false);toggle('Enable finger painting',true);toggle('Hold ruler to set playback range',true);select('QuickMenu action 3').value='colour';input('Profile name').value=' Background painting ';}
 let passed=0,failed=0;function check(name:string,ok:boolean){const li=document.createElement('li');li.textContent=`${ok?'PASS':'FAIL'}: ${name}`;document.querySelector('#results')!.append(li);if(ok)passed++;else failed++;}
 try{
   quick.settings.show();await settle();const original=live(),history=app.history.peekUndo();

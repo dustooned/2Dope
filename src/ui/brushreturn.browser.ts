@@ -45,7 +45,7 @@ function check(name:string,ok:boolean){const li=document.createElement('li');li.
 try {
   await settle(); app.history.clear(); open(); await settle();
   check('Brushes opens with focused, reachable 44px Done inside the viewport',library.open&&reachable(done())&&document.activeElement===done()&&panel().getBoundingClientRect().bottom<=innerHeight&&panel().getBoundingClientRect().left>=0&&panel().getBoundingClientRect().right<=innerWidth);
-  check('The header identifies the current brush, tool and Fill target',panel().querySelector('.bl-current')!.textContent==='Pencil · Brush · Fill');
+  check('The header identifies the current brush, tool and Fill target',panel().querySelector('.bl-current')!.textContent==='Pencil · Brush · Colour');
   check('Library actions and category buttons keep 44px touch targets',[...panel().querySelectorAll<HTMLElement>('.bl-actions button, .bl-cats button')].every(e=>e.getBoundingClientRect().height>=43.9));
   category('ink'); await settle();
   check('Changing collection keeps focus on that collection and adds no document history',(document.activeElement as HTMLElement)?.dataset.cat==='ink'&&!app.history.canUndo);

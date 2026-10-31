@@ -202,7 +202,7 @@ export function planBlender(project: { name: string; main: string; width: number
       const anchorValue = t.anchor.keys.length ? t.anchor.keys[0]!.v : t.anchor.value;
       if (t.anchor.keys.length > 1) notes.add(`“${l.name}”: an animated anchor point is exported as its first value.`);
       if (l.blend !== 'normal') notes.add(`“${l.name}”: the ${l.blend} blend mode is exported as normal.`);
-      if (l.kind === 'drawings' && partsActive(l)) notes.add(`“${l.name}”: Line / Fill part settings (hide, fade, recolour, offset) are not in Blender yet; it gets the drawings as drawn.`);
+      if (l.kind === 'drawings' && partsActive(l)) notes.add(`“${l.name}”: Ink / Colour part settings (hide, fade, recolour, offset) are not in Blender yet; it gets the drawings as drawn.`);
       const ch = {
         ...channels(t.position, ['position.x', 'position.y'], l.start),
         ...channels(t.scale, ['scale.x', 'scale.y'], l.start),

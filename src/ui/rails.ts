@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { layerEnd, type Comp, type Layer } from '../core/comp';
+import { layerEnd, PART_LABEL, type Comp, type Layer } from '../core/comp';
 import type { Drawing } from '../core/project';
 import { decorate } from './icons';
 import { assetLabel } from '../core/assetlabels';
@@ -193,7 +193,7 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
             type: 'button',
             class: 'rail-fold',
             'aria-expanded': String(open),
-            title: l.kind === 'comp' ? (open ? 'Hide the layers inside' : 'Show the layers inside') : open ? 'Hide LINE and FILL' : 'Show LINE and FILL',
+            title: l.kind === 'comp' ? (open ? 'Hide the layers inside' : 'Show the layers inside') : open ? 'Hide Ink and Colour' : 'Show Ink and Colour',
           },
           open ? '▾' : '▸',
         );
@@ -244,7 +244,7 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
           type: 'button',
           class: 'rail-btn icon-only',
           'aria-pressed': String(vis),
-          title: r.active ? `${vis ? 'Hide' : 'Show'} ${r.part === 'line' ? 'LINE (ink)' : 'FILL (colour)'}` : 'Draw on this layer to change its parts',
+          title: r.active ? `${vis ? 'Hide' : 'Show'} ${PART_LABEL[r.part]}` : 'Draw on this layer to change its parts',
         },
         vis ? 'Hide' : 'Show',
       );
@@ -259,9 +259,9 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
         {
           type: 'button',
           class: `rail-name part-name${r.active && app.plane === r.part ? ' paint' : ''}`,
-          title: r.active ? `Paint on ${r.part === 'line' ? 'LINE: your ink' : 'FILL: colour under the ink'}` : '',
+          title: r.active ? `Paint on ${r.part === 'line' ? 'Ink: your lines' : 'Colour: colour under the ink'}` : '',
         },
-        r.part === 'line' ? 'LINE' : 'FILL',
+        PART_LABEL[r.part].toUpperCase(),
       );
       if (r.active) paint.addEventListener('click', () => app.setPlane(r.part));
       tag.append(eye, paint);

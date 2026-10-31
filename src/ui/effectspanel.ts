@@ -264,7 +264,7 @@ export class EffectsPanel {
       }
     }
     slider(def.amountLabel, 'amount', def.amountRange, def.amountUnit === '%' ? 1 : 0.1, def.amountUnit);
-    if (adv) slider(def.sizeLabel, 'size', def.sizeRange, 1, def.sizeUnit);
+    if (adv && def.sizeRange[1] > 0) slider(def.sizeLabel, 'size', def.sizeRange, 1, def.sizeUnit);
     if (adv && def.animated) {
       // how often the pattern changes: on ones, twos, threes, fours
       const hold = el('div', { class: 'fx-row' });

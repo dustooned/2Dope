@@ -29,7 +29,9 @@ export interface WorkspaceLayout {
 export type WorkspaceLayouts = Record<Workspace, WorkspaceLayout>;
 export function defaultWorkspaceLayout(ws: Workspace): WorkspaceLayout {
   return { tools: ws === 'draw' ? ['brush', 'smudge', 'eraser', 'select', 'transform', 'layers', 'color']
-    : ws === 'animate' ? ['brush', 'eraser', 'select', 'assets', 'layers', 'color'] : [...WORKSPACE_TOOLS[ws]],
+    : ws === 'animate' ? ['brush', 'eraser', 'select', 'assets', 'layers', 'color']
+    // Timing: Play, onion and frame actions already have homes (transport, X-sheet); they can be pinned
+    : ws === 'time' ? ['layers'] : [...WORKSPACE_TOOLS[ws]],
   toolDock: 'top', brushEdge: 'left', labels: false, advancedTargets: false };
 }
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};

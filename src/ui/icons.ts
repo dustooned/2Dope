@@ -94,6 +94,7 @@ const P: Record<string, string> = {
   copylayer: '<path d="M10 8l8 4-8 4-8-4z"/><path d="M2 16l8 4 8-4"/><path d="M19 2v6M16 5h6"/>',
   cutlayer: '<path d="M10 8l8 4-8 4-8-4z"/><path d="M2 16l8 4 8-4"/><path d="M19 8V2M16 5l3-3 3 3"/>',
   camera: '<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5l5-3v9l-5-3z"/>',
+  viewfinder: '<path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16"/><path d="M12 9v6M9 12h6"/>',
   more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
   board: '<rect x="3" y="4" width="8" height="6" rx="1"/><rect x="13" y="4" width="8" height="6" rx="1"/><path d="M3 14h8M3 17h6M13 14h8M13 17h6"/>',
   ripple: '<path d="M3 12h7"/><path d="M14 6v12"/><path d="M17 9l3 3-3 3"/><path d="M20 12h-6"/><path d="M7 9l3 3-3 3"/>',

@@ -118,7 +118,7 @@ export class ExportUI {
       o.background = bg.value === 'white' ? 'white' : 'transparent';
       this.summary();
     });
-    d.append(row('Background', bg, 'Applies to the Combined pass. Lines, Fills and Matte always keep their alpha so they can be composited.'));
+    d.append(row('Background', bg, 'Applies to the Combined pass. Ink, Colour and Matte always keep their alpha so they can be composited.'));
 
     const range = el('select', { 'aria-label': 'Frames' });
     range.append(el('option', { value: 'all' }, 'All frames'), el('option', { value: 'selected' }, 'Selected drawings'));

@@ -490,7 +490,7 @@ export class BrushLibrary {
     const focusCat = focused?.closest<HTMLElement>('[data-cat]')?.dataset.cat;
     const listScroll = this.list.scrollTop, catsScroll = this.cats.scrollTop, catsLeft = this.cats.scrollLeft;
     const tool = this.app.smudging ? 'Smudge' : this.app.tool === 'eraser' ? 'Eraser' : this.app.tool === 'pen' ? 'Vector' : 'Brush';
-    this.current.textContent = `${this.app.brush.name} · ${tool} · ${this.app.plane === 'line' ? 'Line' : 'Fill'}`;
+    this.current.textContent = `${this.app.brush.name} · ${tool} · ${this.app.plane === 'line' ? 'Ink' : 'Colour'}`;
     this.current.title = this.current.textContent;
     const favorite = this.app.brushPreferences.favorites.includes(this.app.brush.name);
     this.favorite.setAttribute('aria-pressed', String(favorite));

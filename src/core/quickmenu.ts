@@ -14,7 +14,7 @@ export const QUICK_ACTIONS = [
   { id: 'pen', label: 'Vector', icon: 'pen' },
   { id: 'smudge', label: 'Smudge', icon: 'smudge' },
   { id: 'fill', label: 'Bucket fill', icon: 'fill' },
-  { id: 'plane', label: 'Line / Fill', icon: 'lineplane' },
+  { id: 'plane', label: 'Ink / Colour target', icon: 'lineplane' },
   { id: 'inkPaint', label: 'Ink & Paint', icon: 'inkpaint' },
   { id: 'colour', label: 'Colour', icon: 'palette' },
   { id: 'brushes', label: 'Brushes', icon: 'brushes' },

@@ -3052,6 +3052,11 @@ body.ui-hidden .board {
   }
 }
 
+/* narrow top bar: the other modes are icons, but the one you are in keeps its name */
+@media (min-width: 701px) {
+  .topbar .ws button[aria-pressed='true'] .lbl { display: inline; }
+}
+
 @media (max-width: 900px) {
   .group.file #pname {
     width: 70px;
@@ -4158,6 +4163,10 @@ body.ws-motion .audio-tracks { display: none !important; }
 .lc-tile .ico { width: 20px; height: 20px; }
 .lc-tile.danger { color: var(--danger); }
 .lc-tile:active { transform: scale(.96); }
+.lc-more-toggle { display: block; width: 100%; min-height: 44px; margin-top: 6px; border-radius: var(--radius-md); background: transparent; border: 1px dashed var(--line); color: var(--muted, #aaa); font-size: 13px; }
+.lc-more-toggle[aria-expanded="true"] { border-style: solid; }
+.lc-more-actions[hidden] { display: none; }
+.lc-section { margin: 10px 2px 0; font-size: 11px; color: var(--muted, #aaa); text-transform: uppercase; letter-spacing: .04em; }
 .paint-target.mask-target { background: #b3263f; color: #fff; }
 .quickbar .quick-exit { min-width: 40px; }
 .quickbar .quick-exit .lbl { display: none; }
@@ -4267,6 +4276,8 @@ body.ui-simple .strip-bar button.has-ico .lbl, body.ui-simple .nav-row button.ha
 body.ui-simple .strip-bar button.has-ico, body.ui-simple .nav-row button.has-ico { min-width: 40px; padding: 0 8px; }
 .tracks-handle > * { flex-shrink: 0; white-space: nowrap; }
 .tracks-handle > .nav-row { flex-shrink: 1; }
+.tracks-handle.has-nav > .play, .tracks-handle.has-nav > .tracks-time { display: none; }
+body.ws-time .strip-edit { display: none !important; }
 body.ui-simple .shape-pop, body.ui-clean .shape-pop { display: none !important; }
 /* context bars stay one row: extra chips scroll sideways instead of wrapping */
 .bub-ctx { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
@@ -4817,10 +4828,11 @@ body.painting-workspace.workspace-brush-right .painting-brush-handle { left: aut
 .stage.workspace-tool-labels:is([data-tool-dock=left], [data-tool-dock=right]) .bub-tools .bub:not(.bub-color) { width: 100%; justify-content: flex-start; }
 body.painting-workspace:not(.workspace-brush-right) .stage[data-tool-dock=left] .sidebar { left: calc(var(--edge-tool-width, 54px) + 16px); }
 body.painting-workspace.workspace-brush-right .stage[data-tool-dock=right] .sidebar { right: calc(var(--edge-tool-width, 54px) + 16px); }
+/* mode names stay readable in every mode, not only in Draw and Animate */
 @media (min-width: 1000px) {
-  body.painting-workspace .bub-modes .bub { width: auto; padding: 0 8px; gap: 5px; border-radius: var(--radius-md); font-size: 12px; }
-  body.painting-workspace .bub-modes .lbl { display: inline; }
-  body.painting-workspace .bub-name { display: none; }
+  .bub-modes .bub { width: auto; padding: 0 8px; gap: 5px; border-radius: var(--radius-md); font-size: 12px; }
+  .bub-modes .lbl { display: inline; }
+  .bub-name { display: none; }
 }
 @media (max-width: 700px) {
   body.painting-workspace .bub-modes { max-width: calc(100% - 16px); left: 8px; top: var(--mode-top, 66px); }
@@ -4944,6 +4956,10 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .bub-ctx .bub-row-title { font-weight: 600; color: var(--text); padding-right: 2px; }
 .bub-tool-drawer .bub-drawer-hint { flex-basis: 100%; margin: -2px 0 4px; font-size: 12px; color: var(--muted); }
 body.painting-workspace .painting-views .painting-handle.folded { opacity: 0.75; border-style: dashed; }
+body.painting-workspace .painting-folds { display: inline-flex; flex: 0 0 auto; gap: 4px; padding: 3px; border-radius: var(--radius-md); background: var(--panel-2); }
+body.painting-workspace .painting-folds .painting-handle[hidden] { display: none !important; }
+@media (max-width: 1000px) { body.painting-workspace .painting-folds .painting-handle .lbl { display: none; } }
+.canvas-view-fit { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; margin: 6px 0 4px; }
 /* Story cards: panel header, and the dialogue as subtitle lines (who · what is said · time) */
 body .bcard { flex-basis: 230px; }
 .bunit { margin-left: -3px; font-size: 12px; color: var(--muted); }
@@ -4958,3 +4974,16 @@ body .bcard { flex-basis: 230px; }
 .subtitle-who { font-weight: 700; color: #ffd84a; }
 .share-subtitles { margin: 4px 0; }
 .share-save-subs { align-self: center; }
+
+/* onion skin settings: hold any Onion button */
+.onion-pop { position: fixed; z-index: 60; width: 260px; max-width: calc(100vw - 16px); display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: var(--radius-lg); background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
+.onion-pop[hidden] { display: none; }
+.onion-pop strong { padding: 0 4px 4px; }
+.onion-pop button[role=switch] { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 0 10px; }
+.onion-pop button[role=switch][aria-checked=true] .onion-pop-state { color: var(--accent); }
+.onion-pop-row { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px; }
+.onion-pop-row .onion-pop-name { flex: 1; }
+.onion-pop-row button { min-width: 44px; min-height: 44px; }
+.onion-pop-row output { min-width: 2.5em; text-align: center; font-variant-numeric: tabular-nums; }
+.onion-pop-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.onion-pop-note { margin: 4px 4px 0; font-size: 11px; color: var(--muted); }

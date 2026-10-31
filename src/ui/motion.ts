@@ -2,7 +2,7 @@ import type { App } from '../app';
 import { PlaybackRangeControl } from './playbackrange';
 import { autoIcon, iconSvg, setLabel } from './icons';
 import { easingOf, EASINGS, isAnimated, spacingTicks, type Easing, type Prop, type Vec2 } from '../core/anim';
-import { compLength, layerEnd, PART_NAMES, partOf, playsOn, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
+import { compLength, layerEnd, PART_LABEL, PART_NAMES, partOf, playsOn, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
 import { newEffect } from '../core/effects';
 import { newSeed } from '../core/rng';
@@ -145,11 +145,11 @@ export class MotionPanel {
     const rowA = row(
       this.crumbsEl,
       group(
-        btn('◀', 'Previous frame (←)', () => app.prevFrame()),
         this.playBtn,
-        this.range.button,
-        btn('▶', 'Next frame (→)', () => app.nextFrame()),
+        btn('◀', 'Previous frame (←)', () => app.prevFrame()),
         this.frameLabel,
+        btn('▶', 'Next frame (→)', () => app.nextFrame()),
+        this.range.button,
         this.fpsSel,
       ),
       group(
@@ -514,7 +514,7 @@ export class MotionPanel {
     const p = partOf(l, part);
     const key = `${l.id}#${part}`;
     const open = ed.open.has(key);
-    const label = part === 'line' ? 'Line' : 'Fill';
+    const label = PART_LABEL[part];
     const row = el('div', { class: `mrow part${ed.selected.includes(l.id) ? ' selected' : ''}${p.visible ? '' : ' off'}`, 'data-layer': l.id, 'data-part': part });
     const left = el('div', { class: 'mleft' });
     const chev = el('button', { type: 'button', class: 'chev', 'aria-label': open ? `Hide ${label} properties` : `Show ${label} properties`, 'data-act': 'parttwirl' }, open ? '▾' : '▸');
@@ -922,7 +922,7 @@ export class MotionPanel {
     const part = row?.dataset.part as PartName | undefined;
     if (part && l.kind === 'drawings') {
       const p = partOf(l, part);
-      const name = part === 'line' ? 'Line' : 'Fill';
+      const name = PART_LABEL[part];
       return [
         { title: `${name} of ${l.name}` },
         { label: p.visible ? `Hide ${name.toLowerCase()}` : `Show ${name.toLowerCase()}`, run: () => ed.setPart(l.id, part, { visible: !p.visible }) },

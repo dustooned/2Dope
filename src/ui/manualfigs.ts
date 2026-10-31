@@ -65,9 +65,9 @@ export const FIGURES: Record<string, () => string> = {
     svg(
       320,
       96,
-      `<g transform="translate(20 18) skewX(-20)"><rect x="20" y="0" width="90" height="34" rx="4" stroke="${M}"/><path d="M40 26c6-16 26-18 34-6 6 8 18 6 22-2" stroke="currentColor" stroke-width="2.4"/></g>${txt(150, 32, 'Line: your ink, on top', 'currentColor', 'start')}
-       <g transform="translate(20 52) skewX(-20)"><rect x="20" y="0" width="90" height="34" rx="4" stroke="${M}"/><path d="M42 24c6-12 24-14 32-4 6 6 16 4 20-2v10H42z" fill="${A}" fill-opacity="0.45" stroke="none"/></g>${txt(150, 72, 'Fill: colour, always under the ink', 'currentColor', 'start')}`,
-      'Every drawing has a Line part above a Fill part',
+      `<g transform="translate(20 18) skewX(-20)"><rect x="20" y="0" width="90" height="34" rx="4" stroke="${M}"/><path d="M40 26c6-16 26-18 34-6 6 8 18 6 22-2" stroke="currentColor" stroke-width="2.4"/></g>${txt(150, 32, 'Ink: your lines, on top', 'currentColor', 'start')}
+       <g transform="translate(20 52) skewX(-20)"><rect x="20" y="0" width="90" height="34" rx="4" stroke="${M}"/><path d="M42 24c6-12 24-14 32-4 6 6 16 4 20-2v10H42z" fill="${A}" fill-opacity="0.45" stroke="none"/></g>${txt(150, 72, 'Colour: always under the ink', 'currentColor', 'start')}`,
+      'Every drawing has an Ink part above a Colour part',
     ),
   // onion skin: previous and next drawings faintly around the current one
   onion: () =>

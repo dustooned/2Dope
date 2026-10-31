@@ -112,6 +112,8 @@ export interface DrawingsLayer extends LayerBase, Timed {
 export type PartName = 'line' | 'fill';
 /** Draw order, bottom first. */
 export const PART_NAMES: PartName[] = ['fill', 'line'];
+/** What the parts are called on screen ("Fill" is also the Bucket tool, so the colour part is Colour). */
+export const PART_LABEL: Record<PartName, string> = { line: 'Ink', fill: 'Colour' };
 
 export interface Part {
   visible: boolean;

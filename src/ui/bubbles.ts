@@ -10,6 +10,7 @@ import { isPaintingWorkspace, optionsRow, toolChoice, type OptionsState } from '
 import { isCommandHidden } from '../core/commandprefs';
 import { commandById, commandName, commandPrefs, commandsFor, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
 import { attachContextMenu } from './contextmenu';
+import { onionHold } from './onionpop';
 import { showCustomize } from './customize';
 import { WORKSPACE_TOOL_NAMES, type WorkspaceTool } from '../core/workspacelayout';
 
@@ -431,7 +432,7 @@ export class Bubbles {
     // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
     if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
     if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard or an animatic', 'export']];
-    if (ws === 'motion') return [['addlayer', 'New drawing layer', 'plus'], ['camera', 'Add a camera', 'camera'], ['group', 'Group the selected layers', 'layers'], ['split', 'Split at the playhead', 'scissors'], ['autokey', 'Auto-key: every change writes a keyframe', 'key'], ['look', 'Look through the camera', 'eye'], ['flipbook', 'Edit the selected drawing layer as a flipbook (Flip)', 'flipbook'], ['fx', 'Effects of the selected layer (line boil...)', 'fx']];
+    if (ws === 'motion') return [['addlayer', 'New drawing layer', 'plus'], ['camera', 'Add a camera', 'camera'], ['group', 'Group the selected layers', 'layers'], ['split', 'Split at the playhead', 'scissors'], ['autokey', 'Auto-key: every change writes a keyframe', 'key'], ['look', 'Look through the camera', 'viewfinder'], ['flipbook', 'Edit the selected drawing layer as a flipbook (Flip)', 'flipbook'], ['fx', 'Effects of the selected layer (line boil...)', 'fx']];
     return [];
   }
 
@@ -641,6 +642,7 @@ export class Bubbles {
       const visibleLabel = b.querySelector('.lbl');
       if (visibleLabel) visibleLabel.textContent = pause ? label : WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label;
       b.dataset.toolKey = k;
+      if (k === 'onion') onionHold(a, b);
       if (k === 'more') { b.setAttribute('aria-expanded', String(this.moreTools)); b.setAttribute('aria-controls', 'workspace-extra-tools'); }
       if (k === 'color') {
         b.style.setProperty('--chip', a.color);
@@ -717,8 +719,8 @@ export class Bubbles {
       add(...this.adjustControls());
     } else if (row === 'smudge') {
       add(
-        this.chip('Ink target', 'Smudge the LINE', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }),
-        this.chip('Colour target', 'Smudge the FILL', a.plane === 'fill', () => { a.setPlane('fill'); a.setSmudging(true); }),
+        this.chip('Ink target', 'Smudge the Ink', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }),
+        this.chip('Colour target', 'Smudge the Colour', a.plane === 'fill', () => { a.setPlane('fill'); a.setSmudging(true); }),
         ...this.cmd('smudge.softer'),
         el('span', { class: 'bub-hint' }, `Strength ${Math.round(a.smudgeStrength * 100)}%`),
         ...this.cmd('smudge.stronger'),
@@ -733,7 +735,7 @@ export class Bubbles {
         add(this.chip('Paint colour', `Automatic paint: ${a.color}. Choose paint colour.`, false, b => this.hooks.colorPanel(b), 'palette'));
       }
       add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b), 'brushes'));
-      if (a.studentUI.controls.planes) add(this.chip('Ink target', 'Paint on LINE: your ink', a.plane === 'line', () => a.setPlane('line')), this.chip('Colour target', 'Paint on FILL: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
+      if (a.studentUI.controls.planes) add(this.chip('Ink target', 'Paint on Ink: your lines', a.plane === 'line', () => a.setPlane('line')), this.chip('Colour target', 'Paint on Colour: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
       add(...this.cmd('paint.editpoints'), this.customizeChip('paint'));

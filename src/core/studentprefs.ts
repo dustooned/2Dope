@@ -7,11 +7,11 @@ export const FINGER_PAINT_KEY = '2dope.student.fingerPaint';
 export const PROFILE_LIMIT = 20;
 export const STUDENT_TOOLS = [
   ['brush', 'Brush'], ['eraser', 'Eraser'], ['pen', 'Vector'], ['smudge', 'Smudge'],
-  ['fill', 'Fill'], ['select', 'Selection'], ['adjust', 'Adjustments'], ['color', 'Colour'],
+  ['fill', 'Bucket fill'], ['select', 'Selection'], ['adjust', 'Adjustments'], ['color', 'Colour'],
   ['layers', 'Layers'], ['reference', 'Reference'], ['assets', 'Move assets'],
 ] as const;
 export const STUDENT_CONTROLS = [
-  ['inkPaint', 'Ink & Paint controls'], ['planes', 'Line / Fill controls'],
+  ['inkPaint', 'Ink & Paint controls'], ['planes', 'Ink / Colour target controls'],
   ['symmetry', 'Symmetry controls'], ['guides', 'Drawing guide controls'],
 ] as const;
 export type StudentTool = typeof STUDENT_TOOLS[number][0];

@@ -1,5 +1,6 @@
 import { makeCanvas } from '../brush/raster';
 import { activeEffects, effectsKey, effectTick, type LayerEffect } from '../core/effects';
+import { applyBlur } from '../core/adjust';
 import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
 
@@ -102,8 +103,10 @@ export function drawEffected(
 function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number): void {
   const tick = effectTick(e, frame);
   if (e.type === 'boil') displace(c, e, tick, 1);
+  else if (e.type === 'roughen') roughen(c, e, tick);
   else if (e.type === 'turbulence') displace(c, e, tick, 3);
   else if (e.type === 'grain') grain(c, e, tick);
+  else if (e.type === 'blur') blurLayer(c, e);
   else if (e.type === 'texture') texture(c, e);
   else if (e.type === 'dither') dither(c, e);
 }
@@ -229,6 +232,94 @@ function displace(c: HTMLCanvasElement, e: LayerEffect, tick: number, octaves: n
   }
   // outside the worked area stays as it was (it is empty)
   g.putImageData(outImg, x0, y0);
+}
+
+/**
+ * Roughen edges: the layer's alpha is pulled in and out by a seeded noise field, so the rim
+ * crumbles and wobbles like dry ink or a photocopy. Only alpha moves: colour never smears, thin ink
+ * keeps its colour, and nothing is added outside the artwork (After Effects works on alpha too).
+ */
+function roughen(c: HTMLCanvasElement, e: LayerEffect, tick: number): void {
+  const amount = e.amount;
+  if (amount <= 0) return;
+  const w = c.width, h = c.height;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
+  const img = g.getImageData(0, 0, w, h);
+  const px = new Uint32Array(img.data.buffer);
+  // the box that holds paint
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) {
+    const r = y * w;
+    for (let x = 0; x < w; x++) {
+      if (px[r + x]! >>> 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+  }
+  if (x1 < 0) return;
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  const alpha = new Float32Array(bw * bh);
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) alpha[y * bw + x] = (px[(y + y0) * w + x + x0]! >>> 24) / 255;
+  }
+  // a seeded noise field, two octaves, a new pattern every `hold` frames
+  const seed = (e.seed ^ Math.imul(tick + 1, 0x9e3779b1)) >>> 0;
+  const base = Math.max(4, e.size);
+  const octaves = 2;
+  let norm = 0;
+  for (let o = 0; o < octaves; o++) norm += 0.5 ** o;
+  const oct: { size: number; gw: number; gx: Float32Array; gy: Float32Array; amp: number }[] = [];
+  for (let o = 0; o < octaves; o++) {
+    const size = Math.max(2, base / 2 ** o);
+    const gw = Math.ceil(bw / size) + 2, gh = Math.ceil(bh / size) + 2;
+    const gx = new Float32Array(gw * gh), gy = new Float32Array(gw * gh);
+    for (let i = 0; i < gx.length; i++) { gx[i] = hash01(seed, i, 1 + 2 * o) * 2 - 1; gy[i] = hash01(seed, i, 2 + 2 * o) * 2 - 1; }
+    oct.push({ size, gw, gx, gy, amp: 0.5 ** o / norm });
+  }
+  const offset = (x: number, y: number): [number, number] => {
+    let dx = 0, dy = 0;
+    for (const q of oct) {
+      const fx = x / q.size, fy = y / q.size;
+      const i = Math.floor(fx), j = Math.floor(fy);
+      const tx = fx - i, ty = fy - j;
+      const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      const a = j * q.gw + i, b = a + q.gw;
+      dx += q.amp * ((q.gx[a]! * (1 - sx) + q.gx[a + 1]! * sx) * (1 - sy) + (q.gx[b]! * (1 - sx) + q.gx[b + 1]! * sx) * sy);
+      dy += q.amp * ((q.gy[a]! * (1 - sx) + q.gy[a + 1]! * sx) * (1 - sy) + (q.gy[b]! * (1 - sx) + q.gy[b + 1]! * sx) * sy);
+    }
+    return [dx, dy];
+  };
+  // the alpha where the noise points (bilinear; past the artwork there is nothing to keep)
+  const alphaAt = (x: number, y: number): number => {
+    if (x < 0 || y < 0 || x > bw - 1 || y > bh - 1) return 0;
+    const cx = Math.min(bw - 1, Math.max(0, x)), cy = Math.min(bh - 1, Math.max(0, y));
+    const i = Math.floor(cx), j = Math.floor(cy);
+    const tx = cx - i, ty = cy - j;
+    const i1 = Math.min(bw - 1, i + 1), j1 = Math.min(bh - 1, j + 1);
+    const top = alpha[j * bw + i]! * (1 - tx) + alpha[j * bw + i1]! * tx;
+    const bot = alpha[j1 * bw + i]! * (1 - tx) + alpha[j1 * bw + i1]! * tx;
+    return top * (1 - ty) + bot * ty;
+  };
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      const v = px[(y + y0) * w + x + x0]!;
+      const al = v >>> 24;
+      if (!al) continue;
+      const [dx, dy] = offset(x, y);
+      // outward pulls erase, inward pulls thicken: the rim breaks up but never grows new paint
+      const a = Math.round(al * alphaAt(x + dx * amount, y + dy * amount));
+      if (a !== al) px[(y + y0) * w + x + x0] = ((v & 0x00ffffff) | (a << 24)) >>> 0;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+
+/** Gaussian blur of the whole layer (premultiplied, so soft edges keep their colour). */
+function blurLayer(c: HTMLCanvasElement, e: LayerEffect): void {
+  const radius = e.amount;
+  if (radius < 1) return;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
+  const img = g.getImageData(0, 0, c.width, c.height);
+  applyBlur(img.data, img.data, c.width, c.height, radius);
+  g.putImageData(img, 0, 0);
 }
 
 /** Scale the alpha of every painted pixel by keep(x, y), 0..1. */

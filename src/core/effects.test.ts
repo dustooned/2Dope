@@ -49,6 +49,16 @@ describe('layer effects', () => {
     expect(effectsKey({ id: 'L', effects: [{ ...t.effects[0]!, style: 'dots' as const }] }, 0)).not.toBe(effectsKey(t, 0));
   });
 
+  it('has a roughen-edges effect and a gaussian blur, each with its own defaults', () => {
+    expect(newEffect('roughen', 'a', 3)).toMatchObject({ type: 'roughen', target: 'line', amount: 3, size: 34, hold: 2 });
+    const b = newEffect('blur', 'b', 3);
+    expect(b).toMatchObject({ type: 'blur', target: 'layer', amount: 6 });
+    expect(effectTick(b, 9)).toBe(0);
+    const fx = readEffects([{ type: 'roughen', amount: 99, size: 1 }, { type: 'blur', amount: 99 }])!;
+    expect(fx[0]).toMatchObject({ amount: 20, size: 8, target: 'line' });
+    expect(fx[1]).toMatchObject({ amount: 40, target: 'layer' });
+  });
+
   it('has a dither effect: still, with a palette, a pattern and a pixel size', () => {
     const d = newEffect('dither', 'a', 1);
     expect(d).toMatchObject({ type: 'dither', target: 'layer', palette: 'pico8', method: 'bayer4', gray: false, amount: 100, size: 2 });

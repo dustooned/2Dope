@@ -98,7 +98,7 @@ try {
   check('Configured Brushes and Layers use their existing UI callbacks', brushesOpened === 1 && layersOpened === 1 && !popup());
   app.setFillMode('lasso'); key(canvas, 'KeyQ', 'q'); click('Bucket fill');
   check('Bucket fill exits area selection and selects the normal Fill plane', app.tool === 'fill' && app.fillMode === 'tap' && app.plane === 'fill');
-  key(canvas, 'KeyQ', 'q'); click('Vector'); key(canvas, 'KeyQ', 'q'); click('Line / Fill');
+  key(canvas, 'KeyQ', 'q'); click('Vector'); key(canvas, 'KeyQ', 'q'); click('Ink / Colour target');
   check('Vector and Line/Fill keep existing plane/tool compatibility', app.plane === 'fill' && app.tool === 'brush');
   key(canvas, 'KeyQ', 'q'); click('Smudge'); check('Smudge uses the shared brush state', app.smudging && app.tool === 'brush'); app.setSmudging(false);
   pointer('pointerdown', 24, 84); key(canvas, 'KeyQ', 'q');

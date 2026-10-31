@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
 import { drawRailState } from './rails';
+import { PART_LABEL } from '../core/comp';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -142,13 +143,13 @@ export class LayersPopover {
       list.append(row);
       // the layer you draw on: its LINE and FILL, each shown or hidden, and which one brushes paint on
       if (l.kind === 'drawings' && !l.guide && open) {
-        const parts = el('div', { class: 'lp-parts', role: 'group', 'aria-label': `${l.name}: Line and Fill` });
+        const parts = el('div', { class: 'lp-parts', role: 'group', 'aria-label': `${l.name}: Ink and Colour` });
         for (const part of ['line', 'fill'] as const) {
           const vis = l.parts?.[part]?.visible !== false;
           const chip = el('div', { class: `lp-part${l.id === active && app.plane === part ? ' paint' : ''}` });
           const pe = el(
             'button',
-            { type: 'button', class: 'icon-only', 'aria-pressed': String(vis), title: `${vis ? 'Hide' : 'Show'} ${part === 'line' ? 'LINE (ink)' : 'FILL (colour)'}` },
+            { type: 'button', class: 'icon-only', 'aria-pressed': String(vis), title: `${vis ? 'Hide' : 'Show'} ${PART_LABEL[part]}` },
             vis ? 'Hide' : 'Show',
           );
           decorate(pe, 'eye');
@@ -160,8 +161,8 @@ export class LayersPopover {
           });
           const pick = el(
             'button',
-            { type: 'button', class: 'lp-part-name', 'aria-pressed': String(l.id === active && app.plane === part), title: `Paint on ${part === 'line' ? 'LINE: your ink' : 'FILL: colour under the ink'}` },
-            part === 'line' ? 'Line' : 'Fill',
+            { type: 'button', class: 'lp-part-name', 'aria-pressed': String(l.id === active && app.plane === part), title: `Paint on ${part === 'line' ? 'Ink: your lines' : 'Colour: colour under the ink'}` },
+            PART_LABEL[part],
           );
           pick.addEventListener('click', () => {
             if (app.strokeActive) return;
@@ -170,7 +171,7 @@ export class LayersPopover {
             this.sig = '';
             this.update();
           });
-          chip.append(pe, pick, el('span', { class: 'hint' }, part === 'line' ? 'ink, on top' : 'colour, under'));
+          chip.append(pe, pick, el('span', { class: 'hint' }, part === 'line' ? 'on top' : 'under the ink'));
           parts.append(chip);
         }
         list.append(parts);

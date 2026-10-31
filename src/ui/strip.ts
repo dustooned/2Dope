@@ -2,10 +2,12 @@ import type { ExtraRows } from './rails';
 import type { App } from '../app';
 import { ACTIVE_H, buildRails, foldKeys, drawRailState } from './rails';
 import { autoIcon, decorate, setLabel } from './icons';
-import { FPS_PRESETS, ROLES, type Drawing, type Role } from '../core/project';
-import { blockDropIndex, commonHold, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, totalFrames, type Exposure } from '../core/timeline';
+import { FPS_PRESETS, type Drawing, type Role } from '../core/project';
+import { PART_LABEL } from '../core/comp';
+import { blockDropIndex, dropIndex, indicesInFrames, locate, moveBlock, moveExposure, setHolds, startOf, totalFrames, type Exposure } from '../core/timeline';
 import { rulerStep } from '../core/timecode';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './contextmenu';
+import { onionHold } from './onionpop';
 import { frameMenu } from './framemenu';
 import { AssetClipDrag } from './assetclipdrag';
 import { AssetClipPreviews } from './assetclippreviews';
@@ -58,8 +60,6 @@ export class Strip {
   private readonly playhead: HTMLElement;
   private readonly marquee: HTMLElement;
   private readonly frameLabel: HTMLElement;
-  private readonly expLabel: HTMLElement;
-  private readonly expInput: HTMLInputElement;
   private readonly playBtn: HTMLButtonElement;
   private readonly range: PlaybackRangeControl;
   private rangeGesture?: PlaybackRangeGesture;
@@ -72,7 +72,6 @@ export class Strip {
   private readonly opacityRange: HTMLInputElement;
   private readonly zoomRange: HTMLInputElement;
   private readonly lockMark: HTMLElement;
-  private readonly roleBtns = new Map<Role, HTMLButtonElement>();
   private readonly thumbs = new Map<string, { rev: number; canvas: HTMLCanvasElement }>();
   private signature = '';
   /** Sounds as rows under the layers (the tracks sheet); set by main. */
@@ -118,17 +117,22 @@ export class Strip {
 
     const nav = el('div', { class: 'group' });
     const flipView = btn('Flipbook', 'Show the flipbook under the canvas instead (frames as pages, tracks, swipe to scrub)', () => app.openFlipbook?.(), 'strip-flipview');
+    // the transport, in the same order in every mode: Play · ◀ frame ▶ · Range
+    const firstBtn = btn('⏮', 'Previous drawing (↓)', () => app.prevDrawing());
+    const lastBtn = btn('⏭', 'Next drawing (↑)', () => app.nextDrawing());
     nav.append(
       flipView,
-      btn('⏮', 'Previous drawing (↓)', () => app.prevDrawing()),
-      btn('◀', 'Previous frame (←)', () => app.prevFrame()),
       this.playBtn,
-      this.range.button,
+      firstBtn,
+      btn('◀', 'Previous frame (←)', () => app.prevFrame()),
+      this.frameLabel,
       btn('▶', 'Next frame (→)', () => app.nextFrame()),
-      btn('⏭', 'Next drawing (↑)', () => app.nextDrawing()),
+      lastBtn,
+      this.range.button,
     );
 
-    const edit = el('div', { class: 'group' });
+    // frame actions; Timing hides them because the X-sheet has its own
+    const edit = el('div', { class: 'group strip-edit' });
     edit.append(
       btn('+ Frame', 'New drawing after this frame (N)', () => app.addFrame()),
       btn('Duplicate', 'Duplicate drawing (D)', () => void app.duplicateSelection()),
@@ -138,39 +142,10 @@ export class Strip {
       (this.flipBtn = btn('New page', 'New page: a fresh blank page after the last drawing. Draw on it to add the frame, tap again for the next.', () => app.flipToBlank())),
     );
 
-    // Exposure: how many frames each selected drawing is held (on ones, twos, threes...).
-    const exposure = el('div', { class: 'group', role: 'group', 'aria-label': 'Exposure' });
-    exposure.append(el('span', { class: 'name', title: 'How many frames each drawing stays on screen' }, '\u23f1 Hold'));
-    for (const n of [1, 2, 3, 4]) exposure.append(btn(`${n}`, `Show the selected drawings for ${n} frame${n > 1 ? 's' : ''} each (on ${['ones', 'twos', 'threes', 'fours'][n - 1]}; key ${n})`, () => app.setExposure(n)));
-    this.expInput = el('input', { type: 'number', min: '1', max: '99', step: '1', 'aria-label': 'Exposure in frames', title: 'Type a number of frames and press Enter', class: 'exp-input' });
-    this.expInput.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      e.stopPropagation();
-      const n = Math.round(Number(this.expInput.value));
-      if (n >= 1 && n <= 99) app.setExposure(n);
-      this.expInput.blur();
-    });
-    this.expInput.addEventListener('keyup', (e) => e.stopPropagation());
-    this.expLabel = el('span', { class: 'readout exp-readout', title: 'Exposure of the selected drawings (or the current one)' });
-    exposure.append(
-      this.expInput,
-      this.expLabel,
-      btn('−', 'One frame shorter (−)', () => app.changeHold(-1)),
-      btn('+', 'One frame longer (=)', () => app.changeHold(1)),
-    );
-
-    // Roles: what each drawing is for.
-    const roles = el('div', { class: 'group', role: 'group', 'aria-label': 'Drawing role' });
-    roles.append(el('span', { class: 'name' }, 'Mark'));
-    for (const r of ROLES) {
-      const b = btn(ROLE_LETTER[r], `${ROLE_NAME[r]}: mark the selected drawings as a ${r} (click again to clear)`, () => app.setRole(r), `role role-${r}`);
-      this.roleBtns.set(r, b);
-      roles.append(b);
-    }
-
     const onion = el('div', { class: 'group' });
     onion.append(el('span', { class: 'name' }, 'Onion'));
     this.onionBtn = btn('Onion', 'Onion skin on/off (O)', () => app.toggleOnion());
+    onionHold(app, this.onionBtn);
     const count = (label: string, title: string, get: () => number, set: (n: number) => void) => {
       const sel = el('select', { 'aria-label': title, title });
       for (let n = 0; n <= app.device.limits.onionMax; n++) sel.append(el('option', { value: String(n) }, String(n)));
@@ -228,7 +203,7 @@ export class Strip {
     // rails: fold every group and LINE / FILL open or closed (folding only hides rows)
     const fold = el('div', { class: 'group', role: 'group', 'aria-label': 'Layer rows' });
     fold.append(
-      btn('▾ All', 'Expand all: show every group and LINE / FILL row', () => {
+      btn('▾ All', 'Expand all: show every group and Ink / Colour row', () => {
         this.rails.setAll(foldKeys(app), true);
         this.signature = '';
         this.update();
@@ -248,20 +223,18 @@ export class Strip {
     // which layer the strip shows (and you draw on); tap for the layer list
     this.layerChip = btn('Layer', 'The layer you draw on. Tap for all layers.', () => app.openLayers?.(this.layerChip), 'layerchip');
     decorate(this.layerChip, 'layers');
-    rowA.append(this.layerChip, nav, this.frameLabel, this.fpsSel, edit, flip, zoom);
+    rowA.append(this.layerChip, nav, this.fpsSel, edit, flip, zoom);
     // On the simple screen the row keeps what you use while drawing (previous / next frame, new,
     // duplicate, delete, flipbook, onion) as icons; the rest waits behind More.
     const extra = (e: Element | null | undefined) => e?.setAttribute('data-extra', '');
     extra(this.layerChip);
-    extra(flipView.nextElementSibling);
-    extra(nav.lastElementChild);
-    extra(this.frameLabel);
+    extra(firstBtn);
+    extra(lastBtn);
     extra(this.fpsSel);
     for (const b of edit.querySelectorAll('button')) if (/^(Split|Select)/.test(b.textContent?.trim() ?? '')) extra(b);
     extra(this.lockBtn);
     // the flipbook is its own mode (Flip): its button waits under More here
     extra(this.flipBtn);
-    extra(this.playBtn); // Play lives on the tracks bar
     extra(zoom);
     const more = btn('More \u22ef', 'More timeline tools: layer, frame count, fps, split, select, scrub lock, zoom', () => {
       rowA.classList.toggle('show-extra');
@@ -275,7 +248,8 @@ export class Strip {
     // marks, onion settings, and quick on/off toggles for layers and their Line / Fill parts.
     this.timingBar = el('div', { class: 'timing-controls' });
     const rowB = el('div', { class: 'strip-row' });
-    rowB.append(exposure, roles, onion);
+    // holds and marks live in the Timing options bar above the canvas, so this keeps the onion settings
+    rowB.append(onion);
     this.togglesRow = el('div', { class: 'strip-row layer-toggles', role: 'group', 'aria-label': 'Show or hide layers' });
     this.timingBar.append(rowB, this.togglesRow);
 
@@ -567,13 +541,6 @@ export class Strip {
     this.frameLabel.textContent = app.blankPage ? `new · ${app.fmtDur(p.length)}` : app.workspace === 'animate' ? `${app.fmt(app.frame)} / ${app.fmtDur(app.compEnd)}` : `${app.fmt(app.lf)} / ${app.fmtDur(p.length)}`;
     this.drawEditLine();
     const l = locate(p.exposures, app.lf);
-    const targets = app.targets;
-    const common = commonHold(p.exposures, targets);
-    this.expLabel.textContent = targets.length === 0 ? '-' : common === null ? 'mixed' : `${common}`;
-    this.expLabel.title = `${targets.length} drawing${targets.length === 1 ? '' : 's'} ${app.selection.length ? 'selected' : '(current)'}`;
-    // the box itself shows the hold (type over it to change it)
-    if (document.activeElement !== this.expInput) { this.expInput.value = common === null ? '' : String(common); this.expInput.placeholder = common === null ? 'mixed' : ''; }
-    this.expLabel.hidden = true;
     setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.fpsSel.value = String(p.fps);
@@ -596,9 +563,6 @@ export class Strip {
     this.lockMark.style.display = app.lockFrame === null ? 'none' : 'block';
     this.lockMark.style.width = `${cell}px`;
     this.lockMark.style.transform = `translateX(${(app.lockFrame ?? 0) * cell}px)`;
-    // role buttons show the role shared by the targeted drawings
-    const roles = targets.map((i) => p.drawing(p.exposures[i]!.drawing).role);
-    for (const [r, b] of this.roleBtns) b.setAttribute('aria-pressed', String(roles.length > 0 && roles.every((x) => x === r)));
     for (const b of this.inner.querySelectorAll<HTMLElement>('.block')) {
       b.classList.toggle('current', l !== null && b.dataset.index === String(l.index));
     }
@@ -636,8 +600,8 @@ export class Strip {
         const on = cur.parts?.[part]?.visible !== false;
         const b = el(
           'button',
-          { type: 'button', 'aria-pressed': String(on), title: `${on ? 'Hide' : 'Show'} the ${part === 'line' ? 'LINE (ink)' : 'FILL (colour)'} of ${cur.name}` },
-          part === 'line' ? 'Line' : 'Fill',
+          { type: 'button', 'aria-pressed': String(on), title: `${on ? 'Hide' : 'Show'} the ${PART_LABEL[part]} of ${cur.name}` },
+          PART_LABEL[part],
         );
         b.addEventListener('click', () => app.togglePart(part));
         row.append(b);

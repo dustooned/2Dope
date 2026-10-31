@@ -2,7 +2,7 @@ import type { App } from '../app';
 import { isPaintingWorkspace } from '../core/workspace';
 import type { FlipMode } from './flipmode';
 import { defaultWorkspaceLayout } from '../core/workspacelayout';
-import { decorate } from './icons';
+import { decorate, setLabel } from './icons';
 
 type Fold = 'tools' | 'options' | 'brush' | 'editor';
 type Prefs = Record<Fold, boolean>;
@@ -53,6 +53,9 @@ export class PaintingWorkspaceUI {
     }
     const hint = document.createElement('span'); hint.className = 'painting-purpose';
     this.footer.append(hint);
+    // show / hide handles sit together, each with its own icon (the words show on wide screens)
+    const folds = document.createElement('span'); folds.className = 'painting-folds'; folds.setAttribute('role', 'group'); folds.setAttribute('aria-label', 'Show or hide');
+    this.footer.append(folds);
     for (const [key, label] of [['tools', 'Tools'], ['options', 'Options'], ['brush', 'Brush controls'], ['editor', 'Editor']] as [Fold, string][]) {
       const b = button(label, () => {
         if (!isPaintingWorkspace(app.workspace)) return;
@@ -63,13 +66,15 @@ export class PaintingWorkspaceUI {
       if (key === 'brush') decorate(b, 'brush');
       // not the toolbar's ••• (More tools): this one hides or shows the whole tool bar
       if (key === 'tools') decorate(b, 'panel');
-      b.setAttribute('aria-label', `Toggle ${label.toLowerCase()}`);
+      if (key === 'options') setLabel(b, 'Tool settings', 'adjust');
+      if (key === 'editor') decorate(b, 'flipbook');
+      b.setAttribute('aria-label', key === 'options' ? 'Toggle tool settings' : `Toggle ${label.toLowerCase()}`);
       this.handles.set(key, b);
-      this.footer.append(b);
+      folds.append(b);
     }
     const customize = button('Workspace', () => this.editWorkspace(customize)); customize.setAttribute('aria-label', 'Edit workspace'); decorate(customize, 'gear');
     this.customize = customize;
-    this.footer.append(customize, button('Fit canvas', () => app.fit()));
+    this.footer.append(customize);
     stage.after(this.footer);
     this.update();
   }
@@ -123,7 +128,5 @@ export class PaintingWorkspaceUI {
     const target = a.editingMask ? 'Mask' : a.project.isPlaceholder ? 'New paint layer' : `${a.project.layer.name} · ${a.plane === 'line' ? 'Ink' : 'Colour'}`;
     const hint = this.footer.querySelector<HTMLElement>('.painting-purpose')!;
     hint.textContent = `${tool} on ${target}`; hint.title = `${a.project.comp.name} · ${hint.textContent}`;
-    this.handles.get('options')!.textContent = 'Tool settings';
-    this.handles.get('options')!.setAttribute('aria-label', 'Toggle tool settings');
   }
 }

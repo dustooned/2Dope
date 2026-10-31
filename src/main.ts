@@ -92,7 +92,7 @@ const syncTools = () => {
   const selection = app.tool === 'fill' && app.fillMode === 'lasso';
   const path = app.editor.crumbs().map((c) => c.comp.name).join(' › ');
   const drawing = app.blankPage ? 'Blank page' : `Drawing ${app.drawing.num}`;
-  const target = app.editingMask ? 'Mask' : selection ? 'Area selection' : app.inkPaint.enabled && plane === 'line' && (app.tool === 'brush' || app.tool === 'pen') && !app.smudging ? 'Ink & Paint' : plane === 'fill' ? 'Fill' : 'Line';
+  const target = app.editingMask ? 'Mask' : selection ? 'Area selection' : app.inkPaint.enabled && plane === 'line' && (app.tool === 'brush' || app.tool === 'pen') && !app.smudging ? 'Ink & Paint' : plane === 'fill' ? 'Colour' : 'Ink';
   const warning = layer.locked ? ' · Locked' : !layer.visible || !app.partVisible(plane) ? ' · Hidden' : '';
   // the simple screen says only where you paint (the comp path only inside a group)
   const simple = !document.body.classList.contains('ui-full');
@@ -227,12 +227,12 @@ app.onColorChange = chain(app.onColorChange, () => {
   // the same message at most once every few seconds, so a gesture can never flood the screen
   let last = '';
   let lastAt = 0;
-  app.onNotice = (m) => {
+  app.onNotice = (m, action) => {
     const now = Date.now();
     if (m === last && now - lastAt < 4000) return;
     last = m;
     lastAt = now;
-    files?.toast(m, [], 4000);
+    files?.toast(m, action ? [action] : [], action ? 6000 : 4000);
   };
 }
 const layersPop = new LayersPopover(app);
@@ -347,6 +347,8 @@ motion.audio = { sig: () => audioTracks.railSig(), rows: (c, end) => audioTracks
   const placeNav = () => {
     const simple = !document.body.classList.contains('ui-full');
     const want = simple && sheet.active ? sheet.bar : strip.stripBar;
+    // the frame buttons bring their own Play and frame count, so the bar's pair steps aside
+    sheet.bar.classList.toggle('has-nav', want === sheet.bar);
     if (strip.navRow.parentElement === want) return;
     if (want === sheet.bar) sheet.bar.insertBefore(strip.navRow, sheet.bar.querySelector('.spacer'));
     else strip.stripBar.prepend(strip.navRow);

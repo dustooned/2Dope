@@ -88,7 +88,7 @@ try {
   const stageH = stage.getBoundingClientRect().height, measured = parseFloat(stage.style.getPropertyValue('--flip-h'));
   check('Canvas fitting tracks the measured Flipbook height', Math.abs(measured - (flip.row.offsetHeight + 16)) < 1 && measured < stageH);
   check('Tools, tool settings and Brush recovery buttons remain directly reachable together', ['Toggle tools', 'Toggle tool settings', 'Toggle brush controls'].every(name => hit(button(name))));
-  click('Toggle tools'); click('Toggle tool settings'); click('Toggle brush controls'); click('Fit canvas'); await settle();
+  click('Toggle tools'); click('Toggle tool settings'); click('Toggle brush controls'); app.fit(); await settle(); // View → Fit canvas in the app (this fixture has no View button)
   const page = app.view.docToScreen(64, 64), cr = canvas.getBoundingClientRect();
   check('Folding controls leaves a reachable drawing canvas above the short-screen Flipbook', document.elementFromPoint(cr.x + page.x, cr.y + page.y) === canvas && page.y < flip.row.getBoundingClientRect().top - cr.top);
   click('Done editing asset'); await settle();

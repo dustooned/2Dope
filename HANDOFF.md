@@ -1,6 +1,198 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-10-30) — read this first
+## Current state (2026-10-31) — read this first
+
+### Roughen edges and Gaussian blur, plus the mograph/draw research behind them (2026-10-31, uncommitted)
+
+User asked to continue the reference REA, mine EffectCraft, the After Effects plug-in collection and
+the Procreate IPA for effects/motion settings worth integrating, and named two gaps: roughen edges
+and Gaussian blur.
+
+**Built (source):**
+
+- `src/core/effects.ts`: two new effect types. `roughen` (label Roughen edges; target Ink; Roughness
+  0–24 default 5; Size 8–160 default 34; Hold 1–8 default 2; seeded) and `blur` (label Gaussian
+  blur; whole layer; radius 0–40 default 6; `sizeRange [0,0]`). `effectTick` treats blur as static.
+- `src/view/effects.ts`: `roughen()` is **alpha-only** (soften alpha by Roughness/2 with two box
+  passes, push the rim with 3-octave seeded value noise, multiply alpha; colour untouched, so thin
+  ink does not grey out and shape interiors stay solid). `blurLayer()` reuses `applyBlur()` (three
+  separable box passes, premultiplied). New helper `boxPlane()`.
+- `src/ui/effectspanel.ts`: the Advanced Size row is skipped when the effect has no second knob.
+- `src/core/effects.test.ts`: defaults, clamping and target for both.
+- `src/ui/manualtext.ts`: Effects wording now lists both, and a 2026-10-31 UPDATES entry.
+
+**Research written** (no code copied; parameters/behaviour only):
+
+- `docs/research/motion-mograph-integration-2026-10-31.md` — synthesis and ranked plan (Tier 1:
+  Easy Ease In/Out and the 12 named ease curves from EffectCraft's shipped panel; Tier 2:
+  directional blur, glow, drop shadow, motion blur 180°/−90°/16 samples, keyframe loop/stagger/
+  bounce; Tier 3: Procreate onion tint, playback modes, QuickShape delay, StreamLine).
+- `docs/research/effectcraft-0.19-effects/README.md` (+ `extract_effects.py`) — 306 effects / 3,014
+  params catalog; Roughen Edges and Gaussian Blur parameter tables; motion-blur and easing defaults.
+  Checkout is workspace 0.6.0, not 0.19.
+- `docs/research/ae-mograph-settings/README.md` (+ `_tools/ffx_extract.py`) — 264 `.ffx` presets are
+  **RIFX binary, not XML**; 262 parsed for real names/values/ranges. Bounded negatives: no preset
+  wraps Roughen Edges/Gaussian Blur; AE is effectively not installed (no `AfterFX.exe`).
+- `docs/research/procreate-5.4.9/DRAW-ANIMATE-CONTINUATION-2026-10-31.md` (+ `inspect_draw_metadata.py`,
+  `strings_scan.py`) — brush parameter surface, stabilisation pipeline, guides/QuickShape, Animation
+  Assist (onion tint colours, playback modes).
+
+Checks (actual): `npm test` **72 files / 574 passed**; `npm run build` passed (existing chunk-size
+warning only). **Not checked:** the new effects in a browser/pixel fixture, iPad cost of a 40 px
+blur, roughen on thin vs thick ink. Next sensible step is a fixture plus a visual check on
+`127.0.0.1:5217`, then the easing library in the report's Tier 1.
+
+### Onion skin settings on the Onion button (2026-10-31, uncommitted)
+
+User asked for easy onion settings: tap Onion toggles as before, press-and-hold opens settings.
+
+- New `src/ui/onionpop.ts`: one floating settings card (`.onion-pop`, `role=dialog`) placed above
+  or below the held button and kept on screen: Show onion skin, Before / After (− n +, capped by
+  `device.limits.onionMax`), Strength (opacity), Colours (tint), Keys only, While playing. It edits
+  `App.onion` through `onionChanged()` (device setting, saved, no History). Escape or a tap outside
+  closes it. `onionHold(app, button)` adds the hold (`HOLD_MS`, then `swallowNextClick` so the hold
+  does not also toggle) and right-click; the button's own click still toggles.
+- Attached to every Onion button: Flipbook header (`flipmode.ts`), timeline transport
+  (`strip.ts`), Quick bar (`quick.ts`) and the pinnable Onion tool bubble (`bubbles.ts`). The
+  X-sheet's onion settings row is unchanged. CSS at the end of `style.css`.
+- Manual (Draw flipbook tips) and an UPDATES entry.
+
+Checks (actual): `npx vitest run` 574 passed; `npm run build` passed; browser fixtures **44/44**. Dev
+app (Draw, Flipbook): synthetic 600 ms hold on the Flipbook Onion opened the card with onion still
+On (no toggle); + raised Before 2→3 and − set it back; Escape closed it; two taps toggled
+On→Off→On; right-click opened it above the button (screenshot). No new fixture was added for it.
+Not checked: real touch/Pencil hold, phone width placement, Quick bar and bubble buttons by hand
+(same function attached).
+
+### UI cleanup iteration 4: mode names and the Draw/Animate bottom bar (2026-10-31, uncommitted)
+
+Backlog items 5 and 7.
+
+- Mode names: the ≥1000px rule that shows mode labels in the floating mode bubbles now applies
+  in every mode, not only `body.painting-workspace` (`style.css`); the `.bub-name` readout hides
+  there as before. Full top bar (`index.html` `#ws`): buttons say **Story** and **Timing** (were
+  Board / Time) with the same titles as the bubbles, and below 1400px the active mode keeps its
+  word (`.topbar .ws button[aria-pressed='true'] .lbl`, ≥701px) while the others stay icons.
+- Bottom bar (`paintingworkspace.ts`, `canvasview.ts`, `style.css`): Tools / Tool settings / Brush
+  controls / Editor handles sit in one `.painting-folds` group, each with an icon (Tool settings =
+  `adjust`, Editor = `flipbook`, set once with `setLabel` instead of rewriting `textContent` every
+  update); labels hide below 1000px. **Fit canvas** moved from the bar into View (after the switches; F
+  unchanged). Aria-labels kept (`Toggle tools`, `Toggle tool settings`, …), so recovery fixtures
+  still find them. `flipbooksource` fixture now opens View before Fit canvas.
+- Manual (painting layout lines) and an UPDATES entry.
+
+Checks (actual): `npx vitest run` 574 passed (the extra test is from the concurrent effects work
+in `core/effects.test.ts`, not this change); `npm run build` passed; browser fixtures **42/44** first (canvasview focus order, flipbooksource had no View button), fixed (Fit after the switches; fixture calls `app.fit()`), then **44/44**.
+Dev app at 768×1024 Full: Draw bottom bar = Canvas, Flipbook, status, [4 icon handles], View,
+Workspace gear in one row; View → Fit canvas fits and closes the popover; Timing top bar shows
+"Timing" on the active button, other modes as icons. Not checked: phone widths, ≥1000px Motion
+with the floating mode bubbles (Simple level) for overlap with its tool row, touch.
+
+Concurrent work noticed (not this session's, left untouched): `src/core/effects.ts` /
+`effects.test.ts`, `src/ui/effectspanel.ts`, `src/view/effects.ts` and new `docs/research/*` files.
+This session changed only `TARGET_NAMES` in `core/effects.ts` (iteration 2).
+
+### UI cleanup iteration 3: Timing one-home controls and one transport order (2026-10-31, uncommitted)
+
+Backlog items 2 and 3 (next-phase Quick cleanup 1 and 3; 2026-10-22 review finding 3).
+
+- Timing homes: Hold 1–4 / − / + and Key / Breakdown / In-between stay only in the options bar
+  (`bubbles.ts` time row). The X-sheet's timing bar (`strip.timingBar`) lost its Hold and Mark groups
+  (and the typed-hold box; the X-sheet Hold cell still types holds) and keeps onion settings and the
+  layer switches. The strip's frame-action group (`.strip-edit`: + Frame, Duplicate, Delete, Split,
+  Select, New page) is hidden in Timing (`body.ws-time`), since the X-sheet has its own actions.
+  Timing's default toolbar (`core/workspacelayout.ts`) is now just Layers; Play/Onion/frame tools stay
+  in the Workspace catalog for pinning. Saved per-device layouts keep whatever they had.
+- Transport order everywhere: **Play · ◀ frame count ▶ · Range** (Flipbook header already matched).
+  `strip.ts` nav now holds Play and the frame readout (no longer hidden on Simple); Motion's bar
+  (`motion.ts`) was reordered. On Simple the tracks bar hides its own Play/readout when the strip's
+  nav row is docked in it (`has-nav` class from `main.ts`, CSS in `style.css`).
+- Manual (Timing section) and an UPDATES entry.
+
+Checks (actual): `npx vitest run` 573 passed; `npm run build` passed. Full browser run on 5217:
+**43/44**; `commandrow` failed 2 checks (Select-row Copy still hidden after reload / Customize list)
+in the full run only, then passed **44/44 checks alone** right after. The two earlier full runs today
+passed it; cause not identified (this change does not touch the Select command row), like the
+earlier `brushcontrols` full-run-only miss.
+In the dev app (test origin 5217, Simple): Timing toolbar = Layers + More tools; transport = + Media,
+Flipbook, Play, ◀, 1 / 1f, ▶, Range, Onion, More; X-sheet = onion settings, layer/Ink/Colour
+switches, frame actions; Hold/Mark only in the options bar. Motion read Play · ◀ 1/1f ▶ · Range.
+Not checked: Full-level Draw strip order visually, phone widths, touch.
+
+### UI cleanup iteration 2: Ink / Colour names and tidier Draw Layers (2026-10-31, uncommitted)
+
+The user chose **Ink / Colour** for the two drawing parts (backlog item 1), then asked for a
+cleaner Draw Layers panel.
+
+- Names (labels only; `Plane`/`PartName` ids, schema and storage keys unchanged): new
+  `PART_LABEL` in `core/comp.ts` drives Layers cards (`layercards.ts`), the layer popover
+  (`layerspop.ts`), rails (`rails.ts`, uppercase INK / COLOUR), Timing chips (`strip.ts`), Motion part
+  rows/menus (`motion.ts`), undo labels (`compedit.ts`), the hidden-part notice and canvas menu
+  (`app.ts`), the paint-target cue (`main.ts`), Brushes header, Quick bar ("Draw on: Ink"), QuickMenu
+  ("Ink / Colour target"), student-profile control names, Effects targets, `index.html` options-bar
+  buttons/titles, Blender note and manual figure. The bucket is **Bucket fill** everywhere
+  (`index.html`, canvas menu, student prefs). Export passes read "Ink (lines)" / "Colour (fills)";
+  their folders/suffixes (`lines`, `fills`) are unchanged.
+- Draw Layers (`layercards.ts`, `style.css`): options show Opacity, Blend, Ink/Colour rows, the
+  switches and four everyday tiles (Rename, Duplicate, Lock, Delete). **More actions** (device-only
+  `2dope.layers.more`, try/catch) reveals labelled sections This drawing (Select, Fill, Clear, Flip ↔/↕)
+  and Layer (Effects, Mask/Delete mask, Art layer, Group, Merge); groups get Ungroup there. The swipe
+  hint shows only with 2+ layers; the active card's tag reads "on Ink" / "on Colour".
+- Fixtures updated for the new labels: `paintingplanes`, `quickmenu`, `brushreturn`, `studentprofiles`.
+- Manual (Layers, Draw tips, shortcuts, Motion) and two UPDATES entries.
+
+Checks (actual): `npx vitest run` 573 passed; `npm run build` passed. Rename alone: browser
+fixtures **44/44** on 127.0.0.1:5217; after the Layers change, **44/44** again. In the dev app:
+Layers shows Ink/Colour, the options bar and toolbar show Ink/Colour/Bucket fill, the trimmed
+options and More actions (opens, remembered) were checked at ~800px width. Not checked: phone width
+of More actions, touch. Noticed, not fixed: the footer status read "Brush on Drawing · Ink" while
+the active Layers card was "clip" after a reload (possibly stale status text; not investigated).
+
+### UI cleanup pass: ranked backlog and iteration 1 (2026-10-31, uncommitted)
+
+The user asked for the UI cleanup and the evaluation features still missing, worked in small
+iterations. Survey of `docs/next-phase.md` (Quick cleanup, Last fixes, Story), the 2026-10-22
+review, the mode-context direction and the running app (test origin 127.0.0.1:5217). Ranked list
+the user approved, with status:
+
+- **Iteration 1 (done):** A "can't draw" on hidden layers; 4 Motion camera-view icon; 6 Undo/Redo
+  contrast (no change needed, see below).
+- **1. One name for the drawing parts (next; needs the user's pick of names).** The Draw options
+  row says Ink target / Colour target; Layers cards, layer popover, Motion part rows, X-sheet
+  `clip: Line Fill` and the Brushes header (`brushlib.ts:493`) say Line / Fill, and Fill also
+  names the Bucket tool (next-phase Quick cleanup 2).
+- **2. Timing duplicates (Quick cleanup 1, review finding 3, still open):** Hold 1–4 in the top bar
+  and the X-sheet; onion and frame actions in X-sheet and the bottom transport.
+- **3. Transport order differs per mode (Quick cleanup 3):** Timing puts Play first, Motion ◀ first.
+- **5. Mode bar labels vanish outside Draw** at the same width (icons only in Timing/Motion).
+- **7. Draw bottom bar has 9 items** (Canvas, Flipbook, status, Tools, Tool settings, Brush
+  controls, View, Workspace, Fit canvas).
+- Missing evaluation features, larger: **B** Story Grid · Strip · Present views (next-phase Story
+  priority); **C** script to panels, scenes, shot/camera stickers; **D** canvas-drawn rail with
+  lift-and-drag and the 1,000-frame test; **E** time-lapse replay, sample projects, first-run screen.
+
+Iteration 1 changes:
+
+- `app.ts`: `hiddenTarget()` runs at the start of `beginStroke` (after the locked check). A stroke,
+  fill, smudge or erase on a hidden layer, or on its hidden target part (Line for Vector, else the
+  current plane), no longer paints invisible marks: a notice names what is hidden with **Show it** /
+  **Show Line|Fill**, which uses the existing `editor.setFlag` / `setPart` (one Undo step). Mask
+  editing, guide editing and placeholder layers are exempt. `onNotice` takes an optional action;
+  `main.ts` passes it to `files.toast` (6 s with a button, 4 s without). Fixture `onNotice`
+  overrides still type-check (they ignore the action).
+- `ui/icons.ts` new `viewfinder` icon; Motion's Camera view bubble (`ui/bubbles.ts`) uses it instead
+  of the show/hide eye.
+- Undo/Redo "dim" (Quick cleanup 8): measured in the app. They are full contrast and eyedropper-size
+  when enabled; 0.4 opacity only while disabled (nothing to undo). Left unchanged.
+- Manual (Layers and Motion lists) and an UPDATES entry.
+
+Checks (actual): `npx vitest run` 72 files / 573 passed; `npm run build` passed (existing chunk
+warning); `npm run test:browser -- --base http://127.0.0.1:5217` **44/44 fixtures passed**. In the
+dev app (test origin 5217, existing test project): hid the layer, drew → notice "“clip” is hidden,
+so nothing would show." with Show it, which restored the layer; hid Line, drew → "The Line part of
+“clip” is hidden…" with Show Line, which restored it; Motion showed the viewfinder bubble; no
+console errors. Not checked: touch/Pencil, a new fixture for the notice (none added), Animate
+Flipbook drawing past the end on a hidden track. No commit or push.
 
 ### Animatic / storyboard export and Story subtitle lines (2026-10-30, uncommitted)
 

@@ -1,9 +1,14 @@
 import type { App } from '../app';
-import { BLEND_MODES, partOf, type BlendMode, type DrawingsLayer, type Layer, type PartName } from '../core/comp';
+import { BLEND_MODES, partOf, PART_LABEL, type BlendMode, type DrawingsLayer, type Layer, type PartName } from '../core/comp';
 import type { PropKey } from '../compedit';
 import { drawingAt } from '../core/timeline';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
+
+/** Whether a layer's extra actions (This drawing, Layer) are shown. Device-only, like the fold state. */
+const MORE_KEY = '2dope.layers.more';
+function loadMoreOpen(): boolean { try { return localStorage.getItem(MORE_KEY) === '1'; } catch { return false; } }
+function saveMoreOpen(open: boolean): void { try { localStorage.setItem(MORE_KEY, open ? '1' : '0'); } catch { /* private mode: stays as it is this session */ } }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -298,7 +303,7 @@ export class LayerCards {
 
     const sel = this.selection();
     if (sel.length > 1) this.root.append(this.batchBar(sel));
-    else this.root.append(el('p', { class: 'hint lc-swipe-hint' }, 'Swipe a layer right to select more (then group or merge); left for quick actions; hold to drag.'));
+    else if (layers.length > 1) this.root.append(el('p', { class: 'hint lc-swipe-hint' }, 'Swipe right to select more, left for quick actions; hold to drag.'));
     const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': paint && app.project.comp.asset ? `Layers of ${app.project.comp.name}` : 'Layers', 'aria-multiselectable': 'true' });
     for (const l of layers) {
       const on = l.id === active;
@@ -330,7 +335,7 @@ export class LayerCards {
       const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
       if (op < 100) tags.push(`${op}%`);
       if (l.locked) tags.push('locked');
-      if (on && l.kind === 'drawings') tags.push(app.plane === 'fill' ? 'painting Fill' : 'painting Line');
+      if (on && l.kind === 'drawings') tags.push(`on ${PART_LABEL[app.plane]}`);
       if (tags.length) info.append(el('span', { class: 'lc-tags' }, tags.join(' · ')));
       const eye = el('button', { type: 'button', class: 'lc-eye', 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'aria-label': l.visible ? `Hide ${l.name}` : `Show ${l.name}` }, l.visible ? 'Hide' : 'Show');
       decorate(eye, 'eye');
@@ -617,17 +622,17 @@ export class LayerCards {
       for (const pt of ['line', 'fill'] as const) {
         const q = partOf(l, pt);
         const row = el('div', { class: `lc-part${app.plane === pt ? ' paint' : ''}` });
-        const name = el('button', { type: 'button', class: 'lc-part-name', 'aria-pressed': String(app.plane === pt), title: pt === 'line' ? 'Paint on LINE: your strokes, on top' : 'Paint on FILL: colour under the strokes' }, pt === 'line' ? 'Line' : 'Fill');
+        const name = el('button', { type: 'button', class: 'lc-part-name', 'aria-pressed': String(app.plane === pt), title: pt === 'line' ? 'Paint on Ink: your strokes, on top' : 'Paint on Colour: colour under the strokes' }, PART_LABEL[pt]);
         name.addEventListener('click', () => { app.setPlane(pt); this.sig = ''; this.update(); });
-        const visibility = `${q.visible ? 'Hide' : 'Show'} ${pt === 'line' ? 'Line' : 'Fill'}`;
+        const visibility = `${q.visible ? 'Hide' : 'Show'} ${PART_LABEL[pt]}`;
         const eye = el('button', { type: 'button', class: 'lc-part-eye', 'aria-pressed': String(q.visible), title: visibility, 'aria-label': visibility }, q.visible ? 'Hide' : 'Show');
         decorate(eye, 'eye');
         eye.addEventListener('click', () => { app.editor.setPart(l.id, pt, { visible: !q.visible }); this.sig = ''; this.update(); });
-        const r = el('input', { type: 'range', min: '0', max: '100', step: '1', 'aria-label': `${pt === 'line' ? 'Line' : 'Fill'} opacity` });
+        const r = el('input', { type: 'range', min: '0', max: '100', step: '1', 'aria-label': `${PART_LABEL[pt]} opacity` });
         r.value = String(Math.round(Number(app.editor.valueNow(l, `${pt}.opacity` as PropKey))));
         const out = el('output', {}, `${r.value}%`);
         r.addEventListener('input', () => { out.textContent = `${r.value}%`; });
-        r.addEventListener('change', () => { app.editor.setValue(l.id, `${pt}.opacity` as PropKey, Number(r.value), `${pt === 'line' ? 'Line' : 'Fill'} opacity`); this.sig = ''; this.update(); });
+        r.addEventListener('change', () => { app.editor.setValue(l.id, `${pt}.opacity` as PropKey, Number(r.value), `${PART_LABEL[pt]} opacity`); this.sig = ''; this.update(); });
         row.append(name, eye, r, out);
         box.append(row);
       }
@@ -646,40 +651,51 @@ export class LayerCards {
       sw('Reference', 'Fill and ColorDrop on any layer use this layer\u2019s lines as their edges (one per shot)', l.reference === true, () => app.setReference(l.id, !l.reference));
       if (l.mask) sw('Edit mask', 'Brushes paint on the mask: paint hides, the eraser reveals (all frames of this layer)', app.editingMask, () => app.setMaskEditing(!app.editingMask));
     }
-    // actions: icon tiles
+    // actions: the everyday ones always; drawing and combining actions behind More (remembered here)
     const grid = el('div', { class: 'lc-grid' });
-    const tile = (label: string, icon: string, title: string, fn: () => unknown, danger = false, close = false) => {
+    const more = el('div', { class: 'lc-more-actions' });
+    const section = (title: string) => { const g = el('div', { class: 'lc-grid', role: 'group', 'aria-label': title }); more.append(el('div', { class: 'lc-section' }, title), g); return g; };
+    const tile = (to: HTMLElement, label: string, icon: string, title: string, fn: () => unknown, danger = false, close = false) => {
       const b = el('button', { type: 'button', class: `lc-tile${danger ? ' danger' : ''}`, title }, label);
       decorate(b, icon);
       b.addEventListener('click', () => void (async () => { await fn(); if (close) this.menuFor = null; this.sig = ''; this.update(); })());
-      grid.append(b);
+      to.append(b);
     };
-    if (drawn) {
-      tile('Fill', 'fill', 'Fill this drawing with the current colour (on FILL, under the ink)', () => app.fillDrawing());
-      tile('Clear', 'eraser', 'Clear this drawing: Line, Fill and vector lines (you can undo)', () => app.clearFrame());
-      tile('Flip \u2194', 'fliph', 'Mirror this drawing left to right', () => app.flipDrawing('h'));
-      tile('Flip \u2195', 'flipv', 'Mirror this drawing top to bottom', () => app.flipDrawing('v'));
-      if (l.mask) tile('Delete mask', 'deselect', 'Remove the mask: everything shows again (you can undo)', () => app.deleteMask());
-      else tile('Mask', 'invert', 'Add a mask: paint to hide parts of this layer without erasing them', () => app.addMask());
-      tile('Effects', 'fx', 'Line boil and other effects (they show in Motion, Share and exports)', () => { this.close(); app.openEffects?.(l.id); });
-      tile('Select', 'lasso', 'Select what this drawing has, ready to move, scale or fill inside', () => { this.close(); app.selectContents(); });
-      tile('Group', 'layers', 'Group this layer with the one below (a folder; tap it to fold open)', () => this.groupWithBelow(l), false, true);
-      tile('Merge', 'collapseall', 'Merge down: flatten this layer into the one below (same frames and placement)', () => app.mergeDown(l.id), false, true);
-      tile('Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => app.addCelLayer(), false, true);
-    }
-    if (l.kind === 'comp') tile('Ungroup', 'expandall', 'Put the group\u2019s layers back in place of the group', () => { app.editor.ungroup(l.id); this.openGroups.delete(l.id); }, false, true);
-    tile('Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', () => app.duplicateLayer(l.id), false, true);
-    tile('Rename', 'draw', 'Rename this layer', async () => {
+    tile(grid, 'Rename', 'draw', 'Rename this layer', async () => {
       const n = await askText('Layer name', l.name, 'Rename');
       if (n !== null) app.editor.rename(l.id, n);
     });
-    tile(l.locked ? 'Unlock' : 'Lock', 'lock', l.locked ? 'Allow drawing on it again' : 'Stop drawing on it', () => app.editor.setFlag(l.id, 'locked', !l.locked));
-    tile('Delete', 'trash', 'Delete this layer (you can undo)', async () => {
-      if (!(await confirmBox(`Delete \u201c${l.name}\u201d?`, 'You can undo this.', 'Delete', true))) return;
+    tile(grid, 'Duplicate', 'copy', 'A copy of this layer above it, with its own drawings', () => app.duplicateLayer(l.id), false, true);
+    tile(grid, l.locked ? 'Unlock' : 'Lock', 'lock', l.locked ? 'Allow drawing on it again' : 'Stop drawing on it', () => app.editor.setFlag(l.id, 'locked', !l.locked));
+    tile(grid, 'Delete', 'trash', 'Delete this layer (you can undo)', async () => {
+      if (!(await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true))) return;
       app.editor.deleteLayers([l.id]);
       this.menuFor = null;
     }, true);
+    if (drawn) {
+      const drawing = section('This drawing');
+      tile(drawing, 'Select', 'lasso', 'Select what this drawing has, ready to move, scale or fill inside', () => { this.close(); app.selectContents(); });
+      tile(drawing, 'Fill', 'fill', 'Fill this drawing with the current colour (on Colour, under the ink)', () => app.fillDrawing());
+      tile(drawing, 'Clear', 'eraser', 'Clear this drawing: Ink, Colour and vector lines (you can undo)', () => app.clearFrame());
+      tile(drawing, 'Flip ↔', 'fliph', 'Mirror this drawing left to right', () => app.flipDrawing('h'));
+      tile(drawing, 'Flip ↕', 'flipv', 'Mirror this drawing top to bottom', () => app.flipDrawing('v'));
+      const layer = section('Layer');
+      tile(layer, 'Effects', 'fx', 'Line boil and other effects (they show in Motion, Share and exports)', () => { this.close(); app.openEffects?.(l.id); });
+      if (l.mask) tile(layer, 'Delete mask', 'deselect', 'Remove the mask: everything shows again (you can undo)', () => app.deleteMask());
+      else tile(layer, 'Mask', 'invert', 'Add a mask: paint to hide parts of this layer without erasing them', () => app.addMask());
+      tile(layer, 'Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => app.addCelLayer(), false, true);
+      tile(layer, 'Group', 'layers', 'Group this layer with the one below (a folder; tap it to fold open)', () => this.groupWithBelow(l), false, true);
+      tile(layer, 'Merge', 'collapseall', 'Merge down: flatten this layer into the one below (same frames and placement)', () => app.mergeDown(l.id), false, true);
+    }
+    if (l.kind === 'comp') tile(section('Group'), 'Ungroup', 'expandall', 'Put the group’s layers back in place of the group', () => { app.editor.ungroup(l.id); this.openGroups.delete(l.id); }, false, true);
     box.append(grid);
+    if (more.childElementCount) {
+      const open = loadMoreOpen();
+      const toggle = el('button', { type: 'button', class: 'lc-more-toggle', 'aria-expanded': String(open) }, open ? 'Fewer actions' : 'More actions');
+      more.hidden = !open;
+      toggle.addEventListener('click', () => { saveMoreOpen(!open); this.sig = ''; this.update(); });
+      box.append(toggle, more);
+    }
     return box;
   }
 }

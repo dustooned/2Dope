@@ -22,7 +22,7 @@ import {
   type Layer,
   type Mat,
 } from './core/comp';
-import { defaultPart, localMatrix, nestedFrame, partOf, type PartGrad, type PartName } from './core/comp';
+import { defaultPart, localMatrix, nestedFrame, partOf, PART_LABEL, type PartGrad, type PartName } from './core/comp';
 import { rippleExposures, shiftLater } from './core/ripple';
 import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
 import { totalFrames } from './core/timeline';
@@ -781,7 +781,7 @@ export class CompEditor {
 
   /** Show / hide or recolour one part (Line or Fill) of a drawings layer. One undo step. */
   setPart(id: string, part: PartName, patch: { visible?: boolean; tint?: string | null; grad?: PartGrad | null }): void {
-    const what = patch.visible !== undefined ? `${patch.visible ? 'Show' : 'Hide'} ${part}s` : patch.grad !== undefined ? (patch.grad ? `${part === 'line' ? 'Line' : 'Fill'} gradient` : `Flat ${part} colour`) : patch.tint ? `Recolour ${part}s` : `Original ${part} colours`;
+    const what = patch.visible !== undefined ? `${patch.visible ? 'Show' : 'Hide'} ${PART_LABEL[part].toLowerCase()}` : patch.grad !== undefined ? (patch.grad ? `${PART_LABEL[part]} gradient` : `Flat ${PART_LABEL[part].toLowerCase()}`) : patch.tint ? `Recolour ${PART_LABEL[part].toLowerCase()}` : `Original ${PART_LABEL[part].toLowerCase()}`;
     this.edit(what, (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (l?.kind === 'drawings') l.parts = { ...l.parts, [part]: { ...partOf(l, part), ...patch } };
@@ -790,7 +790,7 @@ export class CompEditor {
 
   /** Back to the defaults for one part (visible, full opacity, own colours, no offset). */
   resetPart(id: string, part: PartName): void {
-    this.edit(`Reset ${part}s`, (c) => {
+    this.edit(`Reset ${PART_LABEL[part].toLowerCase()}`, (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (l?.kind !== 'drawings' || !l.parts?.[part]) return;
       const { [part]: _gone, ...rest } = l.parts;
