@@ -74,6 +74,45 @@ export function easingSides(e: Easing): { out: Side; in: Side } {
   }
 }
 
+/**
+ * Named curves (EffectCraft's Ease Presets panel, After Effects' keyframe speed/influence):
+ * `[influence %, speed]` for the leaving side of the first key and the arriving side of the
+ * next. Speed is a multiple of the segment's average speed, which is exactly `Side.slope`.
+ */
+export type Curve = 'linear' | 'smooth' | 'softInOut' | 'inOut' | 'strongInOut' | 'accelerate' | 'accelerateStrong' | 'decelerate' | 'decelerateStrong' | 'expoInOut' | 'expoAccelerate' | 'expoDecelerate';
+export const CURVES: { id: Curve; label: string; out: [number, number]; in: [number, number] }[] = [
+  { id: 'linear', label: 'Linear', out: [33.33, 1], in: [33.33, 1] },
+  { id: 'smooth', label: 'Smooth', out: [40, 0.25], in: [40, 0.25] },
+  { id: 'softInOut', label: 'Ease in-out soft', out: [25, 0], in: [25, 0] },
+  { id: 'inOut', label: 'Ease in-out', out: [50, 0], in: [50, 0] },
+  { id: 'strongInOut', label: 'Ease in-out strong', out: [75, 0], in: [75, 0] },
+  { id: 'accelerate', label: 'Accelerate', out: [50, 0], in: [20, 1.5] },
+  { id: 'accelerateStrong', label: 'Accelerate strong', out: [80, 0], in: [15, 2.5] },
+  { id: 'decelerate', label: 'Decelerate', out: [20, 1.5], in: [50, 0] },
+  { id: 'decelerateStrong', label: 'Decelerate strong', out: [15, 2.5], in: [80, 0] },
+  { id: 'expoInOut', label: 'Expo in-out', out: [88, 0], in: [88, 0] },
+  { id: 'expoAccelerate', label: 'Expo accelerate', out: [75, 0], in: [12, 7] },
+  { id: 'expoDecelerate', label: 'Expo decelerate', out: [12, 7], in: [75, 0] },
+];
+
+/** The sides a segment gets for a named curve (Linear is the plain linear sides). */
+export function curveSides(id: Curve): { out: Side; in: Side } {
+  const c = CURVES.find((x) => x.id === id) ?? CURVES[0]!;
+  if (c.id === 'linear') return { out: LINEAR, in: LINEAR };
+  const side = ([inf, speed]: [number, number]): Side => ({ interp: 'bezier', slope: speed, influence: inf / 100 });
+  return { out: side(c.out), in: side(c.in) };
+}
+
+/** Which named curve a segment matches, or null. */
+export function curveOf(out: Side, inn: Side): Curve | null {
+  const near = (a: Side, b: Side) => a.interp === b.interp && (a.interp !== 'bezier' || (Math.abs(a.slope - b.slope) < 1e-3 && Math.abs(a.influence - b.influence) < 1e-3));
+  for (const c of CURVES) {
+    const s = curveSides(c.id);
+    if (near(out, s.out) && near(inn, s.in)) return c.id;
+  }
+  return null;
+}
+
 /** Which preset a segment matches, or null for a custom curve. */
 export function easingOf(out: Side, inn: Side): Easing | null {
   if (out.interp === 'hold') return 'hold';
@@ -220,6 +259,26 @@ export function setSegmentEasing<T extends Value>(p: Prop<T>, f: number, e: Easi
   keys[i] = { ...keys[i]!, out: s.out };
   keys[i + 1] = { ...keys[i + 1]!, in: s.in };
   return { ...p, keys };
+}
+
+/**
+ * Set one side of the segment that starts at the key on frame `f`, keeping the other side:
+ * `'out'` is its start (leaving the key; eased = starts slow), `'in'` its end (arriving at the
+ * next key; eased = slows down). After Effects' Easy Ease Out / Easy Ease In on those keys.
+ */
+export function setSegmentSide<T extends Value>(p: Prop<T>, f: number, side: 'in' | 'out', s: Side): Prop<T> {
+  const i = p.keys.findIndex((k) => k.f === f);
+  if (i < 0 || i >= p.keys.length - 1) return p;
+  const keys = p.keys.map((k) => ({ ...k }));
+  if (side === 'out') keys[i] = { ...keys[i]!, out: { ...s } };
+  else keys[i + 1] = { ...keys[i + 1]!, in: { ...s } };
+  return { ...p, keys };
+}
+
+/** Set the segment that starts at the key on frame `f` to a named curve. */
+export function setSegmentCurve<T extends Value>(p: Prop<T>, f: number, id: Curve): Prop<T> {
+  const s = curveSides(id);
+  return setSegmentSide(setSegmentSide(p, f, 'out', s.out), f, 'in', s.in);
 }
 
 /** Dreams' "Set all easings": every segment of the property. */

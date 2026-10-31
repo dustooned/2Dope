@@ -1,4 +1,4 @@
-import { activeEffects } from '../core/effects';
+import { activeEffects, effectsPad } from '../core/effects';
 import { drawEffected, releaseEffectScratch } from './effects';
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
@@ -332,6 +332,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
 function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, m: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number, editingDrawing?: Drawing): void {
   let source: HTMLCanvasElement | null = null;
   let direct: Drawing | null = null;
+  let pad = 0;
   if (l.kind === 'drawings') {
     const id = drawingOf(l, frame);
     const d = editingDrawing ?? (id ? project.drawings.get(id) : undefined);
@@ -342,10 +343,12 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     const masked = !!mask && !mask.parked;
     const lf = layerFrame(l, frame);
     // effects (line boil...): the layer is painted part by part and processed first
-    const fx = activeEffects(l).length ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, d, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}:${l.parts ? JSON.stringify(l.parts) : ''}`) : null;
+    const fx = activeEffects(l).length ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, d, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}:${l.parts ? JSON.stringify(l.parts) : ''}`, c.fps) : null;
     if (alpha >= 1 && l.blend === 'normal' && !masked && !fx) direct = d;
     else {
-      source = scratchFor(`d${depth}`, project.width, project.height);
+      // effects that reach past the art (shadow, glow) come back on a grown page
+      pad = fx ? effectsPad(l) : 0;
+      source = scratchFor(`d${depth}`, project.width + 2 * pad, project.height + 2 * pad);
       const sg = source.getContext('2d')!;
       if (fx) {
         sg.setTransform(1, 0, 0, 1, 0, 0);
@@ -353,7 +356,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
         sg.drawImage(fx, 0, 0);
       } else paintPlanes(sg, d, planes, opt, { layer: l, lf, depth });
       if (masked) {
-        sg.setTransform(1, 0, 0, 1, 0, 0);
+        sg.setTransform(1, 0, 0, 1, pad, pad);
         sg.globalAlpha = 1;
         sg.globalCompositeOperation = 'destination-out';
         const maskSrc = opt.source?.(mask);
@@ -375,7 +378,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
   g.globalAlpha = alpha;
   g.globalCompositeOperation = BLEND[l.blend];
   if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
-  else if (source) g.drawImage(source, 0, 0);
+  else if (source) g.drawImage(source, -pad, -pad);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
 }

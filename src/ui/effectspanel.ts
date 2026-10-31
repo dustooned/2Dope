@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
 import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
-import { canMerge, duplicateEffect, EFFECT_TYPES, effectDef, effectPreview, mergeDown, moveEffect, newEffect, plainName, resetEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
+import { canMerge, duplicateEffect, EFFECT_TYPES, effectDef, effectPreview, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { showContextMenu, type CtxItem } from './contextmenu';
 import { decorate } from './icons';
@@ -265,6 +265,44 @@ export class EffectsPanel {
     }
     slider(def.amountLabel, 'amount', def.amountRange, def.amountUnit === '%' ? 1 : 0.1, def.amountUnit);
     if (adv && def.sizeRange[1] > 0) slider(def.sizeLabel, 'size', def.sizeRange, 1, def.sizeUnit);
+    // the kind's further settings: each change is one undo step (sliders preview while dragged)
+    const setParam = (key: string, v: number | string | boolean, label: string) => this.patch(i, { params: { ...e.params, [key]: v } }, `${name} ${label.toLowerCase()}`);
+    for (const x of adv ? def.extras ?? [] : []) {
+      const row = el('label', { class: 'fx-row' });
+      row.append(el('span', {}, x.label));
+      if (x.kind === 'range') {
+        const v = param<number>(e, x.key);
+        const input = el('input', { type: 'range', min: String(x.min), max: String(x.max), step: String(x.step), 'aria-label': x.label });
+        input.value = String(v);
+        const out = el('output', {}, `${v}${x.unit}`);
+        input.addEventListener('input', () => {
+          out.textContent = `${input.value}${x.unit}`;
+          effectPreview.set(this.layerId, list.map((f, k) => (k === i ? { ...f, params: { ...f.params, [x.key]: Number(input.value) } } : f)));
+          this.app.requestRender();
+        });
+        input.addEventListener('change', () => setParam(x.key, Number(input.value), x.label));
+        row.append(input, out);
+      } else if (x.kind === 'choice') {
+        const seg = el('div', { class: 'fx-seg small', role: 'group', 'aria-label': x.label });
+        for (const o of x.options) {
+          const b = el('button', { type: 'button', 'aria-pressed': String(param<string>(e, x.key) === o.id) }, o.label);
+          b.addEventListener('click', () => { if (param<string>(e, x.key) !== o.id) setParam(x.key, o.id, `${x.label} ${o.label}`); });
+          seg.append(b);
+        }
+        row.append(seg);
+      } else if (x.kind === 'color') {
+        const input = el('input', { type: 'color', 'aria-label': x.label });
+        input.value = param<string>(e, x.key);
+        input.addEventListener('change', () => setParam(x.key, input.value, x.label));
+        row.append(input);
+      } else {
+        const on = param<boolean>(e, x.key);
+        const sw = el('button', { type: 'button', class: `fx-switch${on ? ' on' : ''}`, role: 'switch', 'aria-checked': String(on), 'aria-label': x.label });
+        sw.addEventListener('click', () => setParam(x.key, !on, x.label));
+        row.append(sw);
+      }
+      body.append(row);
+    }
     if (adv && def.animated) {
       // how often the pattern changes: on ones, twos, threes, fours
       const hold = el('div', { class: 'fx-row' });
@@ -278,7 +316,7 @@ export class EffectsPanel {
       hold.append(holds);
       body.append(hold);
     }
-    if (adv && !(e.type === 'texture' && (e.style ?? 'paper') !== 'paper') && e.type !== 'dither') {
+    if (adv && ((def.seeded ?? def.animated) || (e.type === 'texture' && (e.style ?? 'paper') === 'paper'))) {
       const reseed = el('button', { type: 'button', class: 'fx-reseed', title: 'A different random pattern' }, 'New pattern');
       reseed.addEventListener('click', () => this.patch(i, { seed: newSeed() }, `${name} new pattern`));
       body.append(reseed);

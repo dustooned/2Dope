@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blenderHandles, easingOf, easingSides, moveKey, progress, removeKey, reverseKeys, setAllEasings, setKey, setSegmentEasing, shiftKeys, spacingTicks, staticProp, valueAt, type Prop } from './anim';
+import { blenderHandles, CURVES, curveOf, EASED, easingOf, easingSides, moveKey, progress, removeKey, reverseKeys, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, spacingTicks, staticProp, valueAt, type Prop } from './anim';
 
 const two = (e: Parameters<typeof easingSides>[0] = 'linear'): Prop<number> => setKey(setKey(staticProp(0), 0, 0, e), 10, 100, e);
 
@@ -108,5 +108,44 @@ describe('keyframes', () => {
     const e = setSegmentEasing(two(), 0, 'easeInOut');
     const [r2] = blenderHandles({ f: 0, v: 0, out: e.keys[0]!.out }, { f: 10, v: 100, in: e.keys[1]!.in });
     expect(r2[1]).toBe(0); // flat handle = eased to a stop
+  });
+});
+
+describe('per-side easing and named curves', () => {
+  it('eases one side of a segment and keeps the other', () => {
+    const p = setSegmentEasing(two(), 0, 'easeOut');
+    const q = setSegmentSide(p, 0, 'out', EASED);
+    expect(easingOf(q.keys[0]!.out, q.keys[1]!.in)).toBe('easeInOut');
+    const r = setSegmentSide(two(), 0, 'in', EASED);
+    expect(easingOf(r.keys[0]!.out, r.keys[1]!.in)).toBe('easeOut');
+    expect(setSegmentSide(two(), 10, 'out', EASED)).toEqual(two()); // no segment after the last key
+  });
+
+  it('every named curve round-trips through its sides, stays monotonic and maps the table', () => {
+    expect(CURVES).toHaveLength(12);
+    for (const c of CURVES) {
+      const p = setSegmentCurve(two(), 0, c.id);
+      expect(curveOf(p.keys[0]!.out, p.keys[1]!.in)).toBe(c.id);
+      let last = -Infinity;
+      for (let x = 0; x <= 1.0001; x += 0.05) {
+        const y = progress(p.keys[0]!.out, p.keys[1]!.in, Math.min(1, x));
+        expect(y).toBeGreaterThanOrEqual(last - 1e-9);
+        last = y;
+      }
+      if (c.id !== 'linear') {
+        expect(p.keys[0]!.out).toEqual({ interp: 'bezier', slope: c.out[1], influence: c.out[0] / 100 });
+        expect(p.keys[1]!.in).toEqual({ interp: 'bezier', slope: c.in[1], influence: c.in[0] / 100 });
+      }
+    }
+    expect(valueAt(setSegmentCurve(two(), 0, 'accelerate'), 2)).toBeLessThan(20);
+    expect(valueAt(setSegmentCurve(two(), 0, 'decelerate'), 8)).toBeGreaterThan(80);
+  });
+
+  it('a segment goes back to one of the five easings after a curve', () => {
+    const p = setSegmentEasing(setSegmentCurve(two(), 0, 'expoInOut'), 0, 'easeIn');
+    expect(easingOf(p.keys[0]!.out, p.keys[1]!.in)).toBe('easeIn');
+    expect(curveOf(p.keys[0]!.out, p.keys[1]!.in)).toBeNull();
+    const l = setSegmentCurve(two('easeInOut'), 0, 'linear');
+    expect(easingOf(l.keys[0]!.out, l.keys[1]!.in)).toBe('linear');
   });
 });

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Drawing, Project } from '../core/project';
 import { drawingsLayer, newComp } from '../core/comp';
 import { exportGif } from './exportgif';
+import { GIF_DEFAULTS } from './gifpalette';
 
 const rig = vi.hoisted(() => ({ frames: [] as number[], released: 0, canvas: { width: 0, height: 0 }, fail: false }));
 vi.mock('../brush/raster', () => ({ makeCanvas: (width: number, height: number) => {
@@ -48,5 +49,18 @@ describe('GIF render lifecycle', () => {
     const h = hold(where === 'pin'); rig.fail = where === 'render';
     await expect(exportGif(project(), false, new AbortController().signal, h, () => {})).rejects.toThrow(/failed/);
     expect(h.unpin).toHaveBeenCalledTimes(1); expect(rig.canvas.width).toBe(0); expect(rig.released).toBe(1);
+  });
+});
+
+describe('GIF options in the export', () => {
+  it('better colours reads every picture twice (palette pass, then the GIF) and still releases residency', async () => {
+    const h = hold(), progress = vi.fn();
+    const blob = await exportGif(project(), false, new AbortController().signal, h, progress, false, { ...GIF_DEFAULTS, colors: 16, better: true, loop: 'once' });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    expect(rig.frames).toEqual([0, 1, 3, 0, 1, 3]);
+    expect(progress).toHaveBeenLastCalledWith(6, 6);
+    expect(new TextDecoder().decode(bytes.slice(0, 1000))).not.toContain('NETSCAPE');
+    expect(h.pin).toHaveBeenCalledTimes(h.unpin.mock.calls.length);
+    expect(rig.released).toBe(1);
   });
 });

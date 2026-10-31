@@ -1,6 +1,7 @@
 import { syncCelGroups } from './core/cellink';
 import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
-import { easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentEasing, valueAt, type Easing, type Prop, type Vec2 } from './core/anim';
+import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
+import { loopKeys, smoothKeys, staggerOffsets, wiggle, type LoopMode, type StaggerOrder, type WiggleOptions } from './core/keytools';
 import {
   apply,
   cameraLayer,
@@ -1056,6 +1057,145 @@ export class CompEditor {
       const l = c.layers.find((x) => x.id === id);
       if (l) this.setProp(l, n, setAllEasings(this.getProp(l, n), e));
     });
+  }
+
+  /** Ease only one side of the selected keys' segments (the other side stays as it is): one undo step. */
+  setEaseSide(side: 'in' | 'out', refs = this.selectedKeys()): void {
+    if (!refs.length) return;
+    this.edit(side === 'out' ? 'Ease in only' : 'Ease out only', (c) => {
+      for (const r of refs) {
+        const l = c.layers.find((x) => x.id === r.layer);
+        if (l) this.setProp(l, r.prop, setSegmentSide(this.getProp(l, r.prop), r.f, side, EASED));
+      }
+    });
+    this.onChange();
+  }
+
+  /** Give the selected keys' segments a named curve: one undo step. */
+  setCurve(id: Curve, refs = this.selectedKeys()): void {
+    if (!refs.length) return;
+    this.edit(`Curve: ${CURVES.find((c) => c.id === id)?.label ?? id}`, (c) => {
+      for (const r of refs) {
+        const l = c.layers.find((x) => x.id === r.layer);
+        if (l) this.setProp(l, r.prop, setSegmentCurve(this.getProp(l, r.prop), r.f, id));
+      }
+    });
+    this.onChange();
+  }
+
+  /**
+   * The selected keys as ranges, one per property row: from the first to the last selected key
+   * (a single selected key stands for the row's whole key range).
+   */
+  private keyRanges(refs = this.selectedKeys()): { layer: string; prop: PropKey; from: number; to: number }[] {
+    const rows = new Map<string, { layer: string; prop: PropKey; fs: number[] }>();
+    for (const r of refs) {
+      const id = `${r.layer}|${r.prop}`;
+      const row = rows.get(id) ?? { layer: r.layer, prop: r.prop, fs: [] };
+      row.fs.push(r.f);
+      rows.set(id, row);
+    }
+    const out: { layer: string; prop: PropKey; from: number; to: number }[] = [];
+    for (const row of rows.values()) {
+      const l = this.layer(row.layer);
+      if (!l) continue;
+      const keys = this.getProp(l, row.prop).keys;
+      const fs = row.fs.length > 1 ? row.fs : keys.map((k) => k.f);
+      if (fs.length > 1) out.push({ layer: row.layer, prop: row.prop, from: Math.min(...fs), to: Math.max(...fs) });
+    }
+    return out;
+  }
+
+  /** Apply a key tool to every selected range: one undo step. */
+  private keyTool(label: string, fn: (p: Prop, from: number, to: number) => Prop): boolean {
+    const ranges = this.keyRanges();
+    if (!ranges.length) { this.app.onNotice?.('Select two keys (or one key of an animated property) first.'); return false; }
+    const done = this.edit(label, (c) => {
+      for (const r of ranges) {
+        const l = c.layers.find((x) => x.id === r.layer);
+        if (l) this.setProp(l, r.prop, fn(this.getProp(l, r.prop), r.from, r.to));
+      }
+    });
+    this.onChange();
+    return done;
+  }
+
+  /** Wiggle between the selected keys (EffectCraft's Wiggler). */
+  wiggleKeys(o: WiggleOptions): boolean {
+    return this.keyTool('Wiggle', (p, a, b) => wiggle(p, a, b, this.comp.fps, o));
+  }
+
+  /** Remove keys that the motion does not need (within `tolerance`). */
+  smoothSelectedKeys(tolerance: number): boolean {
+    return this.keyTool('Smooth keys', (p, a, b) => smoothKeys(p, a, b, tolerance));
+  }
+
+  /** Loop the selected keys `repeats` more times. */
+  loopSelectedKeys(mode: LoopMode, repeats: number): boolean {
+    return this.keyTool('Loop keys', (p, a, b) => loopKeys(p, a, b, mode, repeats));
+  }
+
+  /** Offset the selected layers' keys by `step` frames each, in layer order, reverse or random. */
+  staggerLayers(step: number, order: StaggerOrder, seed: number): boolean {
+    const ids = this.comp.layers.map((l) => l.id).filter((id) => this.selected.includes(id));
+    if (ids.length < 2) { this.app.onNotice?.('Select two or more layers to stagger.'); return false; }
+    const offsets = staggerOffsets(ids.length, step, order, seed);
+    const done = this.edit('Stagger', (c) => {
+      ids.forEach((id, i) => {
+        const l = c.layers.find((x) => x.id === id);
+        if (!l || !offsets[i]) return;
+        for (const n of this.rowsOf(l)) this.setProp(l, n, shiftKeys(this.getProp(l, n), offsets[i]!));
+      });
+    });
+    this.keys.clear();
+    this.onChange();
+    return done;
+  }
+
+  /** The easing copied with Copy easing (both sides of a segment). */
+  easeClipboard: { out: Side; in: Side } | null = null;
+
+  /** Copy the easing of the first selected key's segment. */
+  copyEasing(): boolean {
+    for (const r of this.selectedKeys()) {
+      const l = this.layer(r.layer);
+      if (!l) continue;
+      const keys = this.getProp(l, r.prop).keys, i = keys.findIndex((k) => k.f === r.f);
+      if (keys[i] && keys[i + 1]) { this.easeClipboard = { out: { ...keys[i]!.out }, in: { ...keys[i + 1]!.in } }; this.onChange(); return true; }
+    }
+    this.app.onNotice?.('Select a key that has a key after it, then copy its easing.');
+    return false;
+  }
+
+  /** Give the selected keys' segments the copied easing: one undo step. */
+  pasteEasing(): boolean {
+    const s = this.easeClipboard, refs = this.selectedKeys();
+    if (!s || !refs.length) return false;
+    const done = this.edit('Paste easing', (c) => {
+      for (const r of refs) {
+        const l = c.layers.find((x) => x.id === r.layer);
+        if (l) this.setProp(l, r.prop, setSegmentSide(setSegmentSide(this.getProp(l, r.prop), r.f, 'out', s.out), r.f, 'in', s.in));
+      }
+    });
+    this.onChange();
+    return done;
+  }
+
+  /** The named curve shared by the selected keys' segments, or null when mixed / none / custom. */
+  curveOfSelection(): Curve | null {
+    let common: Curve | null | undefined;
+    for (const r of this.selectedKeys()) {
+      const l = this.layer(r.layer);
+      if (!l) continue;
+      const p = this.getProp(l, r.prop);
+      const i = p.keys.findIndex((k) => k.f === r.f);
+      const a = p.keys[i], b = p.keys[i + 1];
+      if (!a || !b) continue;
+      const e = curveOf(a.out, b.in);
+      if (common === undefined) common = e;
+      else if (common !== e) return null;
+    }
+    return common ?? null;
   }
 
   /** The easing shared by the selected keys' segments, or null when mixed / none. */

@@ -2,13 +2,16 @@
  * This trades compression for predictable memory and avoids another runtime dependency.
  * Format: https://www.w3.org/Graphics/GIF/spec-gif89a.txt
  */
-export function gifHeader(width: number, height: number): Uint8Array {
+export function gifHeader(width: number, height: number, palette?: [number, number, number][], loop: 'forever' | 'once' | number = 'forever'): Uint8Array {
   if (![width, height].every(n => Number.isInteger(n) && n > 0 && n <= 480)) throw new Error('Invalid GIF size.');
-  const bytes = new Uint8Array(13 + 768 + 19);
+  // no looping block = play once; otherwise the count of repeats after the first play (0 = for ever)
+  const repeats = loop === 'forever' ? 0 : loop === 'once' ? -1 : Math.max(1, Math.round(loop) - 1);
+  const bytes = new Uint8Array(13 + 768 + (repeats < 0 ? 0 : 19));
   bytes.set(new TextEncoder().encode('GIF89a'));
   bytes.set([width & 255, width >> 8, height & 255, height >> 8, 0xf7, 0, 0], 6);
-  for (let i = 0; i < 256; i++) bytes.set([Math.round((i >> 5) * 255 / 7), Math.round(((i >> 2) & 7) * 255 / 7), (i & 3) * 85], 13 + i * 3);
-  bytes.set([0x21, 0xff, 11, ...new TextEncoder().encode('NETSCAPE2.0'), 3, 1, 0, 0, 0], 781);
+  // the global table always has 256 entries (unused ones black), so codes stay 8-bit
+  for (let i = 0; i < 256; i++) bytes.set(palette ? (palette[i] ?? [0, 0, 0]) : [Math.round((i >> 5) * 255 / 7), Math.round(((i >> 2) & 7) * 255 / 7), (i & 3) * 85], 13 + i * 3);
+  if (repeats >= 0) bytes.set([0x21, 0xff, 11, ...new TextEncoder().encode('NETSCAPE2.0'), 3, 1, repeats & 255, repeats >> 8, 0], 781);
   return bytes;
 }
 
@@ -19,7 +22,9 @@ export const GIF_CLEAR = 0b11100011;
  * One frame. With `transparent`, pixels under half opacity become see-through (GIF has only on/off
  * transparency) and each frame clears the last, so moving art leaves no trail.
  */
-export function gifFrame(rgba: Uint8ClampedArray, width: number, height: number, delay: number, transparent = false): Uint8Array {
+export function gifFrame(rgba: Uint8ClampedArray, width: number, height: number, delay: number, transparent = false,
+  /** Palette indices made by `mapToPalette` (a chosen palette); without them, the fixed RGB332 one. */
+  indices?: Uint8Array, clear = GIF_CLEAR): Uint8Array {
   if (![width, height].every(n => Number.isInteger(n) && n > 0 && n <= 480) || rgba.length !== width * height * 4 || !Number.isInteger(delay) || delay < 1 || delay > 65535) throw new Error('Invalid GIF frame.');
   const pixels = width * height;
   // A clear before each 250 literals prevents the decoder dictionary reaching 512 entries.
@@ -34,6 +39,7 @@ export function gifFrame(rgba: Uint8ClampedArray, width: number, height: number,
   };
   for (let i = 0; i < pixels; i++) {
     if (i % 250 === 0) write(256);
+    if (indices) { write(indices[i]!); continue; }
     const p = i * 4;
     let index = (Math.round(rgba[p]! * 7 / 255) << 5) | (Math.round(rgba[p + 1]! * 7 / 255) << 2) | Math.round(rgba[p + 2]! * 3 / 255);
     if (transparent) {
@@ -45,7 +51,7 @@ export function gifFrame(rgba: Uint8ClampedArray, width: number, height: number,
   write(257);
   const out = new Uint8Array(19 + packed.length + Math.ceil(packed.length / 255) + 1);
   // Graphic control: disposal 1 (keep) when opaque; disposal 2 (clear) plus the see-through index when transparent
-  out.set([0x21, 0xf9, 4, transparent ? 0b1001 : 4, delay & 255, delay >> 8, transparent ? GIF_CLEAR : 0, 0, 0x2c, 0, 0, 0, 0, width & 255, width >> 8, height & 255, height >> 8, 0, 8]);
+  out.set([0x21, 0xf9, 4, transparent ? 0b1001 : 4, delay & 255, delay >> 8, transparent ? clear : 0, 0, 0x2c, 0, 0, 0, 0, width & 255, width >> 8, height & 255, height >> 8, 0, 8]);
   let offset = 19;
   for (let i = 0; i < packed.length; i += 255) {
     const chunk = packed.subarray(i, i + 255);

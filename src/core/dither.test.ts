@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ditherPixels, paletteColors, PALETTES, type DitherMethod } from './dither';
+import { DITHER_METHODS, ditherPixels, ORDERED, orderedAt, paletteColors, PALETTES, type DitherMethod } from './dither';
 
 function ramp(w: number, h: number, v: number, a = 255): Uint8ClampedArray {
   const px = new Uint8ClampedArray(w * h * 4);
@@ -56,5 +56,37 @@ describe('dither', () => {
     ditherPixels(c, 1, 1, { palette: 'bw', method: 'none', gray: true });
     expect(c[0]).toBe(0); // red is dark as grey
     expect(c[1]).toBe(0);
+  });
+});
+
+describe('ordered matrices and per-channel thresholds', () => {
+  it('every matrix has its size and each threshold once', () => {
+    for (const [id, o] of Object.entries(ORDERED)) {
+      expect(o!.m.length, id).toBe(o!.w * o!.h);
+      expect([...o!.m].sort((a, b) => a - b), id).toEqual(Array.from({ length: o!.w * o!.h }, (_, i) => i));
+      expect(DITHER_METHODS.some((m) => m.id === id), id).toBe(true);
+    }
+    expect([ORDERED.grid5x3!.w, ORDERED.grid5x3!.h, ORDERED.grid4x12!.w, ORDERED.grid4x12!.h]).toEqual([5, 3, 4, 12]);
+  });
+
+  it('tiles in both directions (negative too) and stays inside -0.5..0.5', () => {
+    const o = ORDERED.grid12x4!;
+    for (let y = -8; y < 8; y++) for (let x = -24; x < 24; x++) {
+      const v = orderedAt(o, x, y);
+      expect(v).toBe(orderedAt(o, x + 12, y + 4));
+      expect(Math.abs(v)).toBeLessThan(0.5);
+    }
+  });
+
+  it('zero thresholds change nothing; a red threshold pushes red', () => {
+    const make = () => { const p = new Uint8ClampedArray(4 * 16); for (let i = 0; i < 16; i++) p.set([120, 120, 120, 255], i * 4); return p; };
+    const a = make(), b = make(), c = make();
+    ditherPixels(a, 4, 4, { palette: 'rgb2', method: 'bayer3' });
+    ditherPixels(b, 4, 4, { palette: 'rgb2', method: 'bayer3', bias: [0, 0, 0] });
+    ditherPixels(c, 4, 4, { palette: 'rgb2', method: 'bayer3', bias: [128, 0, 0] });
+    expect(b).toEqual(a);
+    let reds = 0;
+    for (let i = 0; i < 16; i++) if (c[i * 4] === 255) reds++;
+    expect(reds).toBeGreaterThan([...a].filter((_, i) => i % 4 === 0 && a[i] === 255).length);
   });
 });

@@ -10,7 +10,7 @@
 
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 
-export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv';
 export type EffectTarget = 'line' | 'fill' | 'layer';
 export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
 
@@ -35,7 +35,16 @@ export interface LayerEffect {
   palette?: PaletteId;
   method?: DitherMethod;
   gray?: boolean;
+  /** The kind's further settings (direction, colour, centre...), by `EffectDef.extras` key; missing = default. */
+  params?: Record<string, number | string | boolean>;
 }
+
+/** A further setting of an effect kind, stored in `LayerEffect.params`. */
+export type ExtraDef =
+  | { key: string; label: string; kind: 'range'; min: number; max: number; step: number; unit: string; def: number }
+  | { key: string; label: string; kind: 'choice'; options: { id: string; label: string }[]; def: string }
+  | { key: string; label: string; kind: 'color'; def: string }
+  | { key: string; label: string; kind: 'toggle'; def: boolean };
 
 export const TEXTURE_STYLES: { id: TextureStyle; label: string }[] = [
   { id: 'paper', label: 'Paper' },
@@ -60,6 +69,12 @@ export interface EffectDef {
   sizeUnit: string;
   /** Whether the pattern can change over time (shows the Changes control). */
   animated: boolean;
+  /** The pattern comes from the seed (shows New pattern); default: when animated. */
+  seeded?: boolean;
+  /** Further settings (Advanced). */
+  extras?: ExtraDef[];
+  /** How far the effect can reach past the art, in document pixels (the layer is padded by it). */
+  pad?: (e: LayerEffect) => number;
 }
 
 export const EFFECT_TYPES: EffectDef[] = [
@@ -68,11 +83,114 @@ export const EFFECT_TYPES: EffectDef[] = [
   { id: 'turbulence', label: 'Ripple', hint: 'Swirling, rippling warp: heat haze, water, wobbly shapes (turbulent displace)', target: 'layer', amount: 6, size: 90, hold: 2, amountRange: [0, 40], sizeRange: [8, 300], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
   { id: 'grain', label: 'Film grain', hint: 'Tiny specks in the paint that change every frame, like old film (noise)', target: 'layer', amount: 35, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Strength', sizeLabel: 'Speck', amountUnit: '%', sizeUnit: ' px', animated: true },
   { id: 'blur', label: 'Gaussian blur', hint: 'Softens the layer like a camera out of focus, or a dreamy glow (Gaussian blur)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [0, 40], sizeRange: [0, 0], amountLabel: 'Blur', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false },
+  { id: 'shadow', label: 'Drop shadow', hint: 'A shadow behind the art, offset and softened, like a sticker or a cut-out (drop shadow)', target: 'layer', amount: 5, size: 0, hold: 1, amountRange: [0, 120], sizeRange: [0, 100], amountLabel: 'Distance', sizeLabel: 'Softness', amountUnit: ' px', sizeUnit: ' px', animated: false,
+    extras: [
+      { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 135 },
+      { key: 'opacity', label: 'Opacity', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'color', label: 'Colour', kind: 'color', def: '#000000' },
+      { key: 'only', label: 'Shadow only', kind: 'toggle', def: false },
+    ],
+    pad: (e) => e.amount + 1.5 * e.size + 2 },
+  { id: 'glow', label: 'Glow', hint: 'The bright parts shine and bloom into their surroundings (glow)', target: 'layer', amount: 10, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Radius', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false,
+    extras: [
+      { key: 'threshold', label: 'Threshold', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 60 },
+      { key: 'intensity', label: 'Intensity', kind: 'range', min: 0, max: 4, step: 0.1, unit: '\u00d7', def: 1 },
+      { key: 'composite', label: 'Original', kind: 'choice', options: [{ id: 'top', label: 'On top' }, { id: 'behind', label: 'Behind' }, { id: 'none', label: 'Glow only' }], def: 'top' },
+    ],
+    pad: (e) => 1.5 * e.amount + 2 },
+  { id: 'dirblur', label: 'Directional blur', hint: 'Streaks along one direction, like something moving fast (directional blur)', target: 'layer', amount: 10, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Length', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false,
+    extras: [{ key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 180, step: 5, unit: '\u00b0', def: 0 }],
+    pad: (e) => e.amount / 2 + 2 },
+  { id: 'radialblur', label: 'Radial blur', hint: 'Spins around a centre or zooms out from it: impacts, speed, a dizzy look (radial blur)', target: 'layer', amount: 10, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: '', sizeUnit: ' px', animated: false,
+    extras: [
+      { key: 'mode', label: 'Type', kind: 'choice', options: [{ id: 'spin', label: 'Spin' }, { id: 'zoom', label: 'Zoom' }], def: 'spin' },
+      { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+    ] },
+  { id: 'posterize', label: 'Posterize', hint: 'Fewer shades of each colour: flat, poster-like bands (posterize)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [2, 32], sizeRange: [0, 0], amountLabel: 'Levels', sizeLabel: 'Size', amountUnit: '', sizeUnit: '', animated: false },
+  { id: 'mosaic', label: 'Mosaic', hint: 'Big square blocks of colour, like a censored or low-res picture (mosaic)', target: 'layer', amount: 10, size: 10, hold: 1, amountRange: [1, 200], sizeRange: [1, 200], amountLabel: 'Blocks across', sizeLabel: 'Blocks down', amountUnit: '', sizeUnit: '', animated: false,
+    extras: [{ key: 'sharp', label: 'Sharp colours', kind: 'toggle', def: false }] },
+  { id: 'edges', label: 'Find edges', hint: 'Only the outlines stay, like a pencil tracing of the picture (find edges)', target: 'layer', amount: 0, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Mix with original', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
+    extras: [{ key: 'invert', label: 'Invert', kind: 'toggle', def: false }] },
+  { id: 'threshold', label: 'Threshold', hint: 'Every colour becomes black or white, like a photocopy (threshold)', target: 'layer', amount: 128, size: 0, hold: 1, amountRange: [0, 255], sizeRange: [0, 0], amountLabel: 'Level', sizeLabel: 'Size', amountUnit: '', sizeUnit: '', animated: false },
+  { id: 'twirl', label: 'Twirl', hint: 'Swirls the middle around like water going down a drain (twirl)', target: 'layer', amount: 90, size: 30, hold: 1, amountRange: [-720, 720], sizeRange: [1, 100], amountLabel: 'Angle', sizeLabel: 'Radius', amountUnit: '\u00b0', sizeUnit: '%', animated: false,
+    extras: [
+      { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+    ] },
+  { id: 'mirror', label: 'Mirror', hint: 'One half reflects onto the other, like a fold or a kaleidoscope (mirror)', target: 'layer', amount: 0, size: 0, hold: 1, amountRange: [0, 360], sizeRange: [0, 0], amountLabel: 'Angle', sizeLabel: 'Size', amountUnit: '\u00b0', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+    ] },
+  { id: 'offset', label: 'Offset', hint: 'Slides the picture and wraps it round the edges: tiling and scrolling backgrounds (offset)', target: 'layer', amount: 0, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Mix with original', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'x', label: 'Shift across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'y', label: 'Shift down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+    ] },
+  { id: 'wave', label: 'Wave warp', hint: 'Waves run through the picture: water, flags, heat haze (wave warp)', target: 'layer', amount: 10, size: 40, hold: 1, amountRange: [0, 100], sizeRange: [1, 500], amountLabel: 'Height', sizeLabel: 'Width', amountUnit: ' px', sizeUnit: ' px', animated: true, seeded: false,
+    extras: [
+      { key: 'shape', label: 'Wave', kind: 'choice', options: [{ id: 'sine', label: 'Smooth' }, { id: 'triangle', label: 'Triangle' }, { id: 'square', label: 'Square' }, { id: 'saw', label: 'Saw' }], def: 'sine' },
+      { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 90 },
+      { key: 'speed', label: 'Speed', kind: 'range', min: -5, max: 5, step: 0.1, unit: ' waves/s', def: 1 },
+      { key: 'phase', label: 'Phase', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 0 },
+      { key: 'pin', label: 'Pin the edges', kind: 'toggle', def: false },
+    ],
+    pad: (e) => e.amount + 2 },
+  { id: 'fringe', label: 'Fringe', hint: 'Fading copies trail off one side of the art, like an echo or a smear (fringe)', target: 'layer', amount: 8, size: 4, hold: 1, amountRange: [0, 40], sizeRange: [1, 8], amountLabel: 'Offset', sizeLabel: 'Copies', amountUnit: ' px', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'dir', label: 'Direction', kind: 'choice', options: [['0', '\u2191'], ['45', '\u2197'], ['90', '\u2192'], ['135', '\u2198'], ['180', '\u2193'], ['225', '\u2199'], ['270', '\u2190'], ['315', '\u2196']].map(([id, label]) => ({ id: id!, label: label! })), def: '90' },
+      { key: 'falloff', label: 'Falloff', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 70 },
+    ],
+    pad: (e) => e.amount + 2 },
+  { id: 'tv', label: 'Retro TV', hint: 'An old TV or VHS tape: static, colour that slips off the lines, rolling picture (analog signal)', target: 'layer', amount: 100, size: 24, hold: 1, amountRange: [0, 100], sizeRange: [4, 120], amountLabel: 'Strength', sizeLabel: 'Noise size', amountUnit: '%', sizeUnit: ' px', animated: true,
+    extras: [
+      { key: 'static', label: 'Static', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 12 },
+      { key: 'chromaLoss', label: 'Chroma loss', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 30 },
+      { key: 'chromaShift', label: 'Chroma shift', kind: 'range', min: 0, max: 8, step: 0.5, unit: ' px', def: 2 },
+      { key: 'phase', label: 'Phase offset', kind: 'range', min: 0, max: 360, step: 15, unit: '\u00b0', def: 0 },
+      { key: 'scanBlur', label: 'Scanline blur', kind: 'range', min: 0, max: 8, step: 1, unit: ' px', def: 0 },
+      { key: 'roll', label: 'Roll', kind: 'range', min: -4, max: 4, step: 0.5, unit: ' rows/frame', def: 0 },
+      { key: 'speed', label: 'Distortion speed', kind: 'range', min: 0, max: 8, step: 0.5, unit: '', def: 2 },
+    ] },
   { id: 'texture', label: 'Texture', hint: 'Paper, hatching, dots or canvas weave in the paint (best on the Fill)', target: 'fill', amount: 60, size: 14, hold: 1, amountRange: [0, 100], sizeRange: [3, 80], amountLabel: 'Strength', sizeLabel: 'Scale', amountUnit: '%', sizeUnit: ' px', animated: false },
-  { id: 'dither', label: 'Retro pixels', hint: 'Old-console look: chunky pixels and a few colours, mixed with a dot pattern (dither)', target: 'layer', amount: 100, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Mix', sizeLabel: 'Pixel size', amountUnit: '%', sizeUnit: ' px', animated: false },
+  { id: 'dither', label: 'Retro pixels', hint: 'Old-console look: chunky pixels and a few colours, mixed with a dot pattern (dither)', target: 'layer', amount: 100, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Mix', sizeLabel: 'Pixel size', amountUnit: '%', sizeUnit: ' px', animated: false,
+    extras: [
+      { key: 'tr', label: 'Red threshold', kind: 'range', min: -100, max: 100, step: 1, unit: '', def: 0 },
+      { key: 'tg', label: 'Green threshold', kind: 'range', min: -100, max: 100, step: 1, unit: '', def: 0 },
+      { key: 'tb', label: 'Blue threshold', kind: 'range', min: -100, max: 100, step: 1, unit: '', def: 0 },
+    ] },
 ];
 
 export const EFFECT_LIMITS = { hold: [1, 8] as const };
+
+/** One further setting of an effect (its stored value, or the kind's default). */
+export function param<T extends number | string | boolean>(e: LayerEffect, key: string): T {
+  const x = effectDef(e.type).extras?.find((d) => d.key === key);
+  const v = e.params?.[key];
+  return (v !== undefined ? v : x?.def) as T;
+}
+
+/** How far the layer is padded for its effects (shadows and glows reach past the art). */
+export function effectsPad(l: { id: string; effects?: LayerEffect[] }): number {
+  let pad = 0;
+  for (const e of activeEffects(l)) pad += effectDef(e.type).pad?.(e) ?? 0;
+  return Math.ceil(pad);
+}
+
+/** Validate stored further settings against the kind (unknown keys dropped, numbers clamped). */
+function readParams(def: EffectDef, v: unknown): Record<string, number | string | boolean> | undefined {
+  if (!def.extras || !v || typeof v !== 'object') return undefined;
+  const r = v as Record<string, unknown>, out: Record<string, number | string | boolean> = {};
+  for (const x of def.extras) {
+    const y = r[x.key];
+    if (x.kind === 'range' && typeof y === 'number' && Number.isFinite(y)) out[x.key] = Math.min(x.max, Math.max(x.min, y));
+    else if (x.kind === 'choice' && typeof y === 'string' && x.options.some((o) => o.id === y)) out[x.key] = y;
+    else if (x.kind === 'color' && typeof y === 'string' && /^#[0-9a-f]{6}$/i.test(y)) out[x.key] = y;
+    else if (x.kind === 'toggle' && typeof y === 'boolean') out[x.key] = y;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 export const TARGET_NAMES: Record<EffectTarget, string> = { line: 'Ink', fill: 'Colour', layer: 'Whole layer' };
 
@@ -95,7 +213,7 @@ export function newEffect(type: EffectType, id: string, seed: number): LayerEffe
 
 /** Which pattern of an effect shows at a layer frame (changes every `hold` frames). */
 export function effectTick(e: LayerEffect, frame: number): number {
-  if (e.type === 'texture' || e.type === 'dither' || e.type === 'blur') return 0;
+  if (!effectDef(e.type).animated) return 0;
   return Math.floor(frame / Math.max(1, Math.round(e.hold)));
 }
 
@@ -129,6 +247,8 @@ export function readEffects(v: unknown): LayerEffect[] | undefined {
           }
         : {}),
     });
+    const params = readParams(def, r.params);
+    if (params) out[out.length - 1]!.params = params;
   }
   return out.length ? out : undefined;
 }
@@ -148,7 +268,7 @@ export function activeEffects(l: { id: string; effects?: LayerEffect[] }): Layer
 /** A short signature of what effects do at a frame (frame keys, caches). */
 export function effectsKey(l: { id: string; effects?: LayerEffect[] }, frame: number): string {
   const fx = activeEffects(l);
-  return fx.length ? fx.map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}`).join(',') : '';
+  return fx.length ? fx.map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${e.params ? `:${JSON.stringify(e.params)}` : ''}`).join(',') : '';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -192,5 +312,6 @@ export function duplicateEffect(list: LayerEffect[], index: number, id: string):
 /** The effect back to its kind's starting values (keeps id, seed, on, target and look). */
 export function resetEffect(e: LayerEffect): LayerEffect {
   const d = effectDef(e.type);
-  return { ...e, amount: d.amount, size: d.size, hold: d.hold };
+  const { params: _drop, ...rest } = e;
+  return { ...rest, amount: d.amount, size: d.size, hold: d.hold };
 }

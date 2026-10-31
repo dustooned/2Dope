@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GIF_CLEAR, gifFrame, gifHeader } from './gif';
+import { GIF_DEFAULTS, mapToPalette, medianCut, readGifOptions, usesFixedPalette } from './gifpalette';
 import { planGif } from './exportgif';
 import { drawingsLayer, newComp } from '../core/comp';
 
@@ -67,5 +68,52 @@ describe('GIF encoding and budgets', () => {
     expect(() => planGif(p, false)).toThrow(/device limit/);
     main.fps = 0;
     expect(() => planGif(p, false)).toThrow(/timing/);
+  });
+});
+
+describe('GIF options', () => {
+  it('loops for ever by default, can play once (no loop block) or a number of times', () => {
+    const at = (b: Uint8Array) => b.length > 781 ? [b[781 + 14 + 2], b[781 + 14 + 3]] : null;
+    expect(at(gifHeader(4, 4))).toEqual([0, 0]);
+    expect(gifHeader(4, 4, undefined, 'once').length).toBe(13 + 768);
+    expect(at(gifHeader(4, 4, undefined, 3))).toEqual([2, 0]);
+  });
+
+  it('writes a chosen palette and its indices, with a see-through index', () => {
+    const pal: [number, number, number][] = [[10, 20, 30], [200, 100, 50]];
+    const h = gifHeader(2, 1, pal);
+    expect([...h.slice(13, 19)]).toEqual([10, 20, 30, 200, 100, 50]);
+    const rgba = new Uint8ClampedArray([200, 100, 50, 255, 0, 0, 0, 0]);
+    const idx = mapToPalette(rgba, 2, 1, pal, { dither: 'none', ditherScale: 2 }, 2);
+    expect([...idx]).toEqual([1, 2]);
+    const f = gifFrame(rgba, 2, 1, 5, true, idx, 2);
+    expect(f[6]).toBe(2);
+    expect(decode(f)).toEqual([1, 2]);
+  });
+
+  it('median cut keeps to the colour count and finds the colours there are', () => {
+    const cs = [0xff0000, 0xff0000, 0x00ff00, 0x0000ff, 0x0000fe];
+    expect(medianCut(cs, 2).length).toBeLessThanOrEqual(2);
+    expect(medianCut([0xff0000, 0x00ff00, 0x0000ff], 3)).toEqual(expect.arrayContaining([[255, 0, 0], [0, 255, 0], [0, 0, 255]]));
+    expect(medianCut([], 8)).toEqual([[0, 0, 0]]);
+  });
+
+  it('dithers between two colours for a middle grey; none gives one colour', () => {
+    const rgba = new Uint8ClampedArray(8 * 8 * 4);
+    for (let i = 0; i < 64; i++) rgba.set([128, 128, 128, 255], i * 4);
+    const pal: [number, number, number][] = [[0, 0, 0], [255, 255, 255]];
+    expect(new Set(mapToPalette(rgba, 8, 8, pal, { dither: 'none', ditherScale: 2 })).size).toBe(1);
+    for (const dither of ['ordered', 'diffusion'] as const) {
+      const n = [...mapToPalette(rgba, 8, 8, pal, { dither, ditherScale: 2 })].filter((v) => v === 1).length;
+      expect(n, dither).toBeGreaterThan(20);
+      expect(n, dither).toBeLessThan(44);
+    }
+  });
+
+  it('reads saved options safely', () => {
+    expect(readGifOptions(null)).toEqual(GIF_DEFAULTS);
+    expect(readGifOptions({ colors: 999, loop: 1, dither: 'x', ditherScale: 7, better: 'yes', pixelArt: true })).toEqual({ ...GIF_DEFAULTS, colors: 256, loop: 2, pixelArt: true });
+    expect(usesFixedPalette(GIF_DEFAULTS)).toBe(true);
+    expect(usesFixedPalette({ ...GIF_DEFAULTS, colors: 16 })).toBe(false);
   });
 });

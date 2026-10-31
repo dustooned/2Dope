@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeEffects, effectPreview, effectsKey, effectTick, newEffect, readEffects } from './effects';
+import { activeEffects, effectPreview, effectsKey, effectsPad, effectTick, newEffect, param, readEffects, resetEffect } from './effects';
 
 describe('layer effects', () => {
   it('makes a line boil with its defaults, aimed at the Line', () => {
@@ -66,5 +66,22 @@ describe('layer effects', () => {
     expect(effectsKey({ id: 'L', effects: [{ ...d, palette: 'bw' as const }] }, 0)).not.toBe(effectsKey({ id: 'L', effects: [d] }, 0));
     const [r] = readEffects([{ type: 'dither', palette: 'nope', method: 'floyd', gray: true, size: 99 }])!;
     expect(r).toMatchObject({ palette: 'pico8', method: 'floyd', gray: true, size: 16 });
+  });
+});
+
+describe('further settings (params)', () => {
+  it('reads valid params, clamps numbers and drops unknown keys and bad values', () => {
+    const [e] = readEffects([{ type: 'shadow', amount: 6, params: { angle: 999, opacity: 30, color: '#ff0000', only: true, bogus: 1 } }])!;
+    expect(e!.params).toEqual({ angle: 360, opacity: 30, color: '#ff0000', only: true });
+    const [g] = readEffects([{ type: 'glow', params: { composite: 'sideways', threshold: 'x' } }])!;
+    expect(g!.params).toBeUndefined();
+    expect(param(g!, 'composite')).toBe('top');
+  });
+
+  it('pads layers for shadows and glows, and reset clears params', () => {
+    expect(effectsPad({ id: 'a', effects: [newEffect('shadow', 's', 1)] })).toBe(Math.ceil(5 + 0 + 2));
+    expect(effectsPad({ id: 'b', effects: [newEffect('glow', 'g', 1)] })).toBe(17);
+    expect(effectsPad({ id: 'c', effects: [newEffect('blur', 'b', 1)] })).toBe(0);
+    expect(resetEffect({ ...newEffect('shadow', 's', 1), params: { angle: 10 } }).params).toBeUndefined();
   });
 });

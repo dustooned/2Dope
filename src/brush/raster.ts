@@ -247,6 +247,13 @@ function paperPattern(g: CanvasRenderingContext2D, scale: number, image?: string
 
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * Side of the sheet grained dabs are prepared on: hundreds of pencil-sized dabs per batch, one
+ * for a large brush (larger dabs take the one-at-a-time path). A bigger sheet shifted the paper
+ * grain's sub-pixel sampling in Chrome's software canvas (brushperformance reference check).
+ */
+const ATLAS = 256;
+
 export interface StrokeCommit {
   rect: Rect;
   before: ImageData;
@@ -289,6 +296,19 @@ export class RasterEngine {
   private clipReady = false;
   /** The stroke image masked by the selection (the shared buffers are never masked in place). */
   private readonly stencil: HTMLCanvasElement;
+  /**
+   * Grained dabs are cut out of the paper one at a time on this sheet, each in its own slot, then
+   * copied to their buffer in order. Switching a surface between drawing and being read stalls
+   * the GPU, so a whole batch is written first and read once (one stall per batch, not per dab).
+   */
+  private readonly atlas: HTMLCanvasElement;
+  private readonly actx: CanvasRenderingContext2D;
+  private readonly pending: { ctx: CanvasRenderingContext2D; sx: number; sy: number; r: Rect }[] = [];
+  private shelfX = 0;
+  private shelfY = 0;
+  private shelfH = 0;
+  /** `work` already holds the bound canvas outside the stroke's rectangle. */
+  private workReady = false;
 
   constructor(
     public width: number,
@@ -306,6 +326,8 @@ export class RasterEngine {
     this.stencil = makeCanvas(width, height);
     this.bctx = ctx2d(this.buffer);
     this.sctx = ctx2d(this.shadeBuffer);
+    this.atlas = makeCanvas(ATLAS, ATLAS);
+    this.actx = ctx2d(this.atlas);
   }
 
   /** Match another document size (a different project was opened). Only call between strokes. */
@@ -319,6 +341,7 @@ export class RasterEngine {
     }
     this.scratch.width=this.scratch.height=1;
     this.clipReady = false;
+    this.workReady = false;
   }
 
   /** The canvas strokes paint onto. */
@@ -329,6 +352,7 @@ export class RasterEngine {
   bind(canvas: HTMLCanvasElement): void {
     if (this.record) return;
     this.target = canvas;
+    this.workReady = false;
   }
 
   get active(): StrokeRecord | null {
@@ -347,6 +371,9 @@ export class RasterEngine {
    */
   begin(record: StrokeRecord, clip?: Uint8Array | null): void {
     this.record = record;
+    this.workReady = false;
+    this.pending.length = 0;
+    this.shelfX = this.shelfY = this.shelfH = 0;
     // A large brush on the previous stroke must not leave Pencil using a page-sized source.
     this.scratch.width=this.scratch.height=1;
     if (clip !== undefined) {
@@ -401,6 +428,7 @@ export class RasterEngine {
       }
       this.grow(d);
     }
+    this.flushStamps();
     this.bctx.globalAlpha = 1;
     this.sctx.globalAlpha = 1;
   }
@@ -409,9 +437,38 @@ export class RasterEngine {
    * A firmer press lays down more paint; even the darkest grain can gradually take pigment.
    * Reuse a stamp-sized scratch tile and retain document-aligned paper coordinates. */
   private stamp(ctx: CanvasRenderingContext2D, d: Dab, tip: HTMLCanvasElement, grain: number, paper: CanvasPattern | null, alphaScale = 1): void {
-    if (grain <= 0 || !paper) { drawDab(ctx, d, tip, alphaScale); return; }
+    if (grain <= 0 || !paper) {
+      if (this.pending.some((p) => p.ctx === ctx)) this.flushStamps();
+      drawDab(ctx, d, tip, alphaScale);
+      return;
+    }
     const r = this.clip(dabBounds(d));
     if (!r) return;
+    if (r.w < ATLAS && r.h < ATLAS) {
+      // the next free slot on the sheet (rows of slots, a 1 px gap so neighbours never bleed)
+      if (this.shelfX + r.w > ATLAS) { this.shelfX = 0; this.shelfY += this.shelfH; this.shelfH = 0; }
+      if (this.shelfY + r.h > ATLAS) this.flushStamps();
+      const sx = this.shelfX, sy = this.shelfY, a = this.actx;
+      this.shelfX += r.w + 1;
+      this.shelfH = Math.max(this.shelfH, r.h + 1);
+      a.save();
+      a.setTransform(1, 0, 0, 1, 0, 0);
+      a.beginPath();
+      a.rect(sx, sy, r.w, r.h);
+      a.clip();
+      a.clearRect(sx, sy, r.w, r.h);
+      // document coordinates map onto the slot, so the paper grain keeps its phase
+      a.setTransform(1, 0, 0, 1, sx - r.x, sy - r.y);
+      drawDab(a, d, tip, alphaScale);
+      a.globalCompositeOperation = 'destination-out';
+      a.globalAlpha = Math.min(0.95, grain) * (1 - 0.25 * d.pressure);
+      a.fillStyle = paper;
+      a.fillRect(r.x, r.y, r.w, r.h);
+      a.restore();
+      this.pending.push({ ctx, sx, sy, r });
+      return;
+    }
+    this.flushStamps();
     const width=Math.min(this.width,Math.max(32,2**Math.ceil(Math.log2(r.w))));
     const height=Math.min(this.height,Math.max(32,2**Math.ceil(Math.log2(r.h))));
     if(this.scratch.width<width)this.scratch.width=width;
@@ -435,6 +492,18 @@ export class RasterEngine {
     ctx.restore();
   }
 
+  /** Copy the prepared grained dabs to their buffers, in the order they were laid. */
+  private flushStamps(): void {
+    for (const { ctx, sx, sy, r } of this.pending) {
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.drawImage(this.atlas, sx, sy, r.w, r.h, r.x, r.y, r.w, r.h);
+      ctx.restore();
+    }
+    this.pending.length = 0;
+    this.shelfX = this.shelfY = this.shelfH = 0;
+  }
+
   /** Draw extra, temporary dabs (predicted input) straight onto a display context. */
   drawGhost(ctx: CanvasRenderingContext2D, dabs: Dab[]): void {
     if (!this.tip || !this.shadeTip || !this.record || this.record.tool === 'eraser') return;
@@ -446,6 +515,7 @@ export class RasterEngine {
       if (d.shade < 1) this.stamp(out, d, this.tip, b.grain, this.paper, (1 - d.shade) * b.opacity);
       if (d.shade > 0) this.stamp(out, d, this.shadeTip, b.tiltShade.grain, this.shadePaper, d.shade * b.opacity);
     }
+    this.flushStamps();
     out.globalAlpha = 1;
     if (out !== ctx) {
       this.maskTo(out, { x: 0, y: 0, w: this.width, h: this.height });
@@ -542,8 +612,16 @@ export class RasterEngine {
     const r = this.rect();
     if (!this.record || !r) return this.target;
     const w = ctx2d(this.work);
-    w.clearRect(0, 0, this.width, this.height);
-    w.drawImage(this.target, 0, 0);
+    // the canvas does not change during a stroke and the stroke's box only grows: after the first
+    // full copy, only the box is restored and repainted (not the whole page every frame)
+    if (!this.workReady) {
+      w.clearRect(0, 0, this.width, this.height);
+      w.drawImage(this.target, 0, 0);
+      this.workReady = true;
+    } else {
+      w.clearRect(r.x, r.y, r.w, r.h);
+      w.drawImage(this.target, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+    }
     this.apply(w, r);
     return this.work;
   }
@@ -580,6 +658,9 @@ export class RasterEngine {
 
   cancel(): void {
     this.record = null;
+    this.workReady = false;
+    this.pending.length = 0;
+    this.shelfX = this.shelfY = this.shelfH = 0;
     this.clipMask = null;
     this.clipReady = false;
     this.bbox = null;

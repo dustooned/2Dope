@@ -3,6 +3,7 @@ import { compLength, frameContent } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { drawComp, releaseScratch } from '../view/composite';
 import { gifFrame, gifHeader } from './gif';
+import { ColourSample, GIF_DEFAULTS, mapToPalette, medianCut, usesFixedPalette, type GifOptions } from './gifpalette';
 
 export function planGif(project: Pick<Project, 'comp' | 'comps' | 'main'>, lite: boolean) {
   const comp = project.comps.get(project.main) ?? project.comp;
@@ -21,18 +22,18 @@ export function planGif(project: Pick<Project, 'comp' | 'comps' | 'main'>, lite:
 
 /** Main shot and shared compositor; no editor clock changes, one pinned frame at a time. */
 export async function exportGif(project: Project, lite: boolean, signal: AbortSignal,
-  hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void }, progress: (done: number, total: number) => void, transparent = false): Promise<Blob> {
+  hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void }, progress: (done: number, total: number) => void, transparent = false,
+  options: GifOptions = GIF_DEFAULTS): Promise<Blob> {
   const p = planGif(project, lite);
   const check = () => { if (signal.aborted) throw new DOMException('GIF export cancelled', 'AbortError'); };
   check();
   const canvas = makeCanvas(p.width, p.height), g = canvas.getContext('2d');
-  const parts: BlobPart[] = [gifHeader(p.width, p.height) as BlobPart];
   let bytes = 800;
   try {
     if (!g) throw new Error('2D canvas unavailable.');
     const comp = project.comps.get(p.comp)!;
-    for (let i = 0; i < p.samples; i++) {
-      check();
+    /** Pixels of picture `i` (its drawings pinned only while it is drawn). */
+    const render = async (i: number): Promise<Uint8ClampedArray> => {
       const frame = Math.min(p.frames - 1, Math.floor(i * p.frames / p.samples));
       const pinned: Drawing[] = [];
       try {
@@ -48,14 +49,33 @@ export async function exportGif(project: Project, lite: boolean, signal: AbortSi
         if (transparent) g.clearRect(0, 0, p.width, p.height);
         else { g.fillStyle = '#ffffff'; g.fillRect(0, 0, p.width, p.height); }
         g.setTransform(p.width / comp.width, 0, 0, p.height / comp.height, 0, 0);
+        // pixel art: the shot is scaled down to GIF size with nearest pixels, not smoothed
+        g.imageSmoothingEnabled = !options.pixelArt;
         drawComp(g, project, p.comp, frame, { backgrounds: true, export: true });
-        const delay = Math.round((i + 1) * p.duration * 100 / p.samples) - Math.round(i * p.duration * 100 / p.samples);
-        const data = gifFrame(g.getImageData(0, 0, p.width, p.height).data, p.width, p.height, delay, transparent);
-        bytes += data.length;
-        if (bytes > p.maxBytes) throw new Error('GIF exceeded the device limit. Use video instead.');
-        parts.push(data as BlobPart);
+        return g.getImageData(0, 0, p.width, p.height).data;
       } finally { for (const d of pinned) hold.unpin(d); }
-      progress(i + 1, p.samples);
+    };
+    // a chosen palette: from the first picture, or (better colours) from every picture in a first pass
+    let palette: [number, number, number][] | undefined;
+    if (!usesFixedPalette(options)) {
+      const sample = new ColourSample(), step = Math.max(1, Math.floor((p.width * p.height) / 20000));
+      const passes = options.better ? p.samples : 1;
+      for (let i = 0; i < passes; i++) { check(); sample.add(await render(i), step); if (options.better) progress(i + 1, 2 * p.samples); }
+      palette = medianCut(sample.px, Math.max(2, Math.min(256, options.colors) - (transparent ? 1 : 0)));
+    }
+    const clear = palette && transparent ? palette.length : undefined;
+    const parts: BlobPart[] = [gifHeader(p.width, p.height, palette, options.loop) as BlobPart];
+    for (let i = 0; i < p.samples; i++) {
+      check();
+      const px = await render(i);
+      const delay = Math.round((i + 1) * p.duration * 100 / p.samples) - Math.round(i * p.duration * 100 / p.samples);
+      const data = palette
+        ? gifFrame(px, p.width, p.height, delay, transparent, mapToPalette(px, p.width, p.height, palette, options, clear), clear)
+        : gifFrame(px, p.width, p.height, delay, transparent);
+      bytes += data.length;
+      if (bytes > p.maxBytes) throw new Error('GIF exceeded the device limit. Use video instead.');
+      parts.push(data as BlobPart);
+      progress(options.better ? p.samples + i + 1 : i + 1, options.better ? 2 * p.samples : p.samples);
       await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     check(); parts.push(new Uint8Array([0x3b]));

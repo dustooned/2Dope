@@ -7,6 +7,7 @@
 export type PaletteId = 'bw' | 'gameboy' | 'cga' | 'ega' | 'c64' | 'zx' | 'pico8' | 'rgb2' | 'rgb4';
 export type DitherMethod =
   | 'none' | 'bayer2' | 'bayer4' | 'bayer8'
+  | 'bayer3' | 'grid5x3' | 'grid8x1' | 'grid12x4' | 'grid1x8' | 'grid4x12' | 'diagonal5' | 'cluster8'
   | 'floyd' | 'atkinson' | 'jjn' | 'stucki' | 'burkes' | 'sierra';
 
 const hex = (s: string): [number, number, number][] => s.split(' ').map((h) => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]);
@@ -34,6 +35,14 @@ export const DITHER_METHODS: { id: DitherMethod; label: string }[] = [
   { id: 'bayer2', label: 'Grid dots \u00b7 big (2\u00d72)' },
   { id: 'bayer4', label: 'Grid dots (4\u00d74)' },
   { id: 'bayer8', label: 'Grid dots \u00b7 fine (8\u00d78)' },
+  { id: 'bayer3', label: 'Grid dots (3\u00d73)' },
+  { id: 'grid5x3', label: 'Grid dots \u00b7 wide (5\u00d73)' },
+  { id: 'grid8x1', label: 'Lines \u00b7 upright (8\u00d71)' },
+  { id: 'grid1x8', label: 'Lines \u00b7 across (1\u00d78)' },
+  { id: 'grid12x4', label: 'Grid dots \u00b7 wide (12\u00d74)' },
+  { id: 'grid4x12', label: 'Grid dots \u00b7 tall (4\u00d712)' },
+  { id: 'diagonal5', label: 'Diagonal lines (5\u00d75)' },
+  { id: 'cluster8', label: 'Halftone dots (cluster 8\u00d78)' },
   { id: 'floyd', label: 'Scattered \u00b7 smooth (Floyd\u2013Steinberg)' },
   { id: 'atkinson', label: 'Scattered \u00b7 crisp (Atkinson)' },
   { id: 'jjn', label: 'Scattered \u00b7 soft (Jarvis)' },
@@ -62,7 +71,37 @@ function bayer(n: number): Int32Array {
   }
   return Int32Array.from(m.flat());
 }
-const BAYER = { bayer2: [2, bayer(2)], bayer4: [4, bayer(4)], bayer8: [8, bayer(8)] } as const;
+/** Values 0..n-1 by rank of `score` (ties by position): any threshold pattern from a scoring rule. */
+function ranked(w: number, h: number, score: (x: number, y: number) => number): Int32Array {
+  const cells = Array.from({ length: w * h }, (_, i) => ({ i, s: score(i % w, Math.floor(i / w)) }));
+  cells.sort((a, b) => a.s - b.s || a.i - b.i);
+  const m = new Int32Array(w * h);
+  cells.forEach((c, r) => (m[c.i] = r));
+  return m;
+}
+/** Evenly spread dots for any size (a low-discrepancy lattice, ranked). */
+const spread = (w: number, h: number) => ranked(w, h, (x, y) => (x * 0.7548776662 + y * 0.5698402910) % 1);
+
+/** Ordered (threshold) matrices: width, height, values 0..w·h-1, read tiled across the picture. */
+export const ORDERED: Partial<Record<DitherMethod, { w: number; h: number; m: Int32Array }>> = {
+  bayer2: { w: 2, h: 2, m: bayer(2) },
+  bayer4: { w: 4, h: 4, m: bayer(4) },
+  bayer8: { w: 8, h: 8, m: bayer(8) },
+  bayer3: { w: 3, h: 3, m: Int32Array.from([0, 7, 3, 6, 5, 2, 4, 1, 8]) },
+  grid5x3: { w: 5, h: 3, m: spread(5, 3) },
+  grid8x1: { w: 8, h: 1, m: Int32Array.from([0, 4, 2, 6, 1, 5, 3, 7]) },
+  grid1x8: { w: 1, h: 8, m: Int32Array.from([0, 4, 2, 6, 1, 5, 3, 7]) },
+  grid12x4: { w: 12, h: 4, m: spread(12, 4) },
+  grid4x12: { w: 4, h: 12, m: spread(4, 12) },
+  diagonal5: { w: 5, h: 5, m: ranked(5, 5, (x, y) => ((x + y) % 5) * 5 + x) },
+  cluster8: { w: 8, h: 8, m: ranked(8, 8, (x, y) => Math.hypot(x - 3.5, y - 3.5)) },
+};
+
+/** The threshold offset (-0.5..0.5) of an ordered matrix at a pixel, tiled in both directions. */
+export function orderedAt(o: { w: number; h: number; m: Int32Array }, x: number, y: number): number {
+  const n = o.w * o.h, mx = ((x % o.w) + o.w) % o.w, my = ((y % o.h) + o.h) % o.h;
+  return o.m[my * o.w + mx]! / n - 0.5 + 0.5 / n;
+}
 
 /** Error-diffusion kernels: [dx, dy, weight], weights divided by `div`. */
 const KERNELS: Partial<Record<DitherMethod, { div: number; k: [number, number, number][] }>> = {
@@ -104,7 +143,7 @@ const clamp255 = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
  * never changed. `gray` turns the colour to grey first. `strength` (0..1) lets the dithered result
  * mix back into the original.
  */
-export function ditherPixels(px: Uint8ClampedArray, w: number, h: number, opts: { palette: PaletteId; method: DitherMethod; gray?: boolean; strength?: number }): void {
+export function ditherPixels(px: Uint8ClampedArray, w: number, h: number, opts: { palette: PaletteId; method: DitherMethod; gray?: boolean; strength?: number; bias?: [number, number, number] }): void {
   const pal = paletteColors(opts.palette);
   const lut = lutFor(opts.palette);
   const mix = opts.strength ?? 1;
@@ -120,7 +159,9 @@ export function ditherPixels(px: Uint8ClampedArray, w: number, h: number, opts: 
   }
   const original = mix < 1 ? Float32Array.from(work) : null;
   const pick = (r: number, g: number, b: number) => lut[((clamp255(r) >> 3) << 10) | ((clamp255(g) >> 3) << 5) | (clamp255(b) >> 3)]!;
-  const ordered = (BAYER as Record<string, readonly [number, Int32Array]>)[opts.method];
+  const ordered = ORDERED[opts.method];
+  // per-channel thresholds: push a channel lighter or darker before it is matched
+  const [br, bg, bb] = opts.bias ?? [0, 0, 0];
   const kernel = KERNELS[opts.method];
   // ordered dither pushes each channel by up to +-spread/2, wide enough to cross a palette step
   const spread = opts.palette === 'bw' ? 255 : 255 / Math.cbrt(pal.length);
@@ -131,9 +172,9 @@ export function ditherPixels(px: Uint8ClampedArray, w: number, h: number, opts: 
       const x = back ? w - 1 - k : k;
       const i = y * w + x;
       if (!px[i * 4 + 3]) continue;
-      let r = work[i * 3]!, g = work[i * 3 + 1]!, b = work[i * 3 + 2]!;
+      let r = work[i * 3]! + br, g = work[i * 3 + 1]! + bg, b = work[i * 3 + 2]! + bb;
       if (ordered) {
-        const m = ordered[1][(y % ordered[0]) * ordered[0] + (x % ordered[0])]! / (ordered[0] * ordered[0]) - 0.5 + 0.5 / (ordered[0] * ordered[0]);
+        const m = orderedAt(ordered, x, y);
         r += m * spread; g += m * spread; b += m * spread;
       }
       const c = pal[pick(r, g, b)]!;

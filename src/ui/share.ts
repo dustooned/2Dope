@@ -6,6 +6,7 @@ import { boardCues, toSrt } from '../core/dialogue';
 import { animaticLength, animaticOptions, animaticPicture, boardOf, paintAnimatic, type AnimaticOptions } from '../io/animatic';
 import { DEFAULT_APNG, exportApng, planApng, type ApngOptions } from '../io/apng';
 import { exportGif, planGif } from '../io/exportgif';
+import { readGifOptions, type GifOptions } from '../io/gifpalette';
 import { DEFAULT_EXPORT, PASSES, sanitizeName, type ExportOptions, type Pass } from '../io/exportplan';
 import { exportSequence } from '../io/exportseq';
 import { exportVideo, videoSupport } from '../io/exportvideo';
@@ -19,6 +20,7 @@ import { decorate } from './icons';
 const VIDEO_KEY = '2dope.video-export';
 const KIND_KEY = '2dope.share.kind';
 const GIF_ALPHA_KEY = '2dope.gif.alpha';
+const GIF_KEY = '2dope.gif.options';
 const APNG_KEY = '2dope.share.apng';
 const FRAMES_KEY = '2dope.share.frames';
 const PICTURE_KEY = '2dope.share.picture';
@@ -92,6 +94,8 @@ export class ShareView {
   private kind: Kind = (() => { try { const k = localStorage.getItem(KIND_KEY); return KINDS.some((x) => x.id === k) ? (k as Kind) : 'video'; } catch { return 'video'; } })();
   private opts: VideoOptions = (() => { try { return videoOptions(JSON.parse(localStorage.getItem(VIDEO_KEY) ?? 'null')); } catch { return videoOptions(null); } })();
   private gifAlpha = (() => { try { return localStorage.getItem(GIF_ALPHA_KEY) === '1'; } catch { return false; } })();
+  /** Colours, loop, dither, palette and resampling for GIFs (remembered on this device). */
+  private gif: GifOptions = readGifOptions((() => { try { return JSON.parse(localStorage.getItem(GIF_KEY) ?? 'null'); } catch { return null; } })());
   private apng: ApngOptions = load(APNG_KEY, DEFAULT_APNG);
   /** The assignment label (burned into video, GIF, animated PNG and pictures when on). */
   private stamp: { on: boolean; name: string; klass: string } = load(STAMP_KEY, { on: false, name: '', klass: '' });
@@ -372,7 +376,19 @@ export class ShareView {
       box.addEventListener('change', () => { this.gifAlpha = box.checked; save(GIF_ALPHA_KEY, box.checked ? '1' : '0'); this.draw(); });
       row.append(box, el('span', {}, 'See-through background (hard edges)'));
       main.append(row);
-      advBody.append(el('p', { class: 'hint' }, `GIF uses 256 colours, up to ${this.app.device.lite ? 320 : 480} px and 12 pictures a second. For soft see-through edges, use Animated PNG.`));
+      const setGif = (patch: Partial<GifOptions>) => { this.gif = readGifOptions({ ...this.gif, ...patch }); save(GIF_KEY, this.gif); };
+      select(advBody, 'Colours', String(this.gif.colors), [['256', '256 \u00b7 most'], ['128', '128'], ['64', '64'], ['32', '32'], ['16', '16'], ['8', '8'], ['4', '4'], ['2', '2 \u00b7 fewest']], (v) => setGif({ colors: Number(v) }));
+      select(advBody, 'Dither', this.gif.dither === 'ordered' ? `ordered${this.gif.ditherScale}` : this.gif.dither, [['none', 'None \u00b7 flat colours'], ['ordered1', 'Grid dots \u00b7 big'], ['ordered2', 'Grid dots'], ['ordered3', 'Grid dots \u00b7 fine'], ['diffusion', 'Scattered (error diffusion)']], (v) => setGif(v.startsWith('ordered') ? { dither: 'ordered', ditherScale: Number(v.slice(7)) as 1 | 2 | 3 } : { dither: v as GifOptions['dither'] }));
+      select(advBody, 'Loop', String(this.gif.loop), [['forever', 'For ever'], ['once', 'Play once'], ['2', 'Twice'], ['3', '3 times'], ['5', '5 times']], (v) => setGif({ loop: v === 'forever' || v === 'once' ? v : Number(v) }));
+      for (const [key, label, title] of [['better', 'Better colours (slower)', 'Choose the colours from every picture first: no colour flicker, takes twice as long'], ['pixelArt', 'Pixel art (sharp pixels)', 'Shrink with nearest pixels instead of smoothing']] as const) {
+        const r = el('label', { class: 'share-row toggle', title });
+        const b = el('input', { type: 'checkbox' });
+        b.checked = this.gif[key];
+        b.addEventListener('change', () => { setGif({ [key]: b.checked }); void this.summary(); });
+        r.append(b, el('span', {}, label));
+        advBody.append(r);
+      }
+      advBody.append(el('p', { class: 'hint' }, `GIF has up to 256 colours, up to ${this.app.device.lite ? 320 : 480} px and 12 pictures a second. For soft see-through edges, use Animated PNG.`));
     } else if (this.kind === 'apng') {
       select(main, 'Background', this.apng.background, bg3, (v) => { this.apng = { ...this.apng, background: v as ApngOptions['background'] }; save(APNG_KEY, this.apng); });
       select(advBody, 'Size', String(this.apng.size), [['480', '480 px'], ['720', '720 px'], ['1080', '1080 px'], ['0', 'Original size']], (v) => { this.apng = { ...this.apng, size: Number(v) }; save(APNG_KEY, this.apng); });
@@ -530,7 +546,8 @@ export class ShareView {
         go.disabled = !support.codec;
       } else if (this.kind === 'gif') {
         const p = planGif(this.app.project, this.app.device.lite);
-        sum.textContent = `${p.width} × ${p.height} · ${p.samples} pictures · loops forever`;
+        const loops = this.gif.loop === 'forever' ? 'loops for ever' : this.gif.loop === 'once' ? 'plays once' : `plays ${this.gif.loop} times`;
+        sum.textContent = `${p.width} × ${p.height} · ${p.samples} pictures · ${this.gif.colors} colours · ${loops}`;
         go.disabled = false;
       } else if (this.kind === 'apng') {
         const p = planApng(this.app.project, this.apng, this.app.device.lite);
@@ -644,7 +661,7 @@ export class ShareView {
         blob = r.blob;
         file = `${name}.${r.extension}`;
       } else if (this.kind === 'gif') {
-        blob = await exportGif(this.app.project, this.app.device.lite, controller.signal, this.app.residency, (n, t) => progress(n, t, `Making GIF: ${n} of ${t}`), this.gifAlpha);
+        blob = await exportGif(this.app.project, this.app.device.lite, controller.signal, this.app.residency, (n, t) => progress(n, t, `Making GIF: ${n} of ${t}`), this.gifAlpha, this.gif);
         file = `${name}.gif`;
       } else if (this.kind === 'apng') {
         blob = await exportApng(this.app.project, this.apng, this.app.device.lite, controller.signal, this.app.residency, (n, t) => progress(n, t, `Making animated PNG: ${n} of ${t}`));

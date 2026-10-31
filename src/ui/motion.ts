@@ -1,12 +1,13 @@
 import type { App } from '../app';
 import { PlaybackRangeControl } from './playbackrange';
 import { autoIcon, iconSvg, setLabel } from './icons';
-import { easingOf, EASINGS, isAnimated, spacingTicks, type Easing, type Prop, type Vec2 } from '../core/anim';
+import { CURVES, curveOf, easingOf, EASINGS, isAnimated, spacingTicks, type Curve, type Easing, type Prop, type Vec2 } from '../core/anim';
 import { compLength, layerEnd, PART_LABEL, PART_NAMES, partOf, playsOn, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
 import { newEffect } from '../core/effects';
 import { newSeed } from '../core/rng';
-import { isPartProp, isPin, keyId, PROP_LABEL, type PropKey, type PropName } from '../compedit';
+import { WIGGLE_DEFAULTS, type LoopMode, type StaggerOrder, type WiggleDims, type WiggleOptions } from '../core/keytools';
+import { isPartProp, isPin, keyId, PROP_LABEL, type KeyRef, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
 import { attachContextMenu, type CtxItem } from './contextmenu';
 import { rulerStep } from '../core/timecode';
@@ -93,6 +94,8 @@ export class MotionPanel {
   private readonly startBtn: HTMLButtonElement;
   private readonly camBtn: HTMLButtonElement;
   private readonly easeBtns = new Map<Easing, HTMLButtonElement>();
+  private readonly sideBtns: HTMLButtonElement[];
+  private readonly curveSel: HTMLSelectElement;
   private readonly delBtn: HTMLButtonElement;
   private readonly splitBtn: HTMLButtonElement;
   private readonly groupBtn: HTMLButtonElement;
@@ -200,6 +203,20 @@ export class MotionPanel {
       this.easeBtns.set(e.id, b);
       ease.append(b);
     }
+    // one side only (After Effects' Easy Ease Out / In on the first / next key), and the named curves
+    this.sideBtns = [
+      btn('Ease in only', 'Starts slow; the end of the segment keeps its easing. Applies to the selected keys.', () => ed.setEaseSide('out')),
+      btn('Ease out only', 'Slows down into the next key; the start keeps its easing. Applies to the selected keys.', () => ed.setEaseSide('in')),
+    ];
+    this.curveSel = el('select', { 'aria-label': 'More easing curves', title: 'More curves for the selected keys: smooth, strong, accelerate, decelerate, expo' });
+    this.curveSel.append(el('option', { value: '' }, 'More…'));
+    for (const c of CURVES) this.curveSel.append(el('option', { value: c.id }, c.label));
+    this.curveSel.addEventListener('change', () => {
+      const id = this.curveSel.value as Curve | '';
+      if (id) ed.setCurve(id);
+      this.update();
+    });
+    ease.append(...this.sideBtns, this.curveSel);
     const rowC = row(
       group(this.autoBtn, this.startBtn, this.camBtn),
       ease,
@@ -302,6 +319,9 @@ export class MotionPanel {
     this.renderCrumbs();
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));
+    for (const b of this.sideBtns) b.disabled = !ed.keys.size;
+    this.curveSel.disabled = !ed.keys.size;
+    this.curveSel.value = (ed.keys.size ? ed.curveOfSelection() : null) ?? '';
     // playhead and live values
     this.playhead.style.width = `${this.cell}px`;
     this.playhead.style.transform = `translateX(${LEFT_W + app.frame * this.cell}px)`;
@@ -629,7 +649,8 @@ export class MotionPanel {
             right.append(tick);
           }
           const e = easingOf(k.out, next.in);
-          const lab = el('span', { class: 'mease' }, e ? (EASINGS.find((z) => z.id === e)?.label ?? '') : 'Custom');
+          const named = e ? null : curveOf(k.out, next.in);
+          const lab = el('span', { class: 'mease' }, e ? (EASINGS.find((z) => z.id === e)?.label ?? '') : named ? (CURVES.find((z) => z.id === named)?.label ?? '') : 'Custom');
           lab.style.left = `${(x(k.f) + x(next.f)) / 2}px`;
           right.append(lab);
         }
@@ -889,6 +910,53 @@ export class MotionPanel {
     return l.start + Math.round((inner.start * this.ed.comp.fps) / nested.fps);
   }
 
+  /** Wiggle between the selected keys: frequency, amount, smoothness, seed (and which way, for a point). */
+  private async askWiggle(ref: KeyRef): Promise<void> {
+    const ed = this.ed, l = ed.layer(ref.layer);
+    const point = !!l && typeof ed.getProp(l, ref.prop).value !== 'number';
+    const w = this.wiggleLast;
+    const r = await askNumbers('Wiggle', [
+      { label: 'Frequency', value: w.frequency, step: 0.5, unit: 'keys a second (0.5–10)' },
+      { label: 'Amount', value: w.magnitude, step: 1, unit: 'most it moves away' },
+      { label: 'Smoothness', value: Math.round(w.smooth * 100), step: 10, unit: '% (0 jagged, 100 smooth)' },
+      { label: 'Seed', value: w.seed, step: 1, unit: 'another number, another wiggle' },
+    ], 'Wiggle');
+    if (!r) return;
+    const dims = point ? await pickBox<WiggleDims>('Wiggle which way', [{ label: 'Both ways', value: 'both' }, { label: 'Only across (X)', value: 'x' }, { label: 'Only up and down (Y)', value: 'y' }]) : 'both';
+    if (!dims) return;
+    this.wiggleLast = { frequency: Math.min(10, Math.max(0.5, r[0]!)), magnitude: Math.abs(r[1]!), smooth: Math.min(1, Math.max(0, r[2]! / 100)), seed: Math.round(r[3]!) >>> 0, dims };
+    ed.wiggleKeys(this.wiggleLast);
+  }
+
+  private wiggleLast: WiggleOptions = { ...WIGGLE_DEFAULTS, seed: 1 };
+
+  private async askSmooth(): Promise<void> {
+    const r = await askNumbers('Smooth keys', [{ label: 'Tolerance', value: 1, step: 0.5, unit: 'how far the motion may drift' }], 'Smooth');
+    if (r) this.ed.smoothSelectedKeys(Math.max(0, r[0]!));
+  }
+
+  private async askLoop(): Promise<void> {
+    const mode = await pickBox<LoopMode>('Loop keys', [
+      { label: 'Cycle', value: 'cycle', hint: 'repeat them' },
+      { label: 'Ping-pong', value: 'pingpong', hint: 'forwards, then backwards' },
+      { label: 'Offset', value: 'offset', hint: 'each pass carries on from the last (a walk)' },
+    ]);
+    if (!mode) return;
+    const r = await askNumbers('Loop keys', [{ label: 'Repeats', value: 2, step: 1, unit: 'times' }], 'Loop');
+    if (r) this.ed.loopSelectedKeys(mode, Math.min(50, Math.max(1, Math.round(r[0]!))));
+  }
+
+  private async askStagger(): Promise<void> {
+    const r = await askNumbers('Stagger', [{ label: 'Frames apart', value: 2, step: 1, unit: 'between each layer' }], 'Next');
+    if (!r) return;
+    const order = await pickBox<StaggerOrder>('Stagger order', [
+      { label: 'Top to bottom', value: 'order' },
+      { label: 'Bottom to top', value: 'reverse' },
+      { label: 'Random', value: 'random' },
+    ]);
+    if (order) this.ed.staggerLayers(Math.round(r[0]!), order, newSeed());
+  }
+
   private async pickParent(l: Layer): Promise<void> {
     const others = this.ed.comp.layers.filter((x) => x.id !== l.id);
     const choice = await pickBox<string | null>('Parent to', [{ label: 'No parent', value: null }, ...others.map((x) => ({ label: `${KIND_ICON[x.kind]} ${x.name}`, value: x.id as string | null }))]);
@@ -910,6 +978,11 @@ export class MotionPanel {
         { title: n > 1 ? `${n} keys` : 'Key' },
         { chips: [ease('Linear', 'linear'), ease('Ease in', 'easeIn'), ease('Ease out', 'easeOut'), ease('In & out', 'easeInOut'), ease('Hold', 'hold')] },
         { label: 'Reverse', run: () => ed.reverse() },
+        { label: 'Wiggle…', run: () => void this.askWiggle(ref) },
+        { label: 'Smooth keys…', run: () => void this.askSmooth() },
+        { label: 'Loop keys…', run: () => void this.askLoop() },
+        { label: 'Copy easing', run: () => ed.copyEasing() },
+        { label: 'Paste easing', disabled: !ed.easeClipboard, run: () => ed.pasteEasing() },
         { label: 'Go to this key', run: () => this.app.setFrame((ed.layer(ref.layer)?.start ?? 0) + ref.f) },
         { sep: true },
         { label: n > 1 ? 'Delete keys' : 'Delete key', run: () => ed.deleteKeys(), danger: true, hint: 'Del' },
@@ -984,6 +1057,7 @@ export class MotionPanel {
       { label: l.visible ? 'Hide' : 'Show', run: () => ed.setFlag(l.id, 'visible', !l.visible) },
       ...(l.kind === 'drawings' || l.kind === 'comp' ? [{ label: 'Split at the playhead', hint: 'Ctrl+Shift+D', run: () => this.splitAt() }] : []),
       ...(ed.selected.length > 1 || l.kind !== 'camera' ? [{ label: ed.selected.length > 1 ? `Group ${ed.selected.length} layers` : 'Group into a comp', run: () => void ed.group() }] : []),
+      ...(ed.selected.length > 1 ? [{ label: `Stagger ${ed.selected.length} layers…`, run: () => void this.askStagger() }] : []),
       ...this.layerActions(l).map((a) => ({ label: a.label, run: () => this.runLayerAction(l, a.value), danger: a.value === 'delete' })),
     ];
   }

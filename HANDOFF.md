@@ -2,6 +2,125 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Iteration 2 packages 2–7: key tools, twelve effects, dither/Fringe, Retro TV, GIF options (2026-10-31, uncommitted)
+
+Plan: `docs/research/CLAUDE-ITERATION-2.md` (packages 0–1 are the section below). Package 8 not started.
+Decisions kept as proposed: no layer groups; effect cards named Drop shadow, Glow, Fringe, Retro TV;
+Wiggle in Motion's key menu (Timing has no keyframes, so it is Motion only).
+
+- **2 Key tools.** New `src/core/keytools.ts` (+ `keytools.test.ts`, 10 tests): `wiggle` (keys every
+  fps/frequency frames between the range ends, each within ±magnitude of the motion underneath,
+  dims both/X/Y, jagged↔smooth, seeded by `hash01`, existing keys kept), `smoothKeys` (greedy
+  removal within a tolerance, ends kept), `loopKeys` (cycle / ping-pong / offset, N repeats,
+  replaces keys inside the new range), `staggerOffsets` (order / reverse / seeded random).
+  `src/compedit.ts`: `wiggleKeys`, `smoothSelectedKeys`, `loopSelectedKeys`, `staggerLayers`,
+  `copyEasing` / `pasteEasing` (one undo each; a row with one selected key uses its whole range).
+  `src/ui/motion.ts`: key context menu Wiggle… / Smooth keys… / Loop keys… / Copy / Paste easing;
+  layer menu "Stagger N layers…" with several selected.
+- **Effects model.** `src/core/effects.ts`: optional `LayerEffect.params` validated per kind by
+  `EffectDef.extras` (range / choice / colour / toggle; unknown keys dropped, numbers clamped),
+  `param()`, `EffectDef.pad` + `effectsPad()`, `seeded` flag; `effectsKey` includes params;
+  `resetEffect` clears them; `effectTick` uses `animated`. No schema version change: older builds
+  drop unknown types (and ignore `params`). `src/ui/effectspanel.ts` renders extras in Advanced
+  (sliders preview live, one undo on release; choices, colour, toggles one undo each); New pattern
+  only for seeded kinds.
+- **Padding.** `src/view/effects.ts` `drawEffected` works on the page grown by `effectsPad` on every
+  side (and takes the comp fps); `src/view/composite.ts` draws the result at −pad (mask at +pad).
+- **3** Drop shadow (distance, softness = blur/2, direction 135° = down-right, opacity 50, colour,
+  shadow only; pad dist + 1.5·soft + 2), Glow (bright-pass with soft knee on threshold, blur radius,
+  intensity, original on top / behind (add) / glow only; pad 1.5·r + 2), Directional blur (length,
+  angle; pad len/2 + 2), Radial blur (spin degrees or zoom %, centre).
+- **4** Posterize, Mosaic (blocks across/down, sharp), Find edges (Sobel over white, invert, mix),
+  Threshold, Twirl (angle, radius %, centre), Mirror (angle, centre), Offset (wrap shift, mix),
+  Wave warp (height, width, shape, direction, speed in waves/s using comp fps, phase, pin edges;
+  animated). Motion Tile and CC Vignette **not done** (optional).
+- **5** `src/core/dither.ts`: `ORDERED` matrices (Bayer 2/3/4/8, 5×3, 8×1, 1×8, 12×4, 4×12, diagonal
+  5×5, cluster 8×8; non-power sizes ranked from a low-discrepancy lattice, not copied), `orderedAt`
+  tiling, `bias` per channel; Retro pixels gains R/G/B threshold extras (−100…100 → ±128).
+  Fringe effect (offset, copies 1–8, 8 directions, falloff; drawn behind; pad offset + 2).
+- **6** Retro TV (`tv`): Strength mix, Static (seeded dashes, `size` = dash length), Chroma loss,
+  Chroma shift with 4-line phase, Phase offset, Scanline blur, Roll (rows/frame, tied to the cached
+  tick), Distortion speed (noise changes per tick × speed). Not a signal model.
+- **7** New `src/io/gifpalette.ts`: `GifOptions` (colours 2–256, loop for ever/once/N, dither
+  none/ordered 1–3/diffusion, better colours, pixel art), `readGifOptions`, `medianCut`,
+  `mapToPalette`. `src/io/gif.ts`: header takes a palette and loop (once = no NETSCAPE block);
+  frames take indices and a see-through index. `src/io/exportgif.ts`: default options keep the
+  old fixed RGB332 path byte for byte; otherwise palette from frame 0 or (better) from every
+  frame in a first pass. `src/ui/share.ts`: GIF Advanced rows, saved as `2dope.gif.options`.
+- Manual Effects / GIF lines and three UPDATES entries; Motion manual line for key tools.
+
+Checks (actual): `npx vitest run` **75 files / 608 passed**; `npm run build` passed; browser fixtures
+**45/45** on 127.0.0.1:5218 (5217 was taken), `effects` now 18 checks (shadow direction/opacity/padding
+past the page edge and in `drawComp`, shadow only, glow only on bright art, directional streak axis,
+radial spin≠zoom, posterize/threshold/mosaic/edges, twirl/wave identity at 0, mirror, offset wrap,
+wave moves over frames, fringe side/falloff, Retro TV identity/seed/frames/roll, params undo through
+the real card). Dev app: wiggle/smooth/loop/paste easing/stagger each one undo step. Real GIF exports
+decoded with `decodeGif` for default, 16-colour ordered, 4-colour better+once, 8-colour pixel art.
+Looked at a headless grid (thin line, thick stroke, filled shape): shadow, wave, fringe, twirl look
+right; Glow does nothing on dark or mid-red art at the default 60 % threshold (by design, but may
+surprise); Retro TV static is strong on large flat colour at 12 %.
+**Not checked:** effect cost on a phone (all CPU ImageData passes; radial/directional blur and warps
+are per-pixel on the padded page, cached per frame), the Share dialog and Motion menus by hand at
+phone width, real touch, Blender export of the new effects (they are pixels like the others).
+
+### Effects fixture (Roughen edges, Gaussian blur) and Motion easing Tier 1 (2026-10-31, uncommitted)
+
+**Task 1, verification.** New fixture `tests/effects.html` + `src/view/effects.browser.ts` (8 checks,
+drives `drawEffected`, `drawEditingLayer` and the real `EffectsPanel`): blur 0 is pixel-identical;
+blur 8 spreads a hard dot with worst soft-edge RGB drift 5 (no darkening); roughen changes 141 rim
+pixels of a 36 px square, never adds alpha, keeps the inside at 255 and RGB within 2 (alpha ≥ 64);
+same seed/frame repeat exactly, hold 2 holds frame 1 and changes at frame 2, hold 1 and a new seed
+change it; Ink roughen leaves Colour untouched and vice versa, whole-layer blur hits both; the layer
+you draw on renders without its effects; Add / slider release / New pattern are one undo step each
+(live slider preview and the Simple→Advanced switch add none), undo restores each, autosave notified.
+Look (headless screenshot of the fixture's grid): thick stroke and filled shape roughen well;
+**a thin 1.5 px line breaks up badly** (keeps 39 % of its ink at the default 3 px, mostly gone at
+8 px), and thick strokes at 8 px get a smeared rim. Not fixed; consider scaling roughness by local
+stroke width or a lower default for Ink.
+
+**Task 2, easing.** `src/core/anim.ts`: `CURVES` (the 12 presets from the research table as data),
+`curveSides`, `curveOf`, `setSegmentSide(prop, f, 'in' | 'out', side)`, `setSegmentCurve`. No
+schema change (plain `Side` values). `src/compedit.ts`: `setEaseSide`, `setCurve`,
+`curveOfSelection` (one undo step each). `src/ui/motion.ts`: Easing row gains **Ease in only**
+(eases the segment's start = AE Easy Ease Out on the first key) and **Ease out only** (its end = AE
+Easy Ease In on the next key) plus a **More…** select of the 12 curves; key labels name a matching
+curve instead of "Custom". Names follow 2Dope's existing meaning (ease in = slow start), which is
+the opposite of AE's key-centred wording. Manual Easing line and an UPDATES entry.
+`src/core/anim.test.ts`: 3 tests (per-side keeps the other side; all 12 round-trip, stay
+monotonic and match the table; back to the five easings).
+
+Checks (actual): `npx vitest run` **74 files / 587 passed**; `npm run build` passed (chunk-size
+warning only); browser fixtures on a separate origin (127.0.0.1:5218) **45/45** including the new
+`effects`. In the dev app: Ease in only → Ease out only → Expo decelerate → Linear gave the expected
+sides, each one undo step, four undos returned to the start. Not checked: how the wider Easing row
+lays out on a phone/tablet (no screenshot), real touch.
+
+### Textured brushes fast on phones (2026-10-31, uncommitted)
+
+User reported heavy Draw/Animate lag on a Pixel 9. Cause (measured in the in-app browser at
+412×915, Lite, 1920×1080 page, GPU canvas, timing flushed by a 1 px readback): every grained dab
+(Pencil — the default brush — Charcoal, Shading Pencil, Textured Paint) was drawn, paper-cut and
+copied through one small scratch canvas, so the GPU stalled once per dab (≈1 dab/px for Pencil), and
+the live preview recopied the whole page every frame.
+
+- `src/brush/raster.ts`: grained dabs are now prepared in slots of a 256×256 sheet (`atlas`,
+  clipped per slot, paper still in document coordinates) and copied to their buffer in order by
+  `flushStamps()` at the end of `addDabs`/`drawGhost`, or before an ungrained dab on the same
+  buffer: one stall per batch instead of per dab. Dabs ≥ 256 px keep the old one-at-a-time path.
+  `displaySource()` copies the page into `work` once per stroke (`workReady`), then only restores
+  and repaints the stroke's growing box. State resets in `begin`/`cancel`/`bind`/`resize`.
+  A 1024 sheet failed the brushperformance reference in Chrome's software canvas (Pencil 128 px,
+  premultiplied RGB error 2.8 > 2.05: grain sampling far from the origin); 256 passes.
+
+Measured (same method, ms per pointer move, before → after): Pencil 8 px stroke 13.3 → 0.76,
+stroke + screen render 63.7 → 0.66; Textured Paint 0.1 / 0.5 after; ungrained brushes unchanged
+(0.23 / 0.5). Live preview vs a full recompute: max channel difference 0 (Pencil), 1 (Textured
+Paint, Pencil eraser). brushperformance reference check passes headless (software) and in the GPU
+pane (all ≤ 1.9 premultiplied error). `npx vitest run` 587 passed, `npm run build` passed,
+browser fixtures **45/45** on 127.0.0.1:5218.
+Not checked: a real Pixel 9 or iPad (desktop GPU only); Animate with many onion skins; the
+per-move `#stats` DOM update (left as is, `app.ts` is being edited by the Story session).
+
 ### Story C iteration 1: Script to panels (2026-10-31, uncommitted)
 
 Before this: the Story views work was checked (vitest 576, build, 44/44 fixtures) and committed as
