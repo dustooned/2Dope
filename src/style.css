@@ -4234,7 +4234,7 @@ body.quick .flip-row { display: none !important; }
 .layercards { position: fixed; z-index: 150; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgba(38, 38, 45, 0.98); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55); overflow: hidden; }
 .layercards[hidden] { display: none; }
 .lc-head { display: flex; align-items: center; gap: 6px; }
-.lc-title { flex: 1; font-weight: 600; padding-left: 4px; }
+.lc-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; padding-left: 4px; }
 .lc-icon { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; }
 .lc-icon .lbl { display: none; }
 .lc-icon[data-state="fade"] { opacity: 0.6; }
@@ -4840,3 +4840,9 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .pen-slider input { flex: 0 1 45%; min-width: 0; }
 .pen-slider output { width: 44px; text-align: right; font-size: 12px; }
 @media (max-width: 420px) { .pen-curve { width: 72px; height: 72px; } }
+/* The vector preview follows the existing native-dialog and touch layout. */
+.vector-restyle { width: min(680px, calc(100vw - 32px)); max-height: 90dvh; overflow: auto; }
+.vector-restyle canvas { display: block; width: 100%; max-height: 50dvh; object-fit: contain; background: #fff; border: 1px solid #8885; margin: 12px 0; }
+.vector-restyle label { display: flex; align-items: center; gap: 8px; }
+.vector-restyle button { min-height: 44px; }
+.panel-body [hidden] { display: none !important; }

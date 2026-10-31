@@ -1,10 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { PRESETS } from '../core/brush';
+import { prepareVectorStroke, selectionClip } from '../core/vectorstyle';
 import { hashBytes } from './hash';
 import { assetPaths, compFile, compsFromFile, mainLength, parseProjectFile, SCHEMA, SchemaError, stringifyProjectFile, validateProjectFile, type ProjectFile } from './schema';
 import { crc32, readZip, safeName, writeZip, ZipError } from './zip';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
+
+describe('schema 4 vector appearances',()=>{
+  const styled=()=>{
+    const file=sample(),r=file.drawings.d2!.vectors[0]!;
+    r.brush={...r.brush,vectorStyle:{v:1,mode:'stamp',tip:'custom',mask:{width:2,height:2,alpha:'ff00ffff'}}};
+    const rec=prepareVectorStroke(r);rec.controls={anchors:[0,1],modes:{0:'straight',1:'curve'},handles:{0:{inx:0,iny:0,outx:1,outy:2}}};
+    const mask=new Uint8Array(16).fill(1);rec.clips=[selectionClip(mask,4,4)];file.drawings.d2!.vectors=[rec];return file;
+  };
+  it('round-trips portable tips, channels, authored controls and selection restrictions',()=>{
+    const file=styled(),copy=parseProjectFile(stringifyProjectFile(file));
+    expect(copy.drawings.d2!.vectors).toEqual(file.drawings.d2!.vectors);
+    expect(copy.schema).toBe(4);
+  });
+  it('rejects unknown renderers and excessive rendering work rather than changing their appearance',()=>{
+    const file=styled();file.drawings.d2!.vectors[0]!.style!.v=7 as 1;expect(()=>validateProjectFile(file)).toThrow(/Unsupported vector/);
+    const dense=styled();dense.drawings.d2!.vectors[0]!.style!.step=.00001;expect(()=>validateProjectFile(dense)).toThrow(/spacing|limit/);
+    const noChannel=styled();delete noChannel.drawings.d2!.vectors[0]!.points[0]!.u;expect(()=>validateProjectFile(noChannel)).toThrow(/channels/);
+  });
+});
 
 const T = (w: number, h: number) => ({
   anchor: { value: [w / 2, h / 2] as [number, number] },

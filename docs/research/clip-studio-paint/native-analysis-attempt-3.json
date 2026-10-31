@@ -1,0 +1,19 @@
+{
+  "kind": "rea-operation-failure-summary",
+  "operation": "search_strings",
+  "code": "provider_timeout",
+  "message": "Ghidra did not finish importing and analyzing the target within its configured 1800000 ms startup deadline (REA_GHIDRA_STARTUP_TIMEOUT_MS). Ghidra's output for this operation is incomplete. No OutOfMemoryError was confirmed; a memory cause cannot be ruled out.",
+  "timeout_ms": 1800000,
+  "target_path": "C:\\Program Files\\CELSYS\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\CLIPStudioPaint.exe",
+  "target_sha256": "11a8ceab708dfac1efea4b85d9febc52a7de8a5e8c37de59cc17dc53b93e0b89",
+  "provider_version": "12.1.4",
+  "analysis_profile_digest": "c5919e3258e315d5591f6ca7b38b1cdf17b4e2d47c293767def489623f3261e7",
+  "disabled_analyzers": [
+    "Stack",
+    "Decompiler Switch Analysis",
+    "Decompiler Parameter ID",
+    "Call Convention ID"
+  ],
+  "observed_oome": [],
+  "result": "No completed primary-executable string/reference/function evidence. Full raw tool response retained in native-main-strings.result.json. The helper stopped on this error and closed its owned session."
+}

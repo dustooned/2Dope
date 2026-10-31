@@ -46,6 +46,8 @@ export class LayersPopover {
 
   toggle(anchor: HTMLElement): void {
     if (this.open && this.anchor === anchor) return this.close();
+    const placement=this.app.drawAssetPlacement;
+    if(placement && !this.app.strokeActive && this.app.editAssetSource)this.app.editAssetSource(placement.comp);
     this.anchor = anchor;
     this.root.hidden = false;
     this.sig = '';
@@ -75,19 +77,20 @@ export class LayersPopover {
     if (this.root.hidden) return;
     const app = this.app;
     const ed = app.editor;
-    const layers = app.project.comp.layers.filter((l) => l.kind === 'drawings' || l.kind === 'comp');
+    const layers = (app.workspace==='draw' && !app.project.comp.asset ? app.celLayers : app.project.comp.layers).filter((l) => l.kind === 'drawings' || l.kind === 'comp');
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // rebuild only when something it shows changed (keeps double-taps and focus intact)
     const sig = `${app.project.comp.id}|${active}|${app.plane}|${app.partVisible('line')}|${app.partVisible('fill')}|${app.showLayers}|${app.otherAlpha}|${app.boardAlpha}|${app.board?.id ?? ''}|${[...drawRailState.open].join(',')}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}`).join(',')}`;
-    if (sig === this.sig) return;
-    this.sig = sig;
+    const scopedSig=`${app.workspace}|${sig}`;
+    if (scopedSig === this.sig) return;
+    this.sig = scopedSig;
     this.root.replaceChildren();
     const head = el('div', { class: 'lp-head' });
     head.append(el('span', { class: 'lp-title' }, `Layers · ${app.project.comp.name}`));
     const add = el('button', { type: 'button', class: 'lp-add', title: 'New layer above the one you draw on' }, 'Layer');
     decorate(add, 'plus');
     add.addEventListener('click', () => {
-      app.addDrawLayer();
+      if(app.workspace==='draw')app.addPaintLayer();else app.addDrawLayer();
       this.update();
     });
     head.append(add);

@@ -37,6 +37,8 @@ const xp = (a: App) => a.transformParams!;
 const ROLE_TITLES = { key: 'A key drawing: the main poses of the move', breakdown: 'A breakdown: the drawing that shapes the move between two keys', inbetween: 'An in-between: fills the gaps so the move is smooth' } as const;
 
 export const COMMANDS: readonly Command[] = [
+  { id:'paint.restyle',label:'Apply brush to lines',title:'Preview the current brush on complete selected vector lines',contexts:['paint'],order:115,run:a=>a.openVectorRestyle(),isEnabled:a=>a.tool==='pen' },
+  { id:'points.restyle',label:'Apply brush to line',title:'Preview the current brush on this editable vector line',contexts:['points'],order:115,run:a=>a.openVectorRestyle() },
   // with something selected
   { id: 'select.transform', label: 'Transform', title: 'Move, size, rotate or flip what is selected (drag the canvas to move)', icon: 'motion', contexts: ['select'], order: 10, run: (a) => a.beginTransform(), isEnabled: selected },
   { id: 'select.fill', label: 'Fill', title: 'Colour everything inside the selection', icon: 'fill', contexts: ['select'], order: 20, run: (a) => a.fillSelectedArea(), isEnabled: selected },

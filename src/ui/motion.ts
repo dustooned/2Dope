@@ -273,7 +273,7 @@ export class MotionPanel {
     let content = 0;
     for (const l of c.layers) if (l.kind === 'drawings') for (const e of l.exposures) content += e.length + 1;
     const simple = !document.body.classList.contains('ui-full');
-    const sig = `${simple}|${this.allRows}|${c.id}|${ed.rev}|${ed.selected.join(',')}|${[...ed.keys].join(',')}|${[...ed.open].join(',')}|${this.cell}|${this.rowH}|${content}|${app.compEnd}|${this.audio?.sig() ?? ''}`;
+    const sig = `${simple}|${this.allRows}|${c.id}|${c.fps}|${app.timeFormat}|${ed.rev}|${ed.selected.join(',')}|${[...ed.keys].join(',')}|${[...ed.open].join(',')}|${this.cell}|${this.rowH}|${content}|${app.compEnd}|${this.audio?.sig() ?? ''}`;
     // never rebuild the rows under a finger that is dragging one of them
     if (sig !== this.signature && !this.drag && !this.scrubbing) {
       this.signature = sig;

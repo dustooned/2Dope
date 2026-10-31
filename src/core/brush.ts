@@ -4,6 +4,7 @@
  * any of them (see docs/feature-deconstruction 02 and 06).
  */
 
+import type { VectorStyle } from './vectorstyle';
 export type Control = 'off' | 'pressure' | 'tilt' | 'speed';
 
 export interface Dynamic {
@@ -38,6 +39,8 @@ export interface TiltShade {
 }
 
 export interface BrushSettings {
+  /** Missing = the original vector outline when used with the Vector pen. */
+  vectorStyle?: VectorStyle;
   name: string;
   /**
    * An image tip (Procreate's shape source): a small PNG as a data URL. White (or opaque) paints,
@@ -319,6 +322,16 @@ export const PRESETS: BrushSettings[] = [
     tiltShade: NO_TILT_SHADE,
   },
 ];
+
+// Vector presets use original procedural tips. Selecting one switches to the Vector pen.
+for (const [name,mode,tip,size,spacing,aspect] of [
+  ['Vector Ink','ink','dot',12,.12,1],
+  ['Vector Chisel','flat','dot',24,.12,.2],
+  ['Vector Dry Ink','stamp','dry',20,.12,1],
+  ['Vector Pencil','stamp','pencil',12,.1,.65],
+  ['Vector Dots','stamp','dot',14,1.6,1],
+  ['Vector Pattern','stamp','dash',22,1.2,1],
+] as const) PRESETS.push({...structuredClone(base),name,size,spacing,roundness:aspect,angle:mode==='flat'?-35:0,followDirection:tip==='dash',sizeDyn:dyn('pressure',.15,1),opacity:1,flow:tip==='pencil'?.6:1,vectorStyle:{v:1,mode,tip}});
 
 export function cloneBrush(b: BrushSettings): BrushSettings {
   return structuredClone(b);

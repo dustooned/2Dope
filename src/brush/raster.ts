@@ -298,7 +298,9 @@ export class RasterEngine {
     this.buffer = makeCanvas(width, height);
     this.shadeBuffer = makeCanvas(width, height);
     this.grained = makeCanvas(width, height);
-    this.scratch = makeCanvas(width, height);
+    // Grain compositing alternates write/read surfaces for every dab. A document-sized
+    // source forces expensive full-surface resolves even when drawImage crops a tiny stamp.
+    this.scratch = makeCanvas(1, 1);
     this.work = makeCanvas(width, height);
     this.clipImageCanvas = makeCanvas(width, height);
     this.stencil = makeCanvas(width, height);
@@ -311,10 +313,11 @@ export class RasterEngine {
     if (width === this.width && height === this.height) return;
     this.width = width;
     this.height = height;
-    for (const c of [this.buffer, this.shadeBuffer, this.grained, this.scratch, this.work, this.clipImageCanvas, this.stencil]) {
+    for (const c of [this.buffer, this.shadeBuffer, this.grained, this.work, this.clipImageCanvas, this.stencil]) {
       c.width = width;
       c.height = height;
     }
+    this.scratch.width=this.scratch.height=1;
     this.clipReady = false;
   }
 
@@ -344,6 +347,8 @@ export class RasterEngine {
    */
   begin(record: StrokeRecord, clip?: Uint8Array | null): void {
     this.record = record;
+    // A large brush on the previous stroke must not leave Pencil using a page-sized source.
+    this.scratch.width=this.scratch.height=1;
     if (clip !== undefined) {
       this.clipMask = clip && clip.length === this.width * this.height ? clip : null;
       this.clipReady = false;
@@ -402,13 +407,21 @@ export class RasterEngine {
 
   /** Deposit textured paint per dab, so overlap can fill the paper valleys within a stroke.
    * A firmer press lays down more paint; even the darkest grain can gradually take pigment.
-   * Reuse the existing scratch plane and touch only this stamp's clipped rectangle. */
+   * Reuse a stamp-sized scratch tile and retain document-aligned paper coordinates. */
   private stamp(ctx: CanvasRenderingContext2D, d: Dab, tip: HTMLCanvasElement, grain: number, paper: CanvasPattern | null, alphaScale = 1): void {
     if (grain <= 0 || !paper) { drawDab(ctx, d, tip, alphaScale); return; }
     const r = this.clip(dabBounds(d));
     if (!r) return;
+    const width=Math.min(this.width,Math.max(32,2**Math.ceil(Math.log2(r.w))));
+    const height=Math.min(this.height,Math.max(32,2**Math.ceil(Math.log2(r.h))));
+    if(this.scratch.width<width)this.scratch.width=width;
+    if(this.scratch.height<height)this.scratch.height=height;
     const s = ctx2d(this.scratch);
-    s.clearRect(r.x, r.y, r.w, r.h);
+    s.setTransform(1,0,0,1,0,0);
+    s.clearRect(0,0,r.w,r.h);
+    // Keep brush and paper coordinates in document space. Translating the tiny target
+    // preserves grain phase, rotated-tip sampling and the original pressure/flow behavior.
+    s.setTransform(1,0,0,1,-r.x,-r.y);
     drawDab(s, d, tip, alphaScale);
     s.save();
     s.globalCompositeOperation = 'destination-out';
@@ -418,7 +431,7 @@ export class RasterEngine {
     s.restore();
     ctx.save();
     ctx.globalAlpha = 1;
-    ctx.drawImage(this.scratch, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+    ctx.drawImage(this.scratch, 0, 0, r.w, r.h, r.x, r.y, r.w, r.h);
     ctx.restore();
   }
 

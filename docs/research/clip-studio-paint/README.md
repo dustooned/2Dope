@@ -1,4 +1,15 @@
-# Clip Studio Paint's UI model (SQLite) — verified
+# Clip Studio Paint research
+
+2026-10-30 follow-up: [the original 2Dope vector-brush milestone is implemented locally](VECTOR-BRUSH-MILESTONE-2026-10-30.md),
+with schema-4 portable tips, editable appearances, restyle previews and tested rendering. Uncommitted,
+not deployed. This implementation is separate from the reference research below.
+
+2026-10-30: [Vector drawing, vector layers and custom-brush REA](VECTOR-BRUSH-REA-2026-10-30.md),
+with [a proposed 2Dope implementation plan](VECTOR-BRUSH-IMPLEMENTATION-PLAN.md) and
+[retained REA evidence](vector-brush-rea-2026-10-30.evidence.json). Research only; it does not
+implement or release vector brushes.
+
+## Clip Studio Paint's UI model (SQLite) — verified
 
 2026-10-26 · REA static read of the shipped tool database. Reference only; nothing is copied into
 2Dope. This records a finding first made in a separate session and re-verified here with REA's SQLite

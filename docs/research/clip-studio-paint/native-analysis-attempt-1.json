@@ -1,0 +1,24 @@
+{
+  "kind": "rea-operation-failure-summary",
+  "operation": "search_strings",
+  "artifact": {
+    "path": "C:\\Program Files\\CELSYS\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\CLIPStudioPaint.exe",
+    "sha256": "11a8ceab708dfac1efea4b85d9febc52a7de8a5e8c37de59cc17dc53b93e0b89"
+  },
+  "provider": "Ghidra 12.1.4",
+  "code": "provider_timeout",
+  "message": "Ghidra did not finish importing and analyzing the target within its configured 330000 ms startup deadline (REA_GHIDRA_STARTUP_TIMEOUT_MS). Ghidra's output for this operation is incomplete. No OutOfMemoryError was confirmed; a memory cause cannot be ruled out.",
+  "timeout_ms": 330000,
+  "profile_digest": "9b537ee6fdad293e1c8ea50e7b50d0b6b22972a83032bca093d279ab7e770ce4",
+  "run_id": "3025df52-7943-4530-b1d6-81a26b2ec1ce",
+  "output_incomplete": true,
+  "observed_oome": [],
+  "remediation": {
+    "action": "Large binaries can need longer: use update_analysis_settings with setting ghidra.startup_timeout_ms and action set above 330000, or set REA_GHIDRA_STARTUP_TIMEOUT_MS in the launch environment for future REA processes; REA_GHIDRA_DISABLED_ANALYZERS can skip selected expensive analyzers with reduced coverage. Export useful Evidence and resolve any retained cleanup before starting a new provider attempt. Runtime updates apply to the next startup attempt without restarting REA. Reopening repeats import from scratch. The MCP client's tool-call deadline must also allow startup and the query."
+  },
+  "retry": {
+    "startup_timeout_ms": 1800000,
+    "status": "the subsequent MCP call hit the separate 450-second client deadline; see native-analysis-attempt-2.json and the report"
+  },
+  "note": "Compact diagnostic summary, not an Evidence record or successful native analysis."
+}

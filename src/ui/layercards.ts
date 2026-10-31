@@ -65,6 +65,8 @@ export class LayerCards {
 
   toggle(anchor: HTMLElement): void {
     if (this.open && this.anchor === anchor) return this.close();
+    const placement=this.app.drawAssetPlacement;
+    if(placement && !this.app.strokeActive && this.app.editAssetSource)this.app.editAssetSource(placement.comp);
     this.anchor = anchor;
     this.root.hidden = false;
     this.menuFor = null;
@@ -81,7 +83,7 @@ export class LayerCards {
 
   /** The selection: the layer you draw on first, then the picked ones (in stack order). */
   private selection(): string[] {
-    const layers = this.app.project.comp.layers;
+    const layers = this.app.workspace==='draw' && !this.app.project.comp.asset ? this.app.celLayers : this.app.project.comp.layers;
     const active = this.app.project.isPlaceholder ? '' : this.app.project.activeLayer;
     for (const id of [...this.picked]) if (!layers.some((l) => l.id === id) || id === active) this.picked.delete(id);
     const ids = layers.filter((l) => l.id === active || this.picked.has(l.id)).map((l) => l.id);
@@ -221,7 +223,8 @@ export class LayerCards {
     // Move assets with a placement chosen: the layers of that artwork, not the shot's tracks
     const placed = app.placedAsset;
     if (placed && !this.showTracks) return this.assetLayers(placed);
-    const layers = app.project.comp.layers.filter((l) => l.kind === 'drawings' || l.kind === 'comp');
+    const paint=app.workspace==='draw';
+    const layers = (paint && !app.project.comp.asset ? app.celLayers : app.project.comp.layers).filter((l) => l.kind === 'drawings' || l.kind === 'comp');
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // options belong to the layer you draw on; picking another closes them
     if (this.menuFor && this.menuFor !== active && !layers.some((l) => l.id === this.menuFor && l.kind === 'comp')) this.menuFor = null;
@@ -234,8 +237,9 @@ export class LayerCards {
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
     const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${[...this.foldedStacks].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
-    if (sig === this.sig) return;
-    this.sig = sig;
+    const scopedSig=`${app.workspace}|${app.project.comp.name}|${sig}`;
+    if (scopedSig === this.sig) return;
+    this.sig = scopedSig;
     const scrollTop = this.root.querySelector<HTMLElement>('.lc-list')?.scrollTop ?? 0;
     const focused = document.activeElement;
     const field = focused instanceof HTMLInputElement || focused instanceof HTMLSelectElement ? focused : null;
@@ -244,7 +248,7 @@ export class LayerCards {
     this.root.replaceChildren();
 
     const head = el('div', { class: 'lc-head' });
-    head.append(el('span', { class: 'lc-title' }, 'Layers'));
+    head.append(el('span', { class: 'lc-title', title:paint && app.project.comp.asset ? app.project.comp.name : 'Layers' }, paint && app.project.comp.asset ? `${app.project.comp.name} · Layers` : 'Layers'));
     const others = el('button', { type: 'button', class: 'lc-icon', title: 'Other layers: show, fade or hide while you draw', 'aria-label': 'Other layers' }, 'Others');
     decorate(others, 'eye');
     others.dataset.state = !app.showLayers ? 'hide' : app.otherAlpha < 0.99 ? 'fade' : 'show';
@@ -255,9 +259,9 @@ export class LayerCards {
       else app.setShowLayers(false, app.otherAlpha);
       this.update();
     });
-    const add = el('button', { type: 'button', class: 'lc-icon', title: 'New layer: animation, background or object', 'aria-label': 'New layer', 'aria-expanded': String(this.addOpen) }, 'Add');
+    const add = el('button', { type: 'button', class: 'lc-icon', title: paint ? 'Add a paint layer to this artwork' : 'New layer: animation, background or object', 'aria-label': 'New layer', 'aria-expanded': String(!paint && this.addOpen) }, 'Add');
     decorate(add, 'plus');
-    add.addEventListener('click', () => { this.addOpen = !this.addOpen; this.sig = ''; this.update(); });
+    add.addEventListener('click', () => { if(paint){app.addPaintLayer();this.sig='';this.update();return;}this.addOpen = !this.addOpen; this.sig = ''; this.update(); });
     const close = el('button', { type: 'button', class: 'lc-icon', title: 'Close layers and return to drawing', 'aria-label': 'Close layers' }, 'Close');
     decorate(close, 'close');
     close.addEventListener('click', () => { this.close(); app.focusCanvas(); });
@@ -270,13 +274,13 @@ export class LayerCards {
       this.root.append(back);
     }
     const crumbs = app.editor.crumbs();
-    if (crumbs.length > 1) {
+    if (crumbs.length > 1 && !(paint && app.project.comp.asset)) {
       const back = el('button', { type: 'button', class: 'lc-back', title: 'Back out of this group' }, `\u2039 ${crumbs[crumbs.length - 2]!.comp.name}`);
       back.append(el('span', { class: 'lc-back-in' }, ` \u00b7 in ${crumbs[crumbs.length - 1]!.comp.name}`));
       back.addEventListener('click', () => { if (!app.strokeActive) { app.editor.exit(); this.menuFor = null; this.sig = ''; this.update(); } });
       this.root.append(back);
     }
-    if (this.addOpen) {
+    if (this.addOpen && !paint) {
       const menu = el('div', { class: 'lc-options lc-add', role: 'group', 'aria-label': 'New layer' });
       const choice = (label: string, icon: string, title: string, fn: () => void) => {
         const b = el('button', { type: 'button', class: 'lc-opt', title }, label);
@@ -295,7 +299,7 @@ export class LayerCards {
     const sel = this.selection();
     if (sel.length > 1) this.root.append(this.batchBar(sel));
     else this.root.append(el('p', { class: 'hint lc-swipe-hint' }, 'Swipe a layer right to select more (then group or merge); left for quick actions; hold to drag.'));
-    const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': 'Layers', 'aria-multiselectable': 'true' });
+    const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': paint && app.project.comp.asset ? `Layers of ${app.project.comp.name}` : 'Layers', 'aria-multiselectable': 'true' });
     for (const l of layers) {
       const on = l.id === active;
       // linked layers (a background's paint layers, a drawing's art layers) are one stack
@@ -303,7 +307,7 @@ export class LayerCards {
       const stackOf = (x: Layer) => (x.kind === 'drawings' ? (x.cel ?? (x.still ? x.id : null)) : null);
       const stackId = stackOf(l);
       const members = stackId ? layers.filter((x): x is DrawingsLayer => x.kind === 'drawings' && stackOf(x) === stackId) : [];
-      const inStack = !!stackId && (members.length > 1 || (l.kind === 'drawings' && !!l.still));
+      const inStack = !paint && !!stackId && (members.length > 1 || (l.kind === 'drawings' && !!l.still));
       if (inStack && members[0] === l) list.append(this.stackHeader(stackId!, members, active));
       if (inStack && this.foldedStacks.has(stackId!) && !members.some((m) => m.id === active)) continue;
       const pick = this.picked.has(l.id);
@@ -316,7 +320,7 @@ export class LayerCards {
       if (l.kind === 'comp') tags.push(`group \u00b7 ${app.project.comps.get(l.comp)?.layers.length ?? 0} layers`);
       if (l.kind === 'drawings' && l.notes) tags.push('notes \u00b7 not exported');
       else if (l.kind === 'drawings' && l.guide) tags.push('board');
-      if (linked && !inStack) tags.push('linked');
+      if (linked && !inStack && !paint) tags.push('linked');
       if (l.kind === 'drawings' && l.still) tags.push('still');
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
       if (l.kind === 'drawings' && l.reference) tags.push('reference');
@@ -463,7 +467,7 @@ export class LayerCards {
    */
   private stackHeader(id: string, members: DrawingsLayer[], active: string): HTMLElement {
     const app = this.app;
-    const still = members.every((m) => m.still);
+    const still = app.workspace==='draw' || members.every((m) => m.still);
     const base = members[members.length - 1]!;
     const folded = this.foldedStacks.has(id) && !members.some((m) => m.id === active);
     const head = el('div', { class: `lc-stack${members.some((m) => m.id === active) ? ' here' : ''}`, role: 'group', 'aria-label': `${base.name} stack` });

@@ -1,6 +1,9 @@
 import { evalDynamic } from '../core/brush';
 import { hash01 } from '../core/rng';
 import { tiltAmount, type StrokePoint, type StrokeRecord } from '../core/stroke';
+import { drawStyledVector, applyVectorClips } from './vectorstyled';
+import { prepareVectorStroke, vectorBounds } from '../core/vectorstyle';
+export { clearVectorRenderCache } from './vectorstyled';
 
 /**
  * Vector pen: the stroke stays as points with a per-point width (from pressure), drawn as one
@@ -43,6 +46,27 @@ function thin(points: StrokePoint[], minDist: number): StrokePoint[] {
 }
 
 export function drawVectorStroke(ctx: CanvasRenderingContext2D, rec: StrokeRecord, totalLength = Infinity): void {
+  if (rec.style || rec.brush.vectorStyle) { drawStyledVector(ctx, prepareVectorStroke(rec)); return; }
+  if(rec.clips?.length) {ctx.save();applyVectorClips(ctx,rec);drawLegacyVectorStroke(ctx,rec,totalLength);ctx.restore();}
+  else drawLegacyVectorStroke(ctx, rec, totalLength);
+}
+
+let visibilityTile: HTMLCanvasElement | undefined;
+/** Exact visible-alpha commit check using the same renderer. Readbacks are tiled, bounded to
+ * 512² pixels, and stop at the first painted pixel. Never allocate a full document hit surface. */
+export function hasVisibleVectorStroke(rec:StrokeRecord,w:number,h:number):boolean {
+  if(!rec.points.length || rec.brush.opacity<=0)return false;
+  const box=vectorBounds(rec),x0=Math.max(0,box.x0),y0=Math.max(0,box.y0),x1=Math.min(w,box.x1),y1=Math.min(h,box.y1);
+  visibilityTile ??= document.createElement('canvas');const c=visibilityTile,g=c.getContext('2d',{willReadFrequently:true})!;
+  for(let y=y0;y<y1;y+=512)for(let x=x0;x<x1;x+=512) {
+    c.width=Math.min(512,x1-x);c.height=Math.min(512,y1-y);g.setTransform(1,0,0,1,-x,-y);drawVectorStroke(g,rec);
+    const data=g.getImageData(0,0,c.width,c.height).data;for(let i=3;i<data.length;i+=4)if(data[i])return true;
+  }
+  return false;
+}
+
+/** Unchanged legacy algorithm: old artwork keeps its thinning, caps and pressure floor. */
+export function drawLegacyVectorStroke(ctx: CanvasRenderingContext2D, rec: StrokeRecord, totalLength = Infinity): void {
   const pts = thin(rec.points, 1.5);
   if (pts.length === 0) return;
   const widths = vectorWidths({ ...rec, points: pts }, totalLength);

@@ -1,5 +1,14 @@
 # PNG sequence export
 
+Versioned vector appearances (2026-10-30) render through the same `drawVectorStroke` dispatcher
+in drawing, thumbnails, onion skins, playback, nested artwork, masks and export. Custom tips
+are synchronous inline alpha data; export has no dependency on the current brush library.
+Ink/chisel union coverage and material-tip coverage receive whole-stroke opacity once, including
+self-crossings. Fill references use the marks’ visible alpha at the existing fill threshold;
+there is no hidden continuous barrier behind dotted/textured lines. The existing Close gaps
+setting can deliberately bridge small holes. Lines and Combined retain the saved selection clips.
+The bounded scratch resolution described in `project-format.md` applies consistently to exports.
+
 **Export…** (top bar, or **More → Export sequence…** in Quick Animate) writes one `.zip`:
 
 ```

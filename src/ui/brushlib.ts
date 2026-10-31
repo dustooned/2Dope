@@ -562,7 +562,7 @@ export class BrushLibrary {
     }
     // previews show the brush at a size that fits the card
     const shown = { ...cloneBrush(b), size: Math.min(b.size, 14) };
-    const rec: StrokeRecord = { id: 'preview', tool: this.app.tool === 'pen' ? 'pen' : 'brush', brush: shown, color: '#e8e8ee', seed: 7, points: pts };
+    const rec: StrokeRecord = { id: 'preview', tool: b.vectorStyle || this.app.tool === 'pen' ? 'pen' : 'brush', brush: shown, color: '#e8e8ee', seed: 7, points: pts };
     const len = strokeLength(pts);
     if (rec.tool === 'pen') drawVectorStroke(g, rec, len);
     else {

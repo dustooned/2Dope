@@ -116,7 +116,7 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
       }
       const file: ProjectFile = {
         format: FORMAT,
-        schema: SCHEMA,
+        schema: Object.values(drawings).some(d=>d.vectors.some(v=>v.style || v.brush.vectorStyle || v.clips || v.controls)) ? SCHEMA : 3,
         savedBy: APP_VERSION,
         name: base.name,
         created: base.created,

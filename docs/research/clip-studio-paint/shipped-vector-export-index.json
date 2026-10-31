@@ -1,0 +1,6875 @@
+{
+  "status": "export declarations only; current application reachability unverified",
+  "source_evidence_id": "ev_c418e43f6479433c706588dec38da5c24288fd799f8d048f8f4d2f05fefad36e",
+  "artifact": {
+    "bytes": 4540888,
+    "path": "C:\\Program Files\\CELSYS\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\iswCoreTG.dll",
+    "sha256": "1817e2b0f7ce49ded2c3fe6360ee9d4f68bf19186faf32835ac6b1c0ce6d227f"
+  },
+  "exports": [
+    {
+      "address": "0x1226d3c0",
+      "forwarder": null,
+      "name": "?Abs@CSVectorMath@@QEAAHH@Z",
+      "ordinal": 626
+    },
+    {
+      "address": "0x1226d3d0",
+      "forwarder": null,
+      "name": "?Abs@CSVectorMath@@QEAAMM@Z",
+      "ordinal": 627
+    },
+    {
+      "address": "0x1226d3f0",
+      "forwarder": null,
+      "name": "?Abs@CSVectorMath@@QEAANN@Z",
+      "ordinal": 628
+    },
+    {
+      "address": "0x12442980",
+      "forwarder": null,
+      "name": "?AddCash@CSVectorSampling@@QEAAHAEBU_VSMPCASH@@@Z",
+      "ordinal": 629
+    },
+    {
+      "address": "0x1225a9e0",
+      "forwarder": null,
+      "name": "?AddCorner@CSVCurve@@QEAAPEAVCSVCorner@@XZ",
+      "ordinal": 631
+    },
+    {
+      "address": "0x1225aa30",
+      "forwarder": null,
+      "name": "?AddCurve@CSVStroke@@QEAAPEAVCSVCurve@@AEBVRCPoint@@0@Z",
+      "ordinal": 632
+    },
+    {
+      "address": "0x122c7260",
+      "forwarder": null,
+      "name": "?AddCurve@CSVectorSampling@@QEAAXAEBU_VCURVE@@@Z",
+      "ordinal": 633
+    },
+    {
+      "address": "0x122c72c0",
+      "forwarder": null,
+      "name": "?AddCurve@CSVectorSampling@@QEAAXPEBU_VCURVE@@H@Z",
+      "ordinal": 634
+    },
+    {
+      "address": "0x1244b250",
+      "forwarder": null,
+      "name": "?AddCurve@CSVectorSimpleCurve@@QEAAXHAEBU_VCURVE@@@Z",
+      "ordinal": 635
+    },
+    {
+      "address": "0x122c7340",
+      "forwarder": null,
+      "name": "?AddCurveBuf@CSVectorSampling@@QEAAXAEBU_VCURVE@@@Z",
+      "ordinal": 636
+    },
+    {
+      "address": "0x122c73a0",
+      "forwarder": null,
+      "name": "?AddCurveBuf@CSVectorSampling@@QEAAXPEBU_VCURVE@@H@Z",
+      "ordinal": 637
+    },
+    {
+      "address": "0x124746b0",
+      "forwarder": null,
+      "name": "?AddDirect@CSVec4Sampling@@QEAAHHHMMMHAEAVRCRect@@H@Z",
+      "ordinal": 639
+    },
+    {
+      "address": "0x12442a60",
+      "forwarder": null,
+      "name": "?AddInOutBuf@CSVectorSampling@@QEAAHAEBU_VSTROKE@@@Z",
+      "ordinal": 643
+    },
+    {
+      "address": "0x1225aac0",
+      "forwarder": null,
+      "name": "?AddLineScale@CSVCurve@@QEAAPEAVCSVLineScale@@MM@Z",
+      "ordinal": 648
+    },
+    {
+      "address": "0x1225ab30",
+      "forwarder": null,
+      "name": "?AddLineScale@CSVCurve@@QEAAPEAVCSVLineScale@@MMMM@Z",
+      "ordinal": 649
+    },
+    {
+      "address": "0x12442b10",
+      "forwarder": null,
+      "name": "?AddLinkInOutBuf@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 650
+    },
+    {
+      "address": "0x12442b70",
+      "forwarder": null,
+      "name": "?AddLinkPresList@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 651
+    },
+    {
+      "address": "0x1243fb60",
+      "forwarder": null,
+      "name": "?AddPacketLink@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 653
+    },
+    {
+      "address": "0x1225abc0",
+      "forwarder": null,
+      "name": "?AddPartialCenterLine@CSVectorV4Layer@@QEAAXAEAUPARTIAL_CENTER_LINE@@@Z",
+      "ordinal": 654
+    },
+    {
+      "address": "0x1225ac90",
+      "forwarder": null,
+      "name": "?AddPenHead@CSVec4DataBase@@QEAAPEAVCSVPenHead@@PEBUPEN_HEAD_STRUCT@@@Z",
+      "ordinal": 655
+    },
+    {
+      "address": "0x1226d4b0",
+      "forwarder": null,
+      "name": "?AddPoint@CSVectorMath@@QEAAXAEAUtagPOINT@@AEBU2@@Z",
+      "ordinal": 656
+    },
+    {
+      "address": "0x1226d4c0",
+      "forwarder": null,
+      "name": "?AddPoint@CSVectorMath@@QEAAXAEAUtagPOINTD@@AEBU2@@Z",
+      "ordinal": 657
+    },
+    {
+      "address": "0x1226d4e0",
+      "forwarder": null,
+      "name": "?AddPoint@CSVectorMath@@QEAAXAEAUtagPOINTF@@AEBU2@@Z",
+      "ordinal": 658
+    },
+    {
+      "address": "0x122c7420",
+      "forwarder": null,
+      "name": "?AddPolyPos@CSVectorFileConv@@QEAAXAEBUtagPOINT@@@Z",
+      "ordinal": 659
+    },
+    {
+      "address": "0x122c7470",
+      "forwarder": null,
+      "name": "?AddPos@CSVectorFileConv@@QEAAXAEBU_VSTROKE@@@Z",
+      "ordinal": 660
+    },
+    {
+      "address": "0x122c74d0",
+      "forwarder": null,
+      "name": "?AddPres@CSVectorSampling@@QEAAXAEBU_VVPRESSURE@@@Z",
+      "ordinal": 661
+    },
+    {
+      "address": "0x122c7520",
+      "forwarder": null,
+      "name": "?AddPres@CSVectorSampling@@QEAAXPEBU_VVPRESSURE@@H@Z",
+      "ordinal": 662
+    },
+    {
+      "address": "0x1244b2c0",
+      "forwarder": null,
+      "name": "?AddPres@CSVectorSimpleCurve@@QEAAXHAEBU_VVPRESSURE@@@Z",
+      "ordinal": 663
+    },
+    {
+      "address": "0x12442be0",
+      "forwarder": null,
+      "name": "?AddPresList@CSVectorSampling@@QEAAHAEBU_VVPRESSURE@@@Z",
+      "ordinal": 664
+    },
+    {
+      "address": "0x122c7590",
+      "forwarder": null,
+      "name": "?AddPrs@CSVectorFileConv@@QEAAXAEBU_VVPRESSURE@@@Z",
+      "ordinal": 665
+    },
+    {
+      "address": "0x122c75e0",
+      "forwarder": null,
+      "name": "?AddSeedStack@CSVectorDraw@@QEAAXHHHH@Z",
+      "ordinal": 673
+    },
+    {
+      "address": "0x1225acf0",
+      "forwarder": null,
+      "name": "?AddStroke@CSVBlockData@@QEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 675
+    },
+    {
+      "address": "0x1225ad40",
+      "forwarder": null,
+      "name": "?AddStroke@CSVec4DataBase@@QEAAPEAVCSVStroke@@IPEAVCSVPenHead@@MKPEAV2@@Z",
+      "ordinal": 676
+    },
+    {
+      "address": "0x1225ae10",
+      "forwarder": null,
+      "name": "?AddStroke@CSVec4DataBase@@QEAAPEAVCSVStroke@@PEAV2@@Z",
+      "ordinal": 677
+    },
+    {
+      "address": "0x1225aeb0",
+      "forwarder": null,
+      "name": "?AddStroke@CSVec4Search@@QEAAPEAVCSVStroke@@IPEAVCSVPenHead@@MKPEAV2@@Z",
+      "ordinal": 678
+    },
+    {
+      "address": "0x1225af90",
+      "forwarder": null,
+      "name": "?AddStroke@CSVec4Search@@QEAAPEAVCSVStroke@@PEAV2@@Z",
+      "ordinal": 679
+    },
+    {
+      "address": "0x122c7680",
+      "forwarder": null,
+      "name": "?AddStroke@CSVectorSampling@@QEAAXAEBU_VSTROKE@@@Z",
+      "ordinal": 680
+    },
+    {
+      "address": "0x122c7700",
+      "forwarder": null,
+      "name": "?AddStroke@CSVectorSampling@@QEAAXPEBU_VSTROKE@@H@Z",
+      "ordinal": 681
+    },
+    {
+      "address": "0x1225b050",
+      "forwarder": null,
+      "name": "?AddStrokeDirect@CSVec4Search@@QEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 682
+    },
+    {
+      "address": "0x12442c30",
+      "forwarder": null,
+      "name": "?AddTempPres@CSVectorSampling@@QEAAXAEBU_VVPRESSURE@@@Z",
+      "ordinal": 691
+    },
+    {
+      "address": "0x122c77c0",
+      "forwarder": null,
+      "name": "?AddTmpStroke@CSVectorSampling@@QEAAXAEBU_VSTROKE@@@Z",
+      "ordinal": 692
+    },
+    {
+      "address": "0x122c7820",
+      "forwarder": null,
+      "name": "?AddV2CtlPos@CSVectorFileConv@@QEAAXAEBU_VV2CTLPOS@@@Z",
+      "ordinal": 693
+    },
+    {
+      "address": "0x122c7870",
+      "forwarder": null,
+      "name": "?AddV2Head@CSVectorFileConv@@QEAAXAEBU_VV2HEAD@@@Z",
+      "ordinal": 694
+    },
+    {
+      "address": "0x122c78e0",
+      "forwarder": null,
+      "name": "?AddV2Scale@CSVectorFileConv@@QEAAXAEBU_VV2SCALE@@@Z",
+      "ordinal": 695
+    },
+    {
+      "address": "0x122f8a00",
+      "forwarder": null,
+      "name": "?AdjustOffset@CSVectorLayer@@UEAAXAEBVRCPoint@@@Z",
+      "ordinal": 710
+    },
+    {
+      "address": "0x1243fc00",
+      "forwarder": null,
+      "name": "?AdjustPresDistance@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 711
+    },
+    {
+      "address": "0x12430b10",
+      "forwarder": null,
+      "name": "?AdjustV2Distance@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 712
+    },
+    {
+      "address": "0x1247b940",
+      "forwarder": null,
+      "name": "?ApplyEditStroke@CSVec4Search@@QEAAXAEAVRCRect@@HH@Z",
+      "ordinal": 761
+    },
+    {
+      "address": "0x1247e700",
+      "forwarder": null,
+      "name": "?ApplyTransform@CSVec4Transform@@QEAAXPEAVCSVectorV4Layer@@0QEBVRCPointD@@1HAEAVRCRect@@@Z",
+      "ordinal": 763
+    },
+    {
+      "address": "0x1226d550",
+      "forwarder": null,
+      "name": "?BSpline2Bezier@CSVectorMath@@QEAAXPEBUtagPOINT@@PEAU2@@Z",
+      "ordinal": 768
+    },
+    {
+      "address": "0x1226d6e0",
+      "forwarder": null,
+      "name": "?BSpline2Bezier@CSVectorMath@@QEAAXPEBUtagPOINTD@@PEAU2@@Z",
+      "ordinal": 769
+    },
+    {
+      "address": "0x1226d830",
+      "forwarder": null,
+      "name": "?BSpline2Bezier@CSVectorMath@@QEAAXPEBUtagPOINTF@@PEAU2@@Z",
+      "ordinal": 770
+    },
+    {
+      "address": "0x1226d9d0",
+      "forwarder": null,
+      "name": "?BSplinePoint2D@CSVectorMath@@QEAAXNNNNNNNAEAN0@Z",
+      "ordinal": 771
+    },
+    {
+      "address": "0x1226da90",
+      "forwarder": null,
+      "name": "?BSplinePoint2D@CSVectorMath@@QEAAXPEBUtagPOINT@@NAEAU2@@Z",
+      "ordinal": 772
+    },
+    {
+      "address": "0x1226db50",
+      "forwarder": null,
+      "name": "?BSplinePoint2D@CSVectorMath@@QEAAXPEBUtagPOINTD@@NAEAU2@@Z",
+      "ordinal": 773
+    },
+    {
+      "address": "0x1226dc00",
+      "forwarder": null,
+      "name": "?BSplinePoint2D@CSVectorMath@@QEAAXPEBUtagPOINTF@@NAEAU2@@Z",
+      "ordinal": 774
+    },
+    {
+      "address": "0x1242c070",
+      "forwarder": null,
+      "name": "?BeginDraw@CSVectorDraw@@QEAAHPEAVCSLayer@@PEAVCSVectorDataBase@@PEAVCSSelectArea@@PEBUtagRECT@@@Z",
+      "ordinal": 779
+    },
+    {
+      "address": "0x1242c140",
+      "forwarder": null,
+      "name": "?BeginDraw@CSVectorDraw@@QEAAHPEAVRCVOffscreen@@AEBUtagPOINT@@NNPEAVCSVectorDataBase@@PEAVCSSelectArea@@PEBUtagRECT@@@Z",
+      "ordinal": 780
+    },
+    {
+      "address": "0x1247bd20",
+      "forwarder": null,
+      "name": "?BeginSearch@CSVStrokeIterator@@QEAAHPEAVCSVec4Search@@AEBVRCRect@@@Z",
+      "ordinal": 781
+    },
+    {
+      "address": "0x12439030",
+      "forwarder": null,
+      "name": "?Bezier2DDivideCalc@CSVectorMath@@QEAAXPEBUtagPOINT@@HPEAN@Z",
+      "ordinal": 783
+    },
+    {
+      "address": "0x12439370",
+      "forwarder": null,
+      "name": "?BezierAmplify@CSVectorMath@@QEAAXNNAEAN000NNN@Z",
+      "ordinal": 784
+    },
+    {
+      "address": "0x124395c0",
+      "forwarder": null,
+      "name": "?BezierAmplify@CSVectorMath@@QEAAXPEAUtagPOINT@@N@Z",
+      "ordinal": 785
+    },
+    {
+      "address": "0x12439690",
+      "forwarder": null,
+      "name": "?BezierAmplify@CSVectorMath@@QEAAXPEAUtagPOINTD@@N@Z",
+      "ordinal": 786
+    },
+    {
+      "address": "0x12439740",
+      "forwarder": null,
+      "name": "?BezierAmplify@CSVectorMath@@QEAAXPEAUtagPOINTF@@N@Z",
+      "ordinal": 787
+    },
+    {
+      "address": "0x12439820",
+      "forwarder": null,
+      "name": "?BezierDivide2D@CSVectorMath@@QEAAXPEBUtagPOINT@@NPEAU2@1@Z",
+      "ordinal": 788
+    },
+    {
+      "address": "0x124399e0",
+      "forwarder": null,
+      "name": "?BezierDivide2D@CSVectorMath@@QEAAXPEBUtagPOINTD@@NPEAU2@1@Z",
+      "ordinal": 789
+    },
+    {
+      "address": "0x12439b20",
+      "forwarder": null,
+      "name": "?BezierDivide2D@CSVectorMath@@QEAAXPEBUtagPOINTF@@NPEAU2@1@Z",
+      "ordinal": 790
+    },
+    {
+      "address": "0x12439ca0",
+      "forwarder": null,
+      "name": "?BezierDivide@CSVectorMath@@QEAAXPEBUtagPOINT@@NPEAU2@1@Z",
+      "ordinal": 791
+    },
+    {
+      "address": "0x12439f60",
+      "forwarder": null,
+      "name": "?BezierDivide@CSVectorMath@@QEAAXPEBUtagPOINTD@@NPEAU2@1@Z",
+      "ordinal": 792
+    },
+    {
+      "address": "0x1243a200",
+      "forwarder": null,
+      "name": "?BezierDivide@CSVectorMath@@QEAAXPEBUtagPOINTF@@NPEAU2@1@Z",
+      "ordinal": 793
+    },
+    {
+      "address": "0x1243a4f0",
+      "forwarder": null,
+      "name": "?BezierExtent2D@CSVectorMath@@QEAAXNNNNNNAEAUtagRECTD@@@Z",
+      "ordinal": 794
+    },
+    {
+      "address": "0x1243a780",
+      "forwarder": null,
+      "name": "?BezierExtent2D@CSVectorMath@@QEAAXPEBUtagPOINT@@AEAUtagRECT@@@Z",
+      "ordinal": 795
+    },
+    {
+      "address": "0x1243a810",
+      "forwarder": null,
+      "name": "?BezierExtent2D@CSVectorMath@@QEAAXPEBUtagPOINTD@@AEAUtagRECTD@@@Z",
+      "ordinal": 796
+    },
+    {
+      "address": "0x1243a850",
+      "forwarder": null,
+      "name": "?BezierExtent2D@CSVectorMath@@QEAAXPEBUtagPOINTF@@AEAUtagRECTF@@@Z",
+      "ordinal": 797
+    },
+    {
+      "address": "0x1243a8f0",
+      "forwarder": null,
+      "name": "?BezierExtent@CSVectorMath@@QEAAXNNNNNNNNAEAUtagRECTD@@@Z",
+      "ordinal": 798
+    },
+    {
+      "address": "0x1243b0a0",
+      "forwarder": null,
+      "name": "?BezierExtent@CSVectorMath@@QEAAXPEBUtagPOINT@@AEAUtagRECT@@@Z",
+      "ordinal": 799
+    },
+    {
+      "address": "0x1243b170",
+      "forwarder": null,
+      "name": "?BezierExtent@CSVectorMath@@QEAAXPEBUtagPOINTD@@AEAUtagRECTD@@@Z",
+      "ordinal": 800
+    },
+    {
+      "address": "0x1243b1b0",
+      "forwarder": null,
+      "name": "?BezierExtent@CSVectorMath@@QEAAXPEBUtagPOINTF@@AEAUtagRECTF@@@Z",
+      "ordinal": 801
+    },
+    {
+      "address": "0x1226dcd0",
+      "forwarder": null,
+      "name": "?BezierLength2D@CSVectorMath@@QEAANNNNNNNH@Z",
+      "ordinal": 802
+    },
+    {
+      "address": "0x1226e500",
+      "forwarder": null,
+      "name": "?BezierLength2D@CSVectorMath@@QEAANPEBUtagPOINT@@H@Z",
+      "ordinal": 803
+    },
+    {
+      "address": "0x1226e560",
+      "forwarder": null,
+      "name": "?BezierLength2D@CSVectorMath@@QEAANPEBUtagPOINTD@@H@Z",
+      "ordinal": 804
+    },
+    {
+      "address": "0x1226e5a0",
+      "forwarder": null,
+      "name": "?BezierLength2D@CSVectorMath@@QEAANPEBUtagPOINTF@@H@Z",
+      "ordinal": 805
+    },
+    {
+      "address": "0x1226e600",
+      "forwarder": null,
+      "name": "?BezierLength@CSVectorMath@@QEAANNNNNNNNNH@Z",
+      "ordinal": 806
+    },
+    {
+      "address": "0x1226f170",
+      "forwarder": null,
+      "name": "?BezierLength@CSVectorMath@@QEAANPEBUtagPOINT@@H@Z",
+      "ordinal": 807
+    },
+    {
+      "address": "0x1226f1f0",
+      "forwarder": null,
+      "name": "?BezierLength@CSVectorMath@@QEAANPEBUtagPOINTD@@H@Z",
+      "ordinal": 808
+    },
+    {
+      "address": "0x1226f230",
+      "forwarder": null,
+      "name": "?BezierLength@CSVectorMath@@QEAANPEBUtagPOINTF@@H@Z",
+      "ordinal": 809
+    },
+    {
+      "address": "0x1226f2b0",
+      "forwarder": null,
+      "name": "?BezierLengthFast@CSVectorMath@@QEAANNNNNNNNN@Z",
+      "ordinal": 810
+    },
+    {
+      "address": "0x1226f590",
+      "forwarder": null,
+      "name": "?BezierLengthFast@CSVectorMath@@QEAANPEBUtagPOINT@@@Z",
+      "ordinal": 811
+    },
+    {
+      "address": "0x1226f610",
+      "forwarder": null,
+      "name": "?BezierLengthFast@CSVectorMath@@QEAANPEBUtagPOINTD@@@Z",
+      "ordinal": 812
+    },
+    {
+      "address": "0x1226f650",
+      "forwarder": null,
+      "name": "?BezierLengthFast@CSVectorMath@@QEAANPEBUtagPOINTF@@@Z",
+      "ordinal": 813
+    },
+    {
+      "address": "0x1226f6d0",
+      "forwarder": null,
+      "name": "?BezierPoint2D@CSVectorMath@@QEAAXNNNNNNNAEAN0@Z",
+      "ordinal": 814
+    },
+    {
+      "address": "0x1226f760",
+      "forwarder": null,
+      "name": "?BezierPoint2D@CSVectorMath@@QEAAXPEBUtagPOINT@@NAEAU2@@Z",
+      "ordinal": 815
+    },
+    {
+      "address": "0x1226f820",
+      "forwarder": null,
+      "name": "?BezierPoint2D@CSVectorMath@@QEAAXPEBUtagPOINTD@@NAEAU2@@Z",
+      "ordinal": 816
+    },
+    {
+      "address": "0x1226f8c0",
+      "forwarder": null,
+      "name": "?BezierPoint2D@CSVectorMath@@QEAAXPEBUtagPOINTF@@NAEAU2@@Z",
+      "ordinal": 817
+    },
+    {
+      "address": "0x1226f980",
+      "forwarder": null,
+      "name": "?BezierPoint@CSVectorMath@@QEAAXNNNNNNNNNAEAN0@Z",
+      "ordinal": 818
+    },
+    {
+      "address": "0x1226fae0",
+      "forwarder": null,
+      "name": "?BezierPoint@CSVectorMath@@QEAAXPEBUtagPOINT@@NAEAU2@@Z",
+      "ordinal": 819
+    },
+    {
+      "address": "0x1226fbc0",
+      "forwarder": null,
+      "name": "?BezierPoint@CSVectorMath@@QEAAXPEBUtagPOINTD@@NAEAU2@@Z",
+      "ordinal": 820
+    },
+    {
+      "address": "0x1226fc30",
+      "forwarder": null,
+      "name": "?BezierPoint@CSVectorMath@@QEAAXPEBUtagPOINTF@@NAEAU2@@Z",
+      "ordinal": 821
+    },
+    {
+      "address": "0x1226fd10",
+      "forwarder": null,
+      "name": "?BezierReverse2D@CSVectorMath@@QEAAXPEAUtagPOINT@@@Z",
+      "ordinal": 822
+    },
+    {
+      "address": "0x1226fd20",
+      "forwarder": null,
+      "name": "?BezierReverse@CSVectorMath@@QEAAXPEAUtagPOINT@@@Z",
+      "ordinal": 823
+    },
+    {
+      "address": "0x1243b290",
+      "forwarder": null,
+      "name": "?BezierRotate@CSVectorMath@@QEAANNNNNNNNNN@Z",
+      "ordinal": 824
+    },
+    {
+      "address": "0x1243b4a0",
+      "forwarder": null,
+      "name": "?BezierRotate@CSVectorMath@@QEAANPEBUtagPOINT@@N@Z",
+      "ordinal": 825
+    },
+    {
+      "address": "0x1243b540",
+      "forwarder": null,
+      "name": "?BezierRotate@CSVectorMath@@QEAANPEBUtagPOINTD@@N@Z",
+      "ordinal": 826
+    },
+    {
+      "address": "0x1243b580",
+      "forwarder": null,
+      "name": "?BezierRotate@CSVectorMath@@QEAANPEBUtagPOINTF@@N@Z",
+      "ordinal": 827
+    },
+    {
+      "address": "0x1243b620",
+      "forwarder": null,
+      "name": "?BezierToStraight@CSVectorMath@@QEAAHPEBUtagPOINTD@@PEANHN@Z",
+      "ordinal": 828
+    },
+    {
+      "address": "0x1243b6f0",
+      "forwarder": null,
+      "name": "?BezierToStraightCore@CSVectorMath@@QEAAXAEAU_BEZ2STR@@@Z",
+      "ordinal": 829
+    },
+    {
+      "address": "0x122faae0",
+      "forwarder": null,
+      "name": "?BitmapRender@CSVectorV4Layer@@UEAAXPEAVCSBitmap@@PEAVCSPageView@@AEBVRCRect@@@Z",
+      "ordinal": 859
+    },
+    {
+      "address": "0x1247bea0",
+      "forwarder": null,
+      "name": "?BuildData@CSVec4Search@@QEAAXXZ",
+      "ordinal": 867
+    },
+    {
+      "address": "0x12430bf0",
+      "forwarder": null,
+      "name": "?CalcAirbrushPoint@CSVectorFileConv@@QEAAXPEBU_VCURVE@@HPEBU_VVPRESSURE@@N@Z",
+      "ordinal": 873
+    },
+    {
+      "address": "0x1247cd70",
+      "forwarder": null,
+      "name": "?CalcControlPoint@CSVec4Smooth@@IEAAHPEAVCSVCurve@@0HAEAVRCPoint@@@Z",
+      "ordinal": 882
+    },
+    {
+      "address": "0x1245ed90",
+      "forwarder": null,
+      "name": "?CalcDirection@CSVCurve@@QEAAMM@Z",
+      "ordinal": 887
+    },
+    {
+      "address": "0x1246cb90",
+      "forwarder": null,
+      "name": "?CalcDirectionBetweenTwo@CSVEC4OPERATION@@YAMMMM@Z",
+      "ordinal": 888
+    },
+    {
+      "address": "0x124803b0",
+      "forwarder": null,
+      "name": "?CalcDirectionOfStrokeEdge@CSVectorizeV4@@IEAAXPEAVCSVStroke@@HAEAVRCPointF@@@Z",
+      "ordinal": 892
+    },
+    {
+      "address": "0x1245ef10",
+      "forwarder": null,
+      "name": "?CalcExtentRect@CSVec4DataBase@@QEAA?AVRCRect@@XZ",
+      "ordinal": 897
+    },
+    {
+      "address": "0x1245ef70",
+      "forwarder": null,
+      "name": "?CalcFarestPoint@CSVPenHead@@QEAAXMAEBVRCPointF@@MMHAEAV2@1@Z",
+      "ordinal": 898
+    },
+    {
+      "address": "0x1245f8e0",
+      "forwarder": null,
+      "name": "?CalcLength@CSVCurve@@QEAANH@Z",
+      "ordinal": 907
+    },
+    {
+      "address": "0x1246d020",
+      "forwarder": null,
+      "name": "?CalcLineScaleFromT@CSVEC4OPERATION@@YAXPEAVCSVCurve@@MHHAEAM11@Z",
+      "ordinal": 910
+    },
+    {
+      "address": "0x1247f030",
+      "forwarder": null,
+      "name": "?CalcParam@CSVec4Transform@@IEAAXXZ",
+      "ordinal": 915
+    },
+    {
+      "address": "0x1246d190",
+      "forwarder": null,
+      "name": "?CalcPointFromDistanceRough@CSVEC4OPERATION@@YA?AVRCPoint@@PEAVCSVStroke@@NHAEAPEAVCSVCurve@@AEAMAEAH@Z",
+      "ordinal": 934
+    },
+    {
+      "address": "0x124804f0",
+      "forwarder": null,
+      "name": "?CalcPositionAndPenScale3D@CSVectorizeV4@@IEAAXQEAU_VERTEX_INFO@@AEAVRCPoint@@AEAM@Z",
+      "ordinal": 936
+    },
+    {
+      "address": "0x124805a0",
+      "forwarder": null,
+      "name": "?CalcPositionAndPenScale@CSVectorizeV4@@IEAAXAEBVRCPoint@@AEAV2@AEAM@Z",
+      "ordinal": 937
+    },
+    {
+      "address": "0x1225bbc0",
+      "forwarder": null,
+      "name": "?CalcRect@CSVCurve@@QEAA?AVRCRect@@XZ",
+      "ordinal": 939
+    },
+    {
+      "address": "0x1245faa0",
+      "forwarder": null,
+      "name": "?CalcRectHighQuality@CSVCurve@@QEAA?AVRCRect@@XZ",
+      "ordinal": 940
+    },
+    {
+      "address": "0x1245fd20",
+      "forwarder": null,
+      "name": "?CalcRoughLength@CSVStroke@@QEAANPEAN@Z",
+      "ordinal": 941
+    },
+    {
+      "address": "0x124806a0",
+      "forwarder": null,
+      "name": "?CalcRoughMeanPenRadius@CSVectorizeV4@@IEAAMPEAVCSVStroke@@@Z",
+      "ordinal": 942
+    },
+    {
+      "address": "0x122fac80",
+      "forwarder": null,
+      "name": "?CalcSelectColor@CSVec4Draw@@SAKK@Z",
+      "ordinal": 944
+    },
+    {
+      "address": "0x122facd0",
+      "forwarder": null,
+      "name": "?CalcVectorExtent@CSVectorV4Layer@@QEAAHAEAVRCRect@@@Z",
+      "ordinal": 948
+    },
+    {
+      "address": "0x1225be80",
+      "forwarder": null,
+      "name": "?CanBlendMode@CSVectorV4Layer@@UEAAHXZ",
+      "ordinal": 961
+    },
+    {
+      "address": "0x1225bea0",
+      "forwarder": null,
+      "name": "?CanColorize@CSVectorV4Layer@@UEAAHXZ",
+      "ordinal": 965
+    },
+    {
+      "address": "0x1225bff0",
+      "forwarder": null,
+      "name": "?CancelEditStroke@CSVec4Search@@QEAAXXZ",
+      "ordinal": 981
+    },
+    {
+      "address": "0x12480700",
+      "forwarder": null,
+      "name": "?CancelSamplingForRuler@CSVectorizeV4@@QEAAXXZ",
+      "ordinal": 982
+    },
+    {
+      "address": "0x122fae30",
+      "forwarder": null,
+      "name": "?ChangeAntiAlias@CSVectorV4Layer@@QEAAXH@Z",
+      "ordinal": 984
+    },
+    {
+      "address": "0x1245fe20",
+      "forwarder": null,
+      "name": "?ChangePenHead@CSVStroke@@QEAAXPEAVCSVPenHead@@@Z",
+      "ordinal": 995
+    },
+    {
+      "address": "0x12456140",
+      "forwarder": null,
+      "name": "?CheckHeadAndTailB@CSVec4Connect@@IEAAHAEAH@Z",
+      "ordinal": 1026
+    },
+    {
+      "address": "0x12429d30",
+      "forwarder": null,
+      "name": "?Cleanup@CSVector@@QEAAXXZ",
+      "ordinal": 1051
+    },
+    {
+      "address": "0x1242ae00",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorDataBase@@QEAAXXZ",
+      "ordinal": 1052
+    },
+    {
+      "address": "0x1242c280",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorDraw@@QEAAXXZ",
+      "ordinal": 1053
+    },
+    {
+      "address": "0x12430f10",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 1054
+    },
+    {
+      "address": "0x12433a50",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorFilter@@UEAAXXZ",
+      "ordinal": 1055
+    },
+    {
+      "address": "0x12434b00",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorIntersect@@UEAAXXZ",
+      "ordinal": 1056
+    },
+    {
+      "address": "0x1243fec0",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorPacket@@QEAAXXZ",
+      "ordinal": 1057
+    },
+    {
+      "address": "0x124416e0",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorPres@@QEAAXXZ",
+      "ordinal": 1058
+    },
+    {
+      "address": "0x12441b20",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorRecord@@QEAAXXZ",
+      "ordinal": 1059
+    },
+    {
+      "address": "0x12442c70",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorSampling@@QEAAXXZ",
+      "ordinal": 1060
+    },
+    {
+      "address": "0x124470b0",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorScanConv@@QEAAXXZ",
+      "ordinal": 1061
+    },
+    {
+      "address": "0x12448630",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorSearch@@QEAAXXZ",
+      "ordinal": 1062
+    },
+    {
+      "address": "0x1244b330",
+      "forwarder": null,
+      "name": "?Cleanup@CSVectorSimpleCurve@@QEAAXXZ",
+      "ordinal": 1063
+    },
+    {
+      "address": "0x12474d60",
+      "forwarder": null,
+      "name": "?Clear@CSVec4Sampling@@QEAAXXZ",
+      "ordinal": 1067
+    },
+    {
+      "address": "0x12474e50",
+      "forwarder": null,
+      "name": "?Clear@CSVec4SamplingBuffer@@QEAAXXZ",
+      "ordinal": 1068
+    },
+    {
+      "address": "0x12474f20",
+      "forwarder": null,
+      "name": "?ClearConnectCurve@CSVec4Sampling@@IEAAXXZ",
+      "ordinal": 1073
+    },
+    {
+      "address": "0x1247c030",
+      "forwarder": null,
+      "name": "?ClearData@CSVec4Search@@QEAAXXZ",
+      "ordinal": 1077
+    },
+    {
+      "address": "0x12459290",
+      "forwarder": null,
+      "name": "?ClearDataBase@CSVec4Convert4to2@@IEAAXXZ",
+      "ordinal": 1078
+    },
+    {
+      "address": "0x1245fef0",
+      "forwarder": null,
+      "name": "?ClearList@CSVec4DataBase@@QEAAXXZ",
+      "ordinal": 1091
+    },
+    {
+      "address": "0x1225c480",
+      "forwarder": null,
+      "name": "?ClearPartialCenterLine@CSVectorV4Layer@@QEAAXXZ",
+      "ordinal": 1103
+    },
+    {
+      "address": "0x1246d3a0",
+      "forwarder": null,
+      "name": "?ClearPressure@CSVEC4OPERATION@@YAXPEAVCSVStroke@@@Z",
+      "ordinal": 1104
+    },
+    {
+      "address": "0x12454fb0",
+      "forwarder": null,
+      "name": "?ClearRect@CSVec4AntiAlias@@QEAAXAEBVRCRect@@HH@Z",
+      "ordinal": 1109
+    },
+    {
+      "address": "0x124562e0",
+      "forwarder": null,
+      "name": "?ClearTempParam@CSVec4Connect@@IEAAXXZ",
+      "ordinal": 1120
+    },
+    {
+      "address": "0x122fafa0",
+      "forwarder": null,
+      "name": "?ClearVectorSelect@CSVectorV4Layer@@QEAAXXZ",
+      "ordinal": 1126
+    },
+    {
+      "address": "0x122c9800",
+      "forwarder": null,
+      "name": "?ClrCash@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 1131
+    },
+    {
+      "address": "0x122c9830",
+      "forwarder": null,
+      "name": "?ClrInOutBuf@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 1132
+    },
+    {
+      "address": "0x1226fe30",
+      "forwarder": null,
+      "name": "?ClrNode@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 1133
+    },
+    {
+      "address": "0x1226fe70",
+      "forwarder": null,
+      "name": "?ClrPacket@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 1134
+    },
+    {
+      "address": "0x1226fec0",
+      "forwarder": null,
+      "name": "?ClrPres@CSVectorPres@@QEAAXH@Z",
+      "ordinal": 1135
+    },
+    {
+      "address": "0x122c9860",
+      "forwarder": null,
+      "name": "?ClrPresList@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 1136
+    },
+    {
+      "address": "0x1226fef0",
+      "forwarder": null,
+      "name": "?ClrRec@CSVectorRecord@@QEAAXH@Z",
+      "ordinal": 1137
+    },
+    {
+      "address": "0x1226ff30",
+      "forwarder": null,
+      "name": "?ClrScanEdge@CSVectorScanConv@@QEAAXH@Z",
+      "ordinal": 1138
+    },
+    {
+      "address": "0x1226ff50",
+      "forwarder": null,
+      "name": "?ClrScanNode@CSVectorScanConv@@QEAAXH@Z",
+      "ordinal": 1139
+    },
+    {
+      "address": "0x12480710",
+      "forwarder": null,
+      "name": "?CollectUsedColor@CSVectorizeV4@@SAHPEAVRCVOffscreen@@AEAV?$RCTArray@K$0A@@@H@Z",
+      "ordinal": 1141
+    },
+    {
+      "address": "0x1242c290",
+      "forwarder": null,
+      "name": "?ColorCalc@CSVectorDraw@@QEAAKAEBK@Z",
+      "ordinal": 1142
+    },
+    {
+      "address": "0x12448660",
+      "forwarder": null,
+      "name": "?CombineNode@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 1146
+    },
+    {
+      "address": "0x1243bcc0",
+      "forwarder": null,
+      "name": "?CommonTangent@CSVectorMath@@QEAAHAEBUtagPOINT@@H0HPEAU2@1@Z",
+      "ordinal": 1149
+    },
+    {
+      "address": "0x1243c260",
+      "forwarder": null,
+      "name": "?CommonTangent@CSVectorMath@@QEAAHAEBUtagPOINTD@@N0NPEAU2@1@Z",
+      "ordinal": 1150
+    },
+    {
+      "address": "0x1243c760",
+      "forwarder": null,
+      "name": "?CommonTangent@CSVectorMath@@QEAAHAEBUtagPOINTF@@M0MPEAU2@1@Z",
+      "ordinal": 1151
+    },
+    {
+      "address": "0x1247d5a0",
+      "forwarder": null,
+      "name": "?ConnectCurve@CSVec4Smooth@@IEAAXPEAVCSVCurve@@0AEBVRCPoint@@@Z",
+      "ordinal": 1160
+    },
+    {
+      "address": "0x124809d0",
+      "forwarder": null,
+      "name": "?ConnectLineAtCross@CSVectorizeV4@@IEAAXXZ",
+      "ordinal": 1161
+    },
+    {
+      "address": "0x12456300",
+      "forwarder": null,
+      "name": "?ConnectStroke@CSVec4Connect@@QEAAHAEAPEAVCSVStroke@@HAEAVRCRect@@PEAV?$RCTArray@PEAVCSVStroke@@$0A@@@@Z",
+      "ordinal": 1165
+    },
+    {
+      "address": "0x1246d3e0",
+      "forwarder": null,
+      "name": "?ConnectStrokeEdge@CSVEC4OPERATION@@YAXPEAVCSVStroke@@0HHPEAVCSVec4Search@@@Z",
+      "ordinal": 1166
+    },
+    {
+      "address": "0x1247f6e0",
+      "forwarder": null,
+      "name": "?ConvTransformPoint@CSVec4Transform@@IEAA?AVRCPoint@@AEBV2@@Z",
+      "ordinal": 1167
+    },
+    {
+      "address": "0x1247f7a0",
+      "forwarder": null,
+      "name": "?ConvTransformPoint@CSVec4Transform@@IEAA?AVRCPointD@@AEBV2@@Z",
+      "ordinal": 1168
+    },
+    {
+      "address": "0x1247fa10",
+      "forwarder": null,
+      "name": "?ConvTransformPres@CSVec4Transform@@IEAAXPEAVCSVCurve@@0@Z",
+      "ordinal": 1170
+    },
+    {
+      "address": "0x12459300",
+      "forwarder": null,
+      "name": "?Convert@CSVec4Convert2to4@@QEAAXPEAVCSVectorLayer@@PEAVCSVectorV4Layer@@@Z",
+      "ordinal": 1175
+    },
+    {
+      "address": "0x12459420",
+      "forwarder": null,
+      "name": "?Convert@CSVec4Convert4to2@@QEAAHPEAVCSVectorV4Layer@@PEAVCSVectorLayer@@PEAV?$RCTArray@PEAVCSLayer@@$0A@@@@Z",
+      "ordinal": 1176
+    },
+    {
+      "address": "0x122f8ae0",
+      "forwarder": null,
+      "name": "?Convert@CSVectorLayer@@UEAAXAEAVRCFilePath@@HPEAVRCLength@@111@Z",
+      "ordinal": 1177
+    },
+    {
+      "address": "0x124595e0",
+      "forwarder": null,
+      "name": "?ConvertPacket@CSVec4Convert2to4@@IEAAXPEAVCSVectorPacket@@H@Z",
+      "ordinal": 1183
+    },
+    {
+      "address": "0x1244b350",
+      "forwarder": null,
+      "name": "?ConvertSimpleCurve@CSVectorSimpleCurve@@QEAAHPEBU_VCURVE@@HPEBU_VVPRESSURE@@@Z",
+      "ordinal": 1188
+    },
+    {
+      "address": "0x1245a000",
+      "forwarder": null,
+      "name": "?ConvertStroke@CSVec4Convert4to2@@IEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 1189
+    },
+    {
+      "address": "0x1243cd30",
+      "forwarder": null,
+      "name": "?ConvexPoint@CSVectorMath@@QEAAHPEBUtagPOINT@@HPEAU2@@Z",
+      "ordinal": 1197
+    },
+    {
+      "address": "0x1245ff50",
+      "forwarder": null,
+      "name": "?Copy@CSVStroke@@QEAAXPEAV1@PEAVRCMatrix2D@@H@Z",
+      "ordinal": 1210
+    },
+    {
+      "address": "0x1246d5f0",
+      "forwarder": null,
+      "name": "?CopyAllStroke@CSVEC4OPERATION@@YAXPEAVCSVectorV4Layer@@0PEAVRCMatrix2D@@HH@Z",
+      "ordinal": 1212
+    },
+    {
+      "address": "0x12271e30",
+      "forwarder": null,
+      "name": "?CopyDB@CSVector@@QEAAHPEAV1@PEBUtagPOINT@@@Z",
+      "ordinal": 1218
+    },
+    {
+      "address": "0x1242ae40",
+      "forwarder": null,
+      "name": "?CopyDB@CSVectorDataBase@@QEAAHPEAV1@PEBUtagPOINT@@@Z",
+      "ordinal": 1219
+    },
+    {
+      "address": "0x122f8af0",
+      "forwarder": null,
+      "name": "?CopyLayer@CSVectorLayer@@UEAAPEAVCSLayer@@HPEAVCSPageDocument@@KH@Z",
+      "ordinal": 1243
+    },
+    {
+      "address": "0x122fafd0",
+      "forwarder": null,
+      "name": "?CopyLayer@CSVectorV4Layer@@UEAAPEAVCSLayer@@HPEAVCSPageDocument@@KH@Z",
+      "ordinal": 1244
+    },
+    {
+      "address": "0x1245b100",
+      "forwarder": null,
+      "name": "?CopyLineInOffscreen@CSVec4Cut@@QEAAHPEAVCSVectorV4Layer@@IAEAVRCRect@@01@Z",
+      "ordinal": 1250
+    },
+    {
+      "address": "0x1243ff00",
+      "forwarder": null,
+      "name": "?CopyPacketInfo@CSVectorPacket@@QEAAXHPEAV1@H@Z",
+      "ordinal": 1290
+    },
+    {
+      "address": "0x1246d6e0",
+      "forwarder": null,
+      "name": "?CopyStroke@CSVEC4OPERATION@@YAPEAVCSVStroke@@PEAV2@PEAVCSVec4Search@@PEAVRCMatrix2D@@H@Z",
+      "ordinal": 1299
+    },
+    {
+      "address": "0x12480b00",
+      "forwarder": null,
+      "name": "?CopyToDstLayer@CSVectorizeV4@@IEAAXAEAVRCRect@@@Z",
+      "ordinal": 1300
+    },
+    {
+      "address": "0x122f8b40",
+      "forwarder": null,
+      "name": "?CopyToMultiLayer@CSVectorLayer@@SAHAEAV?$RCTArray@PEAVCSVectorDataBase@@$0A@@@PEAVCSLayer@@PEAV?$RCTArray@PEAVCSLayer@@$0A@@@@Z",
+      "ordinal": 1301
+    },
+    {
+      "address": "0x124470e0",
+      "forwarder": null,
+      "name": "?CovertScanLine@CSVectorScanConv@@QEAAHPEAVRCVOffscreen@@AEBKIAEAUtagRECT@@0AEBUtagPOINT@@PEBU3@@Z",
+      "ordinal": 1303
+    },
+    {
+      "address": "0x122f8d20",
+      "forwarder": null,
+      "name": "?Create@CSVectorLayer@@UEAAXHHHNVRCString@@@Z",
+      "ordinal": 1335
+    },
+    {
+      "address": "0x122fb710",
+      "forwarder": null,
+      "name": "?Create@CSVectorV4Layer@@UEAAXHHHNVRCString@@@Z",
+      "ordinal": 1336
+    },
+    {
+      "address": "0x12474fd0",
+      "forwarder": null,
+      "name": "?CreateBezierCurve@CSVec4Sampling@@IEAAXAEBUSample@1@PEBU21@0H@Z",
+      "ordinal": 1341
+    },
+    {
+      "address": "0x12442d90",
+      "forwarder": null,
+      "name": "?CreateBezierCurve@CSVectorSampling@@QEAAXAEBU_VSTROKE@@00@Z",
+      "ordinal": 1342
+    },
+    {
+      "address": "0x12442ed0",
+      "forwarder": null,
+      "name": "?CreateBezierLine@CSVectorSampling@@QEAAXAEBU_VSTROKE@@0@Z",
+      "ordinal": 1343
+    },
+    {
+      "address": "0x12455040",
+      "forwarder": null,
+      "name": "?CreateBufferImage@CSVec4AntiAlias@@SAXXZ",
+      "ordinal": 1346
+    },
+    {
+      "address": "0x12440000",
+      "forwarder": null,
+      "name": "?CreateClonePacket@CSVectorPacket@@QEAAHPEAV1@H@Z",
+      "ordinal": 1348
+    },
+    {
+      "address": "0x12440150",
+      "forwarder": null,
+      "name": "?CreateCloneRec@CSVectorPacket@@QEAAHPEAV1@H@Z",
+      "ordinal": 1349
+    },
+    {
+      "address": "0x12434b40",
+      "forwarder": null,
+      "name": "?CreateIntersectPacket@CSVectorIntersect@@QEAAHHPEAVCSVectorPacket@@HAEBUtagPOINT@@AEAPEAV2@@Z",
+      "ordinal": 1358
+    },
+    {
+      "address": "0x1242c320",
+      "forwarder": null,
+      "name": "?CreatePenHeadPolygon@CSVectorDraw@@QEAAHPEBU_VPENHEAD@@AEBUtagPOINT@@MMMPEAUtagPOINTF@@@Z",
+      "ordinal": 1391
+    },
+    {
+      "address": "0x12456db0",
+      "forwarder": null,
+      "name": "?CreatePresPair@CSVec4Connect@@IEAAXAEAUPRES_PAIR_DATA@1@PEAVCSVCurve@@M1M@Z",
+      "ordinal": 1392
+    },
+    {
+      "address": "0x122f8da0",
+      "forwarder": null,
+      "name": "?CreateVectorObject@CSVectorLayer@@QEAAXXZ",
+      "ordinal": 1409
+    },
+    {
+      "address": "0x1243d110",
+      "forwarder": null,
+      "name": "?CrossLinePoint@CSVectorMath@@QEAAHNNNNNNNNAEAN0@Z",
+      "ordinal": 1414
+    },
+    {
+      "address": "0x1243d360",
+      "forwarder": null,
+      "name": "?CrossLinePoint@CSVectorMath@@QEAAHPEBUtagPOINT@@0AEAU2@@Z",
+      "ordinal": 1415
+    },
+    {
+      "address": "0x1243d420",
+      "forwarder": null,
+      "name": "?CrossLinePoint@CSVectorMath@@QEAAHPEBUtagPOINTD@@0AEAU2@@Z",
+      "ordinal": 1416
+    },
+    {
+      "address": "0x1243d490",
+      "forwarder": null,
+      "name": "?CrossLinePoint@CSVectorMath@@QEAAHPEBUtagPOINTF@@0AEAU2@@Z",
+      "ordinal": 1417
+    },
+    {
+      "address": "0x1243d560",
+      "forwarder": null,
+      "name": "?CrossLinePointWithPtOnLine@CSVectorMath@@QEAAHPEBUtagPOINT@@0AEAU2@N@Z",
+      "ordinal": 1418
+    },
+    {
+      "address": "0x1243d680",
+      "forwarder": null,
+      "name": "?CrossLinePointWithPtOnLine@CSVectorMath@@QEAAHPEBUtagPOINTD@@0AEAU2@N@Z",
+      "ordinal": 1419
+    },
+    {
+      "address": "0x1243d7c0",
+      "forwarder": null,
+      "name": "?CrossLinePointWithPtOnLine@CSVectorMath@@QEAAHPEBUtagPOINTF@@0AEAU2@N@Z",
+      "ordinal": 1420
+    },
+    {
+      "address": "0x122722f0",
+      "forwarder": null,
+      "name": "?CrossProduct@CSVectorMath@@QEAAXAEBU_VDIM@@0AEAU2@@Z",
+      "ordinal": 1422
+    },
+    {
+      "address": "0x12475630",
+      "forwarder": null,
+      "name": "?CurveSampling@CSVec4Sampling@@IEAAXUSample@1@@Z",
+      "ordinal": 1426
+    },
+    {
+      "address": "0x12443000",
+      "forwarder": null,
+      "name": "?CurveSampling@CSVectorSampling@@QEAAHPEBU_VSTROKE@@H@Z",
+      "ordinal": 1427
+    },
+    {
+      "address": "0x1245b390",
+      "forwarder": null,
+      "name": "?CutLCurveAtOtherLine@CSVec4Cut@@IEAAXPEAVCSVStroke@@AEAV?$RCTArray@PEAVCSVectorV4Layer@@$0A@@@PEAVCSVec4Search@@@Z",
+      "ordinal": 1428
+    },
+    {
+      "address": "0x1245c340",
+      "forwarder": null,
+      "name": "?CutLineInOffscreen@CSVec4Cut@@QEAAHPEAVCSVectorV4Layer@@IAEAVRCRect@@0PEAV3@H@Z",
+      "ordinal": 1429
+    },
+    {
+      "address": "0x1245cbb0",
+      "forwarder": null,
+      "name": "?CutOrCopySelectedLine@CSVec4Cut@@SAHPEAVCSVectorV4Layer@@HAEAVRCRect@@0PEAV3@@Z",
+      "ordinal": 1430
+    },
+    {
+      "address": "0x122f8e80",
+      "forwarder": null,
+      "name": "?CutOuterArea@CSVectorLayer@@UEAAXVRCRect@@@Z",
+      "ordinal": 1434
+    },
+    {
+      "address": "0x1245cd60",
+      "forwarder": null,
+      "name": "?CutStrokeAtIntersect@CSVec4Cut@@QEAAXPEAVCSVStroke@@PEAVCSVec4Search@@1HPEAV?$RCTArray@PEAVCSVStroke@@$0A@@@@Z",
+      "ordinal": 1438
+    },
+    {
+      "address": "0x12272350",
+      "forwarder": null,
+      "name": "?DecNodeSlotCount@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 1439
+    },
+    {
+      "address": "0x12272380",
+      "forwarder": null,
+      "name": "?DecPacketGDBSlot@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 1440
+    },
+    {
+      "address": "0x12456e90",
+      "forwarder": null,
+      "name": "?DecideMerge@CSVec4Connect@@IEAAHH@Z",
+      "ordinal": 1441
+    },
+    {
+      "address": "0x124437e0",
+      "forwarder": null,
+      "name": "?DelCash@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 1445
+    },
+    {
+      "address": "0x124438c0",
+      "forwarder": null,
+      "name": "?DelInOutBuf@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 1447
+    },
+    {
+      "address": "0x12448bf0",
+      "forwarder": null,
+      "name": "?DelNode@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 1448
+    },
+    {
+      "address": "0x122723b0",
+      "forwarder": null,
+      "name": "?DelPacket@CSVector@@QEAAXAEBUtagRECT@@@Z",
+      "ordinal": 1449
+    },
+    {
+      "address": "0x122723c0",
+      "forwarder": null,
+      "name": "?DelPacket@CSVector@@QEAAXH@Z",
+      "ordinal": 1450
+    },
+    {
+      "address": "0x12272400",
+      "forwarder": null,
+      "name": "?DelPacket@CSVectorDataBase@@QEAAXAEBUtagRECT@@@Z",
+      "ordinal": 1451
+    },
+    {
+      "address": "0x12272490",
+      "forwarder": null,
+      "name": "?DelPacket@CSVectorDataBase@@QEAAXH@Z",
+      "ordinal": 1452
+    },
+    {
+      "address": "0x12440300",
+      "forwarder": null,
+      "name": "?DelPacket@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 1453
+    },
+    {
+      "address": "0x12440400",
+      "forwarder": null,
+      "name": "?DelPacketLink@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 1454
+    },
+    {
+      "address": "0x12441710",
+      "forwarder": null,
+      "name": "?DelPres@CSVectorPres@@QEAAXH@Z",
+      "ordinal": 1455
+    },
+    {
+      "address": "0x124439b0",
+      "forwarder": null,
+      "name": "?DelPresList@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 1456
+    },
+    {
+      "address": "0x12441b50",
+      "forwarder": null,
+      "name": "?DelRec@CSVectorRecord@@QEAAXH@Z",
+      "ordinal": 1457
+    },
+    {
+      "address": "0x12447c20",
+      "forwarder": null,
+      "name": "?DelScanEdge@CSVectorScanConv@@QEAAXH@Z",
+      "ordinal": 1458
+    },
+    {
+      "address": "0x12447c40",
+      "forwarder": null,
+      "name": "?DelScanNode@CSVectorScanConv@@QEAAXH@Z",
+      "ordinal": 1459
+    },
+    {
+      "address": "0x12448c30",
+      "forwarder": null,
+      "name": "?DelSpaceNodeSlot@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 1460
+    },
+    {
+      "address": "0x1225c8b0",
+      "forwarder": null,
+      "name": "?DeleteAllCurve@CSVStroke@@QEAAXXZ",
+      "ordinal": 1468
+    },
+    {
+      "address": "0x122fb850",
+      "forwarder": null,
+      "name": "?DeleteAllData@CSVectorV4Layer@@QEAAXH@Z",
+      "ordinal": 1469
+    },
+    {
+      "address": "0x1225c8e0",
+      "forwarder": null,
+      "name": "?DeleteCorner@CSVCurve@@QEAAXXZ",
+      "ordinal": 1472
+    },
+    {
+      "address": "0x12448dd0",
+      "forwarder": null,
+      "name": "?DeleteNode@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 1488
+    },
+    {
+      "address": "0x12272600",
+      "forwarder": null,
+      "name": "?DeleteOutputImage@CSVectorLayer@@UEAAXXZ",
+      "ordinal": 1492
+    },
+    {
+      "address": "0x1225ca80",
+      "forwarder": null,
+      "name": "?DeleteStroke@CSVec4Search@@QEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 1500
+    },
+    {
+      "address": "0x1247c1c0",
+      "forwarder": null,
+      "name": "?DeleteStrokeDirect@CSVec4Search@@QEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 1501
+    },
+    {
+      "address": "0x1246d780",
+      "forwarder": null,
+      "name": "?DeleteTooShortCurve@CSVEC4OPERATION@@YAHPEAVCSVCurve@@PEAVCSVec4Search@@@Z",
+      "ordinal": 1506
+    },
+    {
+      "address": "0x1246d860",
+      "forwarder": null,
+      "name": "?DeleteTooShortCurve@CSVEC4OPERATION@@YAHPEAVCSVStroke@@PEAVCSVec4Search@@@Z",
+      "ordinal": 1507
+    },
+    {
+      "address": "0x12480c70",
+      "forwarder": null,
+      "name": "?DeleteTooShortStroke@CSVectorizeV4@@IEAAXXZ",
+      "ordinal": 1508
+    },
+    {
+      "address": "0x12448fa0",
+      "forwarder": null,
+      "name": "?DeleteTree@CSVectorSearch@@QEAAXPEAVCSVectorPacket@@H@Z",
+      "ordinal": 1509
+    },
+    {
+      "address": "0x122f9220",
+      "forwarder": null,
+      "name": "?Destroy@CSVectorLayer@@UEAAXXZ",
+      "ordinal": 1540
+    },
+    {
+      "address": "0x122fbb50",
+      "forwarder": null,
+      "name": "?Destroy@CSVectorV4Layer@@UEAAXXZ",
+      "ordinal": 1541
+    },
+    {
+      "address": "0x12272630",
+      "forwarder": null,
+      "name": "?DistFromLine@CSVectorMath@@QEAANAEBUtagPOINT@@00@Z",
+      "ordinal": 1553
+    },
+    {
+      "address": "0x12272690",
+      "forwarder": null,
+      "name": "?DistFromLine@CSVectorMath@@QEAANAEBUtagPOINTD@@00@Z",
+      "ordinal": 1554
+    },
+    {
+      "address": "0x122726d0",
+      "forwarder": null,
+      "name": "?DistFromLine@CSVectorMath@@QEAANAEBUtagPOINTF@@00@Z",
+      "ordinal": 1555
+    },
+    {
+      "address": "0x12272820",
+      "forwarder": null,
+      "name": "?DistFromLine@CSVectorMath@@QEAANNNNNNN@Z",
+      "ordinal": 1556
+    },
+    {
+      "address": "0x1246d970",
+      "forwarder": null,
+      "name": "?DivideCurve@CSVEC4OPERATION@@YAXPEAVCSVCurve@@MAEAPEAV2@1@Z",
+      "ordinal": 1560
+    },
+    {
+      "address": "0x1246df90",
+      "forwarder": null,
+      "name": "?DivideLongCurve@CSVEC4OPERATION@@YAXAEAV?$RCTArray@PEAVCSLayer@@$0A@@@H@Z",
+      "ordinal": 1561
+    },
+    {
+      "address": "0x1246e180",
+      "forwarder": null,
+      "name": "?DivideLongCurve@CSVEC4OPERATION@@YAXPEAVCSVStroke@@H@Z",
+      "ordinal": 1562
+    },
+    {
+      "address": "0x12449040",
+      "forwarder": null,
+      "name": "?DivideNode@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 1563
+    },
+    {
+      "address": "0x12435410",
+      "forwarder": null,
+      "name": "?DividePres@CSVectorIntersect@@QEAAXAEAU_VDIVPRESINFO@@@Z",
+      "ordinal": 1564
+    },
+    {
+      "address": "0x1246e2f0",
+      "forwarder": null,
+      "name": "?DivideStroke@CSVEC4OPERATION@@YAHPEAVCSVec4Search@@AEAVRCPoint@@PEAVCSVCurve@@MAEAPEAVCSVStroke@@3AEAH4@Z",
+      "ordinal": 1565
+    },
+    {
+      "address": "0x1245d160",
+      "forwarder": null,
+      "name": "?DivideStrokeAtIntersect@CSVec4Cut@@IEAAXPEAVCSVStroke@@AEAV?$RCTArray@ULINE_INTERSECT@CSRasVecIntersect@@$0A@@@HPEAVCSVec4Search@@AEAV?$RCTArray@PEAVCSVStroke@@$0A@@@AEAV?$RCTArray@H$0A@@@@Z",
+      "ordinal": 1566
+    },
+    {
+      "address": "0x1246ea30",
+      "forwarder": null,
+      "name": "?DivideTooSharpCurve@CSVEC4OPERATION@@YAHPEAVCSVCurve@@@Z",
+      "ordinal": 1567
+    },
+    {
+      "address": "0x1246ece0",
+      "forwarder": null,
+      "name": "?DivideTooSharpCurve@CSVEC4OPERATION@@YAHPEAVCSVStroke@@PEAVCSVec4Search@@@Z",
+      "ordinal": 1568
+    },
+    {
+      "address": "0x1245d800",
+      "forwarder": null,
+      "name": "?DoFilterInOffscreen@CSVec4Cut@@QEAAHPEAVCSVectorV4Layer@@AEAVRCRect@@@Z",
+      "ordinal": 1570
+    },
+    {
+      "address": "0x1245db50",
+      "forwarder": null,
+      "name": "?DoFilterToSelected@CSVec4Cut@@QEAAHPEAVCSVectorV4Layer@@HAEAVRCRect@@@Z",
+      "ordinal": 1571
+    },
+    {
+      "address": "0x12480dc0",
+      "forwarder": null,
+      "name": "?DoSampling3D@CSVectorizeV4@@IEAAXQEAU_VERTEX_INFO@@@Z",
+      "ordinal": 1572
+    },
+    {
+      "address": "0x12480f20",
+      "forwarder": null,
+      "name": "?DoSampling@CSVectorizeV4@@IEAAXAEBVRCPoint@@@Z",
+      "ordinal": 1573
+    },
+    {
+      "address": "0x12481030",
+      "forwarder": null,
+      "name": "?DoSamplingForRuler@CSVectorizeV4@@QEAAXAEBVRCPointD@@H@Z",
+      "ordinal": 1574
+    },
+    {
+      "address": "0x12272940",
+      "forwarder": null,
+      "name": "?DotProduct2D@CSVectorMath@@QEAANNNNN@Z",
+      "ordinal": 1575
+    },
+    {
+      "address": "0x12272960",
+      "forwarder": null,
+      "name": "?DoubleToInt@CSVectorMath@@QEAAHN@Z",
+      "ordinal": 1578
+    },
+    {
+      "address": "0x1242c7b0",
+      "forwarder": null,
+      "name": "?DrawAirbrushCircle@CSVectorDraw@@QEAAHAEBUtagPOINT@@MMAEBKHHIAEAUtagRECT@@@Z",
+      "ordinal": 1583
+    },
+    {
+      "address": "0x12464850",
+      "forwarder": null,
+      "name": "?DrawCenterLine@CSVec4Draw@@IEAAXPEAVCSVStroke@@PEAUPARTIAL_CENTER_LINE@@@Z",
+      "ordinal": 1584
+    },
+    {
+      "address": "0x12362260",
+      "forwarder": null,
+      "name": "?DrawDoubleLine@CSFrameLineLayer@@MEAAXPEAVCSRulerObject@@PEAVRCPointD@@HPEAVRCVOffscreen@@HKKPEAVCSVectorizeV4@@PEAVRCRect@@@Z",
+      "ordinal": 1591
+    },
+    {
+      "address": "0x122fbbd0",
+      "forwarder": null,
+      "name": "?DrawOffscreen@CSVectorV4Layer@@QEAAXAEBVRCRect@@PEAH@Z",
+      "ordinal": 1617
+    },
+    {
+      "address": "0x1242cc30",
+      "forwarder": null,
+      "name": "?DrawPacket@CSVectorDraw@@QEAAHHAEAUtagRECT@@KK@Z",
+      "ordinal": 1618
+    },
+    {
+      "address": "0x1242cc70",
+      "forwarder": null,
+      "name": "?DrawPacketFace@CSVectorDraw@@QEAAHHAEAUtagRECT@@@Z",
+      "ordinal": 1619
+    },
+    {
+      "address": "0x1242d5a0",
+      "forwarder": null,
+      "name": "?DrawPacketSpline@CSVectorDraw@@QEAAHHAEAUtagRECT@@KK@Z",
+      "ordinal": 1620
+    },
+    {
+      "address": "0x1242db40",
+      "forwarder": null,
+      "name": "?DrawPenHeadCurve@CSVectorDraw@@QEAAHAEBU_VCURVE@@PEBU_VVPRESSURE@@PEBU_VPENHEAD@@AEBKIAEAUtagRECT@@@Z",
+      "ordinal": 1623
+    },
+    {
+      "address": "0x1242e210",
+      "forwarder": null,
+      "name": "?DrawPenHeadLine@CSVectorDraw@@QEAAHPEBU_VSTROKE@@PEBU_VPENHEAD@@AEBKIAEAUtagRECT@@@Z",
+      "ordinal": 1624
+    },
+    {
+      "address": "0x1242e880",
+      "forwarder": null,
+      "name": "?DrawPolygon@CSVectorDraw@@QEAAHPEBUtagPOINTF@@HAEBKIAEAUtagRECT@@@Z",
+      "ordinal": 1628
+    },
+    {
+      "address": "0x12379fe0",
+      "forwarder": null,
+      "name": "?DrawPolygonLine@CSRulerFunction@@IEAAXPEAVCSRulerObject@@PEAVRCPointD@@HPEAVCSVectorizeV4@@AEAVRCRect@@H@Z",
+      "ordinal": 1630
+    },
+    {
+      "address": "0x123292b0",
+      "forwarder": null,
+      "name": "?DrawPolygonLine@CSTextFrameV4Layer@@MEAAXPEAVCSRulerObject@@PEAVRCPoint@@HPEAVRCVOffscreen@@HKPEAVCSVectorizeV4@@@Z",
+      "ordinal": 1631
+    },
+    {
+      "address": "0x12475df0",
+      "forwarder": null,
+      "name": "?DrawRasterStroke@CSVec4Sampling@@QEAAXAEAVRCRect@@@Z",
+      "ordinal": 1633
+    },
+    {
+      "address": "0x123639e0",
+      "forwarder": null,
+      "name": "?DrawRuler@CSFrameLineLayer@@UEAAXPEAVRCVOffscreen@@KKHPEAVCSVectorV4Layer@@@Z",
+      "ordinal": 1635
+    },
+    {
+      "address": "0x1238fc90",
+      "forwarder": null,
+      "name": "?DrawRuler@CSRulerLayer@@MEAAXPEAVRCVOffscreen@@VRCPoint@@HPEAVCSVectorV4Layer@@@Z",
+      "ordinal": 1637
+    },
+    {
+      "address": "0x12390940",
+      "forwarder": null,
+      "name": "?DrawRulerVectorFlash@CSRulerLayer@@IEAAXPEAVRCVOffscreen@@PEAVCSVectorV4Layer@@VRCRect@@@Z",
+      "ordinal": 1642
+    },
+    {
+      "address": "0x123686e0",
+      "forwarder": null,
+      "name": "?DrawSingleLine@CSRulerCubicBezier@@QEAAXAEBVRCPoint@@NPEAVCSVectorizeV4@@AEAVRCRect@@PEAV?$RCTArray@VRCPoint@@$0A@@@@Z",
+      "ordinal": 1649
+    },
+    {
+      "address": "0x1237a520",
+      "forwarder": null,
+      "name": "?DrawSingleLine@CSRulerFunction@@IEAAXPEAVCSRulerObject@@PEAVRCPointD@@HPEAVCSVectorizeV4@@AEAVRCRect@@@Z",
+      "ordinal": 1652
+    },
+    {
+      "address": "0x1237a960",
+      "forwarder": null,
+      "name": "?DrawSingleLineCurve@CSRulerFunction@@IEAAXPEAVCSRulerObject@@PEAVRCPointD@@HPEAVCSVectorizeV4@@AEAVRCRect@@@Z",
+      "ordinal": 1654
+    },
+    {
+      "address": "0x12475f00",
+      "forwarder": null,
+      "name": "?DrawStraightLine@CSVec4Sampling@@QEAAPEAVCSVStroke@@IPEBUPEN_HEAD_STRUCT@@MKAEBVRCPoint@@MMM1MMMAEAVRCRect@@@Z",
+      "ordinal": 1658
+    },
+    {
+      "address": "0x124764b0",
+      "forwarder": null,
+      "name": "?DrawStraightLine@CSVec4Sampling@@QEAAXXZ",
+      "ordinal": 1659
+    },
+    {
+      "address": "0x122dd380",
+      "forwarder": null,
+      "name": "?EnableEscAbort@CSVectorFilter@@QEAAXH@Z",
+      "ordinal": 1684
+    },
+    {
+      "address": "0x1242ea10",
+      "forwarder": null,
+      "name": "?EndDraw@CSVectorDraw@@QEAAXXZ",
+      "ordinal": 1689
+    },
+    {
+      "address": "0x12481140",
+      "forwarder": null,
+      "name": "?EndSampling3D@CSVectorizeV4@@IEAAPEAVCSVStroke@@QEAU_VERTEX_INFO@@@Z",
+      "ordinal": 1690
+    },
+    {
+      "address": "0x12476590",
+      "forwarder": null,
+      "name": "?EndSampling@CSVec4Sampling@@QEAAHAEAVRCRect@@@Z",
+      "ordinal": 1691
+    },
+    {
+      "address": "0x12443a90",
+      "forwarder": null,
+      "name": "?EndSampling@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 1692
+    },
+    {
+      "address": "0x124812b0",
+      "forwarder": null,
+      "name": "?EndSampling@CSVectorizeV4@@IEAAPEAVCSVStroke@@AEBVRCPoint@@@Z",
+      "ordinal": 1693
+    },
+    {
+      "address": "0x12481480",
+      "forwarder": null,
+      "name": "?EndSamplingForRuler@CSVectorizeV4@@QEAAXAEBVRCPointD@@MMHAEAVRCRect@@@Z",
+      "ordinal": 1694
+    },
+    {
+      "address": "0x12272980",
+      "forwarder": null,
+      "name": "?EqualPoint@CSVectorMath@@QEAAHAEBUtagPOINT@@0H@Z",
+      "ordinal": 1697
+    },
+    {
+      "address": "0x122729b0",
+      "forwarder": null,
+      "name": "?EqualPointF@CSVectorMath@@QEAAHAEBUtagPOINTF@@0M@Z",
+      "ordinal": 1698
+    },
+    {
+      "address": "0x122fbc80",
+      "forwarder": null,
+      "name": "?ExtensionOffscr@CSVectorV4Layer@@UEAA?AVRCPoint@@VRCRect@@V2@@Z",
+      "ordinal": 1713
+    },
+    {
+      "address": "0x12430f80",
+      "forwarder": null,
+      "name": "?FileConvertToRaster@CSVectorFileConv@@QEAAXPEBEAEBUtagRECT@@PEAVCSBitmapLayer@@H@Z",
+      "ordinal": 1714
+    },
+    {
+      "address": "0x12465250",
+      "forwarder": null,
+      "name": "?FillPolygon@CSVec4Draw@@IEAAXKHH@Z",
+      "ordinal": 1718
+    },
+    {
+      "address": "0x12265350",
+      "forwarder": null,
+      "name": "?FilterToStroke@CSVec4Cut@@MEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 1722
+    },
+    {
+      "address": "0x12466670",
+      "forwarder": null,
+      "name": "?Finalize@CSVec4Draw@@QEAAXXZ",
+      "ordinal": 1723
+    },
+    {
+      "address": "0x124358f0",
+      "forwarder": null,
+      "name": "?FindCurveAndCurveIntersect@CSVectorIntersect@@SAHPEAVCSVectorMath@@QEAUtagPOINT@@1AEAV?$RCTArray@M$0A@@@@Z",
+      "ordinal": 1731
+    },
+    {
+      "address": "0x12457500",
+      "forwarder": null,
+      "name": "?FindMergeStartPoint@CSVec4Connect@@IEAAHPEAVCSVCurve@@AEAPEAV2@AEAM@Z",
+      "ordinal": 1739
+    },
+    {
+      "address": "0x1246ed80",
+      "forwarder": null,
+      "name": "?FindNearestPoint@CSVEC4OPERATION@@YAHPEAVCSVStroke@@AEBVRCPoint@@HAEAV3@AEAHPEAPEAVCSVCurve@@PEAM@Z",
+      "ordinal": 1740
+    },
+    {
+      "address": "0x1246f0d0",
+      "forwarder": null,
+      "name": "?FindNearestPointFast@CSVEC4OPERATION@@YAHPEAVCSVStroke@@AEBVRCPoint@@HAEAV3@PEAPEAVCSVCurve@@PEAM@Z",
+      "ordinal": 1741
+    },
+    {
+      "address": "0x12436430",
+      "forwarder": null,
+      "name": "?FindPacketAndPacketIntersect@CSVectorIntersect@@SAHPEAVCSVectorPacket@@HHAEAV?$RCTArray@PEAUINTERSECT_INFO@CSVectorIntersect@@$0A@@@@Z",
+      "ordinal": 1744
+    },
+    {
+      "address": "0x12457770",
+      "forwarder": null,
+      "name": "?FindSeparatePoint@CSVec4Connect@@IEAAXPEAVCSVCurve@@MAEAPEAV2@@Z",
+      "ordinal": 1749
+    },
+    {
+      "address": "0x12481660",
+      "forwarder": null,
+      "name": "?FindStrokeToConnect@CSVectorizeV4@@IEAAPEAVCSVStroke@@PEAV2@HAEAH@Z",
+      "ordinal": 1752
+    },
+    {
+      "address": "0x1246f5a0",
+      "forwarder": null,
+      "name": "?FindTwoStrokeIntersect@CSVEC4OPERATION@@YAHPEAVCSVStroke@@0AEAV?$RCTArray@UTWO_LINE_INTERSECT@CSVEC4OPERATION@@$0A@@@VRCPoint@@H@Z",
+      "ordinal": 1753
+    },
+    {
+      "address": "0x12470450",
+      "forwarder": null,
+      "name": "?FixStrokeVertex@CSVEC4OPERATION@@YAXPEAVCSVStroke@@@Z",
+      "ordinal": 1756
+    },
+    {
+      "address": "0x12476810",
+      "forwarder": null,
+      "name": "?FlickerReduction@CSVec4Sampling@@QEAAXAEAVRCPoint@@AEAM@Z",
+      "ordinal": 1758
+    },
+    {
+      "address": "0x12443ab0",
+      "forwarder": null,
+      "name": "?FlickerReduction@CSVectorSampling@@QEAAXHHMAEAH0AEAMH@Z",
+      "ordinal": 1759
+    },
+    {
+      "address": "0x12440510",
+      "forwarder": null,
+      "name": "?GeneratePacketExtent@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 1773
+    },
+    {
+      "address": "0x1225cba0",
+      "forwarder": null,
+      "name": "?Get2BitColor@CSVStroke@@QEBAEXZ",
+      "ordinal": 1777
+    },
+    {
+      "address": "0x1225cbe0",
+      "forwarder": null,
+      "name": "?Get32BitColor@CSVStroke@@QEBAKXZ",
+      "ordinal": 1781
+    },
+    {
+      "address": "0x12455070",
+      "forwarder": null,
+      "name": "?GetBaseAddress@CSVec4AntiAlias@@QEAAPEAEXZ",
+      "ordinal": 1820
+    },
+    {
+      "address": "0x12272ac0",
+      "forwarder": null,
+      "name": "?GetBezierDevideCount@CSVectorMath@@QEAAHPEBUtagPOINT@@H@Z",
+      "ordinal": 1832
+    },
+    {
+      "address": "0x12272af0",
+      "forwarder": null,
+      "name": "?GetBezierDevideCount@CSVectorMath@@QEAAHPEBUtagPOINTD@@N@Z",
+      "ordinal": 1833
+    },
+    {
+      "address": "0x12272b50",
+      "forwarder": null,
+      "name": "?GetBezierDevideCount@CSVectorMath@@QEAAHPEBUtagPOINTF@@N@Z",
+      "ordinal": 1834
+    },
+    {
+      "address": "0x1243d8d0",
+      "forwarder": null,
+      "name": "?GetBezierX2D@CSVectorMath@@QEAAHNNNNNNNPEAN0@Z",
+      "ordinal": 1836
+    },
+    {
+      "address": "0x1243dbb0",
+      "forwarder": null,
+      "name": "?GetBezierX2D@CSVectorMath@@QEAAHPEBUtagPOINT@@NPEAN1@Z",
+      "ordinal": 1837
+    },
+    {
+      "address": "0x1243dc30",
+      "forwarder": null,
+      "name": "?GetBezierX2D@CSVectorMath@@QEAAHPEBUtagPOINTD@@NPEAN1@Z",
+      "ordinal": 1838
+    },
+    {
+      "address": "0x1243dc80",
+      "forwarder": null,
+      "name": "?GetBezierX2D@CSVectorMath@@QEAAHPEBUtagPOINTF@@NPEAN1@Z",
+      "ordinal": 1839
+    },
+    {
+      "address": "0x1243dd00",
+      "forwarder": null,
+      "name": "?GetBezierY2D@CSVectorMath@@QEAAHNNNNNNNPEAN0@Z",
+      "ordinal": 1840
+    },
+    {
+      "address": "0x1243dfd0",
+      "forwarder": null,
+      "name": "?GetBezierY2D@CSVectorMath@@QEAAHPEBUtagPOINT@@NPEAN1@Z",
+      "ordinal": 1841
+    },
+    {
+      "address": "0x1243e050",
+      "forwarder": null,
+      "name": "?GetBezierY2D@CSVectorMath@@QEAAHPEBUtagPOINTD@@NPEAN1@Z",
+      "ordinal": 1842
+    },
+    {
+      "address": "0x1243e0a0",
+      "forwarder": null,
+      "name": "?GetBezierY2D@CSVectorMath@@QEAAHPEBUtagPOINTF@@NPEAN1@Z",
+      "ordinal": 1843
+    },
+    {
+      "address": "0x1225d4c0",
+      "forwarder": null,
+      "name": "?GetBitCount@CSVec4AntiAlias@@QEAAHXZ",
+      "ordinal": 1846
+    },
+    {
+      "address": "0x1225ccd0",
+      "forwarder": null,
+      "name": "?GetBlockStroke@CSVec4Search@@QEAAPEAV?$RCTPtrWList@VCSVStroke@@$0BAAA@$0M@@@HH@Z",
+      "ordinal": 1854
+    },
+    {
+      "address": "0x1225cd20",
+      "forwarder": null,
+      "name": "?GetBound@CSVStroke@@QEAAAEBVRCRect@@XZ",
+      "ordinal": 1857
+    },
+    {
+      "address": "0x122cc9b0",
+      "forwarder": null,
+      "name": "?GetCashDirect@CSVectorSampling@@QEAAXHPEAM@Z",
+      "ordinal": 1870
+    },
+    {
+      "address": "0x122cc9d0",
+      "forwarder": null,
+      "name": "?GetCashDistance@CSVectorSampling@@QEAAXHPEAM@Z",
+      "ordinal": 1871
+    },
+    {
+      "address": "0x122cc9f0",
+      "forwarder": null,
+      "name": "?GetCashExtent@CSVectorSampling@@QEAAAEBUtagRECT@@H@Z",
+      "ordinal": 1872
+    },
+    {
+      "address": "0x122cca10",
+      "forwarder": null,
+      "name": "?GetCashFlat@CSVectorSampling@@QEAAXHPEAM@Z",
+      "ordinal": 1873
+    },
+    {
+      "address": "0x122cca30",
+      "forwarder": null,
+      "name": "?GetCashHead@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 1874
+    },
+    {
+      "address": "0x122cca40",
+      "forwarder": null,
+      "name": "?GetCashID@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 1875
+    },
+    {
+      "address": "0x122cca60",
+      "forwarder": null,
+      "name": "?GetCashLinkNext@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 1876
+    },
+    {
+      "address": "0x122cca80",
+      "forwarder": null,
+      "name": "?GetCashLinkPrev@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 1877
+    },
+    {
+      "address": "0x122ccaa0",
+      "forwarder": null,
+      "name": "?GetCashPoint@CSVectorSampling@@QEAAXHPEAUtagPOINT@@@Z",
+      "ordinal": 1878
+    },
+    {
+      "address": "0x122ccaf0",
+      "forwarder": null,
+      "name": "?GetCashRecycle@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 1879
+    },
+    {
+      "address": "0x122ccb10",
+      "forwarder": null,
+      "name": "?GetCashScale@CSVectorSampling@@QEAAXHPEAM@Z",
+      "ordinal": 1880
+    },
+    {
+      "address": "0x122ccb30",
+      "forwarder": null,
+      "name": "?GetCashTail@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 1881
+    },
+    {
+      "address": "0x122ccb40",
+      "forwarder": null,
+      "name": "?GetClipRect@CSVectorDraw@@QEAAAEBUtagRECT@@XZ",
+      "ordinal": 1901
+    },
+    {
+      "address": "0x1225cdf0",
+      "forwarder": null,
+      "name": "?GetConnectStroke@CSVec4Sampling@@QEAAPEAVCSVStroke@@XZ",
+      "ordinal": 1915
+    },
+    {
+      "address": "0x1225cc90",
+      "forwarder": null,
+      "name": "?GetControlPoint@CSVCurve@@QEBAAEBVRCPoint@@XZ",
+      "ordinal": 1931
+    },
+    {
+      "address": "0x1225ce00",
+      "forwarder": null,
+      "name": "?GetCorner@CSVCurve@@QEAAPEAVCSVCorner@@XZ",
+      "ordinal": 1934
+    },
+    {
+      "address": "0x1225ced0",
+      "forwarder": null,
+      "name": "?GetCurve@CSVStroke@@QEAAPEAV?$RCTWList@VCSVCurve@@$0BAAA@$0M@@@XZ",
+      "ordinal": 1950
+    },
+    {
+      "address": "0x122ccb50",
+      "forwarder": null,
+      "name": "?GetCurve@CSVectorSampling@@QEAAAEBU_VCURVE@@H@Z",
+      "ordinal": 1951
+    },
+    {
+      "address": "0x1244b5a0",
+      "forwarder": null,
+      "name": "?GetCurve@CSVectorSimpleCurve@@QEAAAEBU_VCURVE@@HH@Z",
+      "ordinal": 1952
+    },
+    {
+      "address": "0x122ccb70",
+      "forwarder": null,
+      "name": "?GetCurveBuf@CSVectorSampling@@QEAAAEBU_VCURVE@@H@Z",
+      "ordinal": 1953
+    },
+    {
+      "address": "0x122ccb90",
+      "forwarder": null,
+      "name": "?GetCurveBufCount@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 1954
+    },
+    {
+      "address": "0x122ccba0",
+      "forwarder": null,
+      "name": "?GetCurveCount@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 1955
+    },
+    {
+      "address": "0x1244b5c0",
+      "forwarder": null,
+      "name": "?GetCurveCount@CSVectorSimpleCurve@@QEAAHH@Z",
+      "ordinal": 1956
+    },
+    {
+      "address": "0x1244b5d0",
+      "forwarder": null,
+      "name": "?GetCurveExtent@CSVectorSimpleCurve@@QEAA?AUtagRECT@@H@Z",
+      "ordinal": 1957
+    },
+    {
+      "address": "0x1244a110",
+      "forwarder": null,
+      "name": "?GetDZ@CSVectorSearch@@IEAAIAEBUtagPOINT@@HH@Z",
+      "ordinal": 1959
+    },
+    {
+      "address": "0x12272c00",
+      "forwarder": null,
+      "name": "?GetDZSize@CSVectorSearch@@IEAAHI@Z",
+      "ordinal": 1960
+    },
+    {
+      "address": "0x1225cee0",
+      "forwarder": null,
+      "name": "?GetData@CSVec4Search@@QEAAPEAV?$RCTArray@VCSVBlockData@@$0A@@@XZ",
+      "ordinal": 1962
+    },
+    {
+      "address": "0x1225cf00",
+      "forwarder": null,
+      "name": "?GetDataBase@CSVStroke@@QEAAPEAVCSVec4DataBase@@XZ",
+      "ordinal": 1965
+    },
+    {
+      "address": "0x1225cef0",
+      "forwarder": null,
+      "name": "?GetDataBase@CSVec4Search@@QEAAPEAVCSVec4DataBase@@XZ",
+      "ordinal": 1966
+    },
+    {
+      "address": "0x1225cf10",
+      "forwarder": null,
+      "name": "?GetDataBase@CSVectorV4Layer@@QEAAPEAVCSVec4DataBase@@XZ",
+      "ordinal": 1967
+    },
+    {
+      "address": "0x1225d930",
+      "forwarder": null,
+      "name": "?GetDataBaseObject@CSVector@@QEAAPEAVCSVectorDataBase@@XZ",
+      "ordinal": 1968
+    },
+    {
+      "address": "0x1225d000",
+      "forwarder": null,
+      "name": "?GetDraw@CSVectorV4Layer@@QEAAPEAVCSVec4Draw@@XZ",
+      "ordinal": 1996
+    },
+    {
+      "address": "0x1225ce40",
+      "forwarder": null,
+      "name": "?GetDrawColor@CSVectorizeV4@@QEAAKXZ",
+      "ordinal": 1999
+    },
+    {
+      "address": "0x1242eac0",
+      "forwarder": null,
+      "name": "?GetDrawPres@CSVectorDraw@@QEAAXAEBU_VCURVE@@PEBU_VVPRESSURE@@MAEAHAEAU3@@Z",
+      "ordinal": 2008
+    },
+    {
+      "address": "0x1225ce00",
+      "forwarder": null,
+      "name": "?GetDstLayer@CSVectorizeV4@@QEAAPEAVCSVectorV4Layer@@XZ",
+      "ordinal": 2019
+    },
+    {
+      "address": "0x122f9280",
+      "forwarder": null,
+      "name": "?GetExtPkt@CSVectorIntersect@@QEAAHH@Z",
+      "ordinal": 2043
+    },
+    {
+      "address": "0x122f9290",
+      "forwarder": null,
+      "name": "?GetExtPktCount@CSVectorIntersect@@QEAAHXZ",
+      "ordinal": 2044
+    },
+    {
+      "address": "0x12272ce0",
+      "forwarder": null,
+      "name": "?GetFindCount@CSVectorSearch@@QEAAHXZ",
+      "ordinal": 2081
+    },
+    {
+      "address": "0x12272cf0",
+      "forwarder": null,
+      "name": "?GetFindPacket@CSVector@@QEAAHH@Z",
+      "ordinal": 2082
+    },
+    {
+      "address": "0x12272d00",
+      "forwarder": null,
+      "name": "?GetFindPacket@CSVectorDataBase@@QEAAHH@Z",
+      "ordinal": 2083
+    },
+    {
+      "address": "0x12272d10",
+      "forwarder": null,
+      "name": "?GetFindPacket@CSVectorSearch@@QEAAHH@Z",
+      "ordinal": 2084
+    },
+    {
+      "address": "0x1225d320",
+      "forwarder": null,
+      "name": "?GetHeadCutPoint@CSVStroke@@QEAAHAEAVRCPoint@@0@Z",
+      "ordinal": 2154
+    },
+    {
+      "address": "0x1225d340",
+      "forwarder": null,
+      "name": "?GetHeadPoint@CSVStroke@@QEAAAEBVRCPoint@@XZ",
+      "ordinal": 2156
+    },
+    {
+      "address": "0x1225d460",
+      "forwarder": null,
+      "name": "?GetImageSize@CSVec4Search@@QEBA?AVRCSize@@XZ",
+      "ordinal": 2171
+    },
+    {
+      "address": "0x122cd190",
+      "forwarder": null,
+      "name": "?GetInOutBufHead@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 2174
+    },
+    {
+      "address": "0x122cd1a0",
+      "forwarder": null,
+      "name": "?GetInOutBufLinkNext@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 2175
+    },
+    {
+      "address": "0x122cd1c0",
+      "forwarder": null,
+      "name": "?GetInOutBufLinkPrev@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 2176
+    },
+    {
+      "address": "0x122cd1e0",
+      "forwarder": null,
+      "name": "?GetInOutBufRecycle@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 2177
+    },
+    {
+      "address": "0x122cd200",
+      "forwarder": null,
+      "name": "?GetInOutBufStroke@CSVectorSampling@@QEAAAEBU_VSTROKE@@H@Z",
+      "ordinal": 2178
+    },
+    {
+      "address": "0x12436870",
+      "forwarder": null,
+      "name": "?GetInsideExtent@CSVectorIntersect@@QEAAHAEAUtagRECT@@@Z",
+      "ordinal": 2191
+    },
+    {
+      "address": "0x122f92a0",
+      "forwarder": null,
+      "name": "?GetInsidePacketObject@CSVectorIntersect@@QEAAPEAVCSVectorPacket@@XZ",
+      "ordinal": 2192
+    },
+    {
+      "address": "0x12272b80",
+      "forwarder": null,
+      "name": "?GetIntersectRect@CSVectorFilter@@QEAAAEBUtagRECT@@XZ",
+      "ordinal": 2195
+    },
+    {
+      "address": "0x122cd9e0",
+      "forwarder": null,
+      "name": "?GetKeepPos@CSVectorDraw@@QEAAXAEAUtagPOINT@@H@Z",
+      "ordinal": 2208
+    },
+    {
+      "address": "0x1225d020",
+      "forwarder": null,
+      "name": "?GetKeepPosCount@CSVectorDraw@@QEAAHXZ",
+      "ordinal": 2209
+    },
+    {
+      "address": "0x1225cef0",
+      "forwarder": null,
+      "name": "?GetLayer@CSVec4DataBase@@QEAAPEAVCSVectorV4Layer@@XZ",
+      "ordinal": 2221
+    },
+    {
+      "address": "0x1225cef0",
+      "forwarder": null,
+      "name": "?GetLayerObject@CSVectorBase@@QEAAPEAVCSLayer@@XZ",
+      "ordinal": 2251
+    },
+    {
+      "address": "0x1242ed00",
+      "forwarder": null,
+      "name": "?GetLayerOffset@CSVectorDraw@@QEAA?AUtagPOINT@@XZ",
+      "ordinal": 2252
+    },
+    {
+      "address": "0x1225d5f0",
+      "forwarder": null,
+      "name": "?GetLineLayer@CSDummyLayerManager@@QEAAPEAVCSVectorV4Layer@@H@Z",
+      "ordinal": 2272
+    },
+    {
+      "address": "0x1225cc60",
+      "forwarder": null,
+      "name": "?GetLineScale@CSVCurve@@QEAAPEAV?$RCTList@VCSVLineScale@@$0BAAA@$0M@@@XZ",
+      "ordinal": 2278
+    },
+    {
+      "address": "0x1225d720",
+      "forwarder": null,
+      "name": "?GetMaxHalfLineWidth@CSVStroke@@QEBAHXZ",
+      "ordinal": 2330
+    },
+    {
+      "address": "0x1225d730",
+      "forwarder": null,
+      "name": "?GetMemCorner@CSVec4DataBase@@QEAAPEAV?$RCTListMemory@VCSVCorner@@$0EAA@$09@@XZ",
+      "ordinal": 2331
+    },
+    {
+      "address": "0x1225d740",
+      "forwarder": null,
+      "name": "?GetMemCurve@CSVec4DataBase@@QEAAPEAV?$RCTListMemory@VCSVCurve@@$0BAAA@$0M@@@XZ",
+      "ordinal": 2332
+    },
+    {
+      "address": "0x1225d750",
+      "forwarder": null,
+      "name": "?GetMemLineScale@CSVec4DataBase@@QEAAPEAV?$RCTListMemory@VCSVLineScale@@$0BAAA@$0M@@@XZ",
+      "ordinal": 2333
+    },
+    {
+      "address": "0x1225cd20",
+      "forwarder": null,
+      "name": "?GetMemPenHead@CSVec4DataBase@@QEAAPEAV?$RCTListMemory@VCSVPenHead@@$0CA@$04@@XZ",
+      "ordinal": 2334
+    },
+    {
+      "address": "0x1225d760",
+      "forwarder": null,
+      "name": "?GetMemStroke@CSVec4DataBase@@QEAAPEAV?$RCTListMemory@VCSVStroke@@$0EAA@$09@@XZ",
+      "ordinal": 2335
+    },
+    {
+      "address": "0x1225d770",
+      "forwarder": null,
+      "name": "?GetMemStrokePtr@CSVec4DataBase@@QEAAPEAV?$RCTListMemory@V?$RCTPtrWListNode@VCSVStroke@@@@$0BAAA@$0M@@@XZ",
+      "ordinal": 2336
+    },
+    {
+      "address": "0x12440760",
+      "forwarder": null,
+      "name": "?GetNearPosCurve@CSVectorPacket@@QEAANHAEBUtagPOINT@@AEAU2@PEAHPEAN@Z",
+      "ordinal": 2352
+    },
+    {
+      "address": "0x1225d8a0",
+      "forwarder": null,
+      "name": "?GetNextPoint@CSVCurve@@QEAA?AVRCPoint@@XZ",
+      "ordinal": 2355
+    },
+    {
+      "address": "0x12273150",
+      "forwarder": null,
+      "name": "?GetNode@CSVectorSearch@@IEAAPEAU_VGDBNODE@@H@Z",
+      "ordinal": 2359
+    },
+    {
+      "address": "0x12273170",
+      "forwarder": null,
+      "name": "?GetNodeLeaf@CSVectorSearch@@IEAAHH@Z",
+      "ordinal": 2360
+    },
+    {
+      "address": "0x122731a0",
+      "forwarder": null,
+      "name": "?GetNodeParentNode@CSVectorSearch@@IEAAHH@Z",
+      "ordinal": 2361
+    },
+    {
+      "address": "0x122731d0",
+      "forwarder": null,
+      "name": "?GetNodeParentSlot@CSVectorSearch@@IEAAHH@Z",
+      "ordinal": 2362
+    },
+    {
+      "address": "0x122731a0",
+      "forwarder": null,
+      "name": "?GetNodeRecycle@CSVectorSearch@@IEAAHH@Z",
+      "ordinal": 2363
+    },
+    {
+      "address": "0x12273200",
+      "forwarder": null,
+      "name": "?GetNodeSlotCount@CSVectorSearch@@IEAAHH@Z",
+      "ordinal": 2364
+    },
+    {
+      "address": "0x12273230",
+      "forwarder": null,
+      "name": "?GetNodeSlotDZ@CSVectorSearch@@IEAAIHH@Z",
+      "ordinal": 2365
+    },
+    {
+      "address": "0x12273260",
+      "forwarder": null,
+      "name": "?GetNodeSlotData@CSVectorSearch@@IEAAHHH@Z",
+      "ordinal": 2366
+    },
+    {
+      "address": "0x12273290",
+      "forwarder": null,
+      "name": "?GetNodeSlotExtent@CSVectorSearch@@IEAA?AUtagRECT@@HH@Z",
+      "ordinal": 2367
+    },
+    {
+      "address": "0x1245a5f0",
+      "forwarder": null,
+      "name": "?GetNotFullDB@CSVec4Convert4to2@@IEAAPEAVCSVectorDataBase@@XZ",
+      "ordinal": 2377
+    },
+    {
+      "address": "0x12272ab0",
+      "forwarder": null,
+      "name": "?GetOffscreen@CSVectorDraw@@QEAAPEAVRCVOffscreen@@XZ",
+      "ordinal": 2389
+    },
+    {
+      "address": "0x1225cc90",
+      "forwarder": null,
+      "name": "?GetOffset@CSVectorDraw@@QEAAAEBUtagPOINT@@XZ",
+      "ordinal": 2397
+    },
+    {
+      "address": "0x122fbea0",
+      "forwarder": null,
+      "name": "?GetOrgOffset@CSVectorV4Layer@@QEAAXAEAVRCPoint@@AEAVRCRect@@@Z",
+      "ordinal": 2420
+    },
+    {
+      "address": "0x122f92b0",
+      "forwarder": null,
+      "name": "?GetOrgPkt@CSVectorIntersect@@QEAAHH@Z",
+      "ordinal": 2421
+    },
+    {
+      "address": "0x122f92c0",
+      "forwarder": null,
+      "name": "?GetOrgPktCount@CSVectorIntersect@@QEAAHXZ",
+      "ordinal": 2422
+    },
+    {
+      "address": "0x12436980",
+      "forwarder": null,
+      "name": "?GetOutsideExtent@CSVectorIntersect@@QEAAHAEAUtagRECT@@@Z",
+      "ordinal": 2429
+    },
+    {
+      "address": "0x122f92d0",
+      "forwarder": null,
+      "name": "?GetOutsidePacketObject@CSVectorIntersect@@QEAAPEAVCSVectorPacket@@XZ",
+      "ordinal": 2430
+    },
+    {
+      "address": "0x12273320",
+      "forwarder": null,
+      "name": "?GetPacketBlkCount@CSVectorPacket@@QEAAHXZ",
+      "ordinal": 2432
+    },
+    {
+      "address": "0x12273330",
+      "forwarder": null,
+      "name": "?GetPacketColor@CSVectorPacket@@QEAAAEBKH@Z",
+      "ordinal": 2433
+    },
+    {
+      "address": "0x12273360",
+      "forwarder": null,
+      "name": "?GetPacketDrawFlg@CSVectorPacket@@QEAAIH@Z",
+      "ordinal": 2434
+    },
+    {
+      "address": "0x12273390",
+      "forwarder": null,
+      "name": "?GetPacketExtent@CSVectorPacket@@QEAAAEBUtagRECT@@H@Z",
+      "ordinal": 2435
+    },
+    {
+      "address": "0x122733c0",
+      "forwarder": null,
+      "name": "?GetPacketFlg@CSVectorPacket@@QEAAIH@Z",
+      "ordinal": 2436
+    },
+    {
+      "address": "0x122733f0",
+      "forwarder": null,
+      "name": "?GetPacketGDBNode@CSVectorPacket@@QEAAHH@Z",
+      "ordinal": 2437
+    },
+    {
+      "address": "0x12273420",
+      "forwarder": null,
+      "name": "?GetPacketGDBSlot@CSVectorPacket@@QEAAHH@Z",
+      "ordinal": 2438
+    },
+    {
+      "address": "0x12273450",
+      "forwarder": null,
+      "name": "?GetPacketHead@CSVectorPacket@@QEAAHXZ",
+      "ordinal": 2439
+    },
+    {
+      "address": "0x12273460",
+      "forwarder": null,
+      "name": "?GetPacketID@CSVectorPacket@@QEAAHH@Z",
+      "ordinal": 2440
+    },
+    {
+      "address": "0x12273490",
+      "forwarder": null,
+      "name": "?GetPacketLinkNext@CSVectorPacket@@QEAAHH@Z",
+      "ordinal": 2441
+    },
+    {
+      "address": "0x122734c0",
+      "forwarder": null,
+      "name": "?GetPacketLinkPrev@CSVectorPacket@@QEAAHH@Z",
+      "ordinal": 2442
+    },
+    {
+      "address": "0x122734f0",
+      "forwarder": null,
+      "name": "?GetPacketMaxScale@CSVectorPacket@@QEAAMH@Z",
+      "ordinal": 2443
+    },
+    {
+      "address": "0x1225d930",
+      "forwarder": null,
+      "name": "?GetPacketObject@CSVectorDataBase@@QEAAPEAVCSVectorPacket@@XZ",
+      "ordinal": 2444
+    },
+    {
+      "address": "0x12273520",
+      "forwarder": null,
+      "name": "?GetPacketPenHead@CSVectorPacket@@QEAAAEBU_VPENHEAD@@H@Z",
+      "ordinal": 2445
+    },
+    {
+      "address": "0x12273550",
+      "forwarder": null,
+      "name": "?GetPacketPoint@CSVectorPacket@@QEAAAEBUtagPOINT@@H@Z",
+      "ordinal": 2446
+    },
+    {
+      "address": "0x12273580",
+      "forwarder": null,
+      "name": "?GetPacketRec@CSVectorPacket@@QEAAHH@Z",
+      "ordinal": 2447
+    },
+    {
+      "address": "0x122735b0",
+      "forwarder": null,
+      "name": "?GetPacketRecycle@CSVectorPacket@@QEAAHH@Z",
+      "ordinal": 2448
+    },
+    {
+      "address": "0x1225de40",
+      "forwarder": null,
+      "name": "?GetPenHead@CSVStroke@@QEAAPEAVCSVPenHead@@XZ",
+      "ordinal": 2498
+    },
+    {
+      "address": "0x1225cc60",
+      "forwarder": null,
+      "name": "?GetPenHead@CSVec4DataBase@@QEAAPEAV?$RCTWList@VCSVPenHead@@$0CA@$04@@XZ",
+      "ordinal": 2499
+    },
+    {
+      "address": "0x122cda00",
+      "forwarder": null,
+      "name": "?GetPenHead@CSVectorFileConv@@QEAAAEBU_VBIGPENHEAD@@H@Z",
+      "ordinal": 2500
+    },
+    {
+      "address": "0x12431110",
+      "forwarder": null,
+      "name": "?GetPenHeadRadius@CSVectorFileConv@@QEAAMPEBUtagPOINTF@@H@Z",
+      "ordinal": 2501
+    },
+    {
+      "address": "0x1225dfd0",
+      "forwarder": null,
+      "name": "?GetPenRadius@CSVStroke@@QEBAMXZ",
+      "ordinal": 2502
+    },
+    {
+      "address": "0x12460500",
+      "forwarder": null,
+      "name": "?GetPointDFromT@CSVCurve@@QEAA?AVRCPointD@@M@Z",
+      "ordinal": 2526
+    },
+    {
+      "address": "0x12460750",
+      "forwarder": null,
+      "name": "?GetPointFromT@CSVCurve@@QEAA?AVRCPoint@@M@Z",
+      "ordinal": 2542
+    },
+    {
+      "address": "0x1225e080",
+      "forwarder": null,
+      "name": "?GetPointID@CSVCurve@@QEAAHXZ",
+      "ordinal": 2543
+    },
+    {
+      "address": "0x122cda20",
+      "forwarder": null,
+      "name": "?GetPolyPos@CSVectorFileConv@@QEAAAEBUtagPOINT@@H@Z",
+      "ordinal": 2545
+    },
+    {
+      "address": "0x122cda30",
+      "forwarder": null,
+      "name": "?GetPos@CSVectorFileConv@@QEAAAEBU_VSTROKE@@H@Z",
+      "ordinal": 2546
+    },
+    {
+      "address": "0x122eb1d0",
+      "forwarder": null,
+      "name": "?GetPreSampleStroke@CSVec4Sampling@@QEAAPEAVCSVStroke@@XZ",
+      "ordinal": 2547
+    },
+    {
+      "address": "0x12273600",
+      "forwarder": null,
+      "name": "?GetPresBlkCount@CSVectorPres@@QEAAHXZ",
+      "ordinal": 2548
+    },
+    {
+      "address": "0x12273610",
+      "forwarder": null,
+      "name": "?GetPresConnect@CSVectorPres@@QEAAHH@Z",
+      "ordinal": 2549
+    },
+    {
+      "address": "0x1244b730",
+      "forwarder": null,
+      "name": "?GetPresCount@CSVectorSimpleCurve@@QEAAHH@Z",
+      "ordinal": 2550
+    },
+    {
+      "address": "0x12273640",
+      "forwarder": null,
+      "name": "?GetPresDirect@CSVectorPres@@QEAAMH@Z",
+      "ordinal": 2551
+    },
+    {
+      "address": "0x12273670",
+      "forwarder": null,
+      "name": "?GetPresDistance@CSVectorPres@@QEAAMH@Z",
+      "ordinal": 2552
+    },
+    {
+      "address": "0x122736a0",
+      "forwarder": null,
+      "name": "?GetPresFlat@CSVectorPres@@QEAAMH@Z",
+      "ordinal": 2553
+    },
+    {
+      "address": "0x122cda50",
+      "forwarder": null,
+      "name": "?GetPresListHead@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 2554
+    },
+    {
+      "address": "0x122cda60",
+      "forwarder": null,
+      "name": "?GetPresListLinkNext@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 2555
+    },
+    {
+      "address": "0x122cda80",
+      "forwarder": null,
+      "name": "?GetPresListLinkPrev@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 2556
+    },
+    {
+      "address": "0x122cdaa0",
+      "forwarder": null,
+      "name": "?GetPresListPres@CSVectorSampling@@QEAAAEBU_VVPRESSURE@@H@Z",
+      "ordinal": 2557
+    },
+    {
+      "address": "0x122cdab0",
+      "forwarder": null,
+      "name": "?GetPresListRecycle@CSVectorSampling@@QEAAHH@Z",
+      "ordinal": 2558
+    },
+    {
+      "address": "0x122736d0",
+      "forwarder": null,
+      "name": "?GetPresPres@CSVectorPres@@QEAA?AU_VVPRESSURE@@H@Z",
+      "ordinal": 2559
+    },
+    {
+      "address": "0x12273720",
+      "forwarder": null,
+      "name": "?GetPresRecycle@CSVectorPres@@QEAAHH@Z",
+      "ordinal": 2560
+    },
+    {
+      "address": "0x12273750",
+      "forwarder": null,
+      "name": "?GetPresScale@CSVectorPres@@QEAAMH@Z",
+      "ordinal": 2561
+    },
+    {
+      "address": "0x122cdad0",
+      "forwarder": null,
+      "name": "?GetPrs@CSVectorFileConv@@QEAAAEBU_VVPRESSURE@@H@Z",
+      "ordinal": 2574
+    },
+    {
+      "address": "0x12273780",
+      "forwarder": null,
+      "name": "?GetRec@CSVectorRecord@@QEAAAEBU_VRECORD@@H@Z",
+      "ordinal": 2582
+    },
+    {
+      "address": "0x122737b0",
+      "forwarder": null,
+      "name": "?GetRecBlkCount@CSVectorRecord@@QEAAHXZ",
+      "ordinal": 2583
+    },
+    {
+      "address": "0x122737c0",
+      "forwarder": null,
+      "name": "?GetRecConnect@CSVectorRecord@@QEAAHH@Z",
+      "ordinal": 2584
+    },
+    {
+      "address": "0x122737f0",
+      "forwarder": null,
+      "name": "?GetRecPoint@CSVectorRecord@@QEAAAEBUtagPOINT@@HH@Z",
+      "ordinal": 2585
+    },
+    {
+      "address": "0x12273820",
+      "forwarder": null,
+      "name": "?GetRecPoint@CSVectorRecord@@QEAAXHPEAUtagPOINT@@@Z",
+      "ordinal": 2586
+    },
+    {
+      "address": "0x12273860",
+      "forwarder": null,
+      "name": "?GetRecPres@CSVectorRecord@@QEAAHH@Z",
+      "ordinal": 2587
+    },
+    {
+      "address": "0x12441c40",
+      "forwarder": null,
+      "name": "?GetRecPresArray@CSVectorRecord@@QEAAHHAEAV?$RCTArray@U_VVPRESSURE@@$0A@@@@Z",
+      "ordinal": 2588
+    },
+    {
+      "address": "0x12441d70",
+      "forwarder": null,
+      "name": "?GetRecPresCount@CSVectorRecord@@QEAAHH@Z",
+      "ordinal": 2589
+    },
+    {
+      "address": "0x12441e10",
+      "forwarder": null,
+      "name": "?GetRecPresMaxScale@CSVectorRecord@@QEAAMH@Z",
+      "ordinal": 2590
+    },
+    {
+      "address": "0x12273890",
+      "forwarder": null,
+      "name": "?GetRecRecycle@CSVectorRecord@@QEAAHH@Z",
+      "ordinal": 2591
+    },
+    {
+      "address": "0x1225d6c0",
+      "forwarder": null,
+      "name": "?GetResolution@CSVectorDraw@@QEAANXZ",
+      "ordinal": 2613
+    },
+    {
+      "address": "0x122738e0",
+      "forwarder": null,
+      "name": "?GetRootNode@CSVectorSearch@@IEAAHXZ",
+      "ordinal": 2622
+    },
+    {
+      "address": "0x12455080",
+      "forwarder": null,
+      "name": "?GetRowBytes@CSVec4AntiAlias@@QEAAHXZ",
+      "ordinal": 2625
+    },
+    {
+      "address": "0x1225e280",
+      "forwarder": null,
+      "name": "?GetSamePenHead@CSVec4DataBase@@QEAAPEAVCSVPenHead@@PEBUPEN_HEAD_STRUCT@@@Z",
+      "ordinal": 2652
+    },
+    {
+      "address": "0x1225e390",
+      "forwarder": null,
+      "name": "?GetSamePenHead@CSVec4DataBase@@QEAAPEAVCSVPenHead@@PEBV2@@Z",
+      "ordinal": 2653
+    },
+    {
+      "address": "0x1225d960",
+      "forwarder": null,
+      "name": "?GetSampledStroke@CSVec4Sampling@@QEAAPEAVCSVStroke@@XZ",
+      "ordinal": 2654
+    },
+    {
+      "address": "0x122739d0",
+      "forwarder": null,
+      "name": "?GetScanEdgeLX@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2656
+    },
+    {
+      "address": "0x122739f0",
+      "forwarder": null,
+      "name": "?GetScanEdgeLeft@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2657
+    },
+    {
+      "address": "0x12273a00",
+      "forwarder": null,
+      "name": "?GetScanEdgeLowerX@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2658
+    },
+    {
+      "address": "0x12273a20",
+      "forwarder": null,
+      "name": "?GetScanEdgeLowerY@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2659
+    },
+    {
+      "address": "0x12273a40",
+      "forwarder": null,
+      "name": "?GetScanEdgeNode@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2660
+    },
+    {
+      "address": "0x12273a50",
+      "forwarder": null,
+      "name": "?GetScanEdgeRecycle@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2661
+    },
+    {
+      "address": "0x12273a60",
+      "forwarder": null,
+      "name": "?GetScanEdgeRight@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2662
+    },
+    {
+      "address": "0x12273a70",
+      "forwarder": null,
+      "name": "?GetScanEdgeUpperX@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2663
+    },
+    {
+      "address": "0x12273a90",
+      "forwarder": null,
+      "name": "?GetScanEdgeUpperY@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2664
+    },
+    {
+      "address": "0x12273ab0",
+      "forwarder": null,
+      "name": "?GetScanEdgeX@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2665
+    },
+    {
+      "address": "0x12273ad0",
+      "forwarder": null,
+      "name": "?GetScanEdgeY@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2666
+    },
+    {
+      "address": "0x12273af0",
+      "forwarder": null,
+      "name": "?GetScanNodeAtr@CSVectorScanConv@@QEAAIH@Z",
+      "ordinal": 2667
+    },
+    {
+      "address": "0x12273b00",
+      "forwarder": null,
+      "name": "?GetScanNodeLeft@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2668
+    },
+    {
+      "address": "0x12273b10",
+      "forwarder": null,
+      "name": "?GetScanNodeLower@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2669
+    },
+    {
+      "address": "0x12273b20",
+      "forwarder": null,
+      "name": "?GetScanNodeOver@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2670
+    },
+    {
+      "address": "0x12273b30",
+      "forwarder": null,
+      "name": "?GetScanNodePair@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2671
+    },
+    {
+      "address": "0x12273b40",
+      "forwarder": null,
+      "name": "?GetScanNodeRecycle@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2672
+    },
+    {
+      "address": "0x12273b50",
+      "forwarder": null,
+      "name": "?GetScanNodeRight@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2673
+    },
+    {
+      "address": "0x12273b60",
+      "forwarder": null,
+      "name": "?GetScanNodeUpper@CSVectorScanConv@@QEAAHH@Z",
+      "ordinal": 2674
+    },
+    {
+      "address": "0x12273b70",
+      "forwarder": null,
+      "name": "?GetScanNodeX@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2675
+    },
+    {
+      "address": "0x12273b90",
+      "forwarder": null,
+      "name": "?GetScanNodeY@CSVectorScanConv@@QEAAMH@Z",
+      "ordinal": 2676
+    },
+    {
+      "address": "0x1225e4b0",
+      "forwarder": null,
+      "name": "?GetSearch@CSVectorV4Layer@@QEAAPEAVCSVec4Search@@XZ",
+      "ordinal": 2679
+    },
+    {
+      "address": "0x12273bb0",
+      "forwarder": null,
+      "name": "?GetSearchRect@CSVectorDataBase@@QEAAAEBUtagRECT@@XZ",
+      "ordinal": 2680
+    },
+    {
+      "address": "0x12273bc0",
+      "forwarder": null,
+      "name": "?GetSearchRect@CSVectorSearch@@QEAAAEBUtagRECT@@XZ",
+      "ordinal": 2681
+    },
+    {
+      "address": "0x122cdae0",
+      "forwarder": null,
+      "name": "?GetSeedStack@CSVectorDraw@@QEAAAEBU_VSEEDSTACK@@H@Z",
+      "ordinal": 2684
+    },
+    {
+      "address": "0x1225e180",
+      "forwarder": null,
+      "name": "?GetSelectType@CSVectorSetting@@QEBAIXZ",
+      "ordinal": 2689
+    },
+    {
+      "address": "0x12273be0",
+      "forwarder": null,
+      "name": "?GetSimpleRender@CSVectorLayer@@QEAAHXZ",
+      "ordinal": 2705
+    },
+    {
+      "address": "0x1225de40",
+      "forwarder": null,
+      "name": "?GetStraightStroke@CSVec4Sampling@@QEAAPEAVCSVStroke@@XZ",
+      "ordinal": 2740
+    },
+    {
+      "address": "0x1225e760",
+      "forwarder": null,
+      "name": "?GetStroke@CSVCurve@@QEAAPEAVCSVStroke@@XZ",
+      "ordinal": 2746
+    },
+    {
+      "address": "0x1225e770",
+      "forwarder": null,
+      "name": "?GetStroke@CSVStrokeIterator@@QEAAPEAVCSVStroke@@XZ",
+      "ordinal": 2747
+    },
+    {
+      "address": "0x1225cee0",
+      "forwarder": null,
+      "name": "?GetStroke@CSVec4DataBase@@QEAAPEAV?$RCTWList@VCSVStroke@@$0EAA@$09@@XZ",
+      "ordinal": 2748
+    },
+    {
+      "address": "0x122cdaf0",
+      "forwarder": null,
+      "name": "?GetStroke@CSVectorSampling@@QEAAAEBU_VSTROKE@@H@Z",
+      "ordinal": 2749
+    },
+    {
+      "address": "0x122cdb10",
+      "forwarder": null,
+      "name": "?GetStrokeCount@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 2750
+    },
+    {
+      "address": "0x1225d930",
+      "forwarder": null,
+      "name": "?GetStrokePtr@CSVBlockData@@QEAAPEAV?$RCTPtrWList@VCSVStroke@@$0BAAA@$0M@@@XZ",
+      "ordinal": 2751
+    },
+    {
+      "address": "0x1225ce00",
+      "forwarder": null,
+      "name": "?GetStrokePtr@CSVStrokeIterator@@QEAAPEAV?$RCTPtrWListNode@VCSVStroke@@@@XZ",
+      "ordinal": 2752
+    },
+    {
+      "address": "0x1225e780",
+      "forwarder": null,
+      "name": "?GetStrokeToDelete@CSVec4Search@@QEAAAEAV?$RCTArray@PEAVCSVStroke@@$0A@@@XZ",
+      "ordinal": 2753
+    },
+    {
+      "address": "0x1225e7a0",
+      "forwarder": null,
+      "name": "?GetTailCutPoint@CSVStroke@@QEAAHAEAVRCPoint@@0@Z",
+      "ordinal": 2777
+    },
+    {
+      "address": "0x1225e7d0",
+      "forwarder": null,
+      "name": "?GetTailPoint@CSVStroke@@QEBAAEBVRCPoint@@XZ",
+      "ordinal": 2781
+    },
+    {
+      "address": "0x122cdb20",
+      "forwarder": null,
+      "name": "?GetTempCurve@CSVectorSampling@@QEAAAEBU_VCURVE@@XZ",
+      "ordinal": 2786
+    },
+    {
+      "address": "0x122cdb30",
+      "forwarder": null,
+      "name": "?GetTempPresAdr@CSVectorSampling@@QEAAPEBU_VVPRESSURE@@XZ",
+      "ordinal": 2787
+    },
+    {
+      "address": "0x122cdb40",
+      "forwarder": null,
+      "name": "?GetTmpStroke@CSVectorSampling@@QEAAAEBU_VSTROKE@@H@Z",
+      "ordinal": 2822
+    },
+    {
+      "address": "0x122cdb60",
+      "forwarder": null,
+      "name": "?GetTmpStrokeCount@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 2823
+    },
+    {
+      "address": "0x1225cde0",
+      "forwarder": null,
+      "name": "?GetType@CSVStroke@@QEBAIXZ",
+      "ordinal": 2847
+    },
+    {
+      "address": "0x1225ea70",
+      "forwarder": null,
+      "name": "?GetTypeFlag@CSVStroke@@QEBAHI@Z",
+      "ordinal": 2849
+    },
+    {
+      "address": "0x122cdbf0",
+      "forwarder": null,
+      "name": "?GetV2CtlPos@CSVectorFileConv@@QEAAAEBU_VV2CTLPOS@@H@Z",
+      "ordinal": 2881
+    },
+    {
+      "address": "0x122cdc00",
+      "forwarder": null,
+      "name": "?GetV2Head@CSVectorFileConv@@QEAAAEBU_VV2HEAD@@H@Z",
+      "ordinal": 2882
+    },
+    {
+      "address": "0x122cdc10",
+      "forwarder": null,
+      "name": "?GetV2Scale@CSVectorFileConv@@QEAAAEBU_VV2SCALE@@H@Z",
+      "ordinal": 2883
+    },
+    {
+      "address": "0x1225cf10",
+      "forwarder": null,
+      "name": "?GetVectorObject@CSVectorLayer@@QEAAPEAVCSVector@@XZ",
+      "ordinal": 2893
+    },
+    {
+      "address": "0x1225d930",
+      "forwarder": null,
+      "name": "?GetVertexPoint@CSVCurve@@QEBAAEBVRCPoint@@XZ",
+      "ordinal": 2903
+    },
+    {
+      "address": "0x1242eda0",
+      "forwarder": null,
+      "name": "?GrahamScanWrap@CSVectorDraw@@QEAAHPEBUtagPOINTF@@HPEAU2@@Z",
+      "ordinal": 2940
+    },
+    {
+      "address": "0x12476ba0",
+      "forwarder": null,
+      "name": "?InOutSampling@CSVec4Sampling@@IEAAHAEBUSample@1@H@Z",
+      "ordinal": 2961
+    },
+    {
+      "address": "0x12443d90",
+      "forwarder": null,
+      "name": "?InOutSampling@CSVectorSampling@@QEAAHAEBU_VSTROKE@@@Z",
+      "ordinal": 2962
+    },
+    {
+      "address": "0x12273e70",
+      "forwarder": null,
+      "name": "?IncNodeSlotCount@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 2963
+    },
+    {
+      "address": "0x12273ea0",
+      "forwarder": null,
+      "name": "?IncPacketGDBSlot@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 2964
+    },
+    {
+      "address": "0x12273ed0",
+      "forwarder": null,
+      "name": "?InflateRect@CSVectorMath@@QEAAXAEAUtagRECT@@HH@Z",
+      "ordinal": 2966
+    },
+    {
+      "address": "0x12273ee0",
+      "forwarder": null,
+      "name": "?InflateRectD@CSVectorMath@@QEAAXAEAUtagRECTD@@NN@Z",
+      "ordinal": 2967
+    },
+    {
+      "address": "0x12273f10",
+      "forwarder": null,
+      "name": "?InflateRectF@CSVectorMath@@QEAAXAEAUtagRECTF@@NN@Z",
+      "ordinal": 2968
+    },
+    {
+      "address": "0x12273f50",
+      "forwarder": null,
+      "name": "?InflateRectPacket@CSVectorPacket@@QEAA?AUtagRECT@@HAEBU2@@Z",
+      "ordinal": 2969
+    },
+    {
+      "address": "0x1225ec50",
+      "forwarder": null,
+      "name": "?Init@CSVBlockData@@QEAAXAEBVRCRect@@PEAVCSVec4DataBase@@@Z",
+      "ordinal": 2975
+    },
+    {
+      "address": "0x1225ec90",
+      "forwarder": null,
+      "name": "?Init@CSVCurve@@QEAAXXZ",
+      "ordinal": 2977
+    },
+    {
+      "address": "0x1225ecf0",
+      "forwarder": null,
+      "name": "?Init@CSVPenHead@@QEAAXXZ",
+      "ordinal": 2979
+    },
+    {
+      "address": "0x1225ed10",
+      "forwarder": null,
+      "name": "?Init@CSVStroke@@QEAAXXZ",
+      "ordinal": 2980
+    },
+    {
+      "address": "0x1247c370",
+      "forwarder": null,
+      "name": "?Init@CSVec4Search@@QEAAXHH@Z",
+      "ordinal": 2981
+    },
+    {
+      "address": "0x12429d40",
+      "forwarder": null,
+      "name": "?Init@CSVector@@QEAAXXZ",
+      "ordinal": 2982
+    },
+    {
+      "address": "0x1242af70",
+      "forwarder": null,
+      "name": "?Init@CSVectorDataBase@@QEAAXXZ",
+      "ordinal": 2983
+    },
+    {
+      "address": "0x1242f410",
+      "forwarder": null,
+      "name": "?Init@CSVectorDraw@@QEAAXXZ",
+      "ordinal": 2984
+    },
+    {
+      "address": "0x12431260",
+      "forwarder": null,
+      "name": "?Init@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 2985
+    },
+    {
+      "address": "0x12440be0",
+      "forwarder": null,
+      "name": "?Init@CSVectorPacket@@QEAAXXZ",
+      "ordinal": 2986
+    },
+    {
+      "address": "0x12441760",
+      "forwarder": null,
+      "name": "?Init@CSVectorPres@@QEAAXXZ",
+      "ordinal": 2987
+    },
+    {
+      "address": "0x12441ec0",
+      "forwarder": null,
+      "name": "?Init@CSVectorRecord@@QEAAXXZ",
+      "ordinal": 2988
+    },
+    {
+      "address": "0x12444530",
+      "forwarder": null,
+      "name": "?Init@CSVectorSampling@@QEAAXXZ",
+      "ordinal": 2989
+    },
+    {
+      "address": "0x12447c70",
+      "forwarder": null,
+      "name": "?Init@CSVectorScanConv@@QEAAXXZ",
+      "ordinal": 2990
+    },
+    {
+      "address": "0x1244a1a0",
+      "forwarder": null,
+      "name": "?Init@CSVectorSearch@@QEAAXAEBUtagRECT@@@Z",
+      "ordinal": 2991
+    },
+    {
+      "address": "0x1244b740",
+      "forwarder": null,
+      "name": "?Init@CSVectorSimpleCurve@@QEAAXXZ",
+      "ordinal": 2992
+    },
+    {
+      "address": "0x12481c40",
+      "forwarder": null,
+      "name": "?InitDrawRuler@CSVectorizeV4@@QEAAXPEAVCSVectorV4Layer@@K@Z",
+      "ordinal": 3001
+    },
+    {
+      "address": "0x12476fe0",
+      "forwarder": null,
+      "name": "?InitFlicker@CSVec4Sampling@@QEAAXHHN@Z",
+      "ordinal": 3002
+    },
+    {
+      "address": "0x122cdc20",
+      "forwarder": null,
+      "name": "?InitFlicker@CSVectorSampling@@QEAAXXZ",
+      "ordinal": 3003
+    },
+    {
+      "address": "0x122cdc50",
+      "forwarder": null,
+      "name": "?InitKeepPos@CSVectorDraw@@QEAAXXZ",
+      "ordinal": 3004
+    },
+    {
+      "address": "0x12460a70",
+      "forwarder": null,
+      "name": "?InitList@CSVec4DataBase@@QEAAXXZ",
+      "ordinal": 3008
+    },
+    {
+      "address": "0x122fbec0",
+      "forwarder": null,
+      "name": "?InitOrgOffset@CSVectorV4Layer@@QEAAXXZ",
+      "ordinal": 3017
+    },
+    {
+      "address": "0x12477090",
+      "forwarder": null,
+      "name": "?InitRasterOperation@CSVec4Sampling@@QEAAXPEAVRCPatternDraw@@H@Z",
+      "ordinal": 3019
+    },
+    {
+      "address": "0x12481ca0",
+      "forwarder": null,
+      "name": "?InitSampling3D@CSVectorizeV4@@IEAAXQEAU_VERTEX_INFO@@M@Z",
+      "ordinal": 3020
+    },
+    {
+      "address": "0x12481eb0",
+      "forwarder": null,
+      "name": "?InitSampling@CSVectorizeV4@@IEAAXAEBVRCPoint@@@Z",
+      "ordinal": 3021
+    },
+    {
+      "address": "0x12482090",
+      "forwarder": null,
+      "name": "?InitSamplingForRuler@CSVectorizeV4@@QEAAXNMMHHAEBVRCPointD@@@Z",
+      "ordinal": 3022
+    },
+    {
+      "address": "0x12273fd0",
+      "forwarder": null,
+      "name": "?InitSearch@CSVector@@QEAAXAEBUtagRECT@@@Z",
+      "ordinal": 3023
+    },
+    {
+      "address": "0x12273fe0",
+      "forwarder": null,
+      "name": "?InitSearch@CSVectorDataBase@@QEAAXAEBUtagRECT@@@Z",
+      "ordinal": 3024
+    },
+    {
+      "address": "0x12466710",
+      "forwarder": null,
+      "name": "?Initialize@CSVec4Draw@@QEAAXPEAVCSBitmap@@@Z",
+      "ordinal": 3034
+    },
+    {
+      "address": "0x124667c0",
+      "forwarder": null,
+      "name": "?Initialize@CSVec4Draw@@QEAAXPEAVRCVOffscreen@@H@Z",
+      "ordinal": 3035
+    },
+    {
+      "address": "0x12269600",
+      "forwarder": null,
+      "name": "?Initialize@CSVectorSetting@@QEAAXH@Z",
+      "ordinal": 3036
+    },
+    {
+      "address": "0x12444640",
+      "forwarder": null,
+      "name": "?InsCash@CSVectorSampling@@QEAAHHAEBU_VSMPCASH@@@Z",
+      "ordinal": 3038
+    },
+    {
+      "address": "0x1244a1e0",
+      "forwarder": null,
+      "name": "?InsSpaceNodeSlot@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 3039
+    },
+    {
+      "address": "0x1244a380",
+      "forwarder": null,
+      "name": "?InsertFindTbl@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 3043
+    },
+    {
+      "address": "0x124770c0",
+      "forwarder": null,
+      "name": "?InsertInOut@CSVec4Sampling@@IEAAMM@Z",
+      "ordinal": 3044
+    },
+    {
+      "address": "0x12444730",
+      "forwarder": null,
+      "name": "?InsertInOut@CSVectorSampling@@QEAAMM@Z",
+      "ordinal": 3045
+    },
+    {
+      "address": "0x12444a00",
+      "forwarder": null,
+      "name": "?InsertLinkPresList@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 3053
+    },
+    {
+      "address": "0x1244a410",
+      "forwarder": null,
+      "name": "?InsertNode@CSVectorSearch@@IEAAXHIAEBUtagRECT@@H@Z",
+      "ordinal": 3055
+    },
+    {
+      "address": "0x1244a6e0",
+      "forwarder": null,
+      "name": "?InsertTree@CSVectorSearch@@QEAAXPEAVCSVectorPacket@@H@Z",
+      "ordinal": 3063
+    },
+    {
+      "address": "0x122f92e0",
+      "forwarder": null,
+      "name": "?InternalRender@CSVectorLayer@@UEAAXPEAVRCVOffscreen@@@Z",
+      "ordinal": 3076
+    },
+    {
+      "address": "0x12452d90",
+      "forwarder": null,
+      "name": "?IntersectCurve@CSRasVecIntersect@@QEAAHPEAVCSVCurve@@HAEAV?$RCTArray@ULINE_INTERSECT@CSRasVecIntersect@@$0A@@@AEAHH@Z",
+      "ordinal": 3079
+    },
+    {
+      "address": "0x12436a90",
+      "forwarder": null,
+      "name": "?IntersectCurve@CSVectorIntersect@@QEAAHPEBUtagPOINT@@PEAU2@1AEAN@Z",
+      "ordinal": 3080
+    },
+    {
+      "address": "0x12437100",
+      "forwarder": null,
+      "name": "?IntersectDB@CSVectorIntersect@@QEAAHPEAVCSVectorDataBase@@AEBUtagRECT@@AEAU3@W4SELECT_TYPE@1@@Z",
+      "ordinal": 3081
+    },
+    {
+      "address": "0x12437160",
+      "forwarder": null,
+      "name": "?IntersectDB@CSVectorIntersect@@QEAAHPEAVCSVectorDataBase@@PEAVCSSelectArea@@AEAUtagRECT@@W4SELECT_TYPE@1@@Z",
+      "ordinal": 3082
+    },
+    {
+      "address": "0x12437280",
+      "forwarder": null,
+      "name": "?IntersectDB@CSVectorIntersect@@QEAAHPEAVCSVectorDataBase@@PEAVRCVOffscreen@@AEBUtagPOINT@@AEBUtagRECT@@AEAU5@W4SELECT_TYPE@1@@Z",
+      "ordinal": 3083
+    },
+    {
+      "address": "0x12437350",
+      "forwarder": null,
+      "name": "?IntersectMain@CSVectorIntersect@@QEAAHPEAVCSVectorDataBase@@AEBUtagRECT@@AEAU3@W4SELECT_TYPE@1@@Z",
+      "ordinal": 3084
+    },
+    {
+      "address": "0x12437600",
+      "forwarder": null,
+      "name": "?IntersectPkt@CSVectorIntersect@@QEAAHPEAVCSVectorPacket@@H@Z",
+      "ordinal": 3085
+    },
+    {
+      "address": "0x1243e120",
+      "forwarder": null,
+      "name": "?IntersectPoly@CSVectorMath@@QEAAHPEBUtagPOINT@@H0HH@Z",
+      "ordinal": 3086
+    },
+    {
+      "address": "0x1243e4c0",
+      "forwarder": null,
+      "name": "?IntersectRect@CSVectorMath@@QEAAHAEAUtagRECT@@AEBU2@1@Z",
+      "ordinal": 3087
+    },
+    {
+      "address": "0x1243e530",
+      "forwarder": null,
+      "name": "?IntersectRectD@CSVectorMath@@QEAAHAEAUtagRECTD@@AEBU2@1@Z",
+      "ordinal": 3088
+    },
+    {
+      "address": "0x1243e590",
+      "forwarder": null,
+      "name": "?IntersectRectF@CSVectorMath@@QEAAHAEAUtagRECTF@@AEBU2@1@Z",
+      "ordinal": 3089
+    },
+    {
+      "address": "0x12453460",
+      "forwarder": null,
+      "name": "?IntersectStroke@CSRasVecIntersect@@QEAAHPEAVCSVStroke@@AEAV?$RCTArray@ULINE_INTERSECT@CSRasVecIntersect@@$0A@@@AEAHH@Z",
+      "ordinal": 3090
+    },
+    {
+      "address": "0x12453540",
+      "forwarder": null,
+      "name": "?IntersectStrokeAtOtherLine@CSRasVecIntersect@@QEAAHPEAVCSVStroke@@AEAV?$RCTArray@UOTHER_LINE@CSRasVecIntersect@@$0A@@@AEAV?$RCTArray@ULINE_INTERSECT@CSRasVecIntersect@@$0A@@@H@Z",
+      "ordinal": 3091
+    },
+    {
+      "address": "0x1225d4c0",
+      "forwarder": null,
+      "name": "?IsAntiAlias@CSVectorSetting@@QEBAHXZ",
+      "ordinal": 3095
+    },
+    {
+      "address": "0x1225d4d0",
+      "forwarder": null,
+      "name": "?IsCenterLine@CSVectorSetting@@QEBAHXZ",
+      "ordinal": 3116
+    },
+    {
+      "address": "0x122f9320",
+      "forwarder": null,
+      "name": "?IsCross@CSVectorIntersect@@QEAAHXZ",
+      "ordinal": 3134
+    },
+    {
+      "address": "0x12453a00",
+      "forwarder": null,
+      "name": "?IsCurveInArea@CSRasVecIntersect@@QEAAHPEAVCSVCurve@@H@Z",
+      "ordinal": 3138
+    },
+    {
+      "address": "0x12274070",
+      "forwarder": null,
+      "name": "?IsDotRect@CSVectorMath@@QEAAHAEBUtagRECT@@@Z",
+      "ordinal": 3146
+    },
+    {
+      "address": "0x12274090",
+      "forwarder": null,
+      "name": "?IsDotRectD@CSVectorMath@@QEAAHAEBUtagRECTD@@@Z",
+      "ordinal": 3147
+    },
+    {
+      "address": "0x122740c0",
+      "forwarder": null,
+      "name": "?IsDotRectF@CSVectorMath@@QEAAHAEBUtagRECTF@@@Z",
+      "ordinal": 3148
+    },
+    {
+      "address": "0x12274110",
+      "forwarder": null,
+      "name": "?IsEmptyRect@CSVectorMath@@QEAAHAEBUtagRECT@@@Z",
+      "ordinal": 3163
+    },
+    {
+      "address": "0x12274130",
+      "forwarder": null,
+      "name": "?IsEmptyRectD@CSVectorMath@@QEAAHAEBUtagRECTD@@@Z",
+      "ordinal": 3164
+    },
+    {
+      "address": "0x12274160",
+      "forwarder": null,
+      "name": "?IsEmptyRectF@CSVectorMath@@QEAAHAEBUtagRECTF@@@Z",
+      "ordinal": 3165
+    },
+    {
+      "address": "0x1225ef80",
+      "forwarder": null,
+      "name": "?IsEqual@CSVPenHead@@QEBAHPEBUPEN_HEAD_STRUCT@@@Z",
+      "ordinal": 3171
+    },
+    {
+      "address": "0x1225eff0",
+      "forwarder": null,
+      "name": "?IsEqual@CSVPenHead@@QEBAHPEBV1@@Z",
+      "ordinal": 3172
+    },
+    {
+      "address": "0x1225f060",
+      "forwarder": null,
+      "name": "?IsEqualShape@CSVPenHead@@QEBAHPEBV1@@Z",
+      "ordinal": 3176
+    },
+    {
+      "address": "0x12274260",
+      "forwarder": null,
+      "name": "?IsInclusionDZ@CSVectorSearch@@IEAAHII@Z",
+      "ordinal": 3217
+    },
+    {
+      "address": "0x124822d0",
+      "forwarder": null,
+      "name": "?IsNearDistanceAndNearDirection@CSVectorizeV4@@IEAAHPEAVCSVStroke@@HAEBVRCPoint@@AEBVRCPointF@@AEAM@Z",
+      "ordinal": 3267
+    },
+    {
+      "address": "0x12433a70",
+      "forwarder": null,
+      "name": "?IsPacketInOut@CSVectorFilter@@IEAAHPEAVCSVectorPacket@@HH@Z",
+      "ordinal": 3288
+    },
+    {
+      "address": "0x12433b90",
+      "forwarder": null,
+      "name": "?IsPointInOut@CSVectorFilter@@IEAAHAEBUtagPOINT@@@Z",
+      "ordinal": 3293
+    },
+    {
+      "address": "0x1225e080",
+      "forwarder": null,
+      "name": "?IsRasterBrushOperation@CSVec4Sampling@@QEBAHXZ",
+      "ordinal": 3302
+    },
+    {
+      "address": "0x12433c70",
+      "forwarder": null,
+      "name": "?IsRecInOut@CSVectorFilter@@IEAAHPEBUtagPOINT@@H@Z",
+      "ordinal": 3305
+    },
+    {
+      "address": "0x124772b0",
+      "forwarder": null,
+      "name": "?IsSampling@CSVec4Sampling@@QEAAHXZ",
+      "ordinal": 3321
+    },
+    {
+      "address": "0x12280b00",
+      "forwarder": null,
+      "name": "?IsSampling@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 3322
+    },
+    {
+      "address": "0x124772c0",
+      "forwarder": null,
+      "name": "?IsSharpCorner@CSVec4Sampling@@IEAAHAEBUSample@1@00@Z",
+      "ordinal": 3338
+    },
+    {
+      "address": "0x12444a60",
+      "forwarder": null,
+      "name": "?IsSharpCorner@CSVectorSampling@@QEAAHAEBU_VSTROKE@@00@Z",
+      "ordinal": 3339
+    },
+    {
+      "address": "0x12454360",
+      "forwarder": null,
+      "name": "?IsStrokeInArea@CSRasVecIntersect@@QEAAHPEAVCSVStroke@@H@Z",
+      "ordinal": 3359
+    },
+    {
+      "address": "0x1225f690",
+      "forwarder": null,
+      "name": "?IsTargetStroke@CSVStrokeIterator@@IEAAHXZ",
+      "ordinal": 3362
+    },
+    {
+      "address": "0x1225f7f0",
+      "forwarder": null,
+      "name": "?IsVectorSelect@CSVectorV4Layer@@QEAAHXZ",
+      "ordinal": 3438
+    },
+    {
+      "address": "0x1243e5f0",
+      "forwarder": null,
+      "name": "?JustDegreeSinCos@CSVectorMath@@QEAAXNAEAN0@Z",
+      "ordinal": 3461
+    },
+    {
+      "address": "0x1243e740",
+      "forwarder": null,
+      "name": "?JustRadianSinCos@CSVectorMath@@QEAAXNAEAN0@Z",
+      "ordinal": 3462
+    },
+    {
+      "address": "0x1243e880",
+      "forwarder": null,
+      "name": "?JustRadianSinCosF@CSVectorMath@@QEAAXMAEAN0@Z",
+      "ordinal": 3463
+    },
+    {
+      "address": "0x1242f460",
+      "forwarder": null,
+      "name": "?LeftScan@CSVectorDraw@@QEAAHAEBUtagPOINT@@PEAVRCVOffscreen@@1AEBK0H@Z",
+      "ordinal": 3504
+    },
+    {
+      "address": "0x1243e9b0",
+      "forwarder": null,
+      "name": "?LineFrameClip@CSVectorMath@@QEAAHPEBUtagPOINT@@AEBUtagRECT@@PEAU2@@Z",
+      "ordinal": 3508
+    },
+    {
+      "address": "0x1243ebb0",
+      "forwarder": null,
+      "name": "?LineFrameClip@CSVectorMath@@QEAAHPEBUtagPOINTD@@AEBUtagRECTD@@PEAU2@@Z",
+      "ordinal": 3509
+    },
+    {
+      "address": "0x12477510",
+      "forwarder": null,
+      "name": "?LineSampling@CSVec4Sampling@@IEAAHXZ",
+      "ordinal": 3512
+    },
+    {
+      "address": "0x12444ad0",
+      "forwarder": null,
+      "name": "?LineSampling@CSVectorSampling@@QEAAHM@Z",
+      "ordinal": 3513
+    },
+    {
+      "address": "0x12274450",
+      "forwarder": null,
+      "name": "?LinearPoint@CSVectorMath@@QEAAXAEBUtagPOINT@@0NAEAU2@@Z",
+      "ordinal": 3514
+    },
+    {
+      "address": "0x122744b0",
+      "forwarder": null,
+      "name": "?LinearPointD@CSVectorMath@@QEAAXAEBUtagPOINTD@@0NAEAU2@@Z",
+      "ordinal": 3515
+    },
+    {
+      "address": "0x122744f0",
+      "forwarder": null,
+      "name": "?LinearPointF@CSVectorMath@@QEAAXAEBUtagPOINTF@@0NAEAU2@@Z",
+      "ordinal": 3516
+    },
+    {
+      "address": "0x12274550",
+      "forwarder": null,
+      "name": "?Load@CSVector@@QEAAXAEAVRCArchive@@@Z",
+      "ordinal": 3518
+    },
+    {
+      "address": "0x1242afa0",
+      "forwarder": null,
+      "name": "?Load@CSVectorDataBase@@QEAAXAEAVRCArchive@@@Z",
+      "ordinal": 3519
+    },
+    {
+      "address": "0x12440c30",
+      "forwarder": null,
+      "name": "?Load@CSVectorPacket@@QEAAHAEAVRCArchive@@@Z",
+      "ordinal": 3520
+    },
+    {
+      "address": "0x12441790",
+      "forwarder": null,
+      "name": "?Load@CSVectorPres@@QEAAHAEAVRCArchive@@@Z",
+      "ordinal": 3521
+    },
+    {
+      "address": "0x12441f00",
+      "forwarder": null,
+      "name": "?Load@CSVectorRecord@@QEAAHAEAVRCArchive@@@Z",
+      "ordinal": 3522
+    },
+    {
+      "address": "0x12274560",
+      "forwarder": null,
+      "name": "?LoadMatrix@CSVectorMath@@QEAAXAEAU_VMATRIX@@@Z",
+      "ordinal": 3524
+    },
+    {
+      "address": "0x124312d0",
+      "forwarder": null,
+      "name": "?LoadV2CtlPos@CSVectorFileConv@@QEAAXAEAPEAE@Z",
+      "ordinal": 3526
+    },
+    {
+      "address": "0x124314b0",
+      "forwarder": null,
+      "name": "?LoadV2Param@CSVectorFileConv@@QEAAXAEAPEAE@Z",
+      "ordinal": 3527
+    },
+    {
+      "address": "0x12431610",
+      "forwarder": null,
+      "name": "?LoadV2PenHead@CSVectorFileConv@@QEAAXAEAPEAEAEBU_VGFILEHEADER2@@@Z",
+      "ordinal": 3528
+    },
+    {
+      "address": "0x12431b90",
+      "forwarder": null,
+      "name": "?LoadV2Scale@CSVectorFileConv@@QEAAXAEAPEAE@Z",
+      "ordinal": 3529
+    },
+    {
+      "address": "0x122d01a0",
+      "forwarder": null,
+      "name": "?LockCurve@CSVectorSampling@@QEAAPEAU_VCURVE@@XZ",
+      "ordinal": 3537
+    },
+    {
+      "address": "0x1244b770",
+      "forwarder": null,
+      "name": "?LockCurve@CSVectorSimpleCurve@@QEAAPEAU_VCURVE@@H@Z",
+      "ordinal": 3538
+    },
+    {
+      "address": "0x122d01d0",
+      "forwarder": null,
+      "name": "?LockCurveBuf@CSVectorSampling@@QEAAPEAU_VCURVE@@XZ",
+      "ordinal": 3539
+    },
+    {
+      "address": "0x122d0200",
+      "forwarder": null,
+      "name": "?LockPos@CSVectorFileConv@@QEAAPEAU_VSTROKE@@XZ",
+      "ordinal": 3541
+    },
+    {
+      "address": "0x122d0210",
+      "forwarder": null,
+      "name": "?LockPres@CSVectorSampling@@QEAAPEAU_VVPRESSURE@@XZ",
+      "ordinal": 3542
+    },
+    {
+      "address": "0x1244b790",
+      "forwarder": null,
+      "name": "?LockPres@CSVectorSimpleCurve@@QEAAPEAU_VVPRESSURE@@H@Z",
+      "ordinal": 3543
+    },
+    {
+      "address": "0x122d0240",
+      "forwarder": null,
+      "name": "?LockPrs@CSVectorFileConv@@QEAAPEAU_VVPRESSURE@@XZ",
+      "ordinal": 3544
+    },
+    {
+      "address": "0x122d0250",
+      "forwarder": null,
+      "name": "?LockStroke@CSVectorSampling@@QEAAPEAU_VSTROKE@@XZ",
+      "ordinal": 3545
+    },
+    {
+      "address": "0x122d0280",
+      "forwarder": null,
+      "name": "?LockV2CtlPos@CSVectorFileConv@@QEAAPEAU_VV2CTLPOS@@XZ",
+      "ordinal": 3546
+    },
+    {
+      "address": "0x122d0290",
+      "forwarder": null,
+      "name": "?LockV2Head@CSVectorFileConv@@QEAAPEAU_VV2HEAD@@XZ",
+      "ordinal": 3547
+    },
+    {
+      "address": "0x122d02a0",
+      "forwarder": null,
+      "name": "?LockV2Scale@CSVectorFileConv@@QEAAPEAU_VV2SCALE@@XZ",
+      "ordinal": 3548
+    },
+    {
+      "address": "0x124778c0",
+      "forwarder": null,
+      "name": "?MakeConnectCurve@CSVec4Sampling@@IEAAXAEBUSample@1@00@Z",
+      "ordinal": 3550
+    },
+    {
+      "address": "0x12477ac0",
+      "forwarder": null,
+      "name": "?MakeConnectLine@CSVec4Sampling@@IEAAXAEBUSample@1@0@Z",
+      "ordinal": 3551
+    },
+    {
+      "address": "0x12470960",
+      "forwarder": null,
+      "name": "?MakeCorner@CSVEC4OPERATION@@YAPEAVCSVCorner@@PEAVCSVCurve@@@Z",
+      "ordinal": 3552
+    },
+    {
+      "address": "0x12471170",
+      "forwarder": null,
+      "name": "?MakeDefaultPressure@CSVEC4OPERATION@@YAXPEAVCSVStroke@@@Z",
+      "ordinal": 3553
+    },
+    {
+      "address": "0x1245dc40",
+      "forwarder": null,
+      "name": "?MakeEraserEdge@CSVec4Cut@@IEAAHPEAVCSVStroke@@HAEBVRCPoint@@1@Z",
+      "ordinal": 3554
+    },
+    {
+      "address": "0x1245e9a0",
+      "forwarder": null,
+      "name": "?MakeEraserExtendLine@CSVec4Cut@@IEAAXPEAVCSVStroke@@HAEBVRCPoint@@H@Z",
+      "ordinal": 3555
+    },
+    {
+      "address": "0x12477ca0",
+      "forwarder": null,
+      "name": "?MakeInOutBoth@CSVec4Sampling@@IEAAXAEBUSample@1@@Z",
+      "ordinal": 3561
+    },
+    {
+      "address": "0x12477fb0",
+      "forwarder": null,
+      "name": "?MakeInOutOnlyIn@CSVec4Sampling@@IEAAXAEBUSample@1@@Z",
+      "ordinal": 3562
+    },
+    {
+      "address": "0x124781a0",
+      "forwarder": null,
+      "name": "?MakeInOutOnlyOut@CSVec4Sampling@@IEAAXAEBUSample@1@@Z",
+      "ordinal": 3563
+    },
+    {
+      "address": "0x12471230",
+      "forwarder": null,
+      "name": "?MakeInOutPressure3D@CSVEC4OPERATION@@YAXPEAVCSVCurve@@0NNNNMMMAEAN@Z",
+      "ordinal": 3564
+    },
+    {
+      "address": "0x12482440",
+      "forwarder": null,
+      "name": "?MakeInOutPressure3D@CSVectorizeV4@@QEAAXPEAVCSVStroke@@NPEAVCSVCurve@@1AEAV?$vector@UPRESSPOINT_INFO@CSVectorizeV4@@V?$allocator@UPRESSPOINT_INFO@CSVectorizeV4@@@std@@@std@@MMN@Z",
+      "ordinal": 3565
+    },
+    {
+      "address": "0x12471d90",
+      "forwarder": null,
+      "name": "?MakeInOutPressure@CSVEC4OPERATION@@YAXPEAVCSVStroke@@MM@Z",
+      "ordinal": 3566
+    },
+    {
+      "address": "0x12457c60",
+      "forwarder": null,
+      "name": "?MakeLineScaleFromPair@CSVec4Connect@@IEAAXPEAUPRES_PAIR_DATA@1@PEAVCSVLineScale@@MM@Z",
+      "ordinal": 3568
+    },
+    {
+      "address": "0x124833e0",
+      "forwarder": null,
+      "name": "?MakeNoBreakInOut@CSVectorizeV4@@QEAAXPEAVCSVStroke@@NPEAVCSVCurve@@1AEAV?$vector@UPRESSPOINT_INFO@CSVectorizeV4@@V?$allocator@UPRESSPOINT_INFO@CSVectorizeV4@@@std@@@std@@MMN@Z",
+      "ordinal": 3572
+    },
+    {
+      "address": "0x12478400",
+      "forwarder": null,
+      "name": "?MakePreSampleLine@CSVec4Sampling@@IEAAXH@Z",
+      "ordinal": 3574
+    },
+    {
+      "address": "0x122f9330",
+      "forwarder": null,
+      "name": "?MakeRenderInfo@CSVectorLayer@@QEAA?AU_VECTORRENDERINFO@@AEBU_RENDERLAYERINFO@@H@Z",
+      "ordinal": 3575
+    },
+    {
+      "address": "0x122f9370",
+      "forwarder": null,
+      "name": "?MakeRenderInfo@CSVectorLayer@@QEAA?AU_VECTORRENDERINFO@@AEBUtagPOINT@@AEBUtagRECT@@PEAVCSelectArea@@HH@Z",
+      "ordinal": 3576
+    },
+    {
+      "address": "0x12445070",
+      "forwarder": null,
+      "name": "?MakeTempCurve@CSVectorSampling@@QEAAXAEBU_VSTROKE@@00@Z",
+      "ordinal": 3580
+    },
+    {
+      "address": "0x12445170",
+      "forwarder": null,
+      "name": "?MakeTempLine@CSVectorSampling@@QEAAXAEBU_VSTROKE@@0@Z",
+      "ordinal": 3581
+    },
+    {
+      "address": "0x122745a0",
+      "forwarder": null,
+      "name": "?MemoryCheck@CSVector@@QEAAHHH@Z",
+      "ordinal": 3586
+    },
+    {
+      "address": "0x122745b0",
+      "forwarder": null,
+      "name": "?MemoryCheck@CSVectorDataBase@@QEAAHHH@Z",
+      "ordinal": 3587
+    },
+    {
+      "address": "0x12441080",
+      "forwarder": null,
+      "name": "?MemoryCheck@CSVectorPacket@@QEAAHHH@Z",
+      "ordinal": 3588
+    },
+    {
+      "address": "0x12457d00",
+      "forwarder": null,
+      "name": "?MergePressure@CSVec4Connect@@IEAAXM@Z",
+      "ordinal": 3594
+    },
+    {
+      "address": "0x12458420",
+      "forwarder": null,
+      "name": "?MergeTwoStroke@CSVec4Connect@@IEAAXPEAVCSVec4Search@@@Z",
+      "ordinal": 3595
+    },
+    {
+      "address": "0x122745c0",
+      "forwarder": null,
+      "name": "?MinMax@CSVectorMath@@QEAAHHHH@Z",
+      "ordinal": 3596
+    },
+    {
+      "address": "0x122745e0",
+      "forwarder": null,
+      "name": "?MinMax@CSVectorMath@@QEAAMMMM@Z",
+      "ordinal": 3597
+    },
+    {
+      "address": "0x122745f0",
+      "forwarder": null,
+      "name": "?MinMax@CSVectorMath@@QEAANNNN@Z",
+      "ordinal": 3598
+    },
+    {
+      "address": "0x12478970",
+      "forwarder": null,
+      "name": "?ModifyEndShape@CSVec4Sampling@@IEAAXH@Z",
+      "ordinal": 3603
+    },
+    {
+      "address": "0x12274700",
+      "forwarder": null,
+      "name": "?MoveDB@CSVector@@QEAAXAEBUtagPOINT@@@Z",
+      "ordinal": 3620
+    },
+    {
+      "address": "0x1242b130",
+      "forwarder": null,
+      "name": "?MoveDB@CSVectorDataBase@@QEAAXAEBUtagPOINT@@@Z",
+      "ordinal": 3621
+    },
+    {
+      "address": "0x124410d0",
+      "forwarder": null,
+      "name": "?MovePacket@CSVectorPacket@@QEAAXHAEBUtagPOINT@@@Z",
+      "ordinal": 3622
+    },
+    {
+      "address": "0x12274710",
+      "forwarder": null,
+      "name": "?MoveRec@CSVectorRecord@@QEAAXHAEBUtagPOINT@@@Z",
+      "ordinal": 3623
+    },
+    {
+      "address": "0x12274760",
+      "forwarder": null,
+      "name": "?MulMatrix@CSVectorMath@@QEAAXAEAU_VMATRIX@@AEBU2@1@Z",
+      "ordinal": 3624
+    },
+    {
+      "address": "0x12460dd0",
+      "forwarder": null,
+      "name": "?MultiplyMatrix@CSVCurve@@QEAAXAEBVRCMatrix2D@@@Z",
+      "ordinal": 3626
+    },
+    {
+      "address": "0x12460e50",
+      "forwarder": null,
+      "name": "?MultiplyMatrix@CSVStroke@@QEAAXAEBVRCMatrix2D@@@Z",
+      "ordinal": 3627
+    },
+    {
+      "address": "0x12460fe0",
+      "forwarder": null,
+      "name": "?MultiplyMatrix@CSVec4DataBase@@QEAAXAEBVRCMatrix2D@@@Z",
+      "ordinal": 3628
+    },
+    {
+      "address": "0x12445270",
+      "forwarder": null,
+      "name": "?NewCash@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 3637
+    },
+    {
+      "address": "0x12445300",
+      "forwarder": null,
+      "name": "?NewInOutBuf@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 3638
+    },
+    {
+      "address": "0x1244aa00",
+      "forwarder": null,
+      "name": "?NewNode@CSVectorSearch@@IEAAHXZ",
+      "ordinal": 3639
+    },
+    {
+      "address": "0x12441230",
+      "forwarder": null,
+      "name": "?NewPacket@CSVectorPacket@@QEAAHXZ",
+      "ordinal": 3640
+    },
+    {
+      "address": "0x12441860",
+      "forwarder": null,
+      "name": "?NewPres@CSVectorPres@@QEAAHXZ",
+      "ordinal": 3641
+    },
+    {
+      "address": "0x12445390",
+      "forwarder": null,
+      "name": "?NewPresList@CSVectorSampling@@QEAAHXZ",
+      "ordinal": 3642
+    },
+    {
+      "address": "0x12442080",
+      "forwarder": null,
+      "name": "?NewRec@CSVectorRecord@@QEAAHXZ",
+      "ordinal": 3643
+    },
+    {
+      "address": "0x12447ca0",
+      "forwarder": null,
+      "name": "?NewScanEdge@CSVectorScanConv@@QEAAHXZ",
+      "ordinal": 3644
+    },
+    {
+      "address": "0x12447d10",
+      "forwarder": null,
+      "name": "?NewScanNode@CSVectorScanConv@@QEAAHXZ",
+      "ordinal": 3645
+    },
+    {
+      "address": "0x1225cef0",
+      "forwarder": null,
+      "name": "?Next@CSVCurve@@QEAAPEAV1@XZ",
+      "ordinal": 3646
+    },
+    {
+      "address": "0x1225cef0",
+      "forwarder": null,
+      "name": "?Next@CSVPenHead@@QEAAPEAV1@XZ",
+      "ordinal": 3648
+    },
+    {
+      "address": "0x1225cef0",
+      "forwarder": null,
+      "name": "?Next@CSVStroke@@QEAAPEAV1@XZ",
+      "ordinal": 3649
+    },
+    {
+      "address": "0x1247c4e0",
+      "forwarder": null,
+      "name": "?NextBlock@CSVStrokeIterator@@IEAAHXZ",
+      "ordinal": 3650
+    },
+    {
+      "address": "0x12264d90",
+      "forwarder": null,
+      "name": "?NextStroke@CSVStrokeIterator@@QEAAHXZ",
+      "ordinal": 3651
+    },
+    {
+      "address": "0x12274b70",
+      "forwarder": null,
+      "name": "?NormalRect@CSVectorMath@@QEAAXAEAUtagRECT@@@Z",
+      "ordinal": 3653
+    },
+    {
+      "address": "0x12274bb0",
+      "forwarder": null,
+      "name": "?NormalRect@CSVectorMath@@QEAAXAEAUtagRECTD@@@Z",
+      "ordinal": 3654
+    },
+    {
+      "address": "0x12274c10",
+      "forwarder": null,
+      "name": "?NormalRect@CSVectorMath@@QEAAXAEAUtagRECTF@@@Z",
+      "ordinal": 3655
+    },
+    {
+      "address": "0x12274c70",
+      "forwarder": null,
+      "name": "?NormalRect@CSVectorMath@@QEAAXAEBUtagRECT@@AEAU2@@Z",
+      "ordinal": 3656
+    },
+    {
+      "address": "0x12274cb0",
+      "forwarder": null,
+      "name": "?NormalRect@CSVectorMath@@QEAAXAEBUtagRECTD@@AEAU2@@Z",
+      "ordinal": 3657
+    },
+    {
+      "address": "0x12274d00",
+      "forwarder": null,
+      "name": "?NormalRect@CSVectorMath@@QEAAXAEBUtagRECTF@@AEAU2@@Z",
+      "ordinal": 3658
+    },
+    {
+      "address": "0x12479050",
+      "forwarder": null,
+      "name": "?NotSampling@CSVec4Sampling@@IEAAXUSample@1@@Z",
+      "ordinal": 3661
+    },
+    {
+      "address": "0x12264df0",
+      "forwarder": null,
+      "name": "?Offset@CSVCurve@@QEAAXAEBVRCPoint@@@Z",
+      "ordinal": 3662
+    },
+    {
+      "address": "0x12461190",
+      "forwarder": null,
+      "name": "?Offset@CSVStroke@@QEAAXAEBVRCPoint@@H@Z",
+      "ordinal": 3663
+    },
+    {
+      "address": "0x12461260",
+      "forwarder": null,
+      "name": "?Offset@CSVec4DataBase@@QEAAXAEBVRCPoint@@@Z",
+      "ordinal": 3664
+    },
+    {
+      "address": "0x122f9400",
+      "forwarder": null,
+      "name": "?OffsetOffset@CSVectorLayer@@UEAAXAEBVRCPoint@@@Z",
+      "ordinal": 3684
+    },
+    {
+      "address": "0x12274d50",
+      "forwarder": null,
+      "name": "?OffsetRect@CSVectorMath@@QEAAXAEAUtagRECT@@AEBUtagPOINT@@@Z",
+      "ordinal": 3694
+    },
+    {
+      "address": "0x12274d70",
+      "forwarder": null,
+      "name": "?OffsetRect@CSVectorMath@@QEAAXAEAUtagRECT@@HH@Z",
+      "ordinal": 3695
+    },
+    {
+      "address": "0x1242b280",
+      "forwarder": null,
+      "name": "?OptimizeDB@CSVectorDataBase@@QEAAXXZ",
+      "ordinal": 3728
+    },
+    {
+      "address": "0x12455090",
+      "forwarder": null,
+      "name": "?Output@CSVec4AntiAlias@@QEAAXPEAVRCVOffscreen@@HAEBVRCRect@@HHPEAK2@Z",
+      "ordinal": 3731
+    },
+    {
+      "address": "0x12455110",
+      "forwarder": null,
+      "name": "?OutputFrom16Bit@CSVec4AntiAlias@@IEAAXPEAVRCVOffscreen@@AEBVRCRect@@HHPEAK2@Z",
+      "ordinal": 3732
+    },
+    {
+      "address": "0x12455560",
+      "forwarder": null,
+      "name": "?OutputFrom32Bit@CSVec4AntiAlias@@IEAAXPEAVRCVOffscreen@@HAEBVRCRect@@HH@Z",
+      "ordinal": 3733
+    },
+    {
+      "address": "0x124558d0",
+      "forwarder": null,
+      "name": "?OutputFrom8Bit@CSVec4AntiAlias@@IEAAXPEAVRCVOffscreen@@AEBVRCRect@@HHPEAK@Z",
+      "ordinal": 3734
+    },
+    {
+      "address": "0x12442130",
+      "forwarder": null,
+      "name": "?OverwriteRecPresArray@CSVectorRecord@@QEAAXHAEAV?$RCTArray@U_VVPRESSURE@@$0A@@@@Z",
+      "ordinal": 3737
+    },
+    {
+      "address": "0x122d13c0",
+      "forwarder": null,
+      "name": "?OverwriteV2CtlPos@CSVectorFileConv@@QEAAXHAEBU_VV2CTLPOS@@@Z",
+      "ordinal": 3738
+    },
+    {
+      "address": "0x122d13e0",
+      "forwarder": null,
+      "name": "?OverwriteV2Head@CSVectorFileConv@@QEAAXHAEBU_VV2HEAD@@@Z",
+      "ordinal": 3739
+    },
+    {
+      "address": "0x122d1420",
+      "forwarder": null,
+      "name": "?OverwriteV2Scale@CSVectorFileConv@@QEAAXHAEBU_VV2SCALE@@@Z",
+      "ordinal": 3740
+    },
+    {
+      "address": "0x12437c70",
+      "forwarder": null,
+      "name": "?PktRecConnect@CSVectorIntersect@@QEAAXPEAVCSVectorPacket@@HHAEAH1@Z",
+      "ordinal": 3767
+    },
+    {
+      "address": "0x12479290",
+      "forwarder": null,
+      "name": "?PlotCurvePattern@CSVec4Sampling@@IEAAXPEAVCSLineSegment@@MMH@Z",
+      "ordinal": 3768
+    },
+    {
+      "address": "0x124797b0",
+      "forwarder": null,
+      "name": "?PlotPreSamplePattern@CSVec4Sampling@@IEAAXXZ",
+      "ordinal": 3769
+    },
+    {
+      "address": "0x12274fa0",
+      "forwarder": null,
+      "name": "?PointLength@CSVectorMath@@QEAANAEBUtagPOINT@@0@Z",
+      "ordinal": 3773
+    },
+    {
+      "address": "0x12274ff0",
+      "forwarder": null,
+      "name": "?PointLength@CSVectorMath@@QEAANAEBUtagPOINTD@@0@Z",
+      "ordinal": 3774
+    },
+    {
+      "address": "0x12275030",
+      "forwarder": null,
+      "name": "?PointLength@CSVectorMath@@QEAANAEBUtagPOINTF@@0@Z",
+      "ordinal": 3775
+    },
+    {
+      "address": "0x12275070",
+      "forwarder": null,
+      "name": "?PointLength@CSVectorMath@@QEAANNNNN@Z",
+      "ordinal": 3776
+    },
+    {
+      "address": "0x1242a1d0",
+      "forwarder": null,
+      "name": "?PosInchToVector@CSVectorBase@@QEAAXAEBUtagPOINTD@@AEAU2@@Z",
+      "ordinal": 3789
+    },
+    {
+      "address": "0x1242a200",
+      "forwarder": null,
+      "name": "?PosInchToVector@CSVectorBase@@QEAAXAEBUtagPOINTD@@AEAUtagPOINT@@@Z",
+      "ordinal": 3790
+    },
+    {
+      "address": "0x1242a230",
+      "forwarder": null,
+      "name": "?PosLayerToVector@CSVectorBase@@QEAAXAEBUtagPOINT@@AEAU2@@Z",
+      "ordinal": 3794
+    },
+    {
+      "address": "0x1242a350",
+      "forwarder": null,
+      "name": "?PosLayerToVector@CSVectorBase@@QEAAXAEBUtagPOINTD@@AEAU2@@Z",
+      "ordinal": 3795
+    },
+    {
+      "address": "0x12433f20",
+      "forwarder": null,
+      "name": "?PosOffscrToVector@CSVectorFilter@@IEBAXAEBUtagPOINT@@AEAU2@@Z",
+      "ordinal": 3799
+    },
+    {
+      "address": "0x1242a480",
+      "forwarder": null,
+      "name": "?PosVectorToInch@CSVectorBase@@QEAAXAEBUtagPOINT@@AEAUtagPOINTD@@@Z",
+      "ordinal": 3800
+    },
+    {
+      "address": "0x1242a4b0",
+      "forwarder": null,
+      "name": "?PosVectorToInch@CSVectorBase@@QEAAXAEBUtagPOINTF@@AEAUtagPOINTD@@@Z",
+      "ordinal": 3801
+    },
+    {
+      "address": "0x1242a4e0",
+      "forwarder": null,
+      "name": "?PosVectorToLayer@CSVectorBase@@QEAAXAEBUtagPOINT@@AEAU2@@Z",
+      "ordinal": 3802
+    },
+    {
+      "address": "0x1242a5e0",
+      "forwarder": null,
+      "name": "?PosVectorToLayer@CSVectorBase@@QEAAXAEBUtagPOINT@@AEAUtagPOINTD@@@Z",
+      "ordinal": 3803
+    },
+    {
+      "address": "0x1242a700",
+      "forwarder": null,
+      "name": "?PosVectorToLayer@CSVectorBase@@QEAAXPEBUtagPOINT@@HPEAU2@@Z",
+      "ordinal": 3804
+    },
+    {
+      "address": "0x1242a850",
+      "forwarder": null,
+      "name": "?PosVectorToLayer@CSVectorBase@@QEAAXPEBUtagPOINTF@@HPEAU2@@Z",
+      "ordinal": 3805
+    },
+    {
+      "address": "0x1242f5a0",
+      "forwarder": null,
+      "name": "?PosVectorToLayer@CSVectorDraw@@QEAAXAEBUtagPOINT@@AEAU2@@Z",
+      "ordinal": 3806
+    },
+    {
+      "address": "0x1242f660",
+      "forwarder": null,
+      "name": "?PosVectorToLayer@CSVectorDraw@@QEAAXPEBUtagPOINT@@HPEAU2@@Z",
+      "ordinal": 3807
+    },
+    {
+      "address": "0x1242f740",
+      "forwarder": null,
+      "name": "?PosVectorToLayer@CSVectorDraw@@QEAAXPEBUtagPOINTF@@HPEAU2@@Z",
+      "ordinal": 3808
+    },
+    {
+      "address": "0x122fc010",
+      "forwarder": null,
+      "name": "?PosVectorToOffscr@CSVec4Draw@@IEAA?AVRCPointD@@AEBV2@@Z",
+      "ordinal": 3810
+    },
+    {
+      "address": "0x122fc060",
+      "forwarder": null,
+      "name": "?PosVectorToOffscr@CSVec4Draw@@IEAA?AVRCPointD@@AEBVRCPoint@@@Z",
+      "ordinal": 3811
+    },
+    {
+      "address": "0x12433fa0",
+      "forwarder": null,
+      "name": "?PosVectorToOffscr@CSVectorFilter@@IEBAXAEBUtagPOINT@@AEAU2@@Z",
+      "ordinal": 3812
+    },
+    {
+      "address": "0x122ebb40",
+      "forwarder": null,
+      "name": "?PrepareArray@CSVec4SamplingBuffer@@QEAAXXZ",
+      "ordinal": 3813
+    },
+    {
+      "address": "0x12479ee0",
+      "forwarder": null,
+      "name": "?PresSampling@CSVec4Sampling@@IEAAHHH@Z",
+      "ordinal": 3817
+    },
+    {
+      "address": "0x12445410",
+      "forwarder": null,
+      "name": "?PresSampling@CSVectorSampling@@QEAAHMHH@Z",
+      "ordinal": 3818
+    },
+    {
+      "address": "0x12445850",
+      "forwarder": null,
+      "name": "?PresStrokeSync@CSVectorSampling@@QEAAXPEBU_VSTROKE@@H@Z",
+      "ordinal": 3819
+    },
+    {
+      "address": "0x1225d960",
+      "forwarder": null,
+      "name": "?Prev@CSVCurve@@QEAAPEAV1@XZ",
+      "ordinal": 3820
+    },
+    {
+      "address": "0x1225d960",
+      "forwarder": null,
+      "name": "?Prev@CSVPenHead@@QEAAPEAV1@XZ",
+      "ordinal": 3821
+    },
+    {
+      "address": "0x1225d960",
+      "forwarder": null,
+      "name": "?Prev@CSVStroke@@QEAAPEAV1@XZ",
+      "ordinal": 3822
+    },
+    {
+      "address": "0x122ebbb0",
+      "forwarder": null,
+      "name": "?ProtectSampledStroke@CSVec4Sampling@@QEAAXXZ",
+      "ordinal": 3825
+    },
+    {
+      "address": "0x122750a0",
+      "forwarder": null,
+      "name": "?Pt2Rect@CSVectorMath@@QEAAXAEAUtagRECT@@AEBUtagPOINT@@1@Z",
+      "ordinal": 3826
+    },
+    {
+      "address": "0x1243eec0",
+      "forwarder": null,
+      "name": "?PtHeightOnLine@CSVectorMath@@QEAANAEBUtagPOINTD@@00@Z",
+      "ordinal": 3827
+    },
+    {
+      "address": "0x1243ef60",
+      "forwarder": null,
+      "name": "?PtHeightOnLine@CSVectorMath@@QEAANAEBUtagPOINTF@@00@Z",
+      "ordinal": 3828
+    },
+    {
+      "address": "0x1243f020",
+      "forwarder": null,
+      "name": "?PtHeightOnLine@CSVectorMath@@QEAANNNNNNN@Z",
+      "ordinal": 3829
+    },
+    {
+      "address": "0x1243f0d0",
+      "forwarder": null,
+      "name": "?PtInPoly@CSVectorMath@@QEAAHAEBUtagPOINT@@PEBU2@H@Z",
+      "ordinal": 3830
+    },
+    {
+      "address": "0x1243f180",
+      "forwarder": null,
+      "name": "?PtOnLine@CSVectorMath@@QEAAHAEBUtagPOINT@@00N@Z",
+      "ordinal": 3831
+    },
+    {
+      "address": "0x1243f1f0",
+      "forwarder": null,
+      "name": "?PtOnLine@CSVectorMath@@QEAAHAEBUtagPOINTD@@00N@Z",
+      "ordinal": 3832
+    },
+    {
+      "address": "0x1243f230",
+      "forwarder": null,
+      "name": "?PtOnLine@CSVectorMath@@QEAAHAEBUtagPOINTF@@00N@Z",
+      "ordinal": 3833
+    },
+    {
+      "address": "0x1243f2a0",
+      "forwarder": null,
+      "name": "?PtOnLine@CSVectorMath@@QEAAHNNNNNNN@Z",
+      "ordinal": 3834
+    },
+    {
+      "address": "0x1243f3e0",
+      "forwarder": null,
+      "name": "?PtPosOnLine@CSVectorMath@@QEAAXAEBUtagPOINT@@00AEAU2@@Z",
+      "ordinal": 3835
+    },
+    {
+      "address": "0x1243f470",
+      "forwarder": null,
+      "name": "?PtPosOnLine@CSVectorMath@@QEAAXAEBUtagPOINTD@@00AEAU2@@Z",
+      "ordinal": 3836
+    },
+    {
+      "address": "0x1243f4c0",
+      "forwarder": null,
+      "name": "?PtPosOnLine@CSVectorMath@@QEAAXAEBUtagPOINTF@@00AEAU2@@Z",
+      "ordinal": 3837
+    },
+    {
+      "address": "0x1243f550",
+      "forwarder": null,
+      "name": "?PtPosOnLine@CSVectorMath@@QEAAXNNNNNNAEAN0@Z",
+      "ordinal": 3838
+    },
+    {
+      "address": "0x1243f690",
+      "forwarder": null,
+      "name": "?QuadraticEquation@CSVectorMath@@QEAAHNNNPEAN@Z",
+      "ordinal": 3860
+    },
+    {
+      "address": "0x122d2030",
+      "forwarder": null,
+      "name": "?ReadBYTE@CSVectorFileConv@@QEAAEAEAPEAE@Z",
+      "ordinal": 3900
+    },
+    {
+      "address": "0x122d2040",
+      "forwarder": null,
+      "name": "?ReadBlk@CSVectorFileConv@@QEAAXAEAPEAEPEAXH@Z",
+      "ordinal": 3902
+    },
+    {
+      "address": "0x122d2030",
+      "forwarder": null,
+      "name": "?ReadCHAR@CSVectorFileConv@@QEAADAEAPEAE@Z",
+      "ordinal": 3903
+    },
+    {
+      "address": "0x122d2070",
+      "forwarder": null,
+      "name": "?ReadCOLORREF@CSVectorFileConv@@QEAAKAEAPEAE@Z",
+      "ordinal": 3904
+    },
+    {
+      "address": "0x12431da0",
+      "forwarder": null,
+      "name": "?ReadChunk@CSVectorFileConv@@QEAAXAEAPEAE@Z",
+      "ordinal": 3905
+    },
+    {
+      "address": "0x122d2080",
+      "forwarder": null,
+      "name": "?ReadFLOAT@CSVectorFileConv@@QEAAMAEAPEAE@Z",
+      "ordinal": 3906
+    },
+    {
+      "address": "0x12431e20",
+      "forwarder": null,
+      "name": "?ReadFillChunk@CSVectorFileConv@@QEAAXAEAPEAEAEBU_VECTOR_CHUNK@@@Z",
+      "ordinal": 3909
+    },
+    {
+      "address": "0x12431f80",
+      "forwarder": null,
+      "name": "?ReadHeaderChunk@CSVectorFileConv@@QEAAXAEAPEAEAEBU_VECTOR_CHUNK@@@Z",
+      "ordinal": 3914
+    },
+    {
+      "address": "0x122d2090",
+      "forwarder": null,
+      "name": "?ReadINT16@CSVectorFileConv@@QEAAFAEAPEAE@Z",
+      "ordinal": 3915
+    },
+    {
+      "address": "0x122d2070",
+      "forwarder": null,
+      "name": "?ReadINT32@CSVectorFileConv@@QEAAHAEAPEAE@Z",
+      "ordinal": 3916
+    },
+    {
+      "address": "0x122d20a0",
+      "forwarder": null,
+      "name": "?ReadPointF@CSVectorFileConv@@QEAA?AUtagPOINTF@@AEAPEAE@Z",
+      "ordinal": 3933
+    },
+    {
+      "address": "0x122d20c0",
+      "forwarder": null,
+      "name": "?ReadRect@CSVectorFileConv@@QEAA?AUtagRECT@@AEAPEAE@Z",
+      "ordinal": 3934
+    },
+    {
+      "address": "0x122d20c0",
+      "forwarder": null,
+      "name": "?ReadRectF@CSVectorFileConv@@QEAA?AUtagRECTF@@AEAPEAE@Z",
+      "ordinal": 3935
+    },
+    {
+      "address": "0x122f9410",
+      "forwarder": null,
+      "name": "?ReadSelf@CSVectorLayer@@UEAAXAEAVRCArchive@@@Z",
+      "ordinal": 3967
+    },
+    {
+      "address": "0x122fc1b0",
+      "forwarder": null,
+      "name": "?ReadSelf@CSVectorV4Layer@@UEAAXAEAVRCArchive@@@Z",
+      "ordinal": 3968
+    },
+    {
+      "address": "0x12432110",
+      "forwarder": null,
+      "name": "?ReadSplineChunk@CSVectorFileConv@@QEAAXAEAPEAEAEBU_VECTOR_CHUNK@@@Z",
+      "ordinal": 3971
+    },
+    {
+      "address": "0x122d2150",
+      "forwarder": null,
+      "name": "?ReadUINT16@CSVectorFileConv@@QEAAGAEAPEAE@Z",
+      "ordinal": 3975
+    },
+    {
+      "address": "0x122d2070",
+      "forwarder": null,
+      "name": "?ReadUINT32@CSVectorFileConv@@QEAAIAEAPEAE@Z",
+      "ordinal": 3976
+    },
+    {
+      "address": "0x122d2160",
+      "forwarder": null,
+      "name": "?ReallocCash@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 3981
+    },
+    {
+      "address": "0x1245a6d0",
+      "forwarder": null,
+      "name": "?ReallocCurve@CSVec4Convert4to2@@IEAAXH@Z",
+      "ordinal": 3982
+    },
+    {
+      "address": "0x122d2220",
+      "forwarder": null,
+      "name": "?ReallocCurve@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 3983
+    },
+    {
+      "address": "0x1244b7b0",
+      "forwarder": null,
+      "name": "?ReallocCurve@CSVectorSimpleCurve@@QEAAXHH@Z",
+      "ordinal": 3984
+    },
+    {
+      "address": "0x122d22d0",
+      "forwarder": null,
+      "name": "?ReallocCurveBuf@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 3985
+    },
+    {
+      "address": "0x122f9420",
+      "forwarder": null,
+      "name": "?ReallocExtPkt@CSVectorIntersect@@QEAAXH@Z",
+      "ordinal": 3986
+    },
+    {
+      "address": "0x12275130",
+      "forwarder": null,
+      "name": "?ReallocFind@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 3987
+    },
+    {
+      "address": "0x122d2380",
+      "forwarder": null,
+      "name": "?ReallocInOutBuf@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 3988
+    },
+    {
+      "address": "0x122751e0",
+      "forwarder": null,
+      "name": "?ReallocNode@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 3989
+    },
+    {
+      "address": "0x122f94d0",
+      "forwarder": null,
+      "name": "?ReallocOrgPkt@CSVectorIntersect@@QEAAXH@Z",
+      "ordinal": 3990
+    },
+    {
+      "address": "0x12275270",
+      "forwarder": null,
+      "name": "?ReallocPacket@CSVectorPacket@@QEAAXH@Z",
+      "ordinal": 3991
+    },
+    {
+      "address": "0x122d2440",
+      "forwarder": null,
+      "name": "?ReallocPenHead@CSVectorFileConv@@QEAAXH@Z",
+      "ordinal": 3992
+    },
+    {
+      "address": "0x122d24f0",
+      "forwarder": null,
+      "name": "?ReallocPolyPos@CSVectorFileConv@@QEAAXH@Z",
+      "ordinal": 3993
+    },
+    {
+      "address": "0x122d25a0",
+      "forwarder": null,
+      "name": "?ReallocPos@CSVectorFileConv@@QEAAXH@Z",
+      "ordinal": 3994
+    },
+    {
+      "address": "0x1245a760",
+      "forwarder": null,
+      "name": "?ReallocPres@CSVec4Convert4to2@@IEAAXH@Z",
+      "ordinal": 3995
+    },
+    {
+      "address": "0x12275320",
+      "forwarder": null,
+      "name": "?ReallocPres@CSVectorPres@@QEAAXH@Z",
+      "ordinal": 3996
+    },
+    {
+      "address": "0x122d2650",
+      "forwarder": null,
+      "name": "?ReallocPres@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 3997
+    },
+    {
+      "address": "0x1244b870",
+      "forwarder": null,
+      "name": "?ReallocPres@CSVectorSimpleCurve@@QEAAXHH@Z",
+      "ordinal": 3998
+    },
+    {
+      "address": "0x122d2700",
+      "forwarder": null,
+      "name": "?ReallocPresList@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 3999
+    },
+    {
+      "address": "0x122d27c0",
+      "forwarder": null,
+      "name": "?ReallocPrs@CSVectorFileConv@@QEAAXH@Z",
+      "ordinal": 4000
+    },
+    {
+      "address": "0x122753c0",
+      "forwarder": null,
+      "name": "?ReallocRec@CSVectorRecord@@QEAAXH@Z",
+      "ordinal": 4001
+    },
+    {
+      "address": "0x12275460",
+      "forwarder": null,
+      "name": "?ReallocScanEdge@CSVectorScanConv@@QEAAXH@Z",
+      "ordinal": 4002
+    },
+    {
+      "address": "0x122754f0",
+      "forwarder": null,
+      "name": "?ReallocScanNode@CSVectorScanConv@@QEAAXH@Z",
+      "ordinal": 4003
+    },
+    {
+      "address": "0x122d2870",
+      "forwarder": null,
+      "name": "?ReallocSeed@CSVectorDraw@@QEAAXH@Z",
+      "ordinal": 4004
+    },
+    {
+      "address": "0x122d2920",
+      "forwarder": null,
+      "name": "?ReallocStroke@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 4005
+    },
+    {
+      "address": "0x122d29d0",
+      "forwarder": null,
+      "name": "?ReallocTmp@CSVectorDraw@@QEAAXH@Z",
+      "ordinal": 4006
+    },
+    {
+      "address": "0x122d2a80",
+      "forwarder": null,
+      "name": "?ReallocTmpStroke@CSVectorSampling@@QEAAXH@Z",
+      "ordinal": 4007
+    },
+    {
+      "address": "0x122d2b30",
+      "forwarder": null,
+      "name": "?ReallocV2CtlPos@CSVectorFileConv@@QEAAXH@Z",
+      "ordinal": 4008
+    },
+    {
+      "address": "0x122d2be0",
+      "forwarder": null,
+      "name": "?ReallocV2Head@CSVectorFileConv@@QEAAXH@Z",
+      "ordinal": 4009
+    },
+    {
+      "address": "0x122d2c90",
+      "forwarder": null,
+      "name": "?ReallocV2Scale@CSVectorFileConv@@QEAAXH@Z",
+      "ordinal": 4010
+    },
+    {
+      "address": "0x12275580",
+      "forwarder": null,
+      "name": "?RebuildSearch@CSVector@@QEAAXXZ",
+      "ordinal": 4011
+    },
+    {
+      "address": "0x1242b4c0",
+      "forwarder": null,
+      "name": "?RebuildSearch@CSVectorDataBase@@QEAAXXZ",
+      "ordinal": 4012
+    },
+    {
+      "address": "0x122669f0",
+      "forwarder": null,
+      "name": "?RecKeepPos@CSVectorDraw@@QEAAXH@Z",
+      "ordinal": 4013
+    },
+    {
+      "address": "0x12461340",
+      "forwarder": null,
+      "name": "?RecalcRect@CSVStroke@@QEAAXXZ",
+      "ordinal": 4014
+    },
+    {
+      "address": "0x12461610",
+      "forwarder": null,
+      "name": "?RecalcTailRect@CSVStroke@@QEAA?AVRCRect@@XZ",
+      "ordinal": 4015
+    },
+    {
+      "address": "0x1242a9d0",
+      "forwarder": null,
+      "name": "?RectInchToVector@CSVectorBase@@QEAAXAEBUtagRECTD@@AEAUtagRECT@@@Z",
+      "ordinal": 4020
+    },
+    {
+      "address": "0x1242aa20",
+      "forwarder": null,
+      "name": "?RectLayerToVector@CSVectorBase@@QEAAXAEBUtagRECT@@AEAU2@@Z",
+      "ordinal": 4023
+    },
+    {
+      "address": "0x122fc3b0",
+      "forwarder": null,
+      "name": "?RectOffscrToVector@CSVec4Draw@@IEAA?AVRCRect@@AEBV2@@Z",
+      "ordinal": 4027
+    },
+    {
+      "address": "0x12434020",
+      "forwarder": null,
+      "name": "?RectOffscrToVector@CSVectorFilter@@IEBAXAEBUtagRECT@@AEAU2@@Z",
+      "ordinal": 4028
+    },
+    {
+      "address": "0x12275590",
+      "forwarder": null,
+      "name": "?RectToPoly@CSVectorMath@@QEAAXAEBUtagRECT@@PEAUtagPOINT@@@Z",
+      "ordinal": 4029
+    },
+    {
+      "address": "0x1242ab60",
+      "forwarder": null,
+      "name": "?RectVectorToInch@CSVectorBase@@QEAAXAEBUtagRECT@@AEAUtagRECTD@@@Z",
+      "ordinal": 4030
+    },
+    {
+      "address": "0x1242abc0",
+      "forwarder": null,
+      "name": "?RectVectorToLayer@CSVectorBase@@QEAAXAEBUtagRECT@@AEAU2@@Z",
+      "ordinal": 4031
+    },
+    {
+      "address": "0x1242f850",
+      "forwarder": null,
+      "name": "?RectVectorToLayer@CSVectorDraw@@QEAAXAEBUtagRECT@@AEAU2@@Z",
+      "ordinal": 4032
+    },
+    {
+      "address": "0x124340e0",
+      "forwarder": null,
+      "name": "?RectVectorToOffscr@CSVectorFilter@@IEBAXAEBUtagRECT@@AEAU2@@Z",
+      "ordinal": 4034
+    },
+    {
+      "address": "0x1247d930",
+      "forwarder": null,
+      "name": "?ReduceCurveRatio@CSVec4Smooth@@IEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 4035
+    },
+    {
+      "address": "0x12265130",
+      "forwarder": null,
+      "name": "?RefreshStroke@CSVec4Search@@QEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 4066
+    },
+    {
+      "address": "0x1247c5e0",
+      "forwarder": null,
+      "name": "?RefreshStrokeDirect@CSVec4Search@@QEAAXPEAVCSVStroke@@AEAVRCRect@@@Z",
+      "ordinal": 4067
+    },
+    {
+      "address": "0x1244b930",
+      "forwarder": null,
+      "name": "?RegDB@CSVectorSimpleCurve@@QEAAHPEAVCSVectorDataBase@@AEBU_VREGISTINFO@@@Z",
+      "ordinal": 4070
+    },
+    {
+      "address": "0x12437cf0",
+      "forwarder": null,
+      "name": "?RegDBInside@CSVectorIntersect@@QEAAHPEAVCSVectorDataBase@@@Z",
+      "ordinal": 4071
+    },
+    {
+      "address": "0x122f9580",
+      "forwarder": null,
+      "name": "?RegExtPkt@CSVectorIntersect@@QEAAXH@Z",
+      "ordinal": 4072
+    },
+    {
+      "address": "0x122f95c0",
+      "forwarder": null,
+      "name": "?RegOrgPkt@CSVectorIntersect@@QEAAXH@Z",
+      "ordinal": 4073
+    },
+    {
+      "address": "0x122755d0",
+      "forwarder": null,
+      "name": "?RegPacketFromCurve@CSVector@@QEAAHPEBU_VCURVE@@HPEBU_VVPRESSURE@@AEBU_VREGISTINFO@@@Z",
+      "ordinal": 4074
+    },
+    {
+      "address": "0x1242b5e0",
+      "forwarder": null,
+      "name": "?RegPacketFromCurve@CSVectorDataBase@@QEAAHPEBU_VCURVE@@HPEBU_VVPRESSURE@@AEBU_VREGISTINFO@@@Z",
+      "ordinal": 4075
+    },
+    {
+      "address": "0x122755e0",
+      "forwarder": null,
+      "name": "?RegPacketFromPacket@CSVector@@QEAAHPEAVCSVectorPacket@@HHPEBUtagPOINT@@@Z",
+      "ordinal": 4076
+    },
+    {
+      "address": "0x1242b930",
+      "forwarder": null,
+      "name": "?RegPacketFromPacket@CSVectorDataBase@@QEAAHPEAVCSVectorPacket@@HHPEBUtagPOINT@@@Z",
+      "ordinal": 4077
+    },
+    {
+      "address": "0x1242b9f0",
+      "forwarder": null,
+      "name": "?RegPacketFromPacketClass@CSVectorDataBase@@QEAAXPEAVCSVectorPacket@@HPEBUtagPOINT@@PEAV?$RCTArray@H$0A@@@@Z",
+      "ordinal": 4078
+    },
+    {
+      "address": "0x122d2e40",
+      "forwarder": null,
+      "name": "?RegPenHead@CSVectorFileConv@@QEAAHAEBU_VBIGPENHEAD@@@Z",
+      "ordinal": 4079
+    },
+    {
+      "address": "0x12269620",
+      "forwarder": null,
+      "name": "?RegQueryValueA@CSVectorSetting@@QEAAHAEAVRCRegKey@@@Z",
+      "ordinal": 4087
+    },
+    {
+      "address": "0x12447d80",
+      "forwarder": null,
+      "name": "?RegScanNode@CSVectorScanConv@@QEAAHPEBUtagPOINTF@@PEAH@Z",
+      "ordinal": 4089
+    },
+    {
+      "address": "0x12269680",
+      "forwarder": null,
+      "name": "?RegSetValueA@CSVectorSetting@@QEAAHAEAVRCRegKey@@@Z",
+      "ordinal": 4097
+    },
+    {
+      "address": "0x12265360",
+      "forwarder": null,
+      "name": "?Release@CSVCurve@@QEAAXXZ",
+      "ordinal": 4105
+    },
+    {
+      "address": "0x12265350",
+      "forwarder": null,
+      "name": "?Release@CSVPenHead@@QEAAXXZ",
+      "ordinal": 4107
+    },
+    {
+      "address": "0x122654f0",
+      "forwarder": null,
+      "name": "?Release@CSVStroke@@QEAAXXZ",
+      "ordinal": 4108
+    },
+    {
+      "address": "0x12265500",
+      "forwarder": null,
+      "name": "?Release@CSVec4Search@@QEAAXXZ",
+      "ordinal": 4109
+    },
+    {
+      "address": "0x12429d70",
+      "forwarder": null,
+      "name": "?Release@CSVector@@QEAAXXZ",
+      "ordinal": 4110
+    },
+    {
+      "address": "0x1242bb90",
+      "forwarder": null,
+      "name": "?Release@CSVectorDataBase@@QEAAXXZ",
+      "ordinal": 4111
+    },
+    {
+      "address": "0x1242f930",
+      "forwarder": null,
+      "name": "?Release@CSVectorDraw@@QEAAXXZ",
+      "ordinal": 4112
+    },
+    {
+      "address": "0x12432a10",
+      "forwarder": null,
+      "name": "?Release@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 4113
+    },
+    {
+      "address": "0x12437de0",
+      "forwarder": null,
+      "name": "?Release@CSVectorIntersect@@QEAAXXZ",
+      "ordinal": 4114
+    },
+    {
+      "address": "0x12441330",
+      "forwarder": null,
+      "name": "?Release@CSVectorPacket@@QEAAXXZ",
+      "ordinal": 4115
+    },
+    {
+      "address": "0x12441900",
+      "forwarder": null,
+      "name": "?Release@CSVectorPres@@QEAAXXZ",
+      "ordinal": 4116
+    },
+    {
+      "address": "0x12442240",
+      "forwarder": null,
+      "name": "?Release@CSVectorRecord@@QEAAXXZ",
+      "ordinal": 4117
+    },
+    {
+      "address": "0x12445ab0",
+      "forwarder": null,
+      "name": "?Release@CSVectorSampling@@QEAAXXZ",
+      "ordinal": 4118
+    },
+    {
+      "address": "0x124482d0",
+      "forwarder": null,
+      "name": "?Release@CSVectorScanConv@@QEAAXXZ",
+      "ordinal": 4119
+    },
+    {
+      "address": "0x1244aaa0",
+      "forwarder": null,
+      "name": "?Release@CSVectorSearch@@QEAAXXZ",
+      "ordinal": 4120
+    },
+    {
+      "address": "0x1244b9e0",
+      "forwarder": null,
+      "name": "?Release@CSVectorSimpleCurve@@QEAAXXZ",
+      "ordinal": 4121
+    },
+    {
+      "address": "0x124422f0",
+      "forwarder": null,
+      "name": "?ReleaseRecPres@CSVectorRecord@@QEAAXH@Z",
+      "ordinal": 4123
+    },
+    {
+      "address": "0x1245a7f0",
+      "forwarder": null,
+      "name": "?ReleaseSamplingMem@CSVec4Convert4to2@@IEAAXXZ",
+      "ordinal": 4124
+    },
+    {
+      "address": "0x122d2ef0",
+      "forwarder": null,
+      "name": "?ReleaseSeed@CSVectorDraw@@QEAAXXZ",
+      "ordinal": 4125
+    },
+    {
+      "address": "0x12472770",
+      "forwarder": null,
+      "name": "?RemakeCornerInStroke@CSVEC4OPERATION@@YAXPEAVCSVStroke@@@Z",
+      "ordinal": 4126
+    },
+    {
+      "address": "0x124727e0",
+      "forwarder": null,
+      "name": "?RemakeStrokeEdge@CSVEC4OPERATION@@YAXPEAVCSVStroke@@H@Z",
+      "ordinal": 4127
+    },
+    {
+      "address": "0x12265510",
+      "forwarder": null,
+      "name": "?RemoveStroke@CSVBlockData@@QEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 4137
+    },
+    {
+      "address": "0x122f9600",
+      "forwarder": null,
+      "name": "?Render@CSVectorLayer@@UEAAXPEAVRCVOffscreen@@PEAVCSPageView@@AEBU_RENDERLAYERINFO@@@Z",
+      "ordinal": 4189
+    },
+    {
+      "address": "0x122fc5a0",
+      "forwarder": null,
+      "name": "?Render@CSVectorV4Layer@@UEAAXPEAVRCVOffscreen@@PEAVCSPageView@@AEBU_RENDERLAYERINFO@@@Z",
+      "ordinal": 4190
+    },
+    {
+      "address": "0x124668f0",
+      "forwarder": null,
+      "name": "?RenderBlockNormal@CSVec4Draw@@QEAAXAEBVRCRect@@@Z",
+      "ordinal": 4194
+    },
+    {
+      "address": "0x12466b60",
+      "forwarder": null,
+      "name": "?RenderCenterLine@CSVec4Draw@@QEAAXVRCRect@@PEAVRCMatrix2D@@H@Z",
+      "ordinal": 4195
+    },
+    {
+      "address": "0x122fc720",
+      "forwarder": null,
+      "name": "?RenderCenterLine@CSVectorV4Layer@@QEAAXPEAVRCVOffscreen@@PEAVCSPageView@@AEBU_RENDERLAYERINFO@@@Z",
+      "ordinal": 4196
+    },
+    {
+      "address": "0x12466e50",
+      "forwarder": null,
+      "name": "?RenderCurve@CSVec4Draw@@IEAAXPEAVCSVCurve@@HHMPEAVCSVPenHead@@KH@Z",
+      "ordinal": 4197
+    },
+    {
+      "address": "0x12468370",
+      "forwarder": null,
+      "name": "?RenderCurveByConvex@CSVec4Draw@@IEAAXPEAVCSVCurve@@HMPEAVCSVPenHead@@KH@Z",
+      "ordinal": 4198
+    },
+    {
+      "address": "0x1246a330",
+      "forwarder": null,
+      "name": "?RenderNormal@CSVec4Draw@@QEAAXVRCRect@@HH@Z",
+      "ordinal": 4221
+    },
+    {
+      "address": "0x1245a830",
+      "forwarder": null,
+      "name": "?RenderOffscreen@CSVec4Convert4to2@@IEAAXPEAVCSLayer@@PEAV?$RCTArray@PEAVCSLayer@@$0A@@@@Z",
+      "ordinal": 4222
+    },
+    {
+      "address": "0x1246a440",
+      "forwarder": null,
+      "name": "?RenderPartialCenterLine@CSVec4Draw@@QEAAXVRCRect@@PEAVRCMatrix2D@@AEAV?$RCTArray@UPARTIAL_CENTER_LINE@@$0A@@@@Z",
+      "ordinal": 4223
+    },
+    {
+      "address": "0x1246a630",
+      "forwarder": null,
+      "name": "?RenderStroke@CSVec4Draw@@IEAAXPEAVCSVStroke@@HH@Z",
+      "ordinal": 4248
+    },
+    {
+      "address": "0x1246b1c0",
+      "forwarder": null,
+      "name": "?RenderTempLine@CSVec4Draw@@QEAAXVRCRect@@PEAUTEMP_LINE@1@HHHH@Z",
+      "ordinal": 4249
+    },
+    {
+      "address": "0x122fc900",
+      "forwarder": null,
+      "name": "?RenderToOtherOffscreen@CSVectorV4Layer@@QEAAXPEAVRCVOffscreen@@AEBU_RENDERLAYERINFO@@@Z",
+      "ordinal": 4271
+    },
+    {
+      "address": "0x1246b590",
+      "forwarder": null,
+      "name": "?RenderTransform@CSVec4Draw@@QEAAXVRCRect@@AEBVRCMatrix2D@@HH@Z",
+      "ordinal": 4273
+    },
+    {
+      "address": "0x12432b20",
+      "forwarder": null,
+      "name": "?RenderV2@CSVectorFileConv@@QEAAXAEBU_VGFILEHEADER2@@@Z",
+      "ordinal": 4274
+    },
+    {
+      "address": "0x12433550",
+      "forwarder": null,
+      "name": "?RenderVectorVER1@CSVectorFileConv@@QEAAXAEAPEAE@Z",
+      "ordinal": 4275
+    },
+    {
+      "address": "0x12433560",
+      "forwarder": null,
+      "name": "?RenderVectorVER2@CSVectorFileConv@@QEAAXAEAPEAEAEBU_VGFILEHEADER2@@@Z",
+      "ordinal": 4276
+    },
+    {
+      "address": "0x122755f0",
+      "forwarder": null,
+      "name": "?ResetPacketSearch@CSVectorDataBase@@QEAAXAEAV?$RCTArray@H$0A@@@@Z",
+      "ordinal": 4307
+    },
+    {
+      "address": "0x122756a0",
+      "forwarder": null,
+      "name": "?ResetPacketSearch@CSVectorDataBase@@QEAAXH@Z",
+      "ordinal": 4308
+    },
+    {
+      "address": "0x122fcab0",
+      "forwarder": null,
+      "name": "?ResetSize@CSVectorV4Layer@@QEAAXHHAEBVRCPoint@@0@Z",
+      "ordinal": 4319
+    },
+    {
+      "address": "0x1247a1e0",
+      "forwarder": null,
+      "name": "?RestartSampling@CSVec4Sampling@@QEAAXAEAVRCRect@@@Z",
+      "ordinal": 4325
+    },
+    {
+      "address": "0x12461840",
+      "forwarder": null,
+      "name": "?Reverse@CSVStroke@@QEAAXXZ",
+      "ordinal": 4328
+    },
+    {
+      "address": "0x12461bc0",
+      "forwarder": null,
+      "name": "?ReverseLineScale@CSVCurve@@QEAAXXZ",
+      "ordinal": 4329
+    },
+    {
+      "address": "0x1242f960",
+      "forwarder": null,
+      "name": "?RightScan@CSVectorDraw@@QEAAHAEBUtagPOINT@@PEAVRCVOffscreen@@1AEBK0H@Z",
+      "ordinal": 4339
+    },
+    {
+      "address": "0x1243f7f0",
+      "forwarder": null,
+      "name": "?RotAverage@CSVectorMath@@QEAANNNN@Z",
+      "ordinal": 4355
+    },
+    {
+      "address": "0x1243f870",
+      "forwarder": null,
+      "name": "?RotCalc@CSVectorMath@@QEAANAEBUtagPOINT@@0@Z",
+      "ordinal": 4356
+    },
+    {
+      "address": "0x1243f8b0",
+      "forwarder": null,
+      "name": "?RotCalc@CSVectorMath@@QEAANAEBUtagPOINTD@@0@Z",
+      "ordinal": 4357
+    },
+    {
+      "address": "0x1243f8e0",
+      "forwarder": null,
+      "name": "?RotCalc@CSVectorMath@@QEAANAEBUtagPOINTF@@0@Z",
+      "ordinal": 4358
+    },
+    {
+      "address": "0x1243f920",
+      "forwarder": null,
+      "name": "?RotCalc@CSVectorMath@@QEAANNNNN@Z",
+      "ordinal": 4359
+    },
+    {
+      "address": "0x122756f0",
+      "forwarder": null,
+      "name": "?RotMatrix@CSVectorMath@@QEAAXAEAU_VMATRIX@@AEBU_VDIM@@@Z",
+      "ordinal": 4360
+    },
+    {
+      "address": "0x12275860",
+      "forwarder": null,
+      "name": "?RotMatrixX@CSVectorMath@@QEAAXAEAU_VMATRIX@@N@Z",
+      "ordinal": 4361
+    },
+    {
+      "address": "0x122758c0",
+      "forwarder": null,
+      "name": "?RotMatrixY@CSVectorMath@@QEAAXAEAU_VMATRIX@@N@Z",
+      "ordinal": 4362
+    },
+    {
+      "address": "0x12275920",
+      "forwarder": null,
+      "name": "?RotMatrixZ@CSVectorMath@@QEAAXAEAU_VMATRIX@@N@Z",
+      "ordinal": 4363
+    },
+    {
+      "address": "0x12275980",
+      "forwarder": null,
+      "name": "?RotNega@CSVectorMath@@QEAANN@Z",
+      "ordinal": 4364
+    },
+    {
+      "address": "0x1243fa00",
+      "forwarder": null,
+      "name": "?RotNormal@CSVectorMath@@QEAANN@Z",
+      "ordinal": 4365
+    },
+    {
+      "address": "0x1243fa40",
+      "forwarder": null,
+      "name": "?RotOffCalc@CSVectorMath@@QEAANNN@Z",
+      "ordinal": 4366
+    },
+    {
+      "address": "0x122fcc70",
+      "forwarder": null,
+      "name": "?RotateLayer@CSVectorV4Layer@@UEAAXHHH@Z",
+      "ordinal": 4379
+    },
+    {
+      "address": "0x122759a0",
+      "forwarder": null,
+      "name": "?Round@CSVectorMath@@QEAANN@Z",
+      "ordinal": 4386
+    },
+    {
+      "address": "0x12483890",
+      "forwarder": null,
+      "name": "?SamplePoint3D@CSVectorizeV4@@IEAAXAEAV?$RCTArray@U_ONECURVE_INFO@@$0A@@@@Z",
+      "ordinal": 4404
+    },
+    {
+      "address": "0x12483900",
+      "forwarder": null,
+      "name": "?SamplePoint@CSVectorizeV4@@IEAAXXZ",
+      "ordinal": 4405
+    },
+    {
+      "address": "0x12483ac0",
+      "forwarder": null,
+      "name": "?SamplePointForOneCurve3D@CSVectorizeV4@@IEAAXAEAU_ONECURVE_INFO@@@Z",
+      "ordinal": 4406
+    },
+    {
+      "address": "0x124844b0",
+      "forwarder": null,
+      "name": "?SamplePointForOneCurve@CSVectorizeV4@@IEAAXAEBVRCPoint@@H@Z",
+      "ordinal": 4407
+    },
+    {
+      "address": "0x1247a370",
+      "forwarder": null,
+      "name": "?Sampling@CSVec4Sampling@@QEAAHHHMMMMHHAEAVRCRect@@0PEAV2@@Z",
+      "ordinal": 4408
+    },
+    {
+      "address": "0x12445be0",
+      "forwarder": null,
+      "name": "?Sampling@CSVectorSampling@@QEAAHHHMMMHH@Z",
+      "ordinal": 4409
+    },
+    {
+      "address": "0x1247a760",
+      "forwarder": null,
+      "name": "?SamplingMain@CSVec4Sampling@@IEAAXAEAUSample@1@H@Z",
+      "ordinal": 4410
+    },
+    {
+      "address": "0x12275b00",
+      "forwarder": null,
+      "name": "?Save@CSVector@@QEAAXAEAVRCArchive@@@Z",
+      "ordinal": 4412
+    },
+    {
+      "address": "0x1242bbd0",
+      "forwarder": null,
+      "name": "?Save@CSVectorDataBase@@QEAAXAEAVRCArchive@@@Z",
+      "ordinal": 4413
+    },
+    {
+      "address": "0x124413e0",
+      "forwarder": null,
+      "name": "?Save@CSVectorPacket@@QEAAXAEAVRCArchive@@H@Z",
+      "ordinal": 4414
+    },
+    {
+      "address": "0x12441990",
+      "forwarder": null,
+      "name": "?Save@CSVectorPres@@QEAAXAEAVRCArchive@@H@Z",
+      "ordinal": 4415
+    },
+    {
+      "address": "0x124423d0",
+      "forwarder": null,
+      "name": "?Save@CSVectorRecord@@QEAAXAEAVRCArchive@@H@Z",
+      "ordinal": 4416
+    },
+    {
+      "address": "0x1242bd00",
+      "forwarder": null,
+      "name": "?SaveFromArray@CSVectorDataBase@@QEAAXAEAVRCArchive@@AEAV?$RCTArray@H$0A@@@@Z",
+      "ordinal": 4417
+    },
+    {
+      "address": "0x1242bdc0",
+      "forwarder": null,
+      "name": "?SaveFromExtent@CSVectorDataBase@@QEAAXAEAVRCArchive@@AEBUtagRECT@@@Z",
+      "ordinal": 4418
+    },
+    {
+      "address": "0x1242acf0",
+      "forwarder": null,
+      "name": "?ScalarInchToVector@CSVectorBase@@QEAAHN@Z",
+      "ordinal": 4420
+    },
+    {
+      "address": "0x1242ad00",
+      "forwarder": null,
+      "name": "?ScalarVectorToInch@CSVectorBase@@QEAANH@Z",
+      "ordinal": 4422
+    },
+    {
+      "address": "0x1242ad20",
+      "forwarder": null,
+      "name": "?ScalarVectorToLayer@CSVectorBase@@QEAAHH@Z",
+      "ordinal": 4423
+    },
+    {
+      "address": "0x12275b10",
+      "forwarder": null,
+      "name": "?ScaleMatrix@CSVectorMath@@QEAAXAEAU_VMATRIX@@AEBU_VDIM@@@Z",
+      "ordinal": 4427
+    },
+    {
+      "address": "0x12472ac0",
+      "forwarder": null,
+      "name": "?ScalePressureFor3D@CSVEC4OPERATION@@YAXPEAVCSVStroke@@MMM@Z",
+      "ordinal": 4428
+    },
+    {
+      "address": "0x12472f50",
+      "forwarder": null,
+      "name": "?ScalePressureFor3D@CSVEC4OPERATION@@YAXPEAVCSVStroke@@MMMM@Z",
+      "ordinal": 4429
+    },
+    {
+      "address": "0x12473560",
+      "forwarder": null,
+      "name": "?ScalePressureForWholeLine@CSVEC4OPERATION@@YAXPEAVCSVStroke@@M@Z",
+      "ordinal": 4430
+    },
+    {
+      "address": "0x12275b30",
+      "forwarder": null,
+      "name": "?ScaleRect@CSVectorMath@@QEAAXAEAUtagRECT@@N@Z",
+      "ordinal": 4431
+    },
+    {
+      "address": "0x12275bf0",
+      "forwarder": null,
+      "name": "?ScaleRectD@CSVectorMath@@QEAAXAEAUtagRECTD@@N@Z",
+      "ordinal": 4432
+    },
+    {
+      "address": "0x12275c20",
+      "forwarder": null,
+      "name": "?ScaleRectF@CSVectorMath@@QEAAXAEAUtagRECTF@@N@Z",
+      "ordinal": 4433
+    },
+    {
+      "address": "0x12448330",
+      "forwarder": null,
+      "name": "?ScanConvPoint@CSVectorScanConv@@QEAAHPEAVRCVOffscreen@@PEAPEBUtagPOINTF@@PEBHHAEBKIAEAUtagRECT@@0AEBUtagPOINT@@PEBU4@@Z",
+      "ordinal": 4435
+    },
+    {
+      "address": "0x124484a0",
+      "forwarder": null,
+      "name": "?ScanConvPoint@CSVectorScanConv@@QEAAHPEAVRCVOffscreen@@PEBUtagPOINTF@@HAEBKIAEAUtagRECT@@0AEBUtagPOINT@@PEBU4@@Z",
+      "ordinal": 4436
+    },
+    {
+      "address": "0x12458f60",
+      "forwarder": null,
+      "name": "?SearchNearestStroke@CSVec4Connect@@IEAAHAEBVRCPoint@@AEAPEAVCSVStroke@@@Z",
+      "ordinal": 4445
+    },
+    {
+      "address": "0x1244ab50",
+      "forwarder": null,
+      "name": "?SearchNode@CSVectorSearch@@IEAAXHAEBUtagRECT@@@Z",
+      "ordinal": 4446
+    },
+    {
+      "address": "0x1244ac60",
+      "forwarder": null,
+      "name": "?SearchTree@CSVectorSearch@@QEAAXPEAVCSVectorPacket@@AEBUtagRECT@@@Z",
+      "ordinal": 4455
+    },
+    {
+      "address": "0x12275c50",
+      "forwarder": null,
+      "name": "?SearchVector@CSVector@@QEAAHAEBUtagRECT@@@Z",
+      "ordinal": 4456
+    },
+    {
+      "address": "0x12275c80",
+      "forwarder": null,
+      "name": "?SearchVector@CSVectorDataBase@@QEAAHAEBUtagRECT@@@Z",
+      "ordinal": 4457
+    },
+    {
+      "address": "0x1242faa0",
+      "forwarder": null,
+      "name": "?SeedScanFill@CSVectorDraw@@QEAAHAEBUtagPOINT@@AEBKAEAUtagRECT@@@Z",
+      "ordinal": 4458
+    },
+    {
+      "address": "0x12454400",
+      "forwarder": null,
+      "name": "?SelectStroke@CSRasVecIntersect@@QEAAHPEAVCSVectorV4Layer@@H@Z",
+      "ordinal": 4509
+    },
+    {
+      "address": "0x12461f30",
+      "forwarder": null,
+      "name": "?Serialize@CSVCorner@@QEAAXAEAVRCArchive@@PEAVCSVec4DataBase@@@Z",
+      "ordinal": 4534
+    },
+    {
+      "address": "0x124620c0",
+      "forwarder": null,
+      "name": "?Serialize@CSVCurve@@QEAAXAEAVRCArchive@@PEAVCSVec4DataBase@@@Z",
+      "ordinal": 4535
+    },
+    {
+      "address": "0x12462440",
+      "forwarder": null,
+      "name": "?Serialize@CSVLineScale@@QEAAXAEAVRCArchive@@PEAVCSVec4DataBase@@@Z",
+      "ordinal": 4536
+    },
+    {
+      "address": "0x12462510",
+      "forwarder": null,
+      "name": "?Serialize@CSVPenHead@@QEAAXAEAVRCArchive@@PEAVCSVec4DataBase@@@Z",
+      "ordinal": 4537
+    },
+    {
+      "address": "0x12462660",
+      "forwarder": null,
+      "name": "?Serialize@CSVStroke@@QEAAXAEAVRCArchive@@PEAVCSVec4DataBase@@@Z",
+      "ordinal": 4538
+    },
+    {
+      "address": "0x12462af0",
+      "forwarder": null,
+      "name": "?SerializeList@CSVec4DataBase@@QEAAXAEAVRCArchive@@@Z",
+      "ordinal": 4539
+    },
+    {
+      "address": "0x12463690",
+      "forwarder": null,
+      "name": "?SerializeListHead@CSVec4DataBase@@QEAAXAEAVRCArchive@@@Z",
+      "ordinal": 4540
+    },
+    {
+      "address": "0x122657c0",
+      "forwarder": null,
+      "name": "?Set2BitColor@CSVStroke@@QEAAXE@Z",
+      "ordinal": 4544
+    },
+    {
+      "address": "0x12265810",
+      "forwarder": null,
+      "name": "?Set32BitColor@CSVStroke@@QEAAXK@Z",
+      "ordinal": 4546
+    },
+    {
+      "address": "0x122673f0",
+      "forwarder": null,
+      "name": "?SetAntiAliasSimple@CSVectorSetting@@QEAAXH@Z",
+      "ordinal": 4565
+    },
+    {
+      "address": "0x12265850",
+      "forwarder": null,
+      "name": "?SetAsDummyLayer@CSVectorV4Layer@@QEAAXXZ",
+      "ordinal": 4567
+    },
+    {
+      "address": "0x122fd0c0",
+      "forwarder": null,
+      "name": "?SetCalcRectStroke@CSVec4Draw@@QEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 4588
+    },
+    {
+      "address": "0x122dd010",
+      "forwarder": null,
+      "name": "?SetCashDirect@CSVectorSampling@@QEAAXHPEBM@Z",
+      "ordinal": 4595
+    },
+    {
+      "address": "0x122dd040",
+      "forwarder": null,
+      "name": "?SetCashDistance@CSVectorSampling@@QEAAXHPEBM@Z",
+      "ordinal": 4596
+    },
+    {
+      "address": "0x122dd070",
+      "forwarder": null,
+      "name": "?SetCashExtent@CSVectorSampling@@QEAAXHAEBUtagRECT@@@Z",
+      "ordinal": 4597
+    },
+    {
+      "address": "0x122dd090",
+      "forwarder": null,
+      "name": "?SetCashFlat@CSVectorSampling@@QEAAXHPEBM@Z",
+      "ordinal": 4598
+    },
+    {
+      "address": "0x122dd0c0",
+      "forwarder": null,
+      "name": "?SetCashID@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 4599
+    },
+    {
+      "address": "0x122dd0e0",
+      "forwarder": null,
+      "name": "?SetCashLinkNext@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 4600
+    },
+    {
+      "address": "0x122dd100",
+      "forwarder": null,
+      "name": "?SetCashLinkPrev@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 4601
+    },
+    {
+      "address": "0x122dd120",
+      "forwarder": null,
+      "name": "?SetCashPoint@CSVectorSampling@@QEAAXHPEBUtagPOINT@@@Z",
+      "ordinal": 4602
+    },
+    {
+      "address": "0x122dd170",
+      "forwarder": null,
+      "name": "?SetCashRecycle@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 4603
+    },
+    {
+      "address": "0x122dd190",
+      "forwarder": null,
+      "name": "?SetCashScale@CSVectorSampling@@QEAAXHPEBM@Z",
+      "ordinal": 4604
+    },
+    {
+      "address": "0x122dd1c0",
+      "forwarder": null,
+      "name": "?SetColorize@CSVectorDraw@@QEAAXHAEBK0@Z",
+      "ordinal": 4622
+    },
+    {
+      "address": "0x122659a0",
+      "forwarder": null,
+      "name": "?SetControlPoint@CSVCurve@@QEAAXAEBVRCPoint@@@Z",
+      "ordinal": 4625
+    },
+    {
+      "address": "0x1247ac40",
+      "forwarder": null,
+      "name": "?SetCurvePres@CSVec4Sampling@@IEAAXPEAVCSLineSegment@@PEAVCSVCurve@@MMH@Z",
+      "ordinal": 4638
+    },
+    {
+      "address": "0x124460c0",
+      "forwarder": null,
+      "name": "?SetCurvePres@CSVectorSampling@@QEAAXAEAU_VCURVE@@MM@Z",
+      "ordinal": 4639
+    },
+    {
+      "address": "0x12275de0",
+      "forwarder": null,
+      "name": "?SetDZSize@CSVectorSearch@@IEAAXAEAIH@Z",
+      "ordinal": 4640
+    },
+    {
+      "address": "0x12266200",
+      "forwarder": null,
+      "name": "?SetDataBase@CSVStroke@@QEAAXPEAVCSVec4DataBase@@@Z",
+      "ordinal": 4643
+    },
+    {
+      "address": "0x1244ba70",
+      "forwarder": null,
+      "name": "?SetDivideCurve@CSVectorSimpleCurve@@QEAAHAEBU_VCURVE@@PEBU_VVPRESSURE@@NH@Z",
+      "ordinal": 4674
+    },
+    {
+      "address": "0x122fd0e0",
+      "forwarder": null,
+      "name": "?SetDrawColor@CSVec4Draw@@QEAAXKHHH@Z",
+      "ordinal": 4678
+    },
+    {
+      "address": "0x1244ad00",
+      "forwarder": null,
+      "name": "?SetFindTbl@CSVectorSearch@@IEAAXH@Z",
+      "ordinal": 4719
+    },
+    {
+      "address": "0x122665f0",
+      "forwarder": null,
+      "name": "?SetHeadCutPoint@CSVStroke@@QEAAXAEBVRCPoint@@0@Z",
+      "ordinal": 4767
+    },
+    {
+      "address": "0x122dd1d0",
+      "forwarder": null,
+      "name": "?SetInOutBufLinkNext@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 4782
+    },
+    {
+      "address": "0x122dd1f0",
+      "forwarder": null,
+      "name": "?SetInOutBufLinkPrev@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 4783
+    },
+    {
+      "address": "0x122dd210",
+      "forwarder": null,
+      "name": "?SetInOutBufRecycle@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 4784
+    },
+    {
+      "address": "0x122dd230",
+      "forwarder": null,
+      "name": "?SetInOutBufStroke@CSVectorSampling@@QEAAXHAEBU_VSTROKE@@@Z",
+      "ordinal": 4785
+    },
+    {
+      "address": "0x124341c0",
+      "forwarder": null,
+      "name": "?SetIntersectRect@CSVectorFilter@@QEAAXAEBUtagRECT@@@Z",
+      "ordinal": 4798
+    },
+    {
+      "address": "0x1247b180",
+      "forwarder": null,
+      "name": "?SetLayer@CSVec4Sampling@@QEAAXPEAVCSVectorV4Layer@@HH@Z",
+      "ordinal": 4815
+    },
+    {
+      "address": "0x122fd110",
+      "forwarder": null,
+      "name": "?SetLayerColor@CSVec4Draw@@QEAAXKK@Z",
+      "ordinal": 4828
+    },
+    {
+      "address": "0x12276330",
+      "forwarder": null,
+      "name": "?SetLayerObject@CSVector@@QEAAXPEAVCSLayer@@@Z",
+      "ordinal": 4833
+    },
+    {
+      "address": "0x12266a40",
+      "forwarder": null,
+      "name": "?SetLayerObject@CSVectorBase@@QEAAXPEAVCSLayer@@@Z",
+      "ordinal": 4834
+    },
+    {
+      "address": "0x122fd120",
+      "forwarder": null,
+      "name": "?SetMask@CSVec4Draw@@QEAAXPEAVRCVOffscreen@@AEBVRCPoint@@@Z",
+      "ordinal": 4869
+    },
+    {
+      "address": "0x12266a40",
+      "forwarder": null,
+      "name": "?SetNext@CSVCurve@@QEAAXPEAV1@@Z",
+      "ordinal": 4893
+    },
+    {
+      "address": "0x12266a40",
+      "forwarder": null,
+      "name": "?SetNext@CSVPenHead@@QEAAXPEAV1@@Z",
+      "ordinal": 4895
+    },
+    {
+      "address": "0x12266a40",
+      "forwarder": null,
+      "name": "?SetNext@CSVStroke@@QEAAXPEAV1@@Z",
+      "ordinal": 4896
+    },
+    {
+      "address": "0x122763a0",
+      "forwarder": null,
+      "name": "?SetNodeLeaf@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 4899
+    },
+    {
+      "address": "0x122763d0",
+      "forwarder": null,
+      "name": "?SetNodeParentNode@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 4900
+    },
+    {
+      "address": "0x12276400",
+      "forwarder": null,
+      "name": "?SetNodeParentSlot@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 4901
+    },
+    {
+      "address": "0x122763d0",
+      "forwarder": null,
+      "name": "?SetNodeRecycle@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 4902
+    },
+    {
+      "address": "0x12276430",
+      "forwarder": null,
+      "name": "?SetNodeSlotCount@CSVectorSearch@@IEAAXHH@Z",
+      "ordinal": 4903
+    },
+    {
+      "address": "0x12276460",
+      "forwarder": null,
+      "name": "?SetNodeSlotDZ@CSVectorSearch@@IEAAXHHI@Z",
+      "ordinal": 4904
+    },
+    {
+      "address": "0x12276490",
+      "forwarder": null,
+      "name": "?SetNodeSlotData@CSVectorSearch@@IEAAXHHH@Z",
+      "ordinal": 4905
+    },
+    {
+      "address": "0x122764c0",
+      "forwarder": null,
+      "name": "?SetNodeSlotExtent@CSVectorSearch@@IEAAXHHAEBUtagRECT@@@Z",
+      "ordinal": 4906
+    },
+    {
+      "address": "0x122dd260",
+      "forwarder": null,
+      "name": "?SetOffscrCursor@CSVectorDraw@@QEAAXPEAVRCVOffscreen@@0AEBUtagPOINT@@1@Z",
+      "ordinal": 4917
+    },
+    {
+      "address": "0x124341e0",
+      "forwarder": null,
+      "name": "?SetOffscreen@CSVectorFilter@@QEAAXPEAVRCVOffscreen@@AEBUtagPOINT@@@Z",
+      "ordinal": 4918
+    },
+    {
+      "address": "0x12276560",
+      "forwarder": null,
+      "name": "?SetPacketColor@CSVectorPacket@@QEAAXHAEBK@Z",
+      "ordinal": 4953
+    },
+    {
+      "address": "0x12276590",
+      "forwarder": null,
+      "name": "?SetPacketDrawFlg@CSVectorPacket@@QEAAXHIH@Z",
+      "ordinal": 4954
+    },
+    {
+      "address": "0x12276620",
+      "forwarder": null,
+      "name": "?SetPacketExtent@CSVectorPacket@@QEAAXHAEBUtagRECT@@@Z",
+      "ordinal": 4955
+    },
+    {
+      "address": "0x12276650",
+      "forwarder": null,
+      "name": "?SetPacketFlg@CSVectorPacket@@QEAAXHIH@Z",
+      "ordinal": 4956
+    },
+    {
+      "address": "0x122766e0",
+      "forwarder": null,
+      "name": "?SetPacketGDBNode@CSVectorPacket@@QEAAXHH@Z",
+      "ordinal": 4957
+    },
+    {
+      "address": "0x12276710",
+      "forwarder": null,
+      "name": "?SetPacketGDBSlot@CSVectorPacket@@QEAAXHH@Z",
+      "ordinal": 4958
+    },
+    {
+      "address": "0x12276740",
+      "forwarder": null,
+      "name": "?SetPacketID@CSVectorPacket@@QEAAXHH@Z",
+      "ordinal": 4959
+    },
+    {
+      "address": "0x12276770",
+      "forwarder": null,
+      "name": "?SetPacketLinkNext@CSVectorPacket@@QEAAXHH@Z",
+      "ordinal": 4960
+    },
+    {
+      "address": "0x122767a0",
+      "forwarder": null,
+      "name": "?SetPacketLinkPrev@CSVectorPacket@@QEAAXHH@Z",
+      "ordinal": 4961
+    },
+    {
+      "address": "0x122767d0",
+      "forwarder": null,
+      "name": "?SetPacketMaxScale@CSVectorPacket@@QEAAXHM@Z",
+      "ordinal": 4962
+    },
+    {
+      "address": "0x12276800",
+      "forwarder": null,
+      "name": "?SetPacketPenHead@CSVectorPacket@@QEAAXHAEBU_VPENHEAD@@@Z",
+      "ordinal": 4963
+    },
+    {
+      "address": "0x12276850",
+      "forwarder": null,
+      "name": "?SetPacketPoint@CSVectorPacket@@QEAAXHAEBUtagPOINT@@@Z",
+      "ordinal": 4964
+    },
+    {
+      "address": "0x12276880",
+      "forwarder": null,
+      "name": "?SetPacketRec@CSVectorPacket@@QEAAXHH@Z",
+      "ordinal": 4965
+    },
+    {
+      "address": "0x122768b0",
+      "forwarder": null,
+      "name": "?SetPacketRecycle@CSVectorPacket@@QEAAXHH@Z",
+      "ordinal": 4966
+    },
+    {
+      "address": "0x12266ce0",
+      "forwarder": null,
+      "name": "?SetPenRadius@CSVStroke@@QEAAXM@Z",
+      "ordinal": 4992
+    },
+    {
+      "address": "0x12266cf0",
+      "forwarder": null,
+      "name": "?SetPointID@CSVCurve@@QEAAXH@Z",
+      "ordinal": 5001
+    },
+    {
+      "address": "0x122768f0",
+      "forwarder": null,
+      "name": "?SetPresConnect@CSVectorPres@@QEAAXHH@Z",
+      "ordinal": 5003
+    },
+    {
+      "address": "0x12276920",
+      "forwarder": null,
+      "name": "?SetPresDirect@CSVectorPres@@QEAAXHM@Z",
+      "ordinal": 5004
+    },
+    {
+      "address": "0x12276950",
+      "forwarder": null,
+      "name": "?SetPresDistance@CSVectorPres@@QEAAXHM@Z",
+      "ordinal": 5005
+    },
+    {
+      "address": "0x12276980",
+      "forwarder": null,
+      "name": "?SetPresFlat@CSVectorPres@@QEAAXHM@Z",
+      "ordinal": 5006
+    },
+    {
+      "address": "0x122dd300",
+      "forwarder": null,
+      "name": "?SetPresListLinkNext@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 5007
+    },
+    {
+      "address": "0x122dd320",
+      "forwarder": null,
+      "name": "?SetPresListLinkPrev@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 5008
+    },
+    {
+      "address": "0x122dd340",
+      "forwarder": null,
+      "name": "?SetPresListPres@CSVectorSampling@@QEAAXHAEBU_VVPRESSURE@@@Z",
+      "ordinal": 5009
+    },
+    {
+      "address": "0x122dd360",
+      "forwarder": null,
+      "name": "?SetPresListRecycle@CSVectorSampling@@QEAAXHH@Z",
+      "ordinal": 5010
+    },
+    {
+      "address": "0x122769b0",
+      "forwarder": null,
+      "name": "?SetPresPres@CSVectorPres@@QEAAXHAEBU_VVPRESSURE@@@Z",
+      "ordinal": 5011
+    },
+    {
+      "address": "0x12276a00",
+      "forwarder": null,
+      "name": "?SetPresRecycle@CSVectorPres@@QEAAXHH@Z",
+      "ordinal": 5012
+    },
+    {
+      "address": "0x12276a30",
+      "forwarder": null,
+      "name": "?SetPresScale@CSVectorPres@@QEAAXHM@Z",
+      "ordinal": 5013
+    },
+    {
+      "address": "0x12266d70",
+      "forwarder": null,
+      "name": "?SetPrev@CSVCurve@@QEAAXPEAV1@@Z",
+      "ordinal": 5015
+    },
+    {
+      "address": "0x12266d70",
+      "forwarder": null,
+      "name": "?SetPrev@CSVPenHead@@QEAAXPEAV1@@Z",
+      "ordinal": 5016
+    },
+    {
+      "address": "0x12266d70",
+      "forwarder": null,
+      "name": "?SetPrev@CSVStroke@@QEAAXPEAV1@@Z",
+      "ordinal": 5017
+    },
+    {
+      "address": "0x122fd140",
+      "forwarder": null,
+      "name": "?SetPrevRotate@CSVec4Draw@@QEAAXPEAM@Z",
+      "ordinal": 5018
+    },
+    {
+      "address": "0x12276a70",
+      "forwarder": null,
+      "name": "?SetRec@CSVectorRecord@@QEAAXHAEBU_VRECORD@@@Z",
+      "ordinal": 5033
+    },
+    {
+      "address": "0x12276ab0",
+      "forwarder": null,
+      "name": "?SetRecConnect@CSVectorRecord@@QEAAXHH@Z",
+      "ordinal": 5034
+    },
+    {
+      "address": "0x12276ae0",
+      "forwarder": null,
+      "name": "?SetRecPoint@CSVectorRecord@@QEAAXHHAEBUtagPOINT@@@Z",
+      "ordinal": 5035
+    },
+    {
+      "address": "0x12276b10",
+      "forwarder": null,
+      "name": "?SetRecPoint@CSVectorRecord@@QEAAXHPEBUtagPOINT@@@Z",
+      "ordinal": 5036
+    },
+    {
+      "address": "0x12276b50",
+      "forwarder": null,
+      "name": "?SetRecPres@CSVectorRecord@@QEAAXHH@Z",
+      "ordinal": 5037
+    },
+    {
+      "address": "0x12442550",
+      "forwarder": null,
+      "name": "?SetRecPresArray@CSVectorRecord@@QEAAXHAEAV?$RCTArray@U_VVPRESSURE@@$0A@@@@Z",
+      "ordinal": 5038
+    },
+    {
+      "address": "0x12276b80",
+      "forwarder": null,
+      "name": "?SetRecRecycle@CSVectorRecord@@QEAAXHH@Z",
+      "ordinal": 5039
+    },
+    {
+      "address": "0x12276c30",
+      "forwarder": null,
+      "name": "?SetScanEdgeLX@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5075
+    },
+    {
+      "address": "0x12276c50",
+      "forwarder": null,
+      "name": "?SetScanEdgeLeft@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5076
+    },
+    {
+      "address": "0x12276c70",
+      "forwarder": null,
+      "name": "?SetScanEdgeLowerX@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5077
+    },
+    {
+      "address": "0x12276c90",
+      "forwarder": null,
+      "name": "?SetScanEdgeLowerY@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5078
+    },
+    {
+      "address": "0x12276cb0",
+      "forwarder": null,
+      "name": "?SetScanEdgeNode@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5079
+    },
+    {
+      "address": "0x12276cd0",
+      "forwarder": null,
+      "name": "?SetScanEdgeRecycle@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5080
+    },
+    {
+      "address": "0x12276cf0",
+      "forwarder": null,
+      "name": "?SetScanEdgeRight@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5081
+    },
+    {
+      "address": "0x12276d10",
+      "forwarder": null,
+      "name": "?SetScanEdgeUpperX@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5082
+    },
+    {
+      "address": "0x12276d30",
+      "forwarder": null,
+      "name": "?SetScanEdgeUpperY@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5083
+    },
+    {
+      "address": "0x12276d50",
+      "forwarder": null,
+      "name": "?SetScanEdgeX@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5084
+    },
+    {
+      "address": "0x12276d70",
+      "forwarder": null,
+      "name": "?SetScanEdgeY@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5085
+    },
+    {
+      "address": "0x12276d90",
+      "forwarder": null,
+      "name": "?SetScanNodeAtr@CSVectorScanConv@@QEAAXHIH@Z",
+      "ordinal": 5086
+    },
+    {
+      "address": "0x12276de0",
+      "forwarder": null,
+      "name": "?SetScanNodeLeft@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5087
+    },
+    {
+      "address": "0x12276e00",
+      "forwarder": null,
+      "name": "?SetScanNodeLower@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5088
+    },
+    {
+      "address": "0x12276e20",
+      "forwarder": null,
+      "name": "?SetScanNodeOver@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5089
+    },
+    {
+      "address": "0x12276e40",
+      "forwarder": null,
+      "name": "?SetScanNodePair@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5090
+    },
+    {
+      "address": "0x12276e60",
+      "forwarder": null,
+      "name": "?SetScanNodeRecycle@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5091
+    },
+    {
+      "address": "0x12276e80",
+      "forwarder": null,
+      "name": "?SetScanNodeRight@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5092
+    },
+    {
+      "address": "0x12276ea0",
+      "forwarder": null,
+      "name": "?SetScanNodeUpper@CSVectorScanConv@@QEAAXHH@Z",
+      "ordinal": 5093
+    },
+    {
+      "address": "0x12276ec0",
+      "forwarder": null,
+      "name": "?SetScanNodeX@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5094
+    },
+    {
+      "address": "0x12276ee0",
+      "forwarder": null,
+      "name": "?SetScanNodeY@CSVectorScanConv@@QEAAXHM@Z",
+      "ordinal": 5095
+    },
+    {
+      "address": "0x12276f20",
+      "forwarder": null,
+      "name": "?SetSimpleRender@CSVectorLayer@@QEAAXH@Z",
+      "ordinal": 5119
+    },
+    {
+      "address": "0x1244bf60",
+      "forwarder": null,
+      "name": "?SetSmipleCurve@CSVectorSimpleCurve@@QEAAXAEBU_VCURVE@@PEBU_VVPRESSURE@@H@Z",
+      "ordinal": 5121
+    },
+    {
+      "address": "0x122672a0",
+      "forwarder": null,
+      "name": "?SetStroke@CSVCurve@@QEAAXPEAVCSVStroke@@@Z",
+      "ordinal": 5169
+    },
+    {
+      "address": "0x122672f0",
+      "forwarder": null,
+      "name": "?SetTailCutPoint@CSVStroke@@QEAAXAEBVRCPoint@@0@Z",
+      "ordinal": 5183
+    },
+    {
+      "address": "0x12267310",
+      "forwarder": null,
+      "name": "?SetTailPoint@CSVStroke@@QEAAXAEBVRCPoint@@@Z",
+      "ordinal": 5186
+    },
+    {
+      "address": "0x12446710",
+      "forwarder": null,
+      "name": "?SetTempCurvePres@CSVectorSampling@@QEAAXMMM@Z",
+      "ordinal": 5190
+    },
+    {
+      "address": "0x122dd380",
+      "forwarder": null,
+      "name": "?SetTransparency@CSVectorDraw@@QEAAXH@Z",
+      "ordinal": 5230
+    },
+    {
+      "address": "0x12265980",
+      "forwarder": null,
+      "name": "?SetType@CSVStroke@@QEAAXI@Z",
+      "ordinal": 5233
+    },
+    {
+      "address": "0x12267400",
+      "forwarder": null,
+      "name": "?SetTypeFlag@CSVStroke@@QEAAXIH@Z",
+      "ordinal": 5234
+    },
+    {
+      "address": "0x12269480",
+      "forwarder": null,
+      "name": "?SetVecSelectType@CSVectorSetting@@QEAAXI@Z",
+      "ordinal": 5264
+    },
+    {
+      "address": "0x122674b0",
+      "forwarder": null,
+      "name": "?SetVectorSelect@CSVectorV4Layer@@QEAAXH@Z",
+      "ordinal": 5266
+    },
+    {
+      "address": "0x122674c0",
+      "forwarder": null,
+      "name": "?SetVertexPoint@CSVCurve@@QEAAXAEBVRCPoint@@@Z",
+      "ordinal": 5267
+    },
+    {
+      "address": "0x12267500",
+      "forwarder": null,
+      "name": "?Setup@CSVCurve@@QEAAXPEAVCSVStroke@@AEBVRCPoint@@1@Z",
+      "ordinal": 5291
+    },
+    {
+      "address": "0x12267550",
+      "forwarder": null,
+      "name": "?Setup@CSVPenHead@@QEAAXPEBUPEN_HEAD_STRUCT@@@Z",
+      "ordinal": 5293
+    },
+    {
+      "address": "0x122675a0",
+      "forwarder": null,
+      "name": "?Setup@CSVPenHead@@QEAAXPEBV1@@Z",
+      "ordinal": 5294
+    },
+    {
+      "address": "0x122675f0",
+      "forwarder": null,
+      "name": "?Setup@CSVStroke@@QEAAXPEAVCSVec4DataBase@@IPEAVCSVPenHead@@MK@Z",
+      "ordinal": 5295
+    },
+    {
+      "address": "0x12484790",
+      "forwarder": null,
+      "name": "?SetupBoundAndOffset@CSVectorizeV4@@SAHAEAUVECTORIZE_INFO@1@PEAVCSLayer@@1PEAVRCRect@@@Z",
+      "ordinal": 5297
+    },
+    {
+      "address": "0x1247fea0",
+      "forwarder": null,
+      "name": "?SetupBoundPoint@CSVec4Transform@@IEAAHQEBVRCPointD@@0@Z",
+      "ordinal": 5298
+    },
+    {
+      "address": "0x1247dad0",
+      "forwarder": null,
+      "name": "?SetupParamFromSmoothLevel@CSVec4Smooth@@IEAAXHH@Z",
+      "ordinal": 5304
+    },
+    {
+      "address": "0x12277130",
+      "forwarder": null,
+      "name": "?Sgn@CSVectorMath@@QEAAHH@Z",
+      "ordinal": 5305
+    },
+    {
+      "address": "0x12277150",
+      "forwarder": null,
+      "name": "?Sgn@CSVectorMath@@QEAAMM@Z",
+      "ordinal": 5306
+    },
+    {
+      "address": "0x12277170",
+      "forwarder": null,
+      "name": "?Sgn@CSVectorMath@@QEAANN@Z",
+      "ordinal": 5307
+    },
+    {
+      "address": "0x12473680",
+      "forwarder": null,
+      "name": "?SharpenClosedStrokeEdge@CSVEC4OPERATION@@YAXPEAVCSVStroke@@@Z",
+      "ordinal": 5308
+    },
+    {
+      "address": "0x12433760",
+      "forwarder": null,
+      "name": "?SkipV2Polygon@CSVectorFileConv@@QEAAXAEAPEAE@Z",
+      "ordinal": 5315
+    },
+    {
+      "address": "0x12433990",
+      "forwarder": null,
+      "name": "?SkipV2Segment@CSVectorFileConv@@QEAAXAEAPEAE@Z",
+      "ordinal": 5316
+    },
+    {
+      "address": "0x1247db30",
+      "forwarder": null,
+      "name": "?SmoothCenterLine@CSVec4Smooth@@IEAAHPEAVCSVStroke@@@Z",
+      "ordinal": 5317
+    },
+    {
+      "address": "0x1247dc60",
+      "forwarder": null,
+      "name": "?SmoothCorner@CSVec4Smooth@@IEAAHPEAVCSVStroke@@@Z",
+      "ordinal": 5318
+    },
+    {
+      "address": "0x1247b1a0",
+      "forwarder": null,
+      "name": "?SmoothInOut@CSVec4Sampling@@IEAAXPEAVSampleNode@1@MMMMH@Z",
+      "ordinal": 5319
+    },
+    {
+      "address": "0x12446b60",
+      "forwarder": null,
+      "name": "?SmoothInOut@CSVectorSampling@@QEAAXHMMMMH@Z",
+      "ordinal": 5320
+    },
+    {
+      "address": "0x1247dd20",
+      "forwarder": null,
+      "name": "?SmoothLine@CSVec4Smooth@@QEAAHPEAVCSVectorV4Layer@@HHHHAEAVRCRect@@@Z",
+      "ordinal": 5321
+    },
+    {
+      "address": "0x1247e0d0",
+      "forwarder": null,
+      "name": "?SmoothLineForVectorize@CSVec4Smooth@@QEAAXPEAVCSVectorV4Layer@@HH@Z",
+      "ordinal": 5322
+    },
+    {
+      "address": "0x1247e2e0",
+      "forwarder": null,
+      "name": "?SmoothPressure@CSVec4Smooth@@IEAAHPEAVCSVStroke@@@Z",
+      "ordinal": 5323
+    },
+    {
+      "address": "0x1247e480",
+      "forwarder": null,
+      "name": "?SmoothSingleLine@CSVec4Smooth@@QEAAXPEAVCSVStroke@@PEAVCSVec4Search@@HPEAVCSVCurve@@2@Z",
+      "ordinal": 5324
+    },
+    {
+      "address": "0x1247e510",
+      "forwarder": null,
+      "name": "?SmoothStroke@CSVec4Smooth@@IEAAXPEAVCSVStroke@@HPEAVCSVec4Search@@@Z",
+      "ordinal": 5325
+    },
+    {
+      "address": "0x1247c8f0",
+      "forwarder": null,
+      "name": "?SortStroke@CSVBlockData@@QEAAXPEAVCSVec4DataBase@@@Z",
+      "ordinal": 5333
+    },
+    {
+      "address": "0x1247c990",
+      "forwarder": null,
+      "name": "?SortStroke@CSVec4Search@@QEAAXAEAVRCRect@@@Z",
+      "ordinal": 5334
+    },
+    {
+      "address": "0x12279050",
+      "forwarder": null,
+      "name": "?SquareLineLength@CSVectorMath@@QEAAHAEBUtagPOINT@@0@Z",
+      "ordinal": 5342
+    },
+    {
+      "address": "0x1247b400",
+      "forwarder": null,
+      "name": "?StartSampling@CSVec4Sampling@@QEAAHMMMMMIPEBUPEN_HEAD_STRUCT@@MKHHHHH@Z",
+      "ordinal": 5343
+    },
+    {
+      "address": "0x12446e50",
+      "forwarder": null,
+      "name": "?StartSampling@CSVectorSampling@@QEAAHMMMMM@Z",
+      "ordinal": 5344
+    },
+    {
+      "address": "0x122fd150",
+      "forwarder": null,
+      "name": "?Store@CSVec4Draw@@IEAAXAEBVRCPoint@@@Z",
+      "ordinal": 5347
+    },
+    {
+      "address": "0x122fd220",
+      "forwarder": null,
+      "name": "?Store@CSVec4Draw@@IEAAXAEBVRCPointD@@@Z",
+      "ordinal": 5348
+    },
+    {
+      "address": "0x1246baa0",
+      "forwarder": null,
+      "name": "?StoreCornerPoint@CSVec4Draw@@IEAAXAEBVRCPoint@@PEAVCSVCorner@@MMH@Z",
+      "ordinal": 5349
+    },
+    {
+      "address": "0x1246bd30",
+      "forwarder": null,
+      "name": "?StorePenHeadPoint@CSVec4Draw@@IEAAXAEBVRCPoint@@PEAVCSVPenHead@@MMM@Z",
+      "ordinal": 5350
+    },
+    {
+      "address": "0x124849e0",
+      "forwarder": null,
+      "name": "?StraightenStrokeEdge@CSVectorizeV4@@IEAAXPEAVCSVStroke@@H@Z",
+      "ordinal": 5351
+    },
+    {
+      "address": "0x122790a0",
+      "forwarder": null,
+      "name": "?SubPoint@CSVectorMath@@QEAAXAEAUtagPOINT@@AEBU2@@Z",
+      "ordinal": 5357
+    },
+    {
+      "address": "0x122790b0",
+      "forwarder": null,
+      "name": "?SubPoint@CSVectorMath@@QEAAXAEAUtagPOINTD@@AEBU2@@Z",
+      "ordinal": 5358
+    },
+    {
+      "address": "0x122790d0",
+      "forwarder": null,
+      "name": "?SubPoint@CSVectorMath@@QEAAXAEAUtagPOINTF@@AEBU2@@Z",
+      "ordinal": 5359
+    },
+    {
+      "address": "0x122696e0",
+      "forwarder": null,
+      "name": "?ToggleAntiAlias@CSVectorSetting@@QEAAXAEAV?$RCTArray@PEAVCSPageDocument@@$0A@@@@Z",
+      "ordinal": 5378
+    },
+    {
+      "address": "0x12269800",
+      "forwarder": null,
+      "name": "?ToggleCenterLine@CSVectorSetting@@QEAAXXZ",
+      "ordinal": 5379
+    },
+    {
+      "address": "0x12454c90",
+      "forwarder": null,
+      "name": "?TraceShortVector@CSRasVecIntersect@@IEAAXPEAVCSVCurve@@MAEAVRCPoint@@1@Z",
+      "ordinal": 5384
+    },
+    {
+      "address": "0x122790f0",
+      "forwarder": null,
+      "name": "?TransMatrix@CSVectorMath@@QEAAXAEAU_VMATRIX@@AEBU_VDIM@@@Z",
+      "ordinal": 5385
+    },
+    {
+      "address": "0x12430490",
+      "forwarder": null,
+      "name": "?TransformPenHeadPolygon@CSVectorDraw@@QEAAHPEBUtagPOINTD@@HPEAUtagPOINTF@@AEBUtagPOINT@@MMM@Z",
+      "ordinal": 5386
+    },
+    {
+      "address": "0x1247ff90",
+      "forwarder": null,
+      "name": "?TransformPoints@CSVec4Transform@@QEAAXPEAVRCPointD@@HQEBV2@1@Z",
+      "ordinal": 5387
+    },
+    {
+      "address": "0x12480040",
+      "forwarder": null,
+      "name": "?TransformRuler@CSVec4Transform@@QEAAXPEAVCSRulerObject@@QEBVRCPointD@@1@Z",
+      "ordinal": 5392
+    },
+    {
+      "address": "0x12279110",
+      "forwarder": null,
+      "name": "?TriAreaCalc@CSVectorMath@@QEAANAEBUtagPOINT@@00@Z",
+      "ordinal": 5394
+    },
+    {
+      "address": "0x12279160",
+      "forwarder": null,
+      "name": "?TriAreaCalc@CSVectorMath@@QEAANAEBUtagPOINTD@@00@Z",
+      "ordinal": 5395
+    },
+    {
+      "address": "0x122791c0",
+      "forwarder": null,
+      "name": "?TriAreaCalc@CSVectorMath@@QEAANAEBUtagPOINTF@@00@Z",
+      "ordinal": 5396
+    },
+    {
+      "address": "0x12279220",
+      "forwarder": null,
+      "name": "?TriAreaCalc@CSVectorMath@@QEAANNNNNNN@Z",
+      "ordinal": 5397
+    },
+    {
+      "address": "0x12437e50",
+      "forwarder": null,
+      "name": "?TrimPkt@CSVectorIntersect@@QEAAHPEAVCSVectorDataBase@@PEAVCSVectorPacket@@H@Z",
+      "ordinal": 5398
+    },
+    {
+      "address": "0x12279270",
+      "forwarder": null,
+      "name": "?UnionRect@CSVectorMath@@QEAAXAEAUtagRECT@@AEBU2@1@Z",
+      "ordinal": 5399
+    },
+    {
+      "address": "0x122792e0",
+      "forwarder": null,
+      "name": "?UnionRect@CSVectorMath@@QEAAXAEAUtagRECT@@AEBU2@AEBUtagPOINT@@@Z",
+      "ordinal": 5400
+    },
+    {
+      "address": "0x12279350",
+      "forwarder": null,
+      "name": "?UnionRect@CSVectorMath@@QEAAXAEAUtagRECT@@AEBU2@HH@Z",
+      "ordinal": 5401
+    },
+    {
+      "address": "0x122793c0",
+      "forwarder": null,
+      "name": "?UnionRect@CSVectorMath@@QEAAXAEAUtagRECT@@AEBU2@PEBUtagPOINT@@H@Z",
+      "ordinal": 5402
+    },
+    {
+      "address": "0x12279460",
+      "forwarder": null,
+      "name": "?UnionRectD@CSVectorMath@@QEAAXAEAUtagRECTD@@AEBU2@1@Z",
+      "ordinal": 5403
+    },
+    {
+      "address": "0x122794e0",
+      "forwarder": null,
+      "name": "?UnionRectD@CSVectorMath@@QEAAXAEAUtagRECTD@@AEBU2@AEBUtagPOINTD@@@Z",
+      "ordinal": 5404
+    },
+    {
+      "address": "0x12279560",
+      "forwarder": null,
+      "name": "?UnionRectF@CSVectorMath@@QEAAXAEAUtagRECTF@@AEBU2@1@Z",
+      "ordinal": 5405
+    },
+    {
+      "address": "0x122795e0",
+      "forwarder": null,
+      "name": "?UnionRectF@CSVectorMath@@QEAAXAEAUtagRECTF@@AEBU2@AEBUtagPOINTF@@@Z",
+      "ordinal": 5406
+    },
+    {
+      "address": "0x12279660",
+      "forwarder": null,
+      "name": "?UnionRectF@CSVectorMath@@QEAAXAEAUtagRECTF@@AEBU2@PEBUtagPOINTF@@H@Z",
+      "ordinal": 5407
+    },
+    {
+      "address": "0x122dd390",
+      "forwarder": null,
+      "name": "?UnlockCurve@CSVectorSampling@@QEAAXXZ",
+      "ordinal": 5417
+    },
+    {
+      "address": "0x1244c0a0",
+      "forwarder": null,
+      "name": "?UnlockCurve@CSVectorSimpleCurve@@QEAAXH@Z",
+      "ordinal": 5418
+    },
+    {
+      "address": "0x122dd3a0",
+      "forwarder": null,
+      "name": "?UnlockCurveBuf@CSVectorSampling@@QEAAXXZ",
+      "ordinal": 5419
+    },
+    {
+      "address": "0x122dd3b0",
+      "forwarder": null,
+      "name": "?UnlockPos@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 5420
+    },
+    {
+      "address": "0x122dd3c0",
+      "forwarder": null,
+      "name": "?UnlockPres@CSVectorSampling@@QEAAXXZ",
+      "ordinal": 5421
+    },
+    {
+      "address": "0x1244c0c0",
+      "forwarder": null,
+      "name": "?UnlockPres@CSVectorSimpleCurve@@QEAAXH@Z",
+      "ordinal": 5422
+    },
+    {
+      "address": "0x122dd3d0",
+      "forwarder": null,
+      "name": "?UnlockPrs@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 5423
+    },
+    {
+      "address": "0x122dd3e0",
+      "forwarder": null,
+      "name": "?UnlockStroke@CSVectorSampling@@QEAAXXZ",
+      "ordinal": 5424
+    },
+    {
+      "address": "0x122dd3f0",
+      "forwarder": null,
+      "name": "?UnlockV2CtlPos@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 5425
+    },
+    {
+      "address": "0x122dd400",
+      "forwarder": null,
+      "name": "?UnlockV2Head@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 5426
+    },
+    {
+      "address": "0x122dd410",
+      "forwarder": null,
+      "name": "?UnlockV2Scale@CSVectorFileConv@@QEAAXXZ",
+      "ordinal": 5427
+    },
+    {
+      "address": "0x12429da0",
+      "forwarder": null,
+      "name": "?VectorRender@CSVector@@QEAAHPEAVRCVOffscreen@@AEBU_VECTORRENDERINFO@@@Z",
+      "ordinal": 5451
+    },
+    {
+      "address": "0x12429dc0",
+      "forwarder": null,
+      "name": "?VectorRenderDB@CSVector@@QEAAHPEAVCSVectorDataBase@@PEAVRCVOffscreen@@AEBU_VECTORRENDERINFO@@@Z",
+      "ordinal": 5452
+    },
+    {
+      "address": "0x1242a030",
+      "forwarder": null,
+      "name": "?VectorRenderPacket@CSVector@@QEAAHPEAVCSVectorDataBase@@AEBV?$RCTArray@H$0A@@@PEAVRCVOffscreen@@AEBU_VECTORRENDERINFO@@@Z",
+      "ordinal": 5453
+    },
+    {
+      "address": "0x12484c60",
+      "forwarder": null,
+      "name": "?Vectorize@CSVectorizeV4@@QEAAXPEAVRCVOffscreen@@PEAVCSVectorV4Layer@@AEAUVECTORIZE_INFO@1@AEAVRCRect@@@Z",
+      "ordinal": 5455
+    },
+    {
+      "address": "0x122f9aa0",
+      "forwarder": null,
+      "name": "?WriteSelf@CSVectorLayer@@UEAAXAEAVRCArchive@@@Z",
+      "ordinal": 5535
+    },
+    {
+      "address": "0x122fd2b0",
+      "forwarder": null,
+      "name": "?WriteSelf@CSVectorV4Layer@@UEAAXAEAVRCArchive@@@Z",
+      "ordinal": 5536
+    },
+    {
+      "address": "0x126839f0",
+      "forwarder": null,
+      "name": "?s_Image8Bit@CSVec4AntiAlias@@1VCSBitmap@@A",
+      "ordinal": 5551
+    },
+    {
+      "address": "0x12683e60",
+      "forwarder": null,
+      "name": "?s_SamplingBuffer@CSVec4Sampling@@1VCSVec4SamplingBuffer@@A",
+      "ordinal": 5552
+    }
+  ]
+}

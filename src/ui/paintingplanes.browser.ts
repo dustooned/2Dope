@@ -37,7 +37,7 @@ const hit=(e:HTMLElement)=>{const r=e.getBoundingClientRect();return r.width>=43
 let passed=0,failed=0;
 function check(name:string,ok:boolean){const li=document.createElement('li');li.textContent=`${ok?'PASS':'FAIL'}: ${name}`;document.querySelector('#results')!.append(li);if(ok)passed++;else failed++;}
 try{
-  await settle();click('Layers',tools());click('New layer',panel());click('Background',panel());await settle();
+  await settle();app.setWorkspace('animate');click('Layers',tools());click('New layer',panel());click('Background',panel());await settle();app.setWorkspace('draw');await settle();
   const background=app.project.layer,drawing=app.drawing;
   check('Layers creates a selected still background behind the drawing layer',background.kind==='drawings'&&background.still===true&&app.project.comp.layers.at(-1)?.id===background.id);
   click('Close layers',panel());check('Close layers returns focus to the canvas',!cards.open&&document.activeElement===canvas);
@@ -82,7 +82,7 @@ try{
   check('Painting on Fill from Vector uses Brush instead of drawing vector ink on Line',app.tool==='brush'&&app.plane==='fill'&&!app.smudging);
   click('Fill',tools());check('Explicit Fill tool still activates the bucket on Fill',app.tool==='fill'&&app.plane==='fill');openOptions();
   click('Line',panel().querySelector('.lc-part')!.parentElement!);check('Choosing Line from the bucket returns to Brush on Line',app.tool==='brush'&&app.plane==='line');
-  click('Add a layer to Background',panel());await settle();const top=app.project.layer;
+  click('New layer',panel());await settle();const top=app.project.layer;
   check('The stack plus adds an editable paint layer without retiming the background',top.id!==background.id&&top.kind==='drawings'&&top.still===true&&top.cel===(background.kind==='drawings'?background.cel:undefined)&&app.project.length===1);
   click('Close layers',panel());app.color='#39804c';app.fit();stroke(62);await settle();
   check('Painting the added layer keeps the background Line and Fill intact',painted(app.drawing,'line')&&same(stamp(drawing,'line'),line,3)&&same(stamp(drawing,'fill'),fill,3));

@@ -4,7 +4,7 @@ import { categoryOf, isBuiltIn, readBrush, uniqueName } from './brushlib';
 
 describe('brush library', () => {
   it('sorts every built-in brush into a category', () => {
-    for (const p of PRESETS) expect(['sketch', 'ink', 'paint']).toContain(categoryOf(p.name, []));
+    for (const p of PRESETS) expect(['sketch', 'ink', 'paint', 'vector']).toContain(categoryOf(p.name, []));
     expect(categoryOf('Ink', [])).toBe('ink');
     expect(categoryOf('My chalk', [{ ...PRESETS[0]!, name: 'My chalk' }])).toBe('mine');
     expect(isBuiltIn('Ink')).toBe(true);
@@ -33,7 +33,7 @@ describe('brush collections', () => {
     const { addSet, allCategories, categoryOf: cat, forget, moveTo, readSets, removeSet, renamedIn, renameSet, NO_SETS } = await import('./brushlib');
     const mine = [{ ...PRESETS[0]!, name: 'Chalk' }, { ...PRESETS[0]!, name: 'Gouache' }];
     let s = addSet(NO_SETS, 'Backgrounds', 'set1');
-    expect(allCategories(s).map((c) => c.id)).toEqual(['sketch', 'ink', 'paint', 'mine', 'set1']);
+    expect(allCategories(s).map((c) => c.id)).toEqual(['sketch', 'ink', 'paint', 'vector', 'mine', 'set1']);
     s = moveTo(s, ['Chalk', 'Gouache'], 'set1');
     expect(cat('Chalk', mine, s)).toBe('set1');
     s = moveTo(s, ['Gouache'], 'mine');

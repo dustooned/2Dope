@@ -5,6 +5,7 @@ import { loadGrain, loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
+import { readBrush } from './core/brushlib';
 import { History, type Command } from './core/history';
 import { AUTO_PAINT_KEY, autoPaintLimit, newlyEnclosed, readInkPaint } from './fill/autopaint';
 import { newSeed } from './core/rng';
@@ -13,6 +14,8 @@ import { DabWalker } from './brush/dabs';
 import { maskCanvas } from './brush/clip';
 import { colorRegion } from './fill/wand';
 import { clipStrokeToMask, eraseVectorsInMask } from './core/vectorclip';
+import { prepareVectorStroke, transformVector, assertVectorBudget, selectionClip, vectorSelected, MAX_STYLE_POINTS, type VectorClip } from './core/vectorstyle';
+import { showVectorRestyle } from './ui/vectorrestyle';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
@@ -66,7 +69,7 @@ import { Smoother, smoothStroke } from './brush/smoothing';
 import { eraseVectors, type VectorErase } from './core/vectorcut';
 import { drawingBox } from './view/contentbox';
 import { constrainShape, editShape, fitAs, pressureProfile, recognizeShape, sampleProfile, SHAPE_CHOICES, SHAPE_NAMES, shapeOutline, type Shape, type ShapeChoice } from './core/quickshape';
-import { drawVectorStroke } from './brush/vector';
+import { drawVectorStroke, clearVectorRenderCache, hasVisibleVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
 import { snapRotation, Viewport } from './view/viewport';
 
@@ -207,6 +210,7 @@ export class App {
   readonly editor = new CompEditor(this);
   onWorkspaceChange: () => void = () => {};
   private motionPointer: number | null = null;
+  private paintingView: { project: Project; comp: string; x: number; y: number; zoom: number; rot: number; flipped: boolean; fitSig: string } | null = null;
   private arrangeProject: Project | null = null;
   private arrangeComp = '';
   get arrangingAssets(): boolean {
@@ -218,6 +222,11 @@ export class App {
   get placedAsset(): CompLayer | null {
     const l = this.editor.primary;
     return this.arrangingAssets && l && this.isAssetPlacement(l) ? l : null;
+  }
+  /** Draw opens this source's paint stack; Animate keeps placement/track controls. */
+  get drawAssetPlacement(): CompLayer | null {
+    const l=this.editor.primary;
+    return this.workspace==='draw' && !this.project.comp.asset && l && this.isAssetPlacement(l) ? l : null;
   }
   /** Return keyboard navigation to the drawing surface without moving the page. */
   focusCanvas(): void { this.canvas.focus({ preventScroll: true }); }
@@ -277,11 +286,15 @@ export class App {
     this.arrangeProject = null;
     this.motionPointer = null;
     const was = this.workspace;
+    if(w === 'motion') this.paintingView = {project:this.project,comp:this.project.activeComp,x:this.view.x,y:this.view.y,zoom:this.view.zoom,rot:this.view.rot,flipped:this.view.flipped,fitSig:this.fitSig};
     this.workspace = w;
     if (w === 'board') this.enterBoard();
     else if (was === 'board') this.leaveBoard();
     // Draw and Time look at the same page; Motion looks at the comp
-    if ((was === 'motion') !== (w === 'motion') || arranged) this.fit();
+    const saved=this.paintingView;
+    if(was==='motion' && saved?.project===this.project && saved.comp===this.project.activeComp) {
+      const {x,y,zoom,rot,flipped}=saved;Object.assign(this.view,{x,y,zoom,rot,flipped});this.fitSig=saved.fitSig;this.paintingView=null;
+    } else if ((was === 'motion') !== (w === 'motion') || arranged) this.fit();
     this.requestRender();
     this.onFrameChange();
     this.onWorkspaceChange();
@@ -430,7 +443,7 @@ export class App {
     this.ctx = ctx;
     this.clampOnion();
     // Merge over the default so brushes saved by older builds gain new fields.
-    this.brush = { ...cloneBrush(PRESETS[0]!), ...(loadJSON<Partial<BrushSettings>>(BRUSH_KEY) ?? {}) };
+    this.brush = readBrush(loadJSON<unknown>(BRUSH_KEY)) ?? cloneBrush(PRESETS[0]!);
     this.brushPreferences = usedBrush(rememberBrush(this.brushPreferences, this.brush), this.brush.name);
     if (this.brush.tipImage) void loadTip(this.brush.tipImage);
     if (this.brush.grainImage) void loadGrain(this.brush.grainImage);
@@ -779,6 +792,7 @@ export class App {
   private anchorCache = new Map<string, { n: number; anchors: number[] }>();
 
   private anchorsFor(rec: StrokeRecord): number[] {
+    if(rec.controls) return rec.controls.anchors;
     const c = this.anchorCache.get(rec.id);
     if (c && c.n === rec.points.length) return c.anchors;
     const anchors = anchorsOf(rec.points);
@@ -790,7 +804,7 @@ export class App {
   private handlesOf(rec: StrokeRecord, anchors: number[], k: number): Handles {
     const pi = anchors[k]!;
     if (this.modeOf(rec.id, pi) === 'straight') return { inx: 0, iny: 0, outx: 0, outy: 0 };
-    return this.pointHandles.get(rec.id)?.get(pi) ?? defaultHandles(rec.points, anchors, k);
+    return this.pointHandles.get(rec.id)?.get(pi) ?? rec.controls?.handles[pi] ?? defaultHandles(rec.points, anchors, k);
   }
   /** New points start straight (sharp corners) instead of curved. */
   straightDefault = loadJSON<boolean>('2dope.points.straight') ?? false;
@@ -827,7 +841,8 @@ export class App {
   }
 
   private modeOf(id: string, pointIndex: number): PointMode {
-    return this.pointModes.get(id)?.get(pointIndex) ?? (this.straightDefault ? 'straight' : 'curve');
+    const rec=this.ve?.d.vectors.find(v=>v.id===id);
+    return this.pointModes.get(id)?.get(pointIndex) ?? rec?.controls?.modes[pointIndex] ?? (this.straightDefault ? 'straight' : 'curve');
   }
 
   /** The chosen point's mode (the last one touched), or null when none is chosen. */
@@ -932,17 +947,26 @@ export class App {
     this.requestRender();
   }
 
-  private pushVectors(label: string, d: Drawing, before: StrokeRecord[]): void {
-    const after = d.vectors;
-    if (after === before) return;
+  private pushVectors(label: string, d: Drawing, before: StrokeRecord[]): boolean {
+    if (d.vectors === before) return false;
+    const after = d.vectors.map(v=>{
+      if(before.includes(v))return v;
+      const anchors=this.anchorsFor(v);
+      return {...v,controls:{anchors:[...anchors],modes:Object.fromEntries(anchors.map(i=>[i,this.modeOf(v.id,i)])),handles:Object.fromEntries(anchors.map((i,k)=>[i,{...this.handlesOf(v,anchors,k)}]))}};
+    });
+    try {assertVectorBudget([...this.project.drawings.values()].flatMap(drawing=>drawing===d?after:drawing.vectors));}
+    catch(e){d.vectors=before;this.pointModes.clear();this.pointHandles.clear();this.anchorCache.clear();this.touch(d);this.requestRender();this.onNotice?.((e as Error).message);return false;}
+    d.vectors=after;
+    const sync=()=>{this.pointModes.clear();this.pointHandles.clear();this.anchorCache.clear();this.touch(d);this.requestRender();this.onToolChange();this.onDocChanged();};
     this.history.push({
       label,
       drawings: [d],
-      do: () => { d.vectors = after; this.touch(d); this.requestRender(); this.onToolChange(); },
-      undo: () => { d.vectors = before; this.touch(d); this.requestRender(); this.onToolChange(); },
+      do: () => { d.vectors = after; sync(); },
+      undo: () => { d.vectors = before; sync(); },
     });
     this.residency.updateThumb(d);
     this.onDocChanged();
+    return true;
   }
 
   /** Width changes the whole line, or only around the chosen point. Remembered per device. */
@@ -1683,9 +1707,7 @@ export class App {
 
   /** Vector lines that lie wholly inside the selection. */
   private vectorsInside(d: Drawing, a: Area): StrokeRecord[] {
-    const W = this.docW, H = this.docH;
-    const inside = (x: number, y: number) => { const px = Math.floor(x), py = Math.floor(y); return px >= 0 && py >= 0 && px < W && py < H && a.mask[py * W + px] === 1; };
-    return d.vectors.filter((v) => v.points.length && v.points.every((p) => inside(p.x, p.y)));
+    return d.vectors.filter(v=>vectorSelected(v,a.mask,this.docW,this.docH));
   }
 
   /** Copy what is selected (Line, Fill and the vector lines inside), to paste on any drawing. */
@@ -2075,16 +2097,38 @@ export class App {
 
   /** A vector line's symmetry copies (its own lines), none without symmetry. */
   /** Vector lines kept to a selection mask (unchanged without one). */
-  private clipToSelection(strokes: StrokeRecord[], clip: Uint8Array | null): StrokeRecord[] {
-    return clip ? strokes.flatMap((v) => clipStrokeToMask(v, clip, this.docW, this.docH)) : strokes;
+  private vectorClipCache = new WeakMap<Uint8Array,VectorClip>();
+  private vectorClipProblem: string | null = null;
+  private clipToSelection(strokes: StrokeRecord[], clip: Uint8Array | null, authored = true): StrokeRecord[] {
+    try {
+      const ready=strokes.map(v=>{
+        const r=prepareVectorStroke(v);
+        if(!authored || !r.style || r.controls)return r;
+        const anchors=anchorsOf(r.points);
+        return {...r,controls:{anchors,modes:Object.fromEntries(anchors.map(i=>[i,this.straightDefault?'straight' as const:'curve' as const])),handles:Object.fromEntries(anchors.map((i,k)=>[i,defaultHandles(r.points,anchors,k)]))}};
+      });
+      this.vectorClipProblem=null;
+      if(!clip)return ready;
+      let compiled=this.vectorClipCache.get(clip);
+      // Live stroke selections are immutable snapshots. Encode once, not once per pointer sample.
+      if(!compiled && ready.some(v=>v.style || v.clips)) {compiled=selectionClip(clip,this.docW,this.docH);this.vectorClipCache.set(clip,compiled);}
+      return ready.flatMap(v=>clipStrokeToMask(v,clip,this.docW,this.docH,'inside',compiled));
+    } catch(e) {this.vectorClipProblem=e instanceof Error?e.message:'The vector brush could not be prepared.';return [];}
   }
 
   private symmetryVectors(rec: StrokeRecord): StrokeRecord[] {
     const sym = rec.sym;
     if (!sym || sym.mode === 'off') return [];
+    if((rec.style || rec.brush.vectorStyle) && rec.points.length>MAX_STYLE_POINTS)return [];
     const n = symmetryCopies(sym.mode, sym.cx, sym.cy, 0, 0, 0).length;
     const out: StrokeRecord[] = [];
-    for (let k = 1; k < n; k++) out.push({ ...rec, id: newStrokeId(), sym: undefined, points: rec.points.map((p) => { const c = symmetryCopies(sym.mode, sym.cx, sym.cy, p.x, p.y, 0)[k]!; return { ...p, x: c.x, y: c.y }; }) });
+    const ready=prepareVectorStroke(rec);
+    for (let k = 1; k < n; k++) {
+      const o=symmetryCopies(sym.mode,sym.cx,sym.cy,0,0,0)[k]!;
+      const x=symmetryCopies(sym.mode,sym.cx,sym.cy,1,0,0)[k]!;
+      const y=symmetryCopies(sym.mode,sym.cx,sym.cy,0,1,0)[k]!;
+      out.push({...transformVector(ready,[x.x-o.x,x.y-o.y,y.x-o.x,y.y-o.y,o.x,o.y]),id:newStrokeId(),sym:undefined});
+    }
     return out;
   }
 
@@ -2799,6 +2843,7 @@ export class App {
     this.brushPreferences = usedBrush(this.brushPreferences, b.name);
     if (b.tipImage) void loadTip(b.tipImage);
     if (b.grainImage) void loadGrain(b.grainImage);
+    if(b.vectorStyle) this.setTool('pen');
     this.brushChanged();
   }
 
@@ -2807,6 +2852,52 @@ export class App {
     saveJSON(BRUSH_PREFS_KEY, this.brushPreferences);
     saveJSON(BRUSH_KEY, this.brush);
     this.onBrushChange();
+  }
+
+  openVectorRestyle(): void { showVectorRestyle(this); }
+
+  /** A reviewable preview without mutating the document or exposing draft art to autosave. */
+  previewVectorRestyle(defaultWeight = false): { count:number; paint(g:CanvasRenderingContext2D):void; apply():boolean } | null {
+    if(this.live || this.xf || this.playing || this.blankPage || this.editingMask || this.project.layer.locked) {
+      this.onNotice?.('Finish the current action and choose an unlocked drawing to restyle lines.');return null;
+    }
+    const d=this.drawing;
+    if(!this.residency.isReady(d)) {this.onNotice?.('This drawing is still loading.');return null;}
+    const mask=this.spatialSelection?.mask;
+    const id=this.pointStroke?.id;
+    const chosen=d.vectors.filter(v=>v.tool==='pen' && (id?v.id===id:!!mask && vectorSelected(v,mask,this.docW,this.docH)));
+    if(!chosen.length) {this.onNotice?.('Edit a vector line’s points, or select complete vector lines on the canvas, then apply a brush.');return null;}
+    const before=d.vectors, project=this.project, comp=project.activeComp, layer=project.activeLayer, frame=this.frame;
+    const selected=new Set(chosen);
+    let after:StrokeRecord[];
+    try {
+      after=before.flatMap(v=>{
+        if(!selected.has(v))return [v];
+        const brush=cloneBrush(this.brush);
+        if(!defaultWeight) {
+          // Reapplying a nib uses document units. Preserve uniform weight exactly and use
+          // area-equivalent weight after stretching; directional widths cannot all match.
+          const m=v.style?.matrix,scale=m?Math.sqrt(Math.abs(m[0]*m[3]-m[1]*m[2])):1;
+          brush.size=v.brush.size*scale;brush.sizeDyn=structuredClone(v.brush.sizeDyn);brush.taperStart=v.brush.taperStart*scale;brush.taperEnd=v.brush.taperEnd*scale;
+          if(brush.vectorStyle && brush.size>4096)throw new Error('This transformed line exceeds the brush weight limit. Preview using the brush’s weight instead.');
+        }
+        const points=v.points.map(p=>{const {u:_,...q}=p;return defaultWeight?{...q,w:1}:q;});
+        const next=prepareVectorStroke({...v,style:undefined,brush,points});
+        if(!mask)return [next];
+        // The canvas selection is a restriction on the edit, not permission to discard the
+        // original brush outside it. Keep both appearances under complementary saved clips.
+        const outside=clipStrokeToMask(v,mask,this.docW,this.docH,'outside').map(r=>({...r,id:newStrokeId()}));
+        const inside=clipStrokeToMask(next,mask,this.docW,this.docH).map((r,i)=>({...r,id:i?newStrokeId():v.id}));
+        return [...outside,...inside];
+      });
+      assertVectorBudget([...this.project.drawings.values()].flatMap(drawing=>drawing===d?after:drawing.vectors));
+    } catch(e) {this.onNotice?.(e instanceof Error?e.message:'The brush could not be applied.');return null;}
+    return {count:chosen.length,
+      paint:(g)=>{g.save();g.scale(g.canvas.width/this.docW,g.canvas.height/this.docH);paintDrawing(g,{...d,vectors:after});g.restore();},
+      apply:()=>{
+        if(this.project!==project || project.activeComp!==comp || project.activeLayer!==layer || this.frame!==frame || this.drawing!==d || d.vectors!==before || project.layer.locked || this.editingMask) {this.onNotice?.('The drawing changed. Open the brush preview again.');return false;}
+        d.vectors=after;return this.pushVectors('Apply vector brush',d,before);
+      }};
   }
 
   toggleBrushFavorite(name: string): void {
@@ -3001,7 +3092,8 @@ export class App {
         g.drawImage(tmp, 0, 0);
         g.restore();
       }
-      d.vectors = d.vectors.map((v) => ({ ...v, points: v.points.map((p) => ({ ...p, x: axis === 'h' ? w - p.x : p.x, y: axis === 'v' ? h - p.y : p.y })) }));
+      d.vectors = d.vectors.map(v=>transformVector(v,[axis==='h'?-1:1,0,0,axis==='v'?-1:1,axis==='h'?w:0,axis==='v'?h:0]));
+      this.pointModes.clear();this.pointHandles.clear();this.anchorCache.clear();
       this.touch(d);
     };
     this.history.push({ label: axis === 'h' ? 'Flip drawing left to right' : 'Flip drawing top to bottom', drawings: [d], do: mirror, undo: mirror }, false);
@@ -3009,10 +3101,13 @@ export class App {
 
   /** Replace the whole project (open, restore, new). Clears undo and per-project view state. */
   loadProject(p: Project): void {
+    this.paintingView=null;
+    clearVectorRenderCache();
     this.editor.gestureEnd(true); this.motionPointer = null; this.arrangeProject = null;
     this.cancelTransform();
     this.ve = null;
     this.wBase = null;
+    this.pointModes.clear();this.pointHandles.clear();this.anchorCache.clear();
     if (this.fillG) this.endFill(true);
     this.spatial = null;
     if (this.live) this.endStroke(true);
@@ -3203,6 +3298,16 @@ export class App {
   }
 
   /** A new art layer linked to the one you draw on: the same cels and timing, blank drawings, the same placement. Draw on it. */
+  addPaintLayer(): void {
+    if(this.strokeActive)return;
+    if(!this.project.isPlaceholder){this.addCelLayer();return;}
+    const p=this.project,id=p.newId('L'),d=p.newDrawing();
+    this.editor.edit('Add paint layer',c=>{
+      const layer=drawingsLayer(id,'Paint layer',[{drawing:d.id,length:1}],p.width,p.height,c.width,c.height);layer.play='loop';c.layers.unshift(layer);
+    });
+    this.focusLayer(id);this.onCompChanged();this.requestRender();this.onFrameChange();
+  }
+
   addCelLayer(): void {
     if (this.strokeActive || this.project.isPlaceholder) return;
     const p = this.project;
@@ -3216,9 +3321,10 @@ export class App {
       if (!s || s.kind !== 'drawings') return;
       s.cel = group;
       // in a background or object stack the new one is a paint layer; for animation, an art layer
-      const name = s.still ? `Paint ${count + 1}` : `${s.name} \u00b7 ${count + 1}`;
+      const name = this.workspace==='draw' || s.still || cc.asset ? `Paint ${count + 1}` : `${s.name} \u00b7 ${count + 1}`;
       const made = drawingsLayer(id, name, s.exposures.map((e) => ({ drawing: p.newDrawing().id, length: e.length })), p.width, p.height, cc.width, cc.height);
       if (s.still) { made.still = true; made.play = s.play; }
+      if(cc.asset) {made.play=s.play;made.speed=s.speed;made.single=s.single;made.timeRemap=structuredClone(s.timeRemap);}
       made.start = s.start;
       made.in = s.in;
       made.out = s.out;
@@ -3930,10 +4036,18 @@ export class App {
   }
 
   setFps(fps: number): void {
-    this.project.fps = Math.max(1, Math.min(120, Math.round(fps)));
-    this.playClock = { t0: performance.now(), f0: this.frame };
-    this.onFrameChange();
-    this.onDocChanged();
+    if(!Number.isFinite(fps) || this.strokeActive)return;
+    const p=this.project,id=p.activeComp,before=p.comp.fps,next=Math.max(1,Math.min(120,Math.round(fps)));
+    if(next===before)return;
+    const set=(value:number)=>{
+      if(this.project!==p)return;
+      const comp=p.comps.get(id);if(!comp)return;
+      comp.fps=value;
+      this.frame=Math.max(0,Math.min(this.frame,this.compEnd-1));
+      this.playClock={t0:performance.now(),f0:this.frame};
+      this.onionCache.clear();this.requestRender();this.onFrameChange();this.onDocChanged();
+    };
+    this.history.push({label:'Change frame rate',do:()=>set(next),undo:()=>set(before)},false);
   }
 
   private tickPlayback(now: number): void {
@@ -4824,9 +4938,11 @@ export class App {
     let pointsOf = rec.id;
     if (rec.tool === 'pen') {
       // a selection keeps the line (and its symmetry copies) inside it
-      const strokes = this.clipToSelection([rec, ...this.symmetryVectors(rec)], live.clip);
+      const strokes = this.clipToSelection([rec, ...this.symmetryVectors(rec)], live.clip).filter(v=>!v.style && !v.clips || hasVisibleVectorStroke(v,this.docW,this.docH));
+      try {assertVectorBudget([...this.project.drawings.values()].flatMap(drawing=>drawing.vectors).concat(strokes));}
+      catch(e) {this.onNotice?.((e as Error).message);this.requestRender();return;}
       if (!strokes.length) {
-        this.onNotice?.('The stroke is outside the selection.');
+        this.onNotice?.(this.vectorClipProblem ?? 'The stroke is outside the selection.');
         this.lastShape = null;
         this.onShapeChange();
         this.requestRender();
@@ -5532,9 +5648,9 @@ export class App {
       const s = vd.snapped;
       const other = s && s.end && myEnd && s.id !== vd.base.id && this.mergeOnSnap ? ve.d.vectors.find((v) => v.id === s.id) : undefined;
       const mine = this.pointStroke;
-      if (other && mine && s?.end && myEnd) {
+      if (other && mine && !other.style && !mine.style && !other.clips && !mine.clips && s?.end && myEnd) {
         // the two ends touch: one line from here on
-        const joined: StrokeRecord = { ...mine, points: joinStrokes(mine.points, myEnd, other.points, s.end) };
+        const joined: StrokeRecord = { ...mine, controls:undefined, points: joinStrokes(mine.points, myEnd, other.points, s.end) };
         ve.d.vectors = ve.d.vectors.filter((v) => v.id !== other.id).map((v) => (v.id === mine.id ? joined : v));
         this.pointModes.delete(mine.id);
         this.pointModes.delete(other.id);
@@ -5545,7 +5661,10 @@ export class App {
         this.touch(ve.d);
         this.pushVectors('Join lines', ve.d, vd.before);
         this.onToolChange();
-      } else this.pushVectors('Move point', ve.d, vd.before);
+      } else {
+        if(other && mine && (other.style || mine.style || other.clips || mine.clips))this.onNotice?.('Styled lines snap together. Joining brush styles is a later feature.');
+        this.pushVectors('Move point', ve.d, vd.before);
+      }
       this.requestRender();
       return;
     }
@@ -6039,6 +6158,8 @@ export class App {
     this.needsRender = false;
     const g = this.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha=1;g.globalCompositeOperation='source-over';g.setLineDash([]);
+    g.clearRect(0,0,this.canvas.width,this.canvas.height);
     g.fillStyle = getComputedStyle(document.body).getPropertyValue('--workspace') || '#2b2b31';
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -6132,17 +6253,10 @@ export class App {
       if (ink?.record.tool === 'pen') {
         const extra = ink.record.brush.smoothing < 0.15 ? ink.predicted : [];
         const points = [...ink.record.points, ...extra];
-        const live: StrokeRecord[] = [{ ...ink.record, points }];
-        const sym = ink.record.sym;
-        if (sym && sym.mode !== 'off') {
-          const n = symmetryCopies(sym.mode, sym.cx, sym.cy, 0, 0, 0).length;
-          for (let k = 1; k < n; k++) live.push({ ...ink.record, points: points.map((p) => {
-            const c = symmetryCopies(sym.mode, sym.cx, sym.cy, p.x, p.y, 0)[k]!;
-            return { ...p, x: c.x, y: c.y };
-          }) });
-        }
+        const preview={...ink.record,points};
+        const live: StrokeRecord[] = [preview,...this.symmetryVectors(preview)];
         // the preview keeps to the selection as the committed line will
-        vectors = [...vectors, ...this.clipToSelection(live, ink.clip)];
+        vectors = [...vectors, ...this.clipToSelection(live, ink.clip,false)];
       }
       return {
         line: raster?.plane === 'line' ? liveSrc(drawing.line) : drawing.line,

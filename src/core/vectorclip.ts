@@ -1,5 +1,6 @@
 import type { StrokePoint, StrokeRecord } from './stroke';
 import { at, eraseVectors, type VectorErase } from './vectorcut';
+import { selectionClip, vectorBounds, type VectorClip } from './vectorstyle';
 
 /**
  * Selections for vector lines: keep the parts of a stroke whose centre line falls inside a
@@ -18,9 +19,21 @@ function selected(mask: Uint8Array, width: number, height: number, x: number, y:
  * `keep = 'outside'`, outside it). Wholly kept: the same record (same id). Nothing kept: [].
  * Pieces get ids `${id}~c${k}`, keep pressure, tilt and time, and lose the taper at a cut end.
  */
-export function clipStrokeToMask(rec: StrokeRecord, mask: Uint8Array, width: number, height: number, keep: 'inside' | 'outside' = 'inside'): StrokeRecord[] {
+export function clipStrokeToMask(rec: StrokeRecord, mask: Uint8Array, width: number, height: number, keep: 'inside' | 'outside' = 'inside', compiled?: VectorClip): StrokeRecord[] {
   const P = rec.points;
   if (!P.length) return [];
+  if(rec.style || rec.clips) {
+    // Clip the visible mark, including tip overhang and scatter. Geometry is retained so a
+    // future point edit cannot expose paint beyond the saved restriction.
+    const clip=compiled ?? selectionClip(mask,width,height,keep==='outside');
+    if(!clip.runs.length)return [];
+    const box=vectorBounds(rec);
+    let intersects=false;
+    for(let i=0;i<clip.runs.length;i+=3)if(clip.runs[i]!>=box.y0 && clip.runs[i]!<box.y1 && clip.runs[i+1]!<box.x1 && clip.runs[i+2]!>box.x0){intersects=true;break;}
+    if(!intersects)return [];
+    if((rec.clips?.length ?? 0)>=16)throw new Error('This line has reached its selection clip limit.');
+    return [{...rec,clips:[...(rec.clips ?? []),clip]}];
+  }
   const want = keep === 'inside';
   const keeps = (p: { x: number; y: number }) => selected(mask, width, height, p.x, p.y) === want;
   // walk each segment in steps of at most one pixel, so a gap between two points is not missed
@@ -76,7 +89,7 @@ function cut(rec: StrokeRecord, a: number, b: number, k: number): StrokeRecord |
   pts.push(b === Math.floor(b) ? P[b]! : at(P, b));
   if (pts.length < 2) return null;
   const brush = { ...rec.brush, taperStart: a > 1e-6 ? 0 : rec.brush.taperStart, taperEnd: b < last - 1e-6 ? 0 : rec.brush.taperEnd };
-  return { ...rec, id: `${rec.id}~c${k}`, brush, points: pts };
+  return { ...rec, id: `${rec.id}~c${k}`, brush, points: pts, controls: undefined };
 }
 
 /**

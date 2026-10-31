@@ -1,5 +1,6 @@
 import type { SymmetryMode } from './adjust';
 import type { BrushSettings } from './brush';
+import type { VectorStyle, VectorClip, VectorControls } from './vectorstyle';
 
 /** One input sample in document space. */
 export interface StrokePoint {
@@ -14,6 +15,9 @@ export interface StrokePoint {
   t: number;
   /** Width multiplier set by point editing (missing = 1). */
   w?: number;
+  /** Captured material distance and normalized speed; editing never recalibrates these. */
+  u?: number;
+  speed?: number;
 }
 
 export type Tool = 'brush' | 'eraser' | 'pen' | 'fill';
@@ -24,6 +28,9 @@ export type Tool = 'brush' | 'eraser' | 'pen' | 'fill';
  * deterministic export and re-rendering at any resolution later.
  */
 export interface StrokeRecord {
+  style?: VectorStyle;
+  clips?: VectorClip[];
+  controls?: VectorControls;
   id: string;
   tool: Tool;
   brush: BrushSettings;

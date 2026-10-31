@@ -1,4 +1,5 @@
 import { cloneBrush, PRESETS, type BrushSettings } from './brush';
+import { readVectorStyle } from './vectorstyle';
 
 /**
  * Brush library categories (Procreate Dreams style). "Mine" holds the brushes you saved; your own
@@ -10,11 +11,13 @@ export const CATEGORIES: { id: BrushCategory; label: string }[] = [
   { id: 'sketch', label: 'Sketching' },
   { id: 'ink', label: 'Inking' },
   { id: 'paint', label: 'Painting' },
+  { id: 'vector', label: 'Vector' },
   { id: 'mine', label: 'My brushes' },
 ];
 
 /** Where each built-in brush lives. */
 const BUILT_IN: Record<string, BrushCategory> = {
+  'Vector Ink':'vector', 'Vector Chisel':'vector', 'Vector Dry Ink':'vector', 'Vector Pencil':'vector', 'Vector Dots':'vector', 'Vector Pattern':'vector',
   Pencil: 'sketch',
   'Shading Pencil': 'sketch',
   Charcoal: 'sketch',
@@ -126,6 +129,12 @@ export function readBrush(v: unknown): BrushSettings | null {
   if (typeof o.name !== 'string' || !o.name.trim()) return null;
   const base = cloneBrush(PRESETS[0]!);
   const out = { ...base, ...o, name: o.name.trim().slice(0, 40) } as BrushSettings;
+  if(o.vectorStyle !== undefined) {
+    try {out.vectorStyle=readVectorStyle(o.vectorStyle);}catch{return null;}
+    for(const [key,min,max] of [['size',.1,4096],['roundness',.01,1],['spacing',.02,10],['scatter',0,2],['flow',0,1],['opacity',0,1]] as const) {
+      if(typeof out[key]!=='number' || !Number.isFinite(out[key]) || out[key]<min || out[key]>max)return null;
+    }
+  }
   for (const k of Object.keys(base) as (keyof BrushSettings)[]) {
     const want = typeof base[k];
     if (typeof out[k] !== want) (out as unknown as Record<string, unknown>)[k] = base[k];

@@ -1,0 +1,12 @@
+{
+  "kind": "rea-client-deadline-failure-summary",
+  "operation": "search_strings",
+  "target_sha256": "11a8ceab708dfac1efea4b85d9febc52a7de8a5e8c37de59cc17dc53b93e0b89",
+  "provider_startup_budget_ms": 1800000,
+  "client_tool_deadline_seconds": 450,
+  "result_text": "tool call error: tool call failed for `rea/search_strings`\n\nCaused by:\n    timed out awaiting tools/call after 450s",
+  "retained_search_records_after_failure": 0,
+  "disposition": "No unchanged MCP retry. Completed evidence exported; MCP binary session closed. Continued with an explicit local REA stdio session using a longer call deadline and the same binary.",
+  "needed_host_setting_if_using_original_connection": "mcp_servers.rea.tool_timeout_sec must exceed provider startup, query, cleanup and delivery time.",
+  "note": "A client deadline is not a REA provider result or evidence of feature absence."
+}

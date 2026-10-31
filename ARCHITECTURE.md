@@ -1,5 +1,28 @@
 # Architecture
 
+Motion/Draw fixes (2026-10-30): `App.setFps` is an undoable comp edit that rebases playback,
+invalidates onion previews and requests a redraw; `MotionPanel` includes FPS/time-format in its
+ruler signature. The painting viewport is saved before Motion and restored on return to the same
+project/comp; loading another project discards it. Raster grain now uses a power-of-two stamp tile
+translated to document coordinates, reset at stroke start, instead of a document-sized scratch
+source for every dab. `LayerCards`/`LayersPopover` open a selected artwork source in Draw, show its
+own layers (or the standalone drawing’s cel stack), and add paint layers with `App.addPaintLayer`.
+Animate retains track lists and placement controls. Regression pages: `workspacefixes.html`, its
+responsive wrapper, and `brushperformance.html` (including the original grain routine as reference).
+
+Editable vector brushes (2026-10-30): `core/vectorstyle.ts` owns immutable v1 appearances,
+material distance/speed, deterministic dabs, portable alpha tips, clip/control validation and
+full-mark affine transforms. `brush/vector.ts` dispatches to the unchanged legacy algorithm or
+`brush/vectorstyled.ts` (union ink/chisel and bounded material coverage). All existing consumers
+retain the shared entry point. New recipes live in the existing Brush Studio/library’s Vector
+collection. `ui/vectorrestyle.ts` displays a detached preview; App validates its document context
+and commits one History step. Authored controls are persisted in records and cached App maps are
+cleared on undo/redo/load. `core/vectorcut.ts` intersects sparse segments with the eraser capsule,
+interpolates supported channels and uses conservative styled envelopes, with clip-aware hit
+checks. Persistent clips constrain the complete visible mark; centreline clipping remains the
+legacy path. Project schema 4 is required only when the new fields are captured. See
+`docs/research/clip-studio-paint/VECTOR-BRUSH-MILESTONE-2026-10-30.md` for validation and limits.
+
 Current code map reviewed 2026-10-14. See `HANDOFF.md` for the checked baseline and open work.
 
 Brush workflow (2026-10-23): `core/brushprefs.ts` validates bounded device-only size/opacity
@@ -353,7 +376,7 @@ Undoable document edits use commands and must update revisions/rendering, panel 
 
 Residency parks offscreen planes as PNG bytes or stored asset keys, shrinking canvases to 0-by-0. Rendering, export and pixel undo must request the necessary drawings through it. `device.ts` controls memory, page size, undo depth, onions and display resolution.
 
-`.2dope` is a self-contained ZIP of schema-3 `project.json`, PNG drawing assets and PCM WAV sound assets. Schema 1/2 files migrate on open; older builds refuse schema 3 rather than silently losing audio. Library captures can reference stored assets; archive captures must collect the bytes. File schema and database version are separate concepts. See `docs/project-format.md`.
+`.2dope` is a self-contained ZIP of schema-3/4 `project.json`, PNG drawing assets and PCM WAV sound assets. Schemas 1–3 migrate to the current in-memory file version without refitting geometry; plain earlier outlines still capture as schema 3, while versioned vector appearances/controls/clips require schema 4. Older builds refuse newer schemas rather than silently losing audio or vector appearance. Library captures can reference stored assets; archive captures must collect the bytes. File schema and database version are separate concepts. See `docs/project-format.md`.
 
 ## Output and deployment
 

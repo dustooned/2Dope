@@ -1,4 +1,5 @@
 import type { StrokePoint, StrokeRecord } from './stroke';
+import { insideVectorClips, vectorReach } from './vectorstyle';
 
 /**
  * Erasing vector lines, the way Clip Studio's vector eraser works:
@@ -36,13 +37,28 @@ function crossing(a: Pt, b: Pt, c: Pt, d: Pt): number | null {
 }
 
 /** Positions along a stroke (segment index + fraction) touched by the eraser path. */
-function touchedAt(points: StrokePoint[], path: Pt[], reach: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i]!;
-    let hit = false;
-    for (let k = 0; k < path.length && !hit; k++) hit = distToSegment(p, path[Math.max(0, k - 1)]!, path[k]!) <= reach;
-    if (hit) out.push(i);
+function touchedAt(points: StrokePoint[], path: Pt[], reach: number): [number,number][] {
+  const out: [number,number][] = [];
+  for (let i = 0; i < Math.max(1,points.length-1); i++) {
+    const a=points[i],b=points[i+1] ?? a;
+    if(!a || !b)continue;
+    const dx=b.x-a.x,dy=b.y-a.y,len=dx*dx+dy*dy;
+    const project=(p:Pt)=>len?Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/len)):0;
+    for(let k=0;k<path.length;k++) {
+      const c=path[Math.max(0,k-1)]!,d=path[k]!;
+      const distance=(t:number)=>distToSegment({x:a.x+t*dx,y:a.y+t*dy},c,d);
+      const candidates=[0,1,project(c),project(d)];
+      const cross=crossing(a,b,c,d);if(cross!==null)candidates.push(cross);
+      const t=candidates.reduce((best,n)=>distance(n)<distance(best)?n:best,0);
+      if(distance(t)>reach)continue;
+      let lo=0,hi=t;
+      if(distance(0)>reach)for(let n=0;n<24;n++){const mid=(lo+hi)/2;if(distance(mid)<=reach)hi=mid;else lo=mid;}
+      else hi=0;
+      const left=hi;lo=t;hi=1;
+      if(distance(1)>reach)for(let n=0;n<24;n++){const mid=(lo+hi)/2;if(distance(mid)<=reach)lo=mid;else hi=mid;}
+      else lo=1;
+      out.push([i+left,i+lo]);
+    }
   }
   return out;
 }
@@ -79,7 +95,10 @@ export function at(points: StrokePoint[], f: number): StrokePoint {
   const a = points[i]!;
   const b = points[i + 1] ?? a;
   const lerp = (x: number, y: number) => x + (y - x) * t;
-  return { x: lerp(a.x, b.x), y: lerp(a.y, b.y), pressure: lerp(a.pressure, b.pressure), tiltX: lerp(a.tiltX, b.tiltX), tiltY: lerp(a.tiltY, b.tiltY), t: lerp(a.t, b.t) };
+  return { x: lerp(a.x, b.x), y: lerp(a.y, b.y), pressure: lerp(a.pressure, b.pressure), tiltX: lerp(a.tiltX, b.tiltX), tiltY: lerp(a.tiltY, b.tiltY), t: lerp(a.t, b.t),
+    ...(a.w !== undefined || b.w !== undefined ? {w:lerp(a.w ?? 1,b.w ?? 1)} : {}),
+    ...(a.u !== undefined && b.u !== undefined ? {u:lerp(a.u,b.u)} : {}),
+    ...(a.speed !== undefined || b.speed !== undefined ? {speed:lerp(a.speed ?? 0,b.speed ?? 0)} : {}) };
 }
 
 /** The part of a stroke between fractional indices a..b, as a new record. Cut ends lose their taper. */
@@ -92,7 +111,7 @@ function piece(rec: StrokeRecord, a: number, b: number, k: number): StrokeRecord
   pts.push(at(P, b));
   if (pts.length < 2) return null;
   const brush = { ...rec.brush, taperStart: a > 1e-6 ? 0 : rec.brush.taperStart, taperEnd: b < last - 1e-6 ? 0 : rec.brush.taperEnd };
-  return { ...rec, id: `${rec.id}~${k}`, brush, points: pts };
+  return { ...rec, id: `${rec.id}~${k}`, brush, points: pts, controls: undefined };
 }
 
 /**
@@ -104,7 +123,20 @@ export function eraseVectors(strokes: StrokeRecord[], path: Pt[], radius: number
   const out: StrokeRecord[] = [];
   let changed = false;
   for (const rec of strokes) {
-    const touched = touchedAt(rec.points, path, radius + rec.brush.size / 2);
+    if(rec.clips?.length) {
+      let visible=false;
+      for(let i=0;i<path.length && !visible;i++) {
+        const a=path[Math.max(0,i-1)]!,b=path[i]!;
+        const steps=Math.min(20000,Math.max(1,Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)/Math.max(1,radius))));
+        for(let k=0;k<=steps && !visible;k++) {
+          const x=a.x+(b.x-a.x)*k/steps,y=a.y+(b.y-a.y)*k/steps;
+          visible=insideVectorClips(rec,x,y);
+          for(let n=0;n<8 && !visible;n++)visible=insideVectorClips(rec,x+radius*Math.cos(n*Math.PI/4),y+radius*Math.sin(n*Math.PI/4));
+        }
+      }
+      if(!visible){out.push(rec);continue;}
+    }
+    const touched = touchedAt(rec.points, path, radius + (rec.style ? vectorReach(rec) : rec.brush.size / 2));
     if (!touched.length) {
       out.push(rec);
       continue;
@@ -121,10 +153,8 @@ export function eraseVectors(strokes: StrokeRecord[], path: Pt[], radius: number
       rec.points.length - 1,
     ];
     const gone = new Set<number>();
-    for (const i of touched) {
-      let k = 0;
-      while (k < cuts.length - 2 && cuts[k + 1]! <= i) k++;
-      gone.add(k);
+    for (const [a,b] of touched) for(let k=0;k<cuts.length-1;k++) {
+      if(b>=cuts[k]! && a<=cuts[k+1]!) gone.add(k);
     }
     let n = 0;
     for (let k = 0; k < cuts.length - 1; k++) {

@@ -71,7 +71,7 @@ describe('shared audio timing and storage', () => {
     const bad = structuredClone(raw); bad.comps.c1.audio![0]!.trimOut = 0.5;
     expect(() => validateProjectFile(bad)).toThrow(/source out/);
     const old = structuredClone(raw); delete old.comps.c1.audio; old.schema = 2;
-    expect(validateProjectFile(old).schema).toBe(3);
+    expect(validateProjectFile(old).schema).toBe(SCHEMA);
   });
 });
 

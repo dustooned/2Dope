@@ -1,4 +1,66 @@
-# The .2dope project format (schema 3)
+# The .2dope project format (schemas 3–4)
+
+## Editable vector appearances (2026-10-30)
+
+The reader accepts schemas 1–4 and normalizes the in-memory file version to 4. Captures containing
+only the earlier sampled outlines continue to write schema 3; any `style`, authored `controls`,
+or persistent `clips` requires schema 4 so older readers refuse rather than discard appearance.
+Older geometry is never refitted. The versionless outline renderer remains unchanged.
+
+Each vector can carry `style: { v: 1, mode: "ink" | "flat" | "stamp", tip: "dry" | "pencil" |
+"dot" | "dash" | "custom", step, matrix? }`. `step` is captured distance spacing in the material
+domain. Custom tips additionally contain `mask: { width, height, alpha }`: at most 128 × 128 alpha
+pixels, two hexadecimal characters per pixel. These are inline immutable snapshots, not links to
+device brushes or external image URLs. No asynchronous tip decode is needed when opening,
+rendering, exporting or undoing. Inline masks favor a simple self-contained format over deduplication;
+repeated custom tips can increase project JSON size.
+
+Styled points retain calibrated pressure, tilt, time and local `w`, plus `u` (ordered absolute
+material distance) and `speed` (normalized, captured once after correction). Cuts interpolate these
+channels. Stamps use `seed` and the absolute grid index `u / step`, retaining phase and random
+identity on fragments. Point edits keep `u` and recorded speed, stretching the material domain over
+the new path; explicit restyle resets distance on that path and preserves speed. Width edits do not
+re-space existing marks. The initial spacing expands for extremely long paths to stay within
+12,000 marks. Styled lines allow up to 20,000 input samples; legacy limits remain unchanged.
+
+`controls: { anchors: number[], modes: { [pointIndex]: "curve" | "straight" }, handles:
+{ [pointIndex]: { inx, iny, outx, outy } } }` records authored editing state. Handles are offsets in
+document coordinates. Newly styled paths and point edits persist it; width/corner/handle/point
+undo restores the corresponding state. Legacy cuts discard stale control indices while retaining
+sampled channels; eraser fragments initialize their controls when edited again.
+
+`clips` is an intersected list of at most 16 immutable pixel restrictions. Each is `{ runs, matrix }`:
+`runs` contains ordered triples `[rowY, startX, exclusiveEndX, ...]`, at most 65,536 spans, with an
+invertible six-value affine matrix. Clips restrict visible paint, not only path centres, survive
+later edits and travel with transforms. Inside/outside restrictions preserve both appearances when
+restyling through a canvas selection. Styled clipping retains the sampled path under a clip rather
+than approximating a textured mark by cutting only its centreline.
+
+Full-mark transforms compose `style.matrix`, move path points and handle offsets, and transform
+the clips. The renderer evaluates the original nib in its canonical coordinates and applies the
+affine matrix, preserving rotation, reflection, nonuniform scale and material identity. Legacy
+outlines keep their existing scalar width rule. Multi-style joins are deferred; snapping remains.
+
+Validation refuses unsupported renderer versions, invalid or invisible tips, unordered/missing
+channels, singular transforms, malformed controls/clips and work limits. The estimated project
+budget for inline tip hex, clip numbers and authored controls is 64 MiB; new strokes and restyle
+check it before changing the drawing. Undo keeps immutable assets reachable with its records.
+The renderer shares one scratch coverage surface (about one million pixels, maximum side 2048)
+and an LRU of 16 decoded tips. Large marks or high zoom may soften at that bounded resolution.
+
+Brush recipes use optional `BrushSettings.vectorStyle` in the existing device library. Stroke
+creation snapshots it into `style` and strips unused raster images and the working recipe from
+the stored brush. Selecting a recipe affects future strokes. Explicit restyle uses a detached
+preview and commits one History step; cancellation never mutates the shared project.
+Keeping weight during restyle accounts for any old full-mark matrix: uniform scaling is preserved
+exactly; a nonuniform transform uses the square root of its absolute determinant (area-equivalent
+weight). A newly chosen nib cannot preserve all directional widths of the old stretched mark.
+
+Committed immutable marks have an LRU coverage cache capped at 16 records and 2,097,152 pixels
+(8 MiB RGBA), in addition to the shared scratch surface. Pointer previews do not enter it; edits
+replace records and therefore invalidate cached coverage, and loading a project clears it.
+An exact visible-alpha check before committing styled strokes uses 512 × 512 readback tiles and
+stops at the first painted pixel. A stroke hidden entirely by its selection adds no record/history.
 
 Brush working memory, Favorites and Recent use device-only `2dope.brushes.preferences`
 (version 1: bounded name/size/opacity entries, favorite names, five recent names). No brush image

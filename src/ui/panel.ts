@@ -131,6 +131,33 @@ export function buildPanel(app: App, root: HTMLElement): void {
   const body = el('div', { class: 'panel-body' });
   const refreshers: (() => void)[] = [];
 
+  const styleBox=el('fieldset');styleBox.append(el('legend',{},'Vector appearance'));
+  const style=el('select',{'aria-label':'Vector renderer'});
+  for(const [value,text] of [['legacy','Original outline'],['ink','Expressive ink'],['flat','Chisel'],['stamp','Material tip']])style.append(el('option',{value:value!},text));
+  const tip=el('select',{'aria-label':'Vector material tip'});
+  for(const [value,text] of [['dry','Dry ink'],['pencil','Pencil / chalk'],['dot','Dots'],['dash','Pattern dashes'],['custom','Imported image']])tip.append(el('option',{value:value!},text));
+  const apply=el('button',{type:'button'},'Apply brush to selected lines');apply.onclick=()=>app.openVectorRestyle();
+  style.onchange=()=>{
+    if(style.value==='legacy')delete app.brush.vectorStyle;
+    else app.brush.vectorStyle={v:1,mode:style.value as 'ink'|'flat'|'stamp',tip:'dry'};
+    app.brushChanged();
+  };
+  tip.onchange=()=>{
+    if(!app.brush.vectorStyle)return;
+    if(tip.value==='custom' && !app.brush.vectorStyle.mask){tip.value=app.brush.vectorStyle.tip;app.onNotice?.('Import a tip image below first.');return;}
+    app.brush.vectorStyle={...app.brush.vectorStyle,tip:tip.value as NonNullable<BrushSettings['vectorStyle']>['tip']};app.brushChanged();
+  };
+  styleBox.append(style,tip,apply,el('p',{class:'hint'},'Choose a brush for future lines. Apply previews changes to a point-edited line or complete selected vector lines. Material spacing stays attached to the path through point edits and cuts.'));
+  body.append(styleBox);
+  refreshers.push(()=>{styleBox.hidden=app.tool!=='pen';style.value=app.brush.vectorStyle?.mode ?? 'legacy';tip.hidden=style.value!=='stamp';tip.value=app.brush.vectorStyle?.tip ?? 'dry';});
+  const supported=(key:string):boolean=>{
+    if(app.tool!=='pen')return true;
+    const mode=app.brush.vectorStyle?.mode ?? 'legacy';
+    return ['size','opacity','sizeDyn','taperStart','taperEnd','smoothing','stabilize','motionFilter','expression','postSmooth','pulledString'].includes(key)
+      || (['flat','stamp'].includes(mode) && ['roundness','angle','followDirection'].includes(key))
+      || (mode==='stamp' && ['spacing','flow','scatter','opacityDyn','flowDyn'].includes(key));
+  };
+
   for (const section of SECTIONS) {
     const fs = el('fieldset');
     fs.append(el('legend', {}, section.title));
@@ -140,6 +167,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
       const input = el('input', { type: 'range', min: String(def.min), max: String(def.max), step: String(def.step) });
       const out = el('output');
       const sync = () => {
+        if(def.key==='spacing')input.max=app.tool==='pen' && app.brush.vectorStyle?.mode==='stamp'?'4':String(def.max);
         input.value = String(app.brush[def.key] ?? 0);
         out.textContent = fmt(app.brush[def.key] ?? 0, def.step, def.unit);
       };
@@ -149,6 +177,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
         app.brushChanged();
       });
       refreshers.push(sync);
+      refreshers.push(()=>{row.hidden=!supported(def.key);});
       row.append(name, input, out);
       fs.append(row);
     }
@@ -161,11 +190,13 @@ export function buildPanel(app: App, root: HTMLElement): void {
       });
       // anti-aliasing is on unless a brush turns it off
       refreshers.push(() => (input.checked = t.key === 'antiAlias' ? app.brush.antiAlias !== false : !!app.brush[t.key]));
+      refreshers.push(()=>{row.hidden=!supported(t.key);});
       row.append(input, el('span', {}, t.label));
       fs.append(row);
     }
-    for (const key of section.dyn ?? []) fs.append(dynamicEditor(app, key, refreshers));
+    for (const key of section.dyn ?? []) {const editor=dynamicEditor(app,key,refreshers);fs.append(editor);refreshers.push(()=>{editor.hidden=!supported(key);});}
     if (section.tilt) fs.append(tiltEditor(app, refreshers));
+    refreshers.push(()=>{fs.hidden=app.tool==='pen' && (section.tilt===true || section.title==='Colour and wet mix');});
     body.append(fs);
   }
 
@@ -173,6 +204,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
   {
     const fs = el('fieldset');
     fs.append(el('legend', {}, 'Tip'));
+    refreshers.push(()=>{fs.hidden=app.tool==='pen' && app.brush.vectorStyle?.mode!=='stamp';});
     const preview = el('canvas', { width: '64', height: '64', class: 'tip-preview' });
     const status = el('span', { class: 'hint' });
     const file = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: '' });
@@ -184,7 +216,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
       g.fillStyle = '#fff';
       g.fillRect(0, 0, 64, 64);
       const url = app.brush.tipImage;
-      status.textContent = url ? 'Image tip' : 'Round tip';
+      status.textContent = app.tool==='pen' && app.brush.vectorStyle?.tip==='custom' ? 'Portable vector image tip' : url ? 'Image tip' : 'Round tip';
       if (!url) {
         g.fillStyle = '#222';
         g.beginPath();
@@ -212,6 +244,14 @@ export function buildPanel(app: App, root: HTMLElement): void {
         c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
         app.brush.tipImage = c.toDataURL('image/png');
         await loadTip(app.brush.tipImage);
+        bmp.close();
+        if(app.tool==='pen') {
+          const sprite=imageTipSprite(app.brush.tipImage,'#000000');
+          if(!sprite)throw new Error('Tip decode failed');
+          const data=sprite.getContext('2d')!.getImageData(0,0,sprite.width,sprite.height).data;
+          let alpha='';for(let i=3;i<data.length;i+=4)alpha+=data[i]!.toString(16).padStart(2,'0');
+          app.brush.vectorStyle={v:1,mode:'stamp',tip:'custom',mask:{width:sprite.width,height:sprite.height,alpha}};
+        }
         app.brushChanged();
         draw();
       } catch {
@@ -220,6 +260,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
     });
     round.addEventListener('click', () => {
       delete app.brush.tipImage;
+      if(app.tool==='pen' && app.brush.vectorStyle)app.brush.vectorStyle={v:1,mode:'stamp',tip:'dot'};
       app.brushChanged();
       draw();
     });
@@ -302,7 +343,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
     const prev = app.onToolChange;
     return () => {
       prev();
-      drawPreview();
+      refresh();
     };
   })();
   refresh();
@@ -487,6 +528,7 @@ function dynamicEditor(app: App, key: DynKey, refreshers: (() => void)[]): HTMLE
   wrap.append(top);
 
   const get = (): Dynamic => app.brush[key];
+  refreshers.push(()=>{const speed=sel.querySelector<HTMLOptionElement>('option[value=speed]')!;speed.disabled=speed.hidden=app.tool==='pen' && !app.brush.vectorStyle;});
   sel.addEventListener('change', () => {
     get().control = sel.value as Control;
     app.brushChanged();

@@ -2,6 +2,109 @@
 
 ## Current state (2026-10-30) — read this first
 
+### Release scope (2026-10-30)
+
+The user authorized committing and pushing this snapshot: editable vector brushes and custom tips,
+Motion/FPS redraw and viewport fixes, faster textured raster brushes, and source paint layers in
+Draw, including their research, documentation and regression fixtures. Earlier "uncommitted"
+labels below record the status when those implementation notes were written.
+
+**Deferred at the user's request:** the later UI cleanup for Line/Fill/Whole, additional tools,
+overlapping controls and faster adjustment access. That investigation made no application changes.
+The local `main` push runs `.github/workflows/pages.yml` to publish GitHub Pages. Validation for
+the completed implementation: 559 unit tests, production build, 40 browser fixtures, plus explicit
+tablet/landscape checks. Physical stylus feel remains unverified.
+
+### Motion redraw, textured-brush stalls and Draw paint layers (2026-10-30, uncommitted)
+
+User reported Motion/FPS glitching the drawing space, Pencil/Paint freezing (Ink was fine), and
+Draw Layers showing tracks instead of the artwork's own paint layers.
+
+- `App.setFps` now requests a redraw, clears onion previews, rebases playback and notifies autosave
+  through one undoable comp-rate command. `MotionPanel` includes FPS/time format in its ruler
+  signature. A two-color nested-source test reproduces and verifies immediate remapping after
+  FPS changes and Undo/Redo. Motion temporarily owns its viewport; returning to the same painting
+  comp restores Draw pan/zoom/rotation. Another project discards that saved view. Screen redraws
+  explicitly reset alpha/blending and clear the surface to avoid leftover drawing state.
+- Raster grain formerly resolved a document-sized scratch surface for each dab. Pencil 8px on
+  1920×1080 measured median **206.3 ms** per eight-sample input batch, worst **573.9 ms**. Textured
+  Paint 48px commit measured **1185.9 ms**. `RasterEngine.stamp` now uses a growing power-of-two
+  stamp tile, translated to document coordinates; stroke start/resize releases its previous size.
+  Focused rerun: Pencil median **3.5 ms**, worst **11.9 ms**; Paint 48px commit **149.9 ms** (later
+  suite run **125.9 ms**; final run **44.9 ms** after resetting the tile between strokes).
+  Dense tapered paint can still have a brief finish cost; timings vary with brush/page/device.
+  Original-vs-new reference checks preserve grain phase/coverage/color within canvas rounding
+  (at most 2/255 alpha and premultiplied color; relative alpha error below 0.0001). Ink matched
+  exactly. Existing saved raster pixels are not rerendered or modified.
+- In Draw, opening Layers on a selected placed asset opens its source through the existing asset
+  controller. The full panel lists that source's layers and names the artwork, with long names
+  ellipsized. Add creates a paint layer inside the source, retaining its frame/playback settings;
+  Done restores the shot. Standalone Draw shows its current cel/paint stack. Animate keeps shot
+  tracks and Background/Object/Animation choices. Paint-card selection, eye/options, reordering,
+  duplication/deletion and undo continue through the existing comp editor. Empty assets can add
+  their first paint layer again. The alternate layer popover follows the same scope.
+
+Checks: **559 tests / 68 files passed**; production build passed (existing chunk-size warning).
+**40/40 browser fixtures passed** on isolated `127.0.0.1:5240`. New `workspacefixes.html` passes
+23 checks for Motion pixels/FPS/ruler/undo/view restoration and source paint ownership/layer actions.
+Its responsive wrapper passes 23 checks each on phone (390×844), tablet (834×1112), and landscape
+(844×390), including long source names. `brushperformance.html` passes 10 checks and
+measures Pencil/Paint/Ink and compares against the retained original grain routine. Existing
+painting fixtures were updated to exercise the intentional Draw paint-layer flow, while still
+testing Animate's Background creation. Final Pencil 8px batches measured median **3.3 ms**, worst
+**10.3 ms**; Paint 48px batches median **1.6 ms**, worst **3.2 ms**, commit **44.9 ms**. Ink control
+and all legacy/vector/export fixtures passed. `git diff --check` reported no whitespace errors.
+
+Changed this follow-up: `src/app.ts`, `brush/raster.ts`, `ui/motion.ts`, `ui/layercards.ts`,
+`ui/layerspop.ts`, `style.css`, `ui/manualtext.ts`; new brush/workspace browser fixtures and responsive
+wrapper; updated `paintingplanes.browser.ts`/`paintingworkflow.browser.ts`, architecture and manual.
+No format/schema changes, commit, push or deployment. Physical tablet/iPad Safari validation remains
+unavailable; reported Motion symptoms were addressed through the reproduced redraw/view faults.
+
+### Editable vector brushes — completed locally (2026-10-30, uncommitted)
+
+The user asked to finish Claude's interrupted vector-brush assignment. Parsed Claude session
+`fc2bb431-0754-4284-a884-cf7fc33e8042`: Claude stopped after source inspection/design notes,
+without application implementation changes. Recovered the notes from its session transcript and
+implemented the milestone here. Existing research and pen/tablet work were preserved.
+
+- Brushes → **Vector** offers Ink, Chisel, Dry Ink, Pencil, Dots and Pattern. Studio supports
+  original/ink/chisel/material routes and custom image-tip import; unsupported controls hide.
+- Explicit **Apply brush to lines** uses a detached preview, keeps weight by default, supports
+  brush weight/taper, cancels without mutations and applies as one undo/autosave change. An active
+  canvas selection preserves the original appearance outside it. Project/frame/layer/data guards
+  refuse stale previews. Library selection affects future strokes only.
+- New marks retain immutable v1 appearance, inline 128² custom alpha tips, calibrated pressure,
+  local width, captured speed/material distance, authored anchors/modes/handles and visible-mark
+  selection clips. Cuts interpolate channels and retain stamp phase; sparse segments respond to
+  the eraser. Full-mark affine transforms include tips, reflection, handles and clips.
+- Shared rendering covers drawing, thumbnails/playback, masks, nested assets and export. Legacy
+  versionless outlines keep their original algorithm. Styled/control/clip captures write schema 4;
+  plain earlier outlines still write schema 3. My Assets remains standalone.
+- Buffers/work are bounded. A 16-record / 8 MiB coverage cache makes unchanged dense marks cheap
+  to replay; previews remain transient, edits replace records, project load clears the cache.
+
+Checks: **559 unit tests / 68 files passed**, production build passed (existing chunk-size warning),
+**37/37 browser fixtures passed** on isolated `127.0.0.1:5230`, including the new 46-check specimen
+and its 390×844 wrapper. The specimen tests fresh-origin portability after library deletion,
+different pen calibration, exact PNG Lines output, nested vector masks/My Assets, restyle history,
+authored controls, selections, nonuniform/reflected marks and cache invalidation. Desktop stress
+measurement: 1,500-point dry line median **8.9 ms**, worst **11.6 ms** uncached; twelve dense lines
+median **1.4 ms/frame** with caching, worst/cold **107.8 ms**. This does not establish pen latency.
+
+Open `/tests/vectorbrushes.html` on the dev server for the draggable four-style specimen. Full
+implementation/check/limit notes: [vector milestone](docs/research/clip-studio-paint/VECTOR-BRUSH-MILESTONE-2026-10-30.md).
+Changed areas: `core/vectorstyle`, stroke/brush/brushlib, cuts/clips/selection transforms, vector
+dispatcher/styled renderer, App point/restyle/creation flows, Brush Studio/library/commands/CSS,
+schema/capture, tests/fixture reporter and manual/format/architecture notes.
+
+Limits: cold dense frames can still pause; large/high-zoom marks soften at the bounded scratch
+resolution. Inline tips/clips can enlarge JSON (64 MiB resource estimate). Erasing uses a
+conservative styled footprint rather than exact tip-hole hit testing. Advanced joins, ribbons,
+pinch/redraw/simplify and a dedicated vector-layer policy remain deferred. Physical Wacom/Apple
+Pencil feel and iPad Safari memory were not verified. No commit, push, deployment or new CSP
+native analysis was performed.
+
 ### Pen and tablet settings (2026-10-30, uncommitted on main)
 
 The user asked to optimise for Wacom and other tablet drivers with custom pen settings. Browsers
@@ -83,6 +186,38 @@ zoom, pan moved the view, and eraser switched to the Eraser with the tip restori
 three kept the menu closed; `menu` still opened it. Not verified: a real Wacom (whether Chrome
 receives the driver's keystroke and Erase as expected, with Windows Ink on and off) and Wacom
 Pan/Scroll, which sends wheel events (plain wheel zooms the canvas).
+
+### Vector drawing and custom-brush REA (2026-10-30, research only)
+
+The user requested a deep REA study of CLIP STUDIO PAINT's vector drawing/layers and custom
+brush variety for possible 2Dope work. Read
+[the study](docs/research/clip-studio-paint/VECTOR-BRUSH-REA-2026-10-30.md) and
+[the proposed implementation](docs/research/clip-studio-paint/VECTOR-BRUSH-IMPLEMENTATION-PLAN.md).
+The research folder retains REA SQLite, PE import/export and native function evidence.
+
+Key distinction: 2Dope already retains editable stroke records, but the vector renderer draws a
+solid outline and pen creation strips custom tip/grain images. Rich editable styles require a
+versioned appearance renderer, durable geometry/channels, material packaging/loading and reliable
+channel-preserving cuts. This is a proposal, not implementation authorization.
+
+Native functions were decompiled in shipped `iswCoreTG.dll` (IllustStudio Libraries For Trigraph,
+version 1.10.0.0), including pen-head replacement, channel-preserving curve division and a geometric
+curve renderer. Its use by the active CSP 5.0.4 tool is unverified; it is absent from the main
+executable's static imports. Do not describe this legacy component as the confirmed modern brush
+engine. The report separates completed evidence from timeouts and remaining runtime questions.
+The modern main-executable Ghidra trace remained incomplete even with a 30-minute reduced-profile
+startup window; failure diagnostics are retained and all task-owned analysis processes were closed.
+Two open questions are recorded in the REA bundle: modern rendering internals and physical pen feel.
+
+Claude implementation instructions: [CLAUDE-VECTOR-BRUSH-HANDOFF.md](docs/CLAUDE-VECTOR-BRUSH-HANDOFF.md).
+This scopes the first usable custom-vector-brush milestone, with an isolated specimen first,
+compatibility/editing foundations and application integration. Giving Claude that assignment is
+separate from this research; the instructions do not mean application implementation has happened.
+
+Changed by this research: this handoff and `docs/research/clip-studio-paint/` only. Application
+source was inspected, not edited. Concurrent pen/tablet-settings work was present and preserved.
+Documentation/evidence checks are recorded in the report; application tests/build and physical
+stylus comparisons were not run for this research. No commit, push or deployment by this study.
 
 ## Earlier state (2026-10-26)
 

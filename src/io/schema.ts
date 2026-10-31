@@ -23,6 +23,7 @@ import {
 import { CAPTION_FIELDS } from '../core/timeline';
 import type { SoundClip } from '../core/audio';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
+import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_STYLE_POINTS, vectorResourceCost, VECTOR_RESOURCE_BUDGET } from '../core/vectorstyle';
 
 /**
  * The 2Dope project file. A `.2dope` is a ZIP holding `project.json` plus `assets/*.png`
@@ -34,7 +35,7 @@ import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 3;
+export const SCHEMA = 4;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -232,6 +233,8 @@ function point(v: unknown): StrokePoint {
   };
   // per-point width from point editing (optional; older files have none)
   if (v.w !== undefined) out.w = num(v.w, 'point width', 0.05, 20);
+  if (v.u !== undefined) out.u = num(v.u, 'material distance', 0, 1e9);
+  if (v.speed !== undefined) out.speed = num(v.speed, 'recorded speed', 0, 1);
   return out;
 }
 
@@ -245,6 +248,7 @@ function brush(v: unknown): BrushSettings {
   for (const k of ['size', 'hardness', 'spacing', 'opacity', 'flow', 'roundness', 'angle', 'scatter', 'grain', 'grainScale', 'taperStart', 'taperEnd', 'smoothing'] as const) {
     if (typeof merged[k] !== 'number' || !Number.isFinite(merged[k])) throw new SchemaError(`brush ${k} must be a number`);
   }
+  if(v.vectorStyle !== undefined) merged.vectorStyle = readVectorStyle(v.vectorStyle);
   return merged;
 }
 
@@ -255,7 +259,7 @@ function stroke(v: unknown): StrokeRecord {
   if (!Array.isArray(v.points) || v.points.length > MAX_POINTS) throw new SchemaError('a stroke has too many points');
   const color = str(v.color, 'stroke color', 9);
   if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new SchemaError('a stroke color must look like #rrggbb');
-  return {
+  const out: StrokeRecord = {
     id: str(v.id, 'stroke id', 64),
     tool: tool as Tool,
     brush: brush(v.brush),
@@ -263,6 +267,26 @@ function stroke(v: unknown): StrokeRecord {
     seed: int(v.seed, 'stroke seed', 0, 0xffffffff),
     points: v.points.map(point),
   };
+  if(v.style !== undefined) {
+    if(out.points.length>MAX_STYLE_POINTS)throw new SchemaError('A styled vector has too many samples');
+    out.style=readVectorStyle(v.style);
+    num(out.brush.size,'vector size',.1,4096);num(out.brush.roundness,'vector aspect',.01,1);num(out.brush.scatter,'vector scatter',0,2);
+    num(out.brush.opacity,'vector opacity',0,1);num(out.brush.flow,'vector flow',0,1);
+    num(out.brush.spacing,'vector spacing',.02,10);num(out.brush.taperStart,'vector start taper',0,1e6);num(out.brush.taperEnd,'vector end taper',0,1e6);
+    for(const key of ['sizeDyn','opacityDyn','flowDyn'] as const) {
+      const dyn=out.brush[key];
+      if(!['off','pressure','tilt','speed'].includes(dyn.control) || typeof dyn.invert!=='boolean')throw new SchemaError('Invalid vector dynamic control');
+      num(dyn.min,'vector dynamic minimum',0,1);num(dyn.curve,'vector dynamic curve',.01,100);num(dyn.jitter,'vector dynamic jitter',0,1);
+    }
+    for(let i=0;i<out.points.length;i++) {
+      const p=out.points[i]!;
+      if(p.u===undefined || p.speed===undefined || (i && p.u<out.points[i-1]!.u!)) throw new SchemaError('A styled vector is missing ordered material channels');
+    }
+    if(!out.style.step || ((out.points.at(-1)?.u ?? 0)-(out.points[0]?.u ?? 0))/out.style.step>MAX_STAMPS) throw new SchemaError('Vector brush work limit exceeded');
+  }
+  if(v.clips !== undefined) out.clips=readVectorClips(v.clips);
+  if(v.controls !== undefined) out.controls=readVectorControls(v.controls,out.points.length);
+  return out;
 }
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -482,6 +506,8 @@ export function migrate(input: unknown): Record<string, unknown> {
   if (schema > SCHEMA) throw new SchemaError(`this project was made by a newer version of 2Dope (file format ${schema}, this version reads up to ${SCHEMA}). Update 2Dope to open it.`);
   if (schema < 2) raw = from1to2(raw);
   if ((raw.schema as number) < 3) raw = { ...raw, schema: 3 };
+  // Schema 4 introduces versioned marks; older sampled geometry needs no refitting.
+  if ((raw.schema as number) < 4) raw = { ...raw, schema: 4 };
   return raw;
 }
 
@@ -505,6 +531,7 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     }
   }
   let vectorTotal = 0;
+  let vectorResources = 0;
   for (const id of ids) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new SchemaError(`drawing id "${id}" is not allowed`);
     const d = (raw.drawings as Record<string, unknown>)[id];
@@ -520,6 +547,8 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     if (vectorTotal > MAX_VECTORS) throw new SchemaError('the project has too many vector strokes');
     const role = d.role === 'key' || d.role === 'breakdown' || d.role === 'inbetween' ? d.role : null;
     drawings[id] = { num: int(d.num, `drawing ${id} number`, 1, 1e9), ...planes, vectors: vectors.map(stroke), ...(role ? { role } : {}) };
+    for(const rec of drawings[id]!.vectors)vectorResources+=vectorResourceCost(rec);
+    if(vectorResources>VECTOR_RESOURCE_BUDGET)throw new SchemaError('The project exceeds the 64 MB vector material/clip budget');
   }
 
   if (!isObj(raw.comps)) throw new SchemaError('the project has no comps');

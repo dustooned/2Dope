@@ -43,6 +43,8 @@ try {
     const ok = !!summary && !fails.length && !/^Running/.test(summary) && !/[1-9]\d* failed/.test(summary);
     if (!ok) failed++;
     console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}: ${summary || 'no summary'}`);
+    const measurements = (await value(`[...document.querySelectorAll('#results li')].map((l) => l.textContent).filter((t) => t.startsWith('Measured:'))`)) ?? [];
+    for (const measurement of measurements) console.log(`       ${measurement}`);
     for (const f of fails) console.log(`       ${f.slice(0, 240)}`);
     ws.close();
     await fetch(`http://127.0.0.1:${port}/json/close/${tab.id}`);

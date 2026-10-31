@@ -1,4 +1,5 @@
 import type { StrokeRecord } from './stroke';
+import { transformVector, vectorSelected } from './vectorstyle';
 
 /**
  * Selection transform (pure maths and pixels, no DOM): move, scale, rotate and flip what is inside a
@@ -146,21 +147,10 @@ export function transformRegion(src: Uint8ClampedArray, w: number, h: number, ma
 /** Vector strokes whose points all lie inside the selection move with it; the rest stay put. */
 export function transformVectors(vectors: StrokeRecord[], mask: Uint8Array, w: number, h: number, m: Mat, scale: number): { vectors: StrokeRecord[]; moved: number } {
   let moved = 0;
-  const inside = (x: number, y: number) => {
-    const px = Math.floor(x), py = Math.floor(y);
-    return px >= 0 && py >= 0 && px < w && py < h && mask[py * w + px] === 1;
-  };
   const out = vectors.map((v) => {
-    if (!v.points.length || !v.points.every((p) => inside(p.x, p.y))) return v;
+    if (!vectorSelected(v,mask,w,h)) return v;
     moved++;
-    return {
-      ...v,
-      brush: { ...v.brush, size: v.brush.size * Math.abs(scale) },
-      points: v.points.map((p) => {
-        const [x, y] = applyPoint(m, p.x, p.y);
-        return { ...p, x, y };
-      }),
-    };
+    return transformVector(v,m,scale);
   });
   return { vectors: moved ? out : vectors, moved };
 }
