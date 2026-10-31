@@ -2,6 +2,22 @@
 
 ## Current state (2026-10-30) — read this first
 
+### Effects button in Full Motion (2026-10-30, uncommitted)
+
+The user could not find Effects in Motion at the Full interface level. Full has long hidden the
+floating tool row (where the ✦ bubble lives; `style.css` `body.ui-full .bub-tools`), so Effects was
+reachable only from a layer's ⋯ menu. `src/ui/motion.ts` adds an Effects button after Flipbook in
+the timeline bar, marked `data-dup` so Simple and Focus (which have the bubble) hide it. It opens
+the selected drawing layer, else the first drawing layer, else a notice, matching the bubble.
+Auto-key and Through camera were already in Full under Keyframes, easing and view options.
+Manual (Motion list) and UPDATES entry added.
+
+Checks (actual): `npm test` 69 files / 562 passed; `npm run build` passed; `git diff --check`
+clean. In the dev app on a test origin at Full level, Motion showed the Effects button and it
+opened the Effects card for the drawing layer, with no console errors. With the `ui-simple` body
+class the button computes to `display: none` (the bubble covers it). Not checked: narrow/touch
+layouts. Browser fixtures not run.
+
 ### Workspace UI release scope (2026-10-30)
 
 The user authorized committing and pushing the mode-first workspace cleanup, per-mode

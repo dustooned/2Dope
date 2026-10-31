@@ -160,6 +160,11 @@ export class MotionPanel {
       ),
       group(
         btn('Flipbook', 'Edit the selected drawing layer frame by frame in Draw’s flipbook', () => app.openFlipbook?.(ed.primary?.kind === 'drawings' ? ed.primary.id : undefined)),
+        dup(btn('Effects', 'Effects of the selected drawing layer (line boil, ripple, grain...)', () => {
+          const id = ed.primary?.kind === 'drawings' ? ed.primary.id : ed.comp.layers.find((l) => l.kind === 'drawings')?.id;
+          if (id) app.openEffects?.(id);
+          else app.onNotice?.('Add a drawing layer first, then give it effects.');
+        })),
         btn('↑ Up', 'Move the selected layer up (in front)', () => ed.primary && ed.reorder(ed.primary.id, -1)),
         btn('↓ Down', 'Move the selected layer down (behind)', () => ed.primary && ed.reorder(ed.primary.id, 1)),
         this.multiBtn,
