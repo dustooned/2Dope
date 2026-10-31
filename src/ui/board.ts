@@ -3,6 +3,7 @@ import { boardSpeakers, formatDialogue, parseDialogue, splitPanel, SPEAKER_MAX, 
 import { CAPTION_FIELDS, type CaptionField } from '../core/timeline';
 import type { AudioPlayback } from '../audio';
 import { BoardTimeline } from './boardtimeline';
+import { BoardGrid } from './boardgrid';
 import { attachContextMenu, type CtxItem } from './contextmenu';
 import { frameMenu } from './framemenu';
 import { autoIcon, decorate, setLabel } from './icons';
@@ -27,6 +28,10 @@ const CAMERA_PICKS = ['Wide', 'Medium', 'Close-up', 'Extreme close-up', 'Over th
  * selected panel. Panels are the frames of the board's guide layer, so retiming here is retiming
  * everywhere, and the board stays out of final renders.
  */
+/** Story's views of the one board: Grid (pictures), Panels (cards to write on), Timeline, or Both. */
+export type BoardView = 'grid' | 'panels' | 'timeline' | 'split';
+const BOARD_VIEWS: BoardView[] = ['grid', 'panels', 'timeline', 'split'];
+
 export class BoardPanel {
   private readonly bar = el('div', { class: 'board-bar' });
   private readonly cards = el('div', { class: 'board-cards', role: 'list', 'aria-label': 'Panels' });
@@ -36,7 +41,8 @@ export class BoardPanel {
   private sig = '';
   private thumbs = new Map<string, number>();
   /** Panels (cards), Timeline (blocks on the clock, with audio) or Split (both). Remembered per device. */
-  private view: 'panels' | 'timeline' | 'split' = 'panels';
+  private view: BoardView = 'panels';
+  private readonly grid: BoardGrid;
   private readonly timeline: BoardTimeline;
   private readonly viewBtns: HTMLButtonElement[] = [];
 
@@ -45,6 +51,8 @@ export class BoardPanel {
     private readonly root: HTMLElement,
     /** Export: Share, opened on the story formats (Storyboard sheets or an Animatic). */
     private readonly exportStory: () => void = () => {},
+    /** Present: the board full screen for pitching (StoryPresent). */
+    private readonly present: () => void = () => {},
   ) {
     const btn = (label: string, title: string, fn: () => unknown, icon?: string) => {
       const b = el('button', { type: 'button', title }, label);
@@ -56,12 +64,13 @@ export class BoardPanel {
     this.timeline = new BoardTimeline(app);
     try {
       const v = localStorage.getItem('2dope.board.view');
-      if (v === 'timeline' || v === 'split') this.view = v;
+      if (v === 'grid' || v === 'timeline' || v === 'split') this.view = v;
     } catch {
       // default view
     }
     const views = el('div', { class: 'seg board-views', role: 'group', 'aria-label': 'Board view' });
     for (const [v, label, hint] of [
+      ['grid', '⊞ Grid', 'A wall of pictures: the panels in order, small enough to see the whole board'],
       ['panels', '▦ Panels', 'Cards: picture, timing and captions for each panel'],
       ['timeline', '▭ Timeline', 'Panels on the clock, as long as they last, with the audio underneath'],
       ['split', '◫ Both', 'Timeline and cards together (timeline on top)'],
@@ -91,11 +100,13 @@ export class BoardPanel {
       btn('Later', 'Move the selected panels later', () => app.moveSelection(1), 'next'),
       btn('Images', 'Import images as panels (board sketches, photos)', () => this.fileIn.click(), 'gallery'),
       this.playBtn,
+      btn('Present', 'Present: the board full screen, playing on its timing with dialogue and action (tap to pause, swipe for the next panel, Escape to stop)', () => this.present(), 'board'),
       btn('Export', 'Export the storyboard (PDF sheets, panel images) or an animatic video', () => this.exportStory(), 'export'),
       btn('Animate this shot', 'Draw the animation on top of the board', () => app.animateShot(), 'draw'),
     );
     for (const b of this.bar.querySelectorAll<HTMLButtonElement>('button')) if (['Duplicate', 'Delete', 'Earlier', 'Later'].includes(b.getAttribute('aria-label') ?? '')) b.classList.add('icon-only');
-    root.append(this.bar, this.timeline.root, this.cards, this.fileIn);
+    this.grid = new BoardGrid(app, (c, id) => this.paintThumb(c, id), (i) => this.writeOn(i));
+    root.append(this.bar, this.timeline.root, this.grid.root, this.cards, this.fileIn);
     this.applyView();
     attachContextMenu(this.cards, ({ target }) => {
       const card = (target as HTMLElement | null)?.closest<HTMLElement>('.bcard');
@@ -119,7 +130,7 @@ export class BoardPanel {
   }
 
   /** The board view shown now (the bubbles light the matching chip). */
-  get currentView(): 'panels' | 'timeline' | 'split' {
+  get currentView(): BoardView {
     return this.view;
   }
 
@@ -128,7 +139,7 @@ export class BoardPanel {
     this.fileIn.click();
   }
 
-  setView(v: 'panels' | 'timeline' | 'split'): void {
+  setView(v: BoardView): void {
     this.view = v;
     try {
       localStorage.setItem('2dope.board.view', v);
@@ -137,13 +148,18 @@ export class BoardPanel {
     }
     this.applyView();
     this.update();
+    this.onView();
   }
+
+  /** Told when the view changes (the Story chips in the options row follow it). */
+  onView: () => void = () => {};
 
   private applyView(): void {
     this.root.dataset.view = this.view;
-    this.viewBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(['panels', 'timeline', 'split'][i] === this.view)));
-    this.timeline.root.hidden = this.view === 'panels' || !this.app.board;
-    this.cards.hidden = this.view === 'timeline' && !!this.app.board;
+    this.viewBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(BOARD_VIEWS[i] === this.view)));
+    this.timeline.root.hidden = this.view === 'panels' || this.view === 'grid' || !this.app.board;
+    this.grid.root.hidden = this.view !== 'grid' || !this.app.board;
+    this.cards.hidden = (this.view === 'timeline' || this.view === 'grid') && !!this.app.board;
   }
 
   /** Refresh: rebuild the cards when panels change (never while typing in one). */
@@ -152,6 +168,7 @@ export class BoardPanel {
     const b = app.board;
     this.applyView();
     this.timeline.update();
+    this.grid.update();
     setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     if (!b) {
       if (this.sig !== 'empty') {
@@ -400,6 +417,15 @@ export class BoardPanel {
     (document.activeElement as HTMLElement | null)?.blur();
     this.sig = '';
     this.update();
+  }
+
+  /** Open a panel to write on: the Panels view, scrolled to its card, its first line focused. */
+  private writeOn(i: number): void {
+    this.app.goPanel(i);
+    this.setView('panels');
+    const card = this.cards.querySelector<HTMLElement>(`.bcard[data-i="${i}"]`);
+    card?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    card?.querySelector<HTMLElement>('input:not(.bdur), textarea')?.focus();
   }
 
   private paintThumb(c: HTMLCanvasElement, drawingId: string): void {

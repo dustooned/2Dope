@@ -415,3 +415,16 @@ export function fillHold(ex: Exposure[], index: number, total: number): Edit | n
   for (let i = 0; i < index; i++) start += ex[i]!.length;
   return { ex: next, frame: start, selection: [] };
 }
+
+/**
+ * A panel length dragged on the Story timeline, pulled to the nearest whole or half second when it
+ * is within `slop` frames of one (so "2 seconds" is easy to hit). Never shorter than one frame.
+ */
+export function snapPanelLength(len: number, fps: number, slop: number): number {
+  const n = Math.max(1, Math.round(len));
+  if (!(fps > 0) || slop < 0) return n;
+  const half = fps / 2;
+  const k = Math.max(1, Math.round(n / half));
+  const target = Math.max(1, Math.round(k * half));
+  return Math.abs(target - n) <= slop ? target : n;
+}

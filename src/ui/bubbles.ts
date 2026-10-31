@@ -11,6 +11,7 @@ import { isCommandHidden } from '../core/commandprefs';
 import { commandById, commandName, commandPrefs, commandsFor, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
 import { attachContextMenu } from './contextmenu';
 import { onionHold } from './onionpop';
+import type { BoardView } from './board';
 import { showCustomize } from './customize';
 import { WORKSPACE_TOOL_NAMES, type WorkspaceTool } from '../core/workspacelayout';
 
@@ -37,7 +38,7 @@ export interface BubbleHooks {
   /** Layer cards with thumbnails (Draw); without it, Layers shows the linked layers as chips. */
   layerCards?: (anchor: HTMLElement) => void;
   /** Story (Board) actions the bubbles reach. */
-  story?: { view(): 'panels' | 'timeline' | 'split'; setView(v: 'panels' | 'timeline' | 'split'): void; images(): void; exportBoard(): void };
+  story?: { view(): BoardView; setView(v: BoardView): void; images(): void; exportBoard(): void };
   /** Motion actions the bubbles reach. */
   motion?: { group(): void; split(): void };
   /** Draw's bottom view: the flipbook (on) or the timeline. */
@@ -780,7 +781,7 @@ export class Bubbles {
     } else if (row === 'board') {
       const st = this.hooks.story;
       if (st) {
-        for (const [v, label, show] of [['panels', 'Panels', 'Panels'], ['timeline', 'Timeline', 'Timeline'], ['split', 'Split', 'Both']] as const) add(this.chip(show, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
+        for (const [v, label, show] of [['grid', 'Grid', 'Grid'], ['panels', 'Panels', 'Panels'], ['timeline', 'Timeline', 'Timeline'], ['split', 'Split', 'Both']] as const) add(this.chip(show, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
       }
       add(this.chip('\u25c0 Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later \u25b6', 'Move the selected panels later', false, () => a.moveSelection(1)));
       add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));

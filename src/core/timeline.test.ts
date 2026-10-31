@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockDropIndex, duplicateBlock, exposeAt, insertAt, moveBlock, normalize, setCaption, setNote, shiftBlock } from './timeline';
+import { blockDropIndex, duplicateBlock, exposeAt, insertAt, moveBlock, normalize, setCaption, setNote, shiftBlock, snapPanelLength } from './timeline';
 import { frameLabel, isSecondBoundary } from './timecode';
 import {
   addAfter,
@@ -304,5 +304,19 @@ describe('storyboard captions', () => {
       { drawing: 'x', length: 3, dialogue: 'ignored', action: 'waves' },
     ]);
     expect(merged).toEqual([{ drawing: 'x', length: 5, dialogue: 'Hi', action: 'waves' }]);
+  });
+});
+
+describe('snapPanelLength', () => {
+  it('pulls a dragged length to the nearest half second within the slop', () => {
+    expect(snapPanelLength(47, 24, 2)).toBe(48);
+    expect(snapPanelLength(37, 24, 2)).toBe(36);
+    expect(snapPanelLength(30, 24, 2)).toBe(30);
+    expect(snapPanelLength(13, 25, 1)).toBe(13);
+    expect(snapPanelLength(12, 25, 1)).toBe(13);
+  });
+  it('keeps at least one frame and ignores a bad rate', () => {
+    expect(snapPanelLength(0, 24, 3)).toBe(1);
+    expect(snapPanelLength(5, 0, 3)).toBe(5);
   });
 });

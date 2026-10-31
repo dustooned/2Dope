@@ -3,7 +3,7 @@ import type { App } from '../app';
 import type { AudioPlayback } from '../audio';
 import { paintWaveform } from './waveform';
 import { soundStart, type SoundClip } from '../core/audio';
-import { blockDropIndex, startOf } from '../core/timeline';
+import { blockDropIndex, snapPanelLength, startOf } from '../core/timeline';
 import { rulerStep } from '../core/timecode';
 import { attachContextMenu, showContextMenu, swallowNextClick, HOLD_MS, type CtxItem } from './contextmenu';
 import { frameMenu } from './framemenu';
@@ -157,9 +157,15 @@ export class BoardTimeline {
       if (!d || !b) return;
       if (d.kind === 'scrub') app.setFrame(Math.max(0, Math.floor(x(e) / this.cell)));
       else if (d.kind === 'edge') {
-        d.len = Math.max(1, Math.round(d.len0 + (x(e) - d.x0) / this.cell));
+        // whole and half seconds pull the edge in (about 8 px either side); Alt drags freely
+        const raw = Math.max(1, Math.round(d.len0 + (x(e) - d.x0) / this.cell));
+        d.len = e.altKey ? raw : snapPanelLength(raw, app.project.comp.fps, Math.max(1, Math.round(8 / this.cell)));
         const el = this.inner.querySelector<HTMLElement>(`.btl-panel[data-i="${d.index}"]`);
-        if (el) el.style.width = `${d.len * this.cell - 2}px`;
+        if (el) {
+          el.style.width = `${d.len * this.cell - 2}px`;
+          el.dataset.len = app.fmtDur(d.len);
+          el.classList.add('timing');
+        }
         app.setEditLine({ frame: b.start + startOf(b.exposures, d.index) + d.len, edge: 'out', delta: d.len - d.len0 });
       } else if (d.kind === 'move') {
         d.dx = x(e) - d.x0;
@@ -182,6 +188,7 @@ export class BoardTimeline {
       if (!d || !b) return;
       if (d.kind === 'edge') {
         app.setEditLine(null);
+        this.inner.querySelector<HTMLElement>(`.btl-panel[data-i="${d.index}"]`)?.classList.remove('timing');
         if (!cancelled && d.len !== d.len0) app.setPanelDuration(d.index, d.len);
         else this.sig = '';
       } else if (d.kind === 'move') {

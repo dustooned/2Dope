@@ -33,6 +33,7 @@ import { Bubbles } from './ui/bubbles';
 import { TracksSheet } from './ui/sheet';
 import { Strip } from './ui/strip';
 import { XSheet } from './ui/xsheet';
+import { StoryPresent } from './ui/present';
 import { applyIcons } from './ui/icons';
 import { Sidebar } from './ui/sidebar';
 import { drawRailState } from './ui/rails';
@@ -335,7 +336,15 @@ $('#tab-xsheet').prepend(strip.timingBar);
 const motion = new MotionPanel(app, $('#motion'));
 // Story's Export opens Share on the story formats (Storyboard, or Animatic when that was picked last)
 const exportStory = (): void => share.show(share.lastKind === 'animatic' ? 'animatic' : 'board');
-const board = new BoardPanel(app, $('#board'), () => exportStory());
+const board = new BoardPanel(app, $('#board'), () => exportStory(), () => present.start());
+// Story → Present: the page fills the screen above the caption and controls
+const present = new StoryPresent(app, $('#stage'), () => {
+  if (!present.active) { app.fit(); return; }
+  const bar = document.querySelector<HTMLElement>('.present-layer .present-bar');
+  app.view.fit(app.docW, app.docH, app.viewW, app.viewH, 16, 0, (bar?.offsetHeight ?? 60) + 90);
+  app.requestRender();
+});
+app.onFrameChange = chain(app.onFrameChange, () => present.update());
 const audioPlayback = new AudioPlayback(app);
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 // In the tracks sheet, sounds are rows under the layers; their settings open in a floating card.
@@ -680,6 +689,8 @@ const bubbles = new Bubbles(app, $('#stage'), {
   layers: (anchor) => layersPop.toggle(anchor),
   fit: () => app.refit(),
 });
+board.onView = () => bubbles.update();
+
 const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
   flipMode.update(); sheet.update(); strip.update(); bubbles.update(); app.requestRender();
 });

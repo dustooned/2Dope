@@ -2,6 +2,75 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Story views iteration 2: Grid, and Strip timing that snaps (2026-10-31, uncommitted)
+
+The user asked to continue item B with Grid and Strip after Present. 8bf6b47 and 95f29d2 were pushed
+by the main session (deploying); this session pushed nothing.
+
+- **Grid** (new `src/ui/boardgrid.ts`, `BoardGrid`): a fourth Story view (`BoardView` =
+  grid | panels | timeline | split, exported from `board.ts`; `2dope.board.view` accepts `grid`). Tiles
+  show the panel picture (BoardPanel's `paintThumb`), number, length and first line (`tileLine`: the
+  first dialogue line "Who: text", else the action). Tap = `goPanel`; double-tap or Enter =
+  `writeOn` (Panels view, card scrolled in, first field focused); hold / right-click = the existing
+  `frameMenu`; drag (8px threshold, pointer capture) onto another tile = `moveSelectionTo(target)`
+  (one Undo, via the shared timeline command); arrow keys move by tile / row. − / + (2–8), pinch or
+  Ctrl/⌘ + wheel set per-row count, saved at `2dope.board.gridcols`. Rebuilds only when panels,
+  captions or thumbnails change. The options-row Story chips gained Grid and now follow view changes
+  made from the Story bar (`board.onView` → `bubbles.update()`; before, they could stay on Panels).
+- **Strip (Story Timeline)**: edge drag uses new `snapPanelLength(len, fps, slop)` in
+  `core/timeline.ts` (+ unit tests): lengths within ~8px of a whole or half second snap to it; Alt
+  drags freely. The dragged panel shows its length (`data-len` badge, `.btl-panel.timing`). Existing
+  edge ripple, drag-to-reorder, pinch / Ctrl+wheel zoom and saved zoom were already there.
+- CSS at the end of `style.css`; manual (Story views and Timeline lines) and an UPDATES entry.
+
+Checks (actual): `npx vitest run` **576 passed** (+2 snap tests); `npm run build` passed; browser fixtures **44/44**;
+dev app on 127.0.0.1:5217 (test project, 5-panel board): Grid shows 5 tiles with
+"Panel 1, 24f: Sam: Is anyone there?" etc.; + + set 6 per row (6 grid columns, saved), − − back to 4;
+tap marked panel 3 current; dragging tile 1 onto tile 4 showed the drop ring and moved "Sam" to
+position 4; double-tap opened Panels with "Panel 4 line 1 speaker" focused; chips showed Grid
+pressed after using the Story bar (screenshot). Timeline: an edge dragged to 47f showed "48f" and
+committed 48f; with Alt it read 47f; a drag to 46f stayed 46f (outside the snap zone). Not checked:
+real pinch / touch drag, phone width, keyboard arrows by hand, Undo of a Grid move by hand, auto-scroll
+while dragging in a long Grid (not built). No fixture added.
+
+Still open for B: drag auto-scroll and drop-between markers in Grid, remembering scroll per view,
+Strip snapping to the playhead and other panels' edges, then script to panels and scenes.
+
+### Story views iteration 1: Present (2026-10-31, uncommitted)
+
+Committed before this (not pushed): `8bf6b47` research docs and `95f29d2` UI cleanup iterations 1–4,
+onion settings, Roughen edges / Gaussian blur, manual and handoff. Checks before that commit:
+vitest 574 passed, build passed, browser fixtures 44/44.
+
+Backlog item B (next-phase Story priority: Grid · Strip · Present). Story already has Panels
+(cards), Timeline (strip on the clock) and Both, which cover most of Grid and Strip, so the first
+iteration builds the missing **Present** view.
+
+- New `src/ui/present.ts` (`StoryPresent`): `body.presenting` puts `.stage-col` full window (black),
+  hides every stage overlay except the canvas, the existing live dialogue subtitle and a
+  `.present-layer`. The layer swallows pointer input (nothing reaches the board canvas): tap =
+  play/pause, horizontal swipe ≥50px = next/previous panel (`app.goPanel`), plus a bar with Play,
+  ‹ count ›, Done. Keys (window capture, so the app's Space/Enter do not double-fire): Space/Enter,
+  ← → / PageUp/PageDown, Escape. It shows the current panel's Action under the subtitle, requests
+  browser full screen when allowed (leaving full screen ends Present), stops playback on exit and
+  ends itself if the workspace changes or the board disappears. Viewing only: no History, no saves.
+- `ui/board.ts`: a Present button after Play (optional 4th constructor callback). `main.ts`
+  creates `StoryPresent` with a fit callback (`app.view.fit` with the bar and caption reserved at the
+  bottom; normal `app.fit()` after exit) and updates it on frame changes. CSS at the end of `style.css`.
+- Manual (Story section) and an UPDATES entry.
+
+Checks (actual): `npx vitest run` 574 passed; `npm run build` passed; browser fixtures **44/44**. Dev
+app on 127.0.0.1:5217 (test project; created a 2-panel board with a "Sam: Is anyone there?" line and
+two Actions): Present opened at the current panel with its action; ← went to panel 1 with the
+subtitle "Sam: Is anyone there?" and its action (screenshot); tap toggled play/pause; swipe left/right
+changed panel 1→2→1; playing advanced the counter 1/2→2/2; Escape and Done exited and restored the
+layout. Browser full screen was refused for the scripted click (needs a real user gesture), so it
+was not observed. Not checked: real touch, iPad Safari (no Fullscreen API on iPhone), phone layout,
+long multi-line dialogue, a board with real drawings. No fixture added.
+
+Still open for B: a denser Grid (pinch to change cards per row, drag to reorder), Strip edge-drag
+timing with snapping, remembering zoom/scroll per view, then script to panels and scenes.
+
 ### Roughen edges and Gaussian blur, plus the mograph/draw research behind them (2026-10-31, uncommitted)
 
 User asked to continue the reference REA, mine EffectCraft, the After Effects plug-in collection and
