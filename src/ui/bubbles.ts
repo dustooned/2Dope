@@ -48,6 +48,23 @@ export interface BubbleHooks {
   editWorkspace?: (anchor: HTMLElement) => void;
 }
 
+/**
+ * Draw and Animate's toolbar standard: a tool button selects that tool and stays pressed while it is
+ * current; Brush, Smudge, Vector and Eraser open their brushes on a second tap; Move assets is a mode
+ * that a second tap (or Done) ends. Colour, Layers, Reference and More open a panel and are never
+ * "current". Each title says which, so a tap is never a surprise.
+ */
+const TOOL_HELP: Partial<Record<string, string>> = {
+  brush: 'Paint on the Ink or Colour target', smudge: 'Blend paint that is already there', pen: 'Editable vector lines (they can run past the page with Overscan)',
+  eraser: 'Erase paint, and cut vector lines on Ink', fill: 'Fill closed areas', select: 'Select an area to move, copy or fill',
+  transform: 'Move, size or rotate the selection, or the whole drawing', adjust: 'Colour and blur adjustments to the current drawing',
+  assets: 'Tap placed artwork, drag to move, corners to resize',
+};
+const PANEL_HELP: Partial<Record<string, string>> = {
+  color: 'Opens the colour panel; drag it onto the canvas to fill an area', layers: 'Opens the layer list', reference: 'Opens the reference window', more: 'Opens every tool for this mode and Edit workspace',
+};
+const SECOND_TAP: Partial<Record<string, string>> = { brush: 'Tap again for brushes', smudge: 'Tap again for brushes', pen: 'Tap again for brushes', eraser: 'Tap again for brushes', assets: 'Tap again (or Done) to go back to drawing' };
+
 type ToolKey = 'assets' | 'more' | 'transform' | 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
   | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
 
@@ -434,7 +451,11 @@ export class Bubbles {
         if (a.tool === k && !arranging && !(k === 'brush' && a.smudging)) this.hooks.brushLibrary(b);
         else { a.setTool(k as Tool); if (k === 'brush') a.setSmudging(false); }
         break;
-      case 'smudge': a.setSmudging(true); break;
+      case 'smudge':
+        // like Brush: the second tap opens the brushes Smudge carries paint with
+        if (a.smudging && a.tool === 'brush' && !arranging) this.hooks.brushLibrary(b);
+        else a.setSmudging(true);
+        break;
       case 'fill':
         a.setTool('fill');
         if (a.fillMode === 'lasso') a.setFillMode('tap');
@@ -631,11 +652,21 @@ export class Bubbles {
         : k === 'play' ? a.playing
         : k === 'more' ? this.moreTools : k === 'transform' ? a.transforming : k === cur || (k === 'onion' && a.onion.enabled);
       b.setAttribute('aria-pressed', String(on));
+      if (drawWs) {
+        // one wording for every painting tool: what it does, then what a tap (or a second tap) does
+        const name = WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label;
+        const panel = PANEL_HELP[k];
+        b.title = panel ? `${name}: ${panel}` : `${name}${on ? ' (current)' : ''}: ${TOOL_HELP[k] ?? label}. ${on ? SECOND_TAP[k] ?? 'In use' : 'Tap to use'}.`;
+        b.dataset.kind = panel ? 'panel' : 'tool';
+        // tools first, then the panels, divided once
+        const prev = this.tools.lastElementChild as HTMLElement | null;
+        if (panel && k !== 'more' && prev?.dataset.kind === 'tool') this.tools.append(el('span', { class: 'bub-sep bub-tools-sep', 'aria-hidden': 'true' }));
+      }
       b.addEventListener('click', () => this.pickTool(k, b));
       this.tools.append(b);
     }
     this.extraTools.id = 'workspace-extra-tools'; this.extraTools.hidden = !this.moreTools;
-    this.extraTools.replaceChildren(el('strong', {}, 'More tools'));
+    this.extraTools.replaceChildren(el('strong', {}, 'More tools'), el('p', { class: 'bub-drawer-hint' }, 'Tap a tool to use it now. Edit workspace pins tools to the bar.'));
     const allTools = this.toolsFor(ws, true);
     for (const [k, label] of allTools) {
       const b = this.chip(WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label, label, k === cur, b => this.pickTool(k, b));
@@ -652,10 +683,13 @@ export class Bubbles {
     this.ctx.dataset.essential = String(['select', 'transform', 'adjust', 'points', 'assets'].includes(row) || !!a.gradEditing || a.guideEdit || shape);
     this.ctx.dataset.row = row;
     const add = (...c: HTMLElement[]) => this.ctx.append(...c);
+    // the row starts with whose settings these are, so they are never mistaken for tools
+    const rowTitle = drawWs ? ({ paint: `${a.tool === 'pen' ? 'Vector' : a.tool === 'eraser' ? 'Eraser' : 'Brush'} settings`, fill: 'Bucket fill settings', smudge: 'Smudge settings', select: 'Select', assets: 'Move assets' } as Partial<Record<string, string>>)[row] : undefined;
+    if (rowTitle) add(el('span', { class: 'bub-hint bub-row-title' }, rowTitle));
     // right after a snap: change the shape from here (no floating button on the simple screen)
     if (shape) add(this.chip('Edit shape', 'Change what the stroke snapped to, or keep your own stroke', false, (b) => this.hooks.editShape!(b), 'editpoints'));
     if (row === 'assets') {
-      add(el('span', { class: 'bub-hint' }, 'Tap artwork · drag to move · corners resize'));
+      add(el('span', { class: 'bub-hint' }, 'Tap artwork · drag to move · corners resize · Done or Move assets again to draw'));
     } else if (row === 'points') {
       add(...this.widthControls());
     } else if (row === 'time') {

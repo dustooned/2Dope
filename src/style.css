@@ -4923,3 +4923,24 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .vector-restyle label { display: flex; align-items: center; gap: 8px; }
 .vector-restyle button { min-height: 44px; }
 .panel-body [hidden] { display: none !important; }
+
+/* Canvas view options (Draw and Animate): the View popover over the footer and the frame overview strip */
+.canvas-view-btn.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.canvas-view-pop { position: absolute; z-index: 66; bottom: 8px; left: 8px; display: flex; flex-direction: column; gap: 4px; width: min(300px, calc(100% - 16px)); padding: 12px; box-sizing: border-box; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); box-shadow: 0 8px 24px #0006; }
+.canvas-view-pop > strong { font-size: 14px; margin-bottom: 2px; }
+.canvas-view-pop button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 12px; text-align: left; }
+.canvas-view-pop button[aria-checked=true] { background: var(--accent); color: var(--on-accent); }
+.canvas-view-state { font-size: 12px; opacity: 0.85; }
+.canvas-view-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.canvas-overview { position: absolute; z-index: 14; left: 50%; bottom: calc(var(--flip-h, 0px) + 8px); transform: translateX(-50%); display: flex; gap: 4px; max-width: calc(100% - 16px); padding: 4px; overflow-x: auto; border-radius: var(--radius-md); background: color-mix(in srgb, var(--panel) 88%, transparent); box-shadow: 0 4px 14px #0005; touch-action: pan-x; }
+.canvas-overview button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 44px; min-height: 44px; padding: 3px; border-radius: 8px; font-size: 11px; line-height: 1; }
+.canvas-overview canvas { display: block; width: 64px; height: 36px; border-radius: 4px; }
+.canvas-overview button[aria-current=true] { box-shadow: inset 0 0 0 2px var(--accent); }
+.canvas-view-pop[hidden], .canvas-overview[hidden], body.ui-hidden .canvas-overview, body.quick .canvas-overview, body.ui-hidden .canvas-view-pop, body.quick .canvas-view-pop { display: none !important; }
+
+/* Draw/Animate toolbar standard: tools, a divider, then panel openers; the options row names its tool */
+.bub-tools-sep { align-self: center; }
+.stage[data-tool-dock=left] .bub-tools-sep, .stage[data-tool-dock=right] .bub-tools-sep { width: 26px; height: 1px; margin: 2px 0; }
+.bub-ctx .bub-row-title { font-weight: 600; color: var(--text); padding-right: 2px; }
+.bub-tool-drawer .bub-drawer-hint { flex-basis: 100%; margin: -2px 0 4px; font-size: 12px; color: var(--muted); }
+body.painting-workspace .painting-views .painting-handle.folded { opacity: 0.75; border-style: dashed; }

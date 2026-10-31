@@ -1,4 +1,5 @@
 import { gradientAt, type Grad } from './fill/gradient';
+import { ACTION_SAFE, CANVAS_VIEW_KEY, readCanvasView, safeRect, TITLE_SAFE, type CanvasView } from './core/canvasview';
 import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection, vanishingPoints, type Guide } from './core/guides';
 import { adjustHex, applyBlur, applyHSB, isNoHSB, keepOutside, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
 import { loadGrain, loadTip } from './brush/raster';
@@ -86,6 +87,8 @@ const FILL_MODE_KEY = '2dope.fill.mode';
 const FILL_STYLE_KEY = '2dope.fill.style';
 const COLOR2_KEY = '2dope.color2';
 const LAYERS_KEY = '2dope.draw.layers';
+/** How far the Overscan paper and dimming reach past the page (document pixels). */
+const PASTEBOARD = 100_000;
 const BOARD_ALPHA_KEY = '2dope.draw.boardAlpha';
 const RIPPLE_KEY = '2dope.ripple';
 /** Shared with the X-sheet's frame-number setting (it was there first). */
@@ -3250,6 +3253,17 @@ export class App {
   /** How strongly the other layers show (1 = as they are, lower = a light-table fade). */
   otherAlpha = loadJSON<number>(LAYERS_ALPHA_KEY) ?? 1;
 
+  /** Draw/Animate canvas view options (Overscan, safe areas, centre, overview): device-only, never exported. */
+  canvasView: CanvasView = readCanvasView(loadJSON<unknown>(CANVAS_VIEW_KEY));
+  private overscanNoticed = false;
+
+  setCanvasView(patch: Partial<CanvasView>): void {
+    this.canvasView = readCanvasView({ ...this.canvasView, ...patch });
+    saveJSON(CANVAS_VIEW_KEY, this.canvasView);
+    this.requestRender();
+    this.onToolChange();
+  }
+
   setShowLayers(on: boolean, alpha = this.otherAlpha): void {
     this.showLayers = on;
     this.otherAlpha = Math.max(0.1, Math.min(1, alpha));
@@ -4958,7 +4972,7 @@ export class App {
     let pointsOf = rec.id;
     if (rec.tool === 'pen') {
       // a selection keeps the line (and its symmetry copies) inside it
-      const strokes = this.clipToSelection([rec, ...this.symmetryVectors(rec)], live.clip).filter(v=>!v.style && !v.clips || hasVisibleVectorStroke(v,this.docW,this.docH));
+      const strokes = this.clipToSelection([rec, ...this.symmetryVectors(rec)], live.clip).filter(v=>!v.style && !v.clips || (this.canvasView.overscan && !v.clips) || hasVisibleVectorStroke(v,this.docW,this.docH));
       try {assertVectorBudget([...this.project.drawings.values()].flatMap(drawing=>drawing.vectors).concat(strokes));}
       catch(e) {this.onNotice?.((e as Error).message);this.requestRender();return;}
       if (!strokes.length) {
@@ -4988,6 +5002,11 @@ export class App {
       );
     } else {
       const c = this.raster.commit(post > 0);
+      if (this.canvasView.overscan && !this.overscanNoticed && rec.tool !== 'eraser' && rec.points.some((q) => q.x < 0 || q.y < 0 || q.x > this.docW || q.y > this.docH)) {
+        // Overscan keeps vector lines past the edge; raster planes stay page-sized
+        this.overscanNoticed = true;
+        this.onNotice?.('Brush paint stops at the page edge. Use Vector to draw past it with Overscan.');
+      }
       if (c && rec.tool !== 'eraser' && this.project.layer.kind === 'drawings' && this.project.layer.alphaLock && live.drawing !== this.maskDrawing) {
         // Alpha Lock: the stroke changes colour only where there was paint; coverage stays as it was
         const b = c.before.data, a = c.after.data;
@@ -5462,6 +5481,8 @@ export class App {
         { id: 'canvas.onion', label: 'Onion skin', checked: this.onion.enabled, run: () => this.toggleOnion(), hint: 'O' },
         { id: 'canvas.newpage', label: 'New page after the last drawing', checked: this.flipbook, run: () => this.setFlipbook(!this.flipbook) },
         { id: 'canvas.scrublock', label: 'Scrub lock here', checked: this.lockFrame !== null, run: () => this.toggleLock(), hint: 'L' },
+        { id: 'canvas.overscan', label: 'Overscan: show and draw past the page', checked: this.canvasView.overscan, run: () => this.setCanvasView({ overscan: !this.canvasView.overscan }) },
+        { id: 'canvas.safeareas', label: 'Title and action safe', checked: this.canvasView.safeAreas, run: () => this.setCanvasView({ safeAreas: !this.canvasView.safeAreas }) },
         { sep: true },
         { id: 'canvas.fit', label: 'Fit view', run: () => this.fit(), hint: 'F' },
         { id: 'canvas.flipview', label: 'Flip view', run: () => this.flipView(), hint: 'H' },
@@ -6185,10 +6206,13 @@ export class App {
 
     const m = new DOMMatrix().scale(this.dpr, this.dpr).multiply(this.view.matrix());
     g.setTransform(m);
-    g.shadowColor = 'rgba(0,0,0,0.35)';
-    g.shadowBlur = 24 * this.dpr;
+    // Overscan: the paper runs under the pasteboard too, so art past the edge reads before it is dimmed
+    const overscan = this.canvasView.overscan && isPaintingWorkspace(this.workspace) && !this.arrangingAssets;
+    g.shadowColor = overscan ? 'transparent' : 'rgba(0,0,0,0.35)';
+    g.shadowBlur = overscan ? 0 : 24 * this.dpr;
     g.fillStyle = '#ffffff';
-    g.fillRect(0, 0, this.docW, this.docH);
+    if (overscan) g.fillRect(-PASTEBOARD, -PASTEBOARD, this.docW + 2 * PASTEBOARD, this.docH + 2 * PASTEBOARD);
+    else g.fillRect(0, 0, this.docW, this.docH);
     g.shadowBlur = 0;
     g.shadowColor = 'transparent';
 
@@ -6196,6 +6220,7 @@ export class App {
     this.residency.use(this.workingSet());
     if (this.arrangingAssets) {
       drawComp(g, this.project, this.project.comp, this.frame, { camera: this.editor.throughCamera });
+      this.drawCanvasView(g, false);
       if (this.placedAsset) drawMotionOverlay(g, this.editor, this.view, this.dpr, true);
       return;
     }
@@ -6213,6 +6238,71 @@ export class App {
       drawMotionOverlay(g, this.editor, this.view, this.dpr);
       return;
     }
+    // Draw/Animate without Overscan show the page as it exports: art past the edge stays hidden
+    g.save();
+    if (isPaintingWorkspace(this.workspace) && !overscan) { g.beginPath(); g.rect(0, 0, this.docW, this.docH); g.clip(); }
+    const full = this.renderPainting(g);
+    g.restore();
+    this.drawCanvasView(g, true);
+    if (!full) return;
+    this.drawFillPath(g);
+    this.drawGradHandles(g);
+    this.drawSymmetryGuide(g);
+    this.drawGuide(g);
+    this.drawPointEdit(g);
+    if (this.view.zoom >= 8) this.drawPixelGrid(g);
+  }
+
+  /**
+   * Canvas view guides (screen only, never exported): Overscan's dimmed pasteboard and page edge,
+   * action-safe and title-safe frames, and the centre cross.
+   */
+  private drawCanvasView(g: CanvasRenderingContext2D, dim: boolean): void {
+    if (!isPaintingWorkspace(this.workspace)) return;
+    const v = this.canvasView, W = this.docW, H = this.docH, z = this.view.zoom;
+    g.save();
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    if (dim && v.overscan) {
+      g.fillStyle = getComputedStyle(document.body).getPropertyValue('--workspace') || '#2b2b31';
+      g.globalAlpha = 0.6;
+      g.beginPath();
+      g.rect(-PASTEBOARD, -PASTEBOARD, W + 2 * PASTEBOARD, H + 2 * PASTEBOARD);
+      g.rect(0, 0, W, H);
+      g.fill('evenodd');
+      g.globalAlpha = 1;
+      g.lineWidth = 1.5 / z;
+      g.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+      g.strokeRect(0, 0, W, H);
+    }
+    g.font = `${11 / z}px system-ui, sans-serif`;
+    g.textBaseline = 'top';
+    if (v.safeAreas) {
+      g.lineWidth = 1 / z;
+      g.setLineDash([6 / z, 4 / z]);
+      for (const [f, name, colour] of [[ACTION_SAFE, 'Action safe', 'rgba(0, 150, 255, 0.85)'], [TITLE_SAFE, 'Title safe', 'rgba(235, 120, 0, 0.9)']] as const) {
+        const r = safeRect(W, H, f);
+        g.strokeStyle = g.fillStyle = colour;
+        g.strokeRect(r.x, r.y, r.w, r.h);
+        g.fillText(name, r.x + 4 / z, r.y + 3 / z);
+      }
+      g.setLineDash([]);
+    }
+    if (v.centre) {
+      const cx = W / 2, cy = H / 2, s = Math.min(W, H) * 0.03;
+      g.lineWidth = 1.5 / z;
+      g.strokeStyle = 'rgba(255, 40, 120, 0.85)';
+      g.beginPath();
+      g.moveTo(cx - s, cy); g.lineTo(cx + s, cy);
+      g.moveTo(cx, cy - s); g.lineTo(cx, cy + s);
+      g.stroke();
+      g.beginPath(); g.arc(cx, cy, s / 3, 0, Math.PI * 2); g.stroke();
+    }
+    g.restore();
+  }
+
+  /** The Draw/Animate artwork: layers around, onion skins and the active cel. False on a blank page. */
+  private renderPainting(g: CanvasRenderingContext2D): boolean {
     const comp = this.project.comp;
     const activeId = this.project.layer.id;
     const others = this.showLayers ? this.otherAlpha : 0;
@@ -6244,7 +6334,7 @@ export class App {
     if (this.blankPage && !this.live && !group) {
       if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, undefined, keep);
       outer('above');
-      return;
+      return false;
     }
     const maskD = this.maskDrawing;
     const d = this.live && this.live.drawing !== maskD ? this.live.drawing : this.drawing;
@@ -6342,12 +6432,7 @@ export class App {
 
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude, keep);
     outer('above');
-    this.drawFillPath(g);
-    this.drawGradHandles(g);
-    this.drawSymmetryGuide(g);
-    this.drawGuide(g);
-    this.drawPointEdit(g);
-    if (this.view.zoom >= 8) this.drawPixelGrid(g);
+    return true;
   }
 
   /** Is this part (Line or Fill) of the active layer shown? */

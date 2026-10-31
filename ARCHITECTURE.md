@@ -1,5 +1,14 @@
 # Architecture
 
+Canvas view (2026-10-30): `core/canvasview.ts` validates the device-only `2dope.canvas.view`
+preference (Overscan, safe areas, centre cross, frame overview), safe-frame geometry (90%/80%)
+and overview neighbours. `App.render` clips Draw/Animate art to the page unless Overscan is on;
+with Overscan it lays paper under the pasteboard, then `drawCanvasView` dims outside the page and
+draws the guides on the screen canvas only. `renderPainting` holds the former painting body.
+Drawing planes stay page-sized; vector records already allowed off-page points, and Overscan only
+stops styled vectors wholly outside the page from being dropped. `ui/canvasview.ts` owns the View
+popover and overview strip. `tests/canvasview.html` exercises the real App/UI, export and storage.
+
 Mode-context UI (2026-10-30): `core/workspacelayout.ts` validates bounded per-mode tool
 order/pinning, top/side docking, brush edge, labels and optional paint targets. App reads
 `2dope.workspace.layouts` and applies validated preferences outside document History.

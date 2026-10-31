@@ -1,5 +1,6 @@
 import { setEffectCacheBudget } from './view/effects';
 import { PaintingWorkspaceUI } from './ui/paintingworkspace';
+import { CanvasViewUI } from './ui/canvasview';
 import { ArtworkAssetsUI } from './ui/artworkassets';
 import { EffectsPanel } from './ui/effectspanel';
 import { scrollArrows } from './ui/scrollarrows';
@@ -709,6 +710,12 @@ app.onWorkspaceChange = chain(app.onWorkspaceChange, () => { bubbles.update(); f
 app.onBrushChange = chain(app.onBrushChange, () => quick.update());
 app.history.onChange = chain(app.history.onChange, () => quick.update());
 app.onThumbs = () => { strip.update(); flipMode.update(); layerCards.update(); };
+// Canvas view options (Overscan, safe areas, centre, frame overview) in the painting footer
+const canvasViewUI = new CanvasViewUI(app, $('#stage'));
+paintingUI.addViewButton(canvasViewUI.button);
+for (const k of ['onThumbs', 'onFrameChange', 'onToolChange', 'onWorkspaceChange'] as const) app[k] = chain(app[k], () => canvasViewUI.update());
+app.history.onChange = chain(app.history.onChange, () => canvasViewUI.update());
+canvasViewUI.update();
 // Inside a precomp: the toolbar shows where you are, and ☰ has a way back out.
 const crumbBtn = $<HTMLButtonElement>('#crumb');
 const backOut = $<HTMLButtonElement>('[data-menu="backout"]');

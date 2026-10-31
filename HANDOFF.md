@@ -2,6 +2,56 @@
 
 ## Current state (2026-10-30) — read this first
 
+### Overscan / canvas view options and Animate toolbar polish (2026-10-30, uncommitted)
+
+User asked for a toggle letting artists draw and see art outside the canvas, with title/action-safe
+guides and micro thumbnails, plus modest Animate toolbar polish.
+
+**Overscan design decision.** Drawing planes stay exactly page-sized. Enlarging raster planes (a
+project overscan margin) would touch every pixel consumer (~100 `docW`/`getImageData` sites:
+fills, selections, smudge, autopaint, residency, persistence, schema, PSD/ORA/export) and raise
+memory against Lite limits. Vector strokes are point records that were never bounded by the page,
+so Overscan is **vector-based**: Vector lines can start, end or lie wholly past the edge, are kept
+and saved as before (no schema change), and the Eraser cuts them there. Brush/Smudge/Fill pixels
+still stop at the page edge; a one-per-session notice says so and points to Vector. Exports
+render into comp-size canvases, so framing/size never change. Existing behaviour retained and now
+documented: a layer moved in Motion that draws directly can bring off-page vector lines into the
+frame, while layers flattened for opacity/blend/mask/effects stay bounded by the page; onion
+ghosts and thumbnails are page-sized.
+
+- `core/canvasview.ts` (+ unit tests): device-only `2dope.canvas.view` prefs (overscan, safeAreas,
+  centre, overview), 90% action / 80% title safe geometry (no prior project convention existed),
+  overview neighbours.
+- `app.ts`: `canvasView`/`setCanvasView` (no History). Draw/Animate art is now clipped to the page
+  when Overscan is off (previously off-page vectors leaked onto the pasteboard); with Overscan, paper
+  runs under the pasteboard and `drawCanvasView` dims outside the page and draws safe frames/centre
+  on the screen canvas only (also over Move assets). The painting body moved into `renderPainting`.
+  Styled vectors wholly off-page are no longer discarded with Overscan on. Canvas menu entries
+  `canvas.overscan` / `canvas.safeareas` (registered in `MENU_ENTRIES`).
+- `ui/canvasview.ts`: View button in the painting footer (popover of four switches, Escape/outside
+  close) and the frame overview strip (prev/next drawings from `Drawing.thumb`, tap to jump).
+- Animate/Draw toolbar (`ui/bubbles.ts`, `ui/paintingworkspace.ts`, `style.css`): every tool title
+  says what it does and what a tap / second tap does; tools vs panel openers (Layers, Colour,
+  Reference) separated by a divider and marked `data-kind`; Smudge now opens brushes on a second
+  tap like Brush/Vector/Eraser; the options row starts with its owner ("Brush settings", "Vector
+  settings", …); More tools explains pinning; Move assets hint mentions Done. Footer: Tools fold
+  handle uses the panel icon (no longer the ••• of More tools), fold handles get Show/Hide titles
+  and a faded dashed look when hidden, status reads "Brush on Drawing · Ink". aria-labels kept.
+- Manual (Draw and Animate section) and UPDATES entry; ARCHITECTURE note; new fixture
+  `tests/canvasview.html` (25 checks: stroke past edge, page clip without Overscan, dimmed
+  pasteboard with Overscan, persistence, no Undo step, export unchanged, Eraser off-page + Undo,
+  wholly-off-page vector, Brush notice once, safe/centre screen-only, Escape/focus, overview
+  targets/navigation, Motion hides it, Animate shares it).
+
+Checks (actual): `npm test` 70 files / 565 passed; `npm run build` passed (existing chunk warning);
+`git diff --check` clean. `npm run test:browser` on isolated `127.0.0.1:5219`: **42/43**; the miss
+was `brushcontrols` (3 slider-value checks) in the full run only. It passed 26/26 alone and after
+`assettiming` and `artworklibrary`; cause not identified (it does not touch the changed code).
+Visually checked in the dev app (test origin 5219): Overscan line past the page, safe frames,
+centre cross, overview strip, View popover; Animate toolbar divider, titles, "Brush settings"
+row, More tools hint, faded hidden handle. Not checked: phone/side-dock layouts of the new divider
+and overview strip, touch/Pencil, iPad memory. No commit or push.
+
 ### Effects button in Full Motion (2026-10-30, uncommitted)
 
 The user could not find Effects in Motion at the Full interface level. Full has long hidden the

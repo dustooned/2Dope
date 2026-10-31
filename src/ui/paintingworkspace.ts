@@ -6,6 +6,7 @@ import { decorate } from './icons';
 
 type Fold = 'tools' | 'options' | 'brush' | 'editor';
 type Prefs = Record<Fold, boolean>;
+const FOLD_TITLES: Record<Fold, string> = { tools: 'the tool bar', options: 'the current tool’s settings row', brush: 'the size and opacity sliders', editor: 'the flipbook / clips editor' };
 const defaults = (): Prefs => ({ tools: false, options: true, brush: false, editor: false });
 
 /**
@@ -60,15 +61,24 @@ export class PaintingWorkspaceUI {
       });
       b.className = `painting-handle painting-${key}-handle`;
       if (key === 'brush') decorate(b, 'brush');
-      if (key === 'tools') decorate(b, 'more');
+      // not the toolbar's ••• (More tools): this one hides or shows the whole tool bar
+      if (key === 'tools') decorate(b, 'panel');
       b.setAttribute('aria-label', `Toggle ${label.toLowerCase()}`);
       this.handles.set(key, b);
       this.footer.append(b);
     }
     const customize = button('Workspace', () => this.editWorkspace(customize)); customize.setAttribute('aria-label', 'Edit workspace'); decorate(customize, 'gear');
+    this.customize = customize;
     this.footer.append(customize, button('Fit canvas', () => app.fit()));
     stage.after(this.footer);
     this.update();
+  }
+
+  private customize: HTMLButtonElement | null = null;
+
+  /** Canvas view options sit with the other view controls, before Workspace. */
+  addViewButton(b: HTMLButtonElement): void {
+    this.footer.insertBefore(b, this.customize);
   }
 
   reset(): void {
@@ -93,7 +103,11 @@ export class PaintingWorkspaceUI {
       const folded = active && this.prefs[ws][key];
       document.body.classList.toggle(`painting-${key}-folded`, folded);
       handle.hidden = !active; handle.disabled = key === 'options' && !!essential;
-      handle.setAttribute('aria-expanded', String(!folded || (key === 'options' && essential)));
+      const shown = !folded || (key === 'options' && !!essential);
+      handle.setAttribute('aria-expanded', String(shown));
+      // a hidden part looks hidden here too, and the title says what a tap does
+      handle.classList.toggle('folded', !shown);
+      handle.title = `${shown ? 'Hide' : 'Show'} ${FOLD_TITLES[key]}${key === 'options' && essential ? ' (kept open while this edit is in progress)' : ''}`;
     }
     document.body.classList.toggle('painting-still', active && ws === 'draw' && !this.flip.on);
     if (!active) return;
@@ -108,7 +122,7 @@ export class PaintingWorkspaceUI {
     const tool = a.arrangingAssets ? 'Move placement' : a.transforming ? 'Transform' : a.adjusting ? 'Adjust artwork' : a.tool === 'pen' ? 'Vector' : a.tool === 'fill' ? a.fillMode === 'lasso' ? 'Select area' : 'Bucket fill' : a.smudging ? 'Smudge' : a.tool === 'eraser' ? 'Eraser' : 'Brush';
     const target = a.editingMask ? 'Mask' : a.project.isPlaceholder ? 'New paint layer' : `${a.project.layer.name} · ${a.plane === 'line' ? 'Ink' : 'Colour'}`;
     const hint = this.footer.querySelector<HTMLElement>('.painting-purpose')!;
-    hint.textContent = `${tool} · ${target}`; hint.title = `${a.project.comp.name} · ${hint.textContent}`;
+    hint.textContent = `${tool} on ${target}`; hint.title = `${a.project.comp.name} · ${hint.textContent}`;
     this.handles.get('options')!.textContent = 'Tool settings';
     this.handles.get('options')!.setAttribute('aria-label', 'Toggle tool settings');
   }
