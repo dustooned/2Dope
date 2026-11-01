@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { defaultPenPrefs, diagnosePen, ERASER_BUTTONS, mapPressure, platformOf, readPenPrefs, type PenPrefs } from '../core/pen';
+import { CANVAS_CURSORS, canvasCursorCss, defaultPenPrefs, diagnosePen, ERASER_BUTTONS, mapPressure, platformOf, readPenPrefs, type CanvasCursor, type PenPrefs } from '../core/pen';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string) => {
   const e = document.createElement(tag); e.className = cls; if (text) e.textContent = text; return e;
@@ -38,21 +38,25 @@ export function penSettingsSection(app: App): { section: HTMLDetailsElement; rea
   const barrelRow = el('label', 'app-settings-field'), barrel = el('select'); barrel.setAttribute('aria-label', 'Pen side button');
   for (const [v, t] of [['menu', 'Opens the canvas menu'], ['pan', 'Moves the page (hold and drag)'], ['zoom', 'Zooms (hold and drag up or down)'], ['eraser', 'Erases while held']]) { const o = el('option', '', t); o.value = v!; barrel.append(o); }
   barrelRow.append(el('span', '', 'Side button'), barrel);
+  const cursorRow = el('label', 'app-settings-field'), cursor = el('select'); cursor.setAttribute('aria-label', 'Cursor on the canvas');
+  for (const [v, t] of CANVAS_CURSORS) { const o = el('option', '', t); o.value = v; cursor.append(o); }
+  cursorRow.append(el('span', '', 'Cursor'), cursor);
+  cursorRow.title = 'The pointer over the canvas. Brush size shows the brush’s outline at the current zoom. Try it on the pad.';
   const actions = el('div', 'student-profile-actions');
   const fromPad = el('button', '', 'Set from my test strokes'), clear = el('button', '', 'Clear pad'), reset = el('button', '', 'Restore pen defaults');
   for (const b of [fromPad, clear, reset]) b.type = 'button';
   fromPad.title = 'Full strength at your strongest stroke on the pad';
   actions.append(fromPad, clear, reset);
-  section.append(firm.row, threshold.row, full.row, tilt.row, eraserEnd.row, barrelRow, actions,
+  section.append(firm.row, threshold.row, full.row, tilt.row, eraserEnd.row, barrelRow, cursorRow, actions,
     el('p', 'menu-note', 'Turning the pen over to its eraser end switches to the Eraser; the tip brings back your tool. A tablet button set to Erase in the driver works the same way; one set to zoom with Ctrl + and Ctrl − zooms the canvas. Tilt off helps when a driver reports a tilt that never changes. Each brush’s own pressure settings still apply on top of these.'));
 
   const read = (): PenPrefs => readPenPrefs({
     version: 1, firmness: Number(firm.input.value) / 100, threshold: Number(threshold.input.value) / 100, full: Number(full.input.value) / 100,
-    tilt: tilt.input.checked, eraserEnd: eraserEnd.input.checked, barrel: barrel.value,
+    tilt: tilt.input.checked, eraserEnd: eraserEnd.input.checked, barrel: barrel.value, cursor: cursor.value,
   });
   const fill = (p: PenPrefs) => {
     firm.input.value = String(Math.round(p.firmness * 100)); threshold.input.value = String(Math.round(p.threshold * 100)); full.input.value = String(Math.round(p.full * 100));
-    tilt.input.checked = p.tilt; eraserEnd.input.checked = p.eraserEnd; barrel.value = p.barrel; outputs();
+    tilt.input.checked = p.tilt; eraserEnd.input.checked = p.eraserEnd; barrel.value = p.barrel; cursor.value = p.cursor ?? 'crosshair'; outputs();
   };
   const outputs = () => {
     const f = Number(firm.input.value);
@@ -117,6 +121,9 @@ export function penSettingsSection(app: App): { section: HTMLDetailsElement; rea
   pad.addEventListener('contextmenu', (e) => e.preventDefault());
 
   for (const s of [firm, threshold, full]) s.input.addEventListener('input', outputs);
+  // the pad previews the cursor (Brush size at the current brush's size on screen)
+  const padCursor = () => { pad.style.cursor = canvasCursorCss(cursor.value as CanvasCursor, app.brush.size * app.view.zoom); };
+  cursor.addEventListener('change', padCursor);
   fromPad.addEventListener('click', () => {
     if (padMax < 0.05) { summary.textContent = 'Draw a few strokes on the pad with your pen first, as firmly as you usually draw.'; return; }
     full.input.value = String(Math.max(20, Math.min(100, Math.round(padMax * 100))));
@@ -127,7 +134,7 @@ export function penSettingsSection(app: App): { section: HTMLDetailsElement; rea
   reset.addEventListener('click', () => fill(defaultPenPrefs()));
   section.addEventListener('toggle', () => { if (section.open) { sized(pad); fill(read()); diagnose(); } });
 
-  fill(app.penPrefs); diagnose();
+  fill(app.penPrefs); diagnose(); padCursor();
   return { section, read };
 }
 

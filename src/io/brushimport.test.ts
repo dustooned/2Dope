@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { BrushImportError, parseBplist, parseXmlPlist, readAbr, readBrushFile, readProcreate, unarchive } from './brushimport';
+import { BrushImportError, curvePoints, parseBplist, parseXmlPlist, readAbr, readBrushFile, readProcreate, unarchive } from './brushimport';
+import { TEST_BRUSH_B64 } from './fixtures/testbrush';
+import { cloneBrush, dyn, evalDynamic, PRESETS } from '../core/brush';
+import { readBrush } from '../core/brushlib';
+import { taperProfile } from '../brush/dabs';
 import { writeZip } from './zip';
 
 // ---- fixture writers (the formats as published) ----
@@ -174,3 +178,136 @@ describe('more brush files', () => {
     expect(p.get('$abc')).toEqual({ name: 'Dry Ink', diameter: 42, spacing: 25 });
   });
 });
+
+describe('Procreate import accuracy', () => {
+  const fixture = () => Uint8Array.from(atob(TEST_BRUSH_B64), (c) => c.charCodeAt(0));
+
+  it('reads a real-format .brush: curves, inversion, tapers, smoothing, scatter and grain', async () => {
+    const [b] = await readBrushFile(fixture(), 'Fixture.brush');
+    expect(b).toMatchObject({
+      name: 'Fixture Dry Ink',
+      size: 12,
+      opacity: 0.9,
+      spacing: 0.08,
+      scatter: 5.5,
+      pressureSize: 0.6,
+      pressureSizeInvert: true,
+      sizeCurve: [[0, 0], [0.25, 0.6], [1, 1]],
+      pressureOpacity: 0.5,
+      sizeJitter: 0.3,
+      taperStart: 0.25,
+      taperEnd: 0.5,
+      taperSize: 0.7,
+      taperOpacity: 0.4,
+      taperShape: 0.5,
+      smoothing: 0.35,
+      stabilize: 0.4,
+    });
+    // a straight curve is not stored; speed does not take over a dynamic pressure already drives
+    expect(b!.opacityCurve).toBeUndefined();
+    expect(b!.speedSize).toBeUndefined();
+    // the picture bundledGrainPath names, from the brush folder, and the named shape
+    expect(b!.tip?.kind).toBe('png');
+    expect(b!.grain).toMatchObject({ mode: 'height', depth: 0.2, depthMin: 0.05, scale: 0.5, movement: 0.4, zoom: 1, rotation: 45, invert: false });
+    expect(String.fromCharCode(...b!.grain!.bytes.subarray(1, 4))).toBe('PNG');
+  });
+
+  it('reports every archive key as mapped, not supported (with why) or unknown', async () => {
+    const [b] = await readBrushFile(fixture(), 'Fixture.brush');
+    const r = b!.report!;
+    expect(r.unknown).toEqual(['fixtureFutureKey']);
+    expect(r.mapped).toEqual(expect.arrayContaining(['dynamicsPressureSizeCurve', 'grainBlendMode', 'bundledGrainPath', 'plotMovingAverageStabilization', 'pencilTaperShape', 'textureOrientation']));
+    const why = Object.fromEntries(r.unsupported.map((u) => [u.key, u.why]));
+    expect(why.dynamicsTiltSize).toMatch(/tilt/);
+    expect(why.dynamicsSpeedSize).toMatch(/pressure already/);
+    expect(why.taperPressure).toMatch(/touch taper/);
+    expect(r.mapped).toContain('dynamicsPressureOpacityCurve'); // read (a straight line)
+    // nothing is dropped silently: the three lists cover every key once
+    const all = [...r.mapped, ...r.unsupported.map((u) => u.key), ...r.unknown];
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.length).toBe(37);
+  });
+
+  it('has a reason for every key of the Procreate 5.4.9 Signature brush', async () => {
+    // two halves: the test plist writer keeps under 256 objects
+    const half = (keys: string[]) => keyedArchive(Object.fromEntries(keys.map((k) => [k, k === 'name' ? 'Sig' : 0])));
+    const mid = SIGNATURE_KEYS.length >> 1;
+    const out = await readProcreate(writeZip([{ name: 'A/Brush.archive', data: half(SIGNATURE_KEYS.slice(0, mid)) }, { name: 'B/Brush.archive', data: half(SIGNATURE_KEYS.slice(mid)) }]), 'S.brushset');
+    expect(out.flatMap((b) => b.report!.unknown)).toEqual([]);
+    expect(out.reduce((n, b) => n + b.report!.mapped.length + b.report!.unsupported.length, 0)).toBe(SIGNATURE_KEYS.length);
+  });
+
+  it('maps unsupported grain blends and speed-only dynamics', async () => {
+    const zip = writeZip([
+      { name: 'A/Brush.archive', data: keyedArchive({ name: 'Speedy', bundledGrainPath: 'Not-Here.png', grainBlendMode: 10, dynamicsPressureSize: 0, dynamicsSpeedSize: -0.5, plotJitter: 12 }) },
+      { name: 'A/Grain.png', data: PNG },
+    ]);
+    const [b] = await readProcreate(zip, 'A.brush');
+    expect(b).toMatchObject({ speedSize: -0.5, scatter: 8 });
+    expect(b!.grain?.mode).toBeUndefined();
+    const why = Object.fromEntries(b!.report!.unsupported.map((u) => [u.key, u.why]));
+    expect(why.grainBlendMode).toMatch(/blend 10/);
+    expect(why.bundledGrainPath).toMatch(/Not-Here/);
+  });
+
+  it('fails cleanly on a damaged archive and a damaged curve', async () => {
+    const garbage = writeZip([{ name: 'X/Brush.archive', data: enc('bplist00 this is not really a plist at all, no trailer') }, { name: 'X/Shape.png', data: PNG }]);
+    await expect(readProcreate(garbage, 'X.brush')).rejects.toThrow(/could not be read/);
+    const trunc = fixture().subarray(0, 900);
+    await expect(readBrushFile(trunc, 'Cut.brush')).rejects.toBeInstanceOf(BrushImportError);
+    expect(curvePoints({ points: { 'NS.objects': ['{0, 0}', 'nonsense'] } })).toBeNull();
+    expect(curvePoints({ points: { 'NS.objects': ['{0.000000, 0.000000}', '{0.5, 0.2}', '{1, 1}'] } })).toEqual([[0, 0], [0.5, 0.2], [1, 1]]);
+  });
+});
+
+describe('imported dynamics and tapers in the engine', () => {
+  it('an inverted pressure curve: firmer is smaller, shaped by the curve', () => {
+    const d = { ...dyn('pressure', 0.4), invert: true, points: [[0, 0], [0.25, 0.6], [1, 1]] as [number, number][] };
+    const at = (p: number) => evalDynamic(d, { pressure: p, tilt: 0, speed: 0 }, 0);
+    expect(at(0)).toBeCloseTo(1);
+    expect(at(0.25)).toBeCloseTo(0.4 + 0.6 * 0.4);
+    expect(at(1)).toBeCloseTo(0.4);
+    // without points the exponent curve still applies
+    expect(evalDynamic(dyn('pressure', 0, 2), { pressure: 0.5, tilt: 0, speed: 0 }, 0)).toBeCloseTo(0.25);
+  });
+
+  it('taper size, opacity and shape', () => {
+    const b = { ...cloneBrush(PRESETS[0]!), size: 10, taperStart: 100, taperEnd: 0 };
+    expect(taperProfile(b, 0).size).toBeCloseTo(0);
+    expect(taperProfile(b, 200)).toEqual({ size: 1, alpha: 1 });
+    const half = taperProfile({ ...b, taperSize: 0.5, taperOpacity: 0.4 }, 0);
+    expect(half.size).toBeCloseTo(0.5);
+    expect(half.alpha).toBeCloseTo(0.6);
+    expect(taperProfile({ ...b, taperShape: 1 }, 50).size).toBeLessThan(taperProfile(b, 50).size);
+  });
+
+  it('keeps valid imported fields from storage and drops bad ones', () => {
+    const b = readBrush({ ...cloneBrush(PRESETS[0]!), name: 'X', sizeDyn: { ...dyn('pressure'), points: [[0, 0], [2, 1]] }, opacityDyn: { ...dyn('pressure'), points: [[0, 0], [0.5, 0.8], [1, 1]] }, taperSize: 3, grainMode: 'weird', grainMovement: 0.3 })!;
+    expect(b.sizeDyn.points).toBeUndefined();
+    expect(b.opacityDyn.points).toEqual([[0, 0], [0.5, 0.8], [1, 1]]);
+    expect(b.taperSize).toBe(1);
+    expect(b.grainMode).toBeUndefined();
+    expect(b.grainMovement).toBe(0.3);
+  });
+});
+
+/** Opt-in: BRUSH_CORPUS = a folder of real .brush files (see the handoff); every key must have a reason. */
+describe('local brush corpus', () => {
+  const dir = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.BRUSH_CORPUS;
+  it.skipIf(!dir)('imports every brush with no unknown keys', async () => {
+    const fsName = 'node:fs';
+    const fs = (await import(/* @vite-ignore */ fsName)) as { readdirSync(p: string): string[]; readFileSync(p: string): Uint8Array; writeFileSync(p: string, s: string): void };
+    const report: Record<string, unknown> = {};
+    const unknown = new Set<string>();
+    for (const f of fs.readdirSync(dir!).filter((n) => n.endsWith('.brush'))) {
+      const [b] = await readBrushFile(new Uint8Array(fs.readFileSync(`${dir}/${f}`)), f);
+      for (const k of b!.report!.unknown) unknown.add(k);
+      const { tip, grain, report: r, ...rest } = b!;
+      report[f] = { ...rest, tip: !!tip, grain: grain ? { ...grain, bytes: grain.bytes.length } : null, mapped: r!.mapped, unsupported: r!.unsupported, unknown: r!.unknown };
+    }
+    fs.writeFileSync(`${dir}/report.json`, JSON.stringify(report, null, 1));
+    expect([...unknown]).toEqual([]);
+  }, 60_000);
+});
+
+const SIGNATURE_KEYS = 'authorName blendGammaCorrect blendMode bundledGrainPath bundledShapePath cloneOpacity cloneSize color dualBlendMode dynamicsBlur dynamicsBlurJitter dynamicsFalloff dynamicsGlazeFlow dynamicsJitterDarkness dynamicsJitterHue dynamicsJitterLightness dynamicsJitterOpacity dynamicsJitterSaturation dynamicsJitterSize dynamicsJitterStrokeDarkness dynamicsJitterStrokeHue dynamicsJitterStrokeLightness dynamicsJitterStrokeSaturation dynamicsLoad dynamicsMix dynamicsMixSoftening dynamicsPressureBleed dynamicsPressureBleedCurve dynamicsPressureBleedSpeed dynamicsPressureBrightness dynamicsPressureBrightnessCurve dynamicsPressureHue dynamicsPressureHueCurve dynamicsPressureMix dynamicsPressureOpacity dynamicsPressureOpacityCurve dynamicsPressureOpacitySpeed dynamicsPressureResponse dynamicsPressureSaturation dynamicsPressureSaturationCurve dynamicsPressureSecondaryColor dynamicsPressureSecondaryColorCurve dynamicsPressureSize dynamicsPressureSizeCurve dynamicsPressureSizeSpeed dynamicsPressureSmoothing dynamicsRenderType dynamicsSmudgeAccumulation dynamicsSpeedOpacity dynamicsSpeedSize dynamicsTiltAngle dynamicsTiltBleed dynamicsTiltBrightness dynamicsTiltCompression dynamicsTiltGradation dynamicsTiltHue dynamicsTiltOpacity dynamicsTiltSaturation dynamicsTiltSecondaryColor dynamicsTiltSize dynamicsWetAccumulation dynamicsWetnessJitter eraseOpacity eraseSize extendedBlend grainBlendMode grainDepth grainDepthJitter grainDepthMinimum jitterSecondary jitterStrokeSecondary maxOpacity maxSize minOpacity minSize name oriented paintOpacity paintSize pencilTaperEndLength pencilTaperOpacity pencilTaperShape pencilTaperSize pencilTaperSizeLinked pencilTaperStartLength pencilTipAnimation plotJitter plotSmoothing plotSpacing previewSize secondaryBrush shapeAzimuth shapeCount shapeCountJitter shapeFilter shapeFilterMode shapeFlipXJitter shapeFlipYJitter shapeInverted shapeOrientation shapeRandomise shapeRotation shapeScatter smudgeOpacity smudgeSize stamp taperEndLength taperOpacity taperPressure taperShape taperSize taperSizeLinked taperStartLength taperVersion textureFilter textureFilterMode textureInverted textureMovement textureOffsetJitter textureOrientation textureRotation textureScale textureZoom version'.split(' ');

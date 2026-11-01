@@ -2,6 +2,112 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Cursor choice; iteration 3 follow-ups (2026-11-01, committed with iteration 3)
+
+Owner: "add all those changes" (the open iteration-3 decisions), plus student feedback asking for
+other cursor shapes than the crosshair.
+- Grain blend 27 now imports as height too (`src/io/brushimport.ts`); the test uses blend 10 for
+  the unsupported case.
+- Brush Studio's Scatter slider goes to 8 for pixel brushes, 2 for styled vector brushes
+  (`src/ui/panel.ts`; the file schema still caps styled vectors at 2).
+- Cursor: optional `PenPrefs.cursor` ('crosshair' default | 'circle' | 'dot' | 'brush' | 'none';
+  `src/core/pen.ts`, older builds ignore it). `canvasCursorCss` builds an SVG data-URL cursor (dark
+  ring inside white; hotspot centred; falls back to crosshair). Brush size = brush size × zoom,
+  only for Brush / Eraser / Vector (Fill gets the small circle), crosshair above ~120 px (browser
+  cursor limit). `App.updateCursor` caches the string; `render()` refreshes it while Brush size is
+  chosen; `setPenPrefs` applies it. UI: App settings → Pen and tablet → Cursor, previewed on the
+  test pad (`src/ui/pensettings.ts`). Space / R / Z keep their grab / rotate / zoom cursors.
+- Manual (Pen and tablet) and an UPDATES entry.
+- Checks: `npx vitest run` 643 passed + 1 skipped; `npm run build` passes. Fixtures on 127.0.0.1:5217: vectornext 15/15 (3 new
+  cursor checks: the browser accepts each cursor; Brush size grows with zoom), brushcontrols 26/26,
+  studentprofiles 28/28, commandrow 44/44, canvasview 25/25. The rest of the suite was not rerun.
+- Not checked: Apple Pencil hover on iPad (no cursor there), how each cursor looks on dark and
+  light paper by eye, Firefox/Safari cursor rendering.
+
+### Iteration 3: brush import accuracy and vector features (2026-11-01, committed)
+
+Brief: `docs/research/CLAUDE-ITERATION-3.md` (packages A and B), pasted by the owner.
+
+**A. Procreate brush import** (`src/io/brushimport.ts`, `src/ui/brushlib.ts` `importedBrush`)
+- Model (`src/core/brush.ts`, all optional, older builds ignore them): `Dynamic.points` (a response
+  curve; `evalDynamic` uses it instead of `curve`, then `invert` flips the output), `taperSize`,
+  `taperOpacity`, `taperShape`, `grainMode: 'height'`, `grainMin`, `grainMovement`, `grainRotation`,
+  `grainFollow` + `grainRef`. `sanitizeBrushExtras` clamps/drops them in `readBrush` (storage) and
+  `schema.ts` `brush()` (files). Moving the Curve slider in Brush Studio drops `points` (`panel.ts`).
+- Renderer: `src/brush/dabs.ts` `taperProfile` (size/alpha; defaults reproduce the old taper);
+  `src/brush/raster.ts` grain pass: height masks (`heightFor`, threshold at the depth, cached),
+  depth minimum, rolling grain (per-dab pattern offset when movement < 1), rotation,
+  `grainScaleOf` (follows brush size). Defaults reproduce the old pass.
+- Importer: `unarchive` now resolves nested objects (curves are `{points:{NS.objects:['{x, y}']}}`);
+  `curvePoints`; pressure size/opacity curves; negative amounts → `invert`; speed size/opacity only
+  when pressure does not drive that setting; Apple Pencil taper first (Signature's touch taper is 0,
+  so it used to import no taper), touch taper otherwise, with size/opacity/shape; StreamLine,
+  `plotMovingAverageStabilization` → `stabilize`; real colour-jitter key names
+  (`dynamicsJitterHue` …); scatter clamp 0–2 → 0–8; `bundledShapePath`/`bundledGrainPath` looked up in
+  the brush folder; grain blend 1 → multiply, 28 → height, others reported; textureMovement, Zoom
+  (→ follow size), Rotation (×180°, assumed), Orientation 1; an unreadable archive is skipped and a
+  file with none readable fails with a message.
+- A4 report: every `ImportedBrush` has `report {mapped, unsupported[{key, why}], unknown}` from the
+  `NOT_MAPPED` table; logged with `console.debug('[brush import] …')` on import.
+- Tests (`src/io/brushimport.test.ts`, +9): fixture `src/io/fixtures/testbrush.ts` (a .brush written
+  by `scripts/make-brush-fixture.py`: Python's NSKeyedArchiver plist, Procreate key names, our
+  values) asserts mapped values; the report (37 keys, one unknown on purpose); every Signature key
+  has a reason; blend 27 / missing bundled grain / speed-only / scatter 12→8; damaged archive and
+  truncated zip fail with `BrushImportError`; inverted curve maths; taper profile; storage sanitising.
+  Opt-in corpus test: `BRUSH_CORPUS=<folder of .brush>`; run on 217 local factory brushes (216 Dreams
+  1.0.11 + Signature, copied out of the IPAs into a scratch folder, not the repo): all import, 0
+  unknown keys. Report: `docs/research/procreate-brush-system/import-report-2026-11-01.md`.
+
+**B. Vector features**
+- B1 `src/core/vectorcut.ts`: `vectorWidths` moved here from `brush/vector.ts` (re-exported there);
+  the eraser's reach along each segment is radius + the interpolated drawn half-width (pressure,
+  point width, tapers); styled lines keep `vectorReach`. (Segment-based hit testing already existed.)
+- B2: `at()` already interpolated `w` before this round; now tested (cut through a width peak).
+- B3 `src/core/vecedit.ts` `simplifyPoints` (Douglas–Peucker on centreline and width), `smoothPoints`
+  (bounded by the tolerance), `segDist`; `App.simplifyLine(smooth)` (tolerance = 15 % of the weight,
+  1–6 px), one undo step "Simplify line" / "Smooth line", authored controls reset; commands
+  `points.simplify`, `points.smooth` (`src/ui/commands.ts`).
+- B4: already present — `StrokeRecord.controls {anchors, modes, handles}` is written by `pushVectors`,
+  validated by `readVectorControls`, round-trip tested in `io.test.ts`. Nothing added; no schema bump.
+- B5: `VectorErase` gains `'intersection'` ("Only where it crosses": cuts the touched span only where
+  the eraser path strictly crosses the line). "Whole line" already existed. `VECTOR_ERASE_NAMES`;
+  undo label "Erase (vector: …)"; canvas context-menu chip; stored mode validated on load.
+- B6 `src/io/svg.ts`: `vectorsToSvg` (one stroked centreline path per pen line, colour, opacity,
+  average width, round caps, per-point half-widths in `data-2dope-w`) and `readVectorSvg` (reads
+  that back); `App.exportVectorSvg()`, command `paint.svg` "Export SVG" (Vector pen row).
+- Tests: `src/core/vectornext.test.ts` (10) on one fixture (long two-point line, variable-width line,
+  crossing pair, closed shape); browser fixture `tests/vectornext.html` + `src/ui/vectornext.browser.ts`
+  (12): Simplify/Smooth steps and undo, SVG download point count, only-where-it-crosses (graze vs
+  cross, control with Up to crossings), undo label, height vs multiply grain rows, other grain
+  fields paint without errors, taper size/opacity at the stroke start.
+
+Checks (actual): `npx vitest run` 79 files, 642 passed + 1 skipped (corpus, opt-in);
+`npm run build` passes (existing chunk-size warning); fixture `vectornext` 12/12 on 127.0.0.1:5217;
+all fixtures except railperf (it hangs headless Chrome): 48/49 on the first run;
+the failure was canvasview's check expecting the undo label `Erase` (now "Erase (vector: up to
+crossings)", by design); its assertion was updated in `src/ui/canvasview.browser.ts` and
+canvasview 25/25 + vectornext 12/12 pass on rerun. The other 47 were not rerun after that one-line
+test change.
+
+Decisions (settled in the follow-up above):
+- Grain blends: the corpus has 1 (146 brushes) and **27** (29); 28 only 3. 1 → multiply; 27 and 28
+  → height (27 added in the follow-up).
+- Scatter clamp: raised for new imports only; stored brushes keep their value (no migration).
+  The Scatter slider now reaches 8 for pixel brushes.
+- Handles: additive (the existing `controls` field); no schema bump.
+
+Gaps / not verified:
+- 214 of 217 factory brushes name Procreate's bundled shape/grain pictures, which are not in the
+  file, so their texture cannot come across; grain parity is shown with the fixture only.
+- No stroke rendered against Procreate (three pressures / two speeds); height approximation, rolling
+  grain, rotation units and the speed sign are reasoned, not measured. Taper `Pressure`, tilt,
+  wet mix, dual brush, FFT motion filtering stay unsupported (listed per brush).
+- Vector tapers, styled vectors and `vectorstyle.ts` do not use the new taper/grain fields.
+- SVG has no variable width (average width; the profile is only in `data-2dope-w`), no styles,
+  clips or fills; no SVG import into 2Dope.
+- The eraser chip and the Simplify / Smooth / Export SVG buttons were not clicked in the app; the
+  fixture calls the App methods. Not checked on touch or iPad.
+
 ### Faster effects, floating Effects card, Vignette, Hard edges (2026-11-01, uncommitted)
 
 User feedback: stacked FX lag in Motion previews and while frames generate; the Effects card was awkward (closed on any outside tap, no quick switch between the add list and the layer's effects); Vignette wanted as an effect; pixelate effects only changed the inside of the art.
@@ -588,6 +694,15 @@ and Gaussian blur.
   JSON control schema): reactor types (Pulse/Elastic/Oscillate/Steps/Wiggle/Flicker/Switch/Trigger ×
   1D/2D/3D/Color), controls and defaults, expression maths, and the bake-based "Audio React" design
   for 2Dope (package 9, future).
+- `docs/research/procreate-brush-system/README.md` — NSKeyedArchiver REA of Procreate/Dreams brush
+  archives (Signature: 124 keys; corpus: 241 brushes with min/median/max). Groups, ranges, what the
+  importer takes today (7 settings), and why grain/dynamics/taper feel different. Includes
+  `_tools/nsarchive_dump.py` and `_tools/brush_aggregate.py`.
+- `docs/research/clip-studio-vector-next/README.md` — the CSP vector gaps turned into work: segment
+  eraser hit test, cut width preservation, simplify/smooth, authored handles persistence, erase
+  modes, SVG export.
+- `docs/research/CLAUDE-ITERATION-3.md` — packages A (brush import accuracy: curves, mapping, grain)
+  and B (vector features), ordered, with acceptance criteria and decisions.
 
 Checks (actual): `npm test` **74 files / 584 passed** (the two extra files are the concurrent onion
 and Story work); `npm run build` passed (existing chunk-size warning only). **Not checked:** the new

@@ -88,9 +88,13 @@ export const COMMANDS: readonly Command[] = [
   { id: 'paint.inkpaint', label: 'Ink & Paint', title: 'Ink & Paint: fill newly closed areas after inking. Existing paint stays.', icon: 'inkpaint', contexts: ['paint'], order: 10, run: (a) => a.setInkPaint(!a.inkPaint.enabled), isOn: (a) => a.inkPaint.enabled, isEnabled: (a) => a.studentUI.controls.inkPaint, face: (a) => (a.autoPaintSupported ? {} : { title: 'Ink & Paint: this page exceeds the automatic paint limit for this device.' }) },
   { id: 'paint.editpoints', label: 'Edit points', title: 'Drag the corners and bends of a vector line; set its thickness', contexts: ['paint'], order: 20, run: (a) => { a.enterPointEdit(); }, isEnabled: (a) => a.tool === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen') },
 
+  { id: 'paint.svg', label: 'Export SVG', title: "Save this drawing's vector lines as an SVG file", contexts: ['paint'], order: 30, run: (a) => a.exportVectorSvg(), isEnabled: (a) => a.tool === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen') },
+
   // Editing a vector line's points
   { id: 'points.toggle', label: 'Curved point', name: 'Straight / curved point', title: 'Tap a point first; hold a point to switch it', icon: 'curvept', contexts: ['points'], order: 10, run: (a) => a.togglePoint(), isOn: (a) => a.pointSelMode === 'straight',
     face: (a) => ({ ...(a.pointSelMode === 'straight' ? { label: 'Straight point', icon: 'straightpt' } : {}), ...(a.pointSelMode ? { title: 'Switch this point between straight and curved (or hold the point)' } : {}) }) },
+  { id: 'points.simplify', label: 'Simplify', title: 'Fewer points on this line, same shape and width (ends stay)', contexts: ['points'], order: 22, run: (a) => a.simplifyLine() },
+  { id: 'points.smooth', label: 'Smooth', title: 'Take the wobble out of this line (ends and width stay)', contexts: ['points'], order: 24, run: (a) => a.simplifyLine(true) },
   { id: 'points.allstraight', label: 'All straight', title: 'Make every point straight: clean lines between the corners', icon: 'allstraight', contexts: ['points'], order: 20, run: (a) => a.straightenAllPoints() },
   { id: 'points.widthscope', label: 'Width: whole line', name: 'Width: whole line, point or sections', title: 'Width for the whole line. Tap to switch: whole line, point, sections', icon: 'wline', contexts: ['points'], order: 30, run: (a) => a.setPointWidthScope(a.pointWidthScope === 'all' ? 'point' : a.pointWidthScope === 'point' ? 'section' : 'all'), isOn: (a) => a.pointWidthScope !== 'all',
     face: (a) => a.pointWidthScope === 'point' ? { label: 'Width: this point', title: 'Width for the chosen point. Tap to switch: whole line, point, sections', icon: 'wpoint' }

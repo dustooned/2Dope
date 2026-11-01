@@ -262,3 +262,66 @@ export function scaleSections<T extends Pt & { w?: number }>(points: T[], anchor
   }
   return out;
 }
+
+/**
+ * Fewer points, same line: Douglas–Peucker with a tolerance in document pixels, measured on the
+ * centreline and (when `widths` are given, one half-width per point) on the width too, so a width
+ * peak or a thin tail keeps its points. Endpoints always stay. Kept points keep all their channels
+ * (pressure, width, timing), so the width profile is what it was at every kept point.
+ */
+export function simplifyPoints<T extends Pt>(points: T[], tol: number, widths?: number[]): T[] {
+  const n = points.length;
+  if (n <= 2) return points.slice();
+  const keep = new Uint8Array(n);
+  keep[0] = keep[n - 1] = 1;
+  const stack: [number, number][] = [[0, n - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const A = points[a]!, B = points[b]!;
+    let best = -1, bestD = tol;
+    for (let i = a + 1; i < b; i++) {
+      const d = segDist(points[i]!, A, B);
+      // how far the width strays from a straight width ramp between the two kept points
+      const w = widths ? Math.abs(widths[i]! - (widths[a]! + ((widths[b]! - widths[a]!) * (i - a)) / (b - a))) : 0;
+      const e = Math.max(d, w);
+      if (e > bestD) { bestD = e; best = i; }
+    }
+    if (best > 0) {
+      keep[best] = 1;
+      stack.push([a, best], [best, b]);
+    }
+  }
+  return points.filter((_, i) => keep[i]);
+}
+
+/**
+ * Smooth the wobble out of a line: a few passes that pull each inner point towards its neighbours'
+ * midpoint, never further than `tol` from where it started. Endpoints (and so a closed shape's join)
+ * stay put; pressure and width stay with each point.
+ */
+export function smoothPoints<T extends Pt>(points: T[], tol: number, passes = 4): T[] {
+  const n = points.length;
+  if (n <= 2 || tol <= 0) return points.slice();
+  const out = points.map((p) => ({ ...p }));
+  for (let k = 0; k < passes; k++) {
+    const prev = out.map((p) => ({ x: p.x, y: p.y }));
+    for (let i = 1; i < n - 1; i++) {
+      const o = points[i]!, q = out[i]!;
+      let x = q.x + 0.5 * ((prev[i - 1]!.x + prev[i + 1]!.x) / 2 - q.x);
+      let y = q.y + 0.5 * ((prev[i - 1]!.y + prev[i + 1]!.y) / 2 - q.y);
+      const d = Math.hypot(x - o.x, y - o.y);
+      if (d > tol) { x = o.x + ((x - o.x) * tol) / d; y = o.y + ((y - o.y) * tol) / d; }
+      q.x = x;
+      q.y = y;
+    }
+  }
+  return out;
+}
+
+/** Distance from p to the segment ab. */
+export function segDist(p: Pt, a: Pt, b: Pt): number {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}

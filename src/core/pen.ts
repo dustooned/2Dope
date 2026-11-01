@@ -27,10 +27,43 @@ export interface PenPrefs {
   eraserEnd: boolean;
   /** The pen's side (barrel) button on the canvas. */
   barrel: BarrelAction;
+  /** The pointer over the canvas while drawing (missing = crosshair; older builds ignore it). */
+  cursor?: CanvasCursor;
+}
+
+export type CanvasCursor = 'crosshair' | 'circle' | 'dot' | 'brush' | 'none';
+export const CANVAS_CURSORS: [CanvasCursor, string][] = [['crosshair', 'Crosshair'], ['circle', 'Small circle'], ['dot', 'Dot'], ['brush', 'Brush size'], ['none', 'None (pen screens)']];
+
+/** Largest cursor picture browsers show (Chrome and Safari cap custom cursors at 128 px). */
+const MAX_CURSOR = 124;
+
+/**
+ * The CSS cursor for a canvas cursor choice. `diameter` is the brush's size on screen in CSS pixels
+ * (for 'brush'; tools without a size pass 0 and get the small circle). Rings are drawn dark inside
+ * white so they show on any colour. A brush larger than a cursor picture can be shows the crosshair.
+ */
+export function canvasCursorCss(kind: CanvasCursor = 'crosshair', diameter = 0): string {
+  const svg = (size: number, body: string) => {
+    const c = size / 2;
+    const url = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">${body.replace(/C/g, String(c))}</svg>`)}`;
+    return `url("${url}") ${Math.floor(c)} ${Math.floor(c)}, crosshair`;
+  };
+  const ring = (size: number, r: number) => svg(size, `<circle cx="C" cy="C" r="${r}" fill="none" stroke="#fff" stroke-width="3"/><circle cx="C" cy="C" r="${r}" fill="none" stroke="#000" stroke-width="1"/>`);
+  if (kind === 'none') return 'none';
+  if (kind === 'dot') return svg(8, '<circle cx="C" cy="C" r="2.5" fill="#000" stroke="#fff" stroke-width="1.5"/>');
+  if (kind === 'circle' || (kind === 'brush' && diameter <= 0)) return ring(16, 5.5);
+  if (kind === 'brush') {
+    if (diameter > MAX_CURSOR - 4) return 'crosshair';
+    const r = Math.max(2, diameter / 2);
+    const size = Math.ceil(r * 2 + 6) | 1;
+    // a dot in the middle marks the exact spot on a ring too big to aim with
+    return svg(size, `<circle cx="C" cy="C" r="${r}" fill="none" stroke="#fff" stroke-width="3"/><circle cx="C" cy="C" r="${r}" fill="none" stroke="#000" stroke-width="1"/>${r > 8 ? '<circle cx="C" cy="C" r="1" fill="#000"/>' : ''}`);
+  }
+  return 'crosshair';
 }
 
 export function defaultPenPrefs(): PenPrefs {
-  return { version: 1, firmness: 0, threshold: 0, full: 1, tilt: true, eraserEnd: true, barrel: 'menu' };
+  return { version: 1, firmness: 0, threshold: 0, full: 1, tilt: true, eraserEnd: true, barrel: 'menu', cursor: 'crosshair' };
 }
 
 const num = (v: unknown, lo: number, hi: number, d: number): number =>
@@ -50,6 +83,7 @@ export function readPenPrefs(value: unknown): PenPrefs {
     tilt: typeof v.tilt === 'boolean' ? v.tilt : d.tilt,
     eraserEnd: typeof v.eraserEnd === 'boolean' ? v.eraserEnd : d.eraserEnd,
     barrel: BARREL.includes(v.barrel as BarrelAction) ? v.barrel as BarrelAction : 'menu',
+    cursor: CANVAS_CURSORS.some(([k]) => k === v.cursor) ? v.cursor as CanvasCursor : 'crosshair',
   };
 }
 

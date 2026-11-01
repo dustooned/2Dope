@@ -3,7 +3,7 @@ import { ACTION_SAFE, CANVAS_VIEW_KEY, readCanvasView, safeRect, TITLE_SAFE, typ
 import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection, vanishingPoints, type Guide } from './core/guides';
 import { adjustHex, applyBlur, applyHSB, isNoHSB, keepOutside, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
 import { loadGrain, loadTip } from './brush/raster';
-import { allStraight, anchorsOf, cubicSpan, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
+import { allStraight, anchorsOf, cubicSpan, simplifyPoints, smoothPoints, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
 import { celMembers, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
 import { readBrush } from './core/brushlib';
@@ -30,7 +30,7 @@ import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, PAR
 import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
 import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type InterfaceLevel } from './core/studentprefs';
 import { WORKSPACE_LAYOUT_KEY, readWorkspaceLayouts, type WorkspaceLayouts } from './core/workspacelayout';
-import { ERASER_BUTTONS, mapPressure, PEN_PREFS_KEY, PenProbe, readPenPrefs, type PenPrefs, type PenSample } from './core/pen';
+import { canvasCursorCss, ERASER_BUTTONS, mapPressure, PEN_PREFS_KEY, PenProbe, readPenPrefs, type PenPrefs, type PenSample } from './core/pen';
 import { BRUSH_PREFS_KEY, readBrushPreferences, rememberBrush, recalledBrush, usedBrush, favoriteBrush, forgetBrush, renameBrush } from './core/brushprefs';
 import { staticProp, valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
@@ -69,7 +69,8 @@ import {
   type Exposure,
 } from './core/timeline';
 import { Smoother, smoothStroke } from './brush/smoothing';
-import { eraseVectors, type VectorErase } from './core/vectorcut';
+import { eraseVectors, VECTOR_ERASE_NAMES, vectorWidths, type VectorErase } from './core/vectorcut';
+import { vectorsToSvg } from './io/svg';
 import { drawingBox } from './view/contentbox';
 import { constrainShape, editShape, fitAs, pressureProfile, recognizeShape, sampleProfile, SHAPE_CHOICES, SHAPE_NAMES, shapeOutline, type Shape, type ShapeChoice } from './core/quickshape';
 import { drawVectorStroke, clearVectorRenderCache, hasVisibleVectorStroke } from './brush/vector';
@@ -415,6 +416,7 @@ export class App {
   private barrelUsed = false;
   setPenPrefs(p: PenPrefs): void {
     this.penPrefs = readPenPrefs(p); saveJSON(PEN_PREFS_KEY, this.penPrefs);
+    this.updateCursor();
   }
   uiHidden = false;
 
@@ -542,7 +544,7 @@ export class App {
   // is read once per drawing (a prepared map) and reused until the lines change.
 
   /** What the eraser does to vector lines on the Line plane: cut up to crossings, remove whole lines, or nothing. */
-  vectorErase: VectorErase = loadJSON<VectorErase>(VECTOR_ERASE_KEY) ?? 'crossing';
+  vectorErase: VectorErase = ((m) => (m && m in VECTOR_ERASE_NAMES ? m : 'crossing'))(loadJSON<VectorErase>(VECTOR_ERASE_KEY));
 
   /** QuickShape: hold at the end of a brush or pen stroke to snap it to a line, arc, ellipse, rectangle or polygon. */
   quickShape = loadJSON<boolean>(QUICKSHAPE_KEY) ?? true;
@@ -741,6 +743,7 @@ export class App {
   }
 
   setVectorErase(m: VectorErase): void {
+    if (!(m in VECTOR_ERASE_NAMES)) m = 'crossing';
     this.vectorErase = m;
     saveJSON(VECTOR_ERASE_KEY, m);
     this.onToolChange();
@@ -902,6 +905,41 @@ export class App {
     this.pushVectors('Straight lines', ve.d, before);
     this.onToolChange();
   }
+  /**
+   * Simplify (fewer points) or Smooth (less wobble) the line being edited, within a tolerance that
+   * follows its weight. Endpoints and the width profile stay; its authored handles start over.
+   */
+  simplifyLine(smooth = false): void {
+    const ve = this.ve;
+    const rec = this.pointStroke;
+    if (!ve || !rec || rec.points.length < 3) return;
+    const tol = Math.max(1, Math.min(6, rec.brush.size * 0.15));
+    const points = smooth ? smoothPoints(rec.points, tol) : simplifyPoints(rec.points, tol, rec.style ? undefined : vectorWidths(rec, strokeLength(rec.points)));
+    if (!smooth && points.length === rec.points.length) { this.onNotice?.('This line is already as simple as it gets at this tolerance.'); return; }
+    const before = ve.d.vectors;
+    this.pointModes.delete(rec.id);
+    this.pointHandles.delete(rec.id);
+    this.anchorCache.delete(rec.id);
+    ve.sel = null;
+    ve.sections.clear();
+    this.replaceStroke({ ...rec, controls: undefined, points });
+    this.pushVectors(smooth ? 'Smooth line' : 'Simplify line', ve.d, before);
+    this.onToolChange();
+  }
+
+  /** This drawing's vector lines as an SVG file (centrelines with their colour and width). */
+  exportVectorSvg(): void {
+    const lines = this.drawing.vectors.filter((v) => v.tool === 'pen');
+    if (!lines.length) { this.onNotice?.('This drawing has no vector lines to export.'); return; }
+    const title = `${this.project.layer.name} · frame ${this.frame + 1}`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([vectorsToSvg(lines, this.docW, this.docH, title)], { type: 'image/svg+xml' }));
+    a.download = `${title.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'vector-lines'}.svg`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    this.onNotice?.(`${lines.length} vector line${lines.length === 1 ? '' : 's'} exported as SVG. Brush styles and the width profile's shape are not part of plain SVG; each line keeps its average width.`);
+  }
+
   private wBase: { before: StrokeRecord[]; rec: StrokeRecord } | null = null;
 
   get pointEditing(): boolean {
@@ -5083,7 +5121,7 @@ export class App {
       if (vAfter) d.vectors = vAfter;
       if (c || vAfter) {
         this.recordInk({
-          label: rec.tool === 'eraser' ? 'Erase' : live.shape ? SHAPE_NAMES[live.shape.base.kind] : 'Brush stroke',
+          label: rec.tool === 'eraser' ? (vAfter ? `Erase (vector: ${VECTOR_ERASE_NAMES[this.vectorErase]})` : 'Erase') : live.shape ? SHAPE_NAMES[live.shape.base.kind] : 'Brush stroke',
           drawings: [d],
           do: () => {
             if (c) putPixels(live.canvas, c.rect, c.after);
@@ -5488,6 +5526,7 @@ export class App {
                 chips: [
                   { label: 'Up to crossings', on: this.vectorErase === 'crossing', run: () => this.setVectorErase('crossing') },
                   { label: 'Whole line', on: this.vectorErase === 'whole', run: () => this.setVectorErase('whole') },
+                  { label: 'Only where it crosses', on: this.vectorErase === 'intersection', run: () => this.setVectorErase('intersection') },
                   { label: 'Off', on: this.vectorErase === 'off', run: () => this.setVectorErase('off') },
                 ],
               },
@@ -6184,8 +6223,13 @@ export class App {
   }
 
   private updateCursor(): void {
-    this.canvas.style.cursor = this.held.has('Space') ? 'grab' : this.held.has('KeyR') ? 'alias' : this.held.has('KeyZ') ? 'zoom-in' : 'crosshair';
+    const held = this.held.has('Space') ? 'grab' : this.held.has('KeyR') ? 'alias' : this.held.has('KeyZ') ? 'zoom-in' : null;
+    // Brush size: the brush's footprint at this zoom (the fill tool has none)
+    const sized = this.tool === 'brush' || this.tool === 'eraser' || this.tool === 'pen';
+    const cursor = held ?? canvasCursorCss(this.penPrefs.cursor, sized ? this.brush.size * this.view.zoom : 0);
+    if (cursor !== this.cursorCss) this.canvas.style.cursor = this.cursorCss = cursor;
   }
+  private cursorCss = '';
 
   private notePen(e: PointerEvent): void {
     if (this.penProbe.observe(penSample(e))) this.penNoPressure();
@@ -6255,6 +6299,8 @@ export class App {
 
   private render(): void {
     this.needsRender = false;
+    // the Brush size cursor follows zoom, brush size and tool (a no-op when nothing changed)
+    if (this.penPrefs.cursor === 'brush') this.updateCursor();
     // while playing, effects work at half size so playback keeps up (Full again once it stops)
     setFxPlaying(this.playing);
     const g = this.ctx;

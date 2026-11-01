@@ -1,6 +1,6 @@
 import { readEffects, type LayerEffect } from '../core/effects';
 import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
-import { PRESETS, type BrushSettings } from '../core/brush';
+import { PRESETS, sanitizeBrushExtras, type BrushSettings } from '../core/brush';
 import {
   BLEND_MODES,
   compLength,
@@ -250,7 +250,7 @@ function brush(v: unknown): BrushSettings {
     if (typeof merged[k] !== 'number' || !Number.isFinite(merged[k])) throw new SchemaError(`brush ${k} must be a number`);
   }
   if(v.vectorStyle !== undefined) merged.vectorStyle = readVectorStyle(v.vectorStyle);
-  return merged;
+  return sanitizeBrushExtras(merged);
 }
 
 function stroke(v: unknown): StrokeRecord {

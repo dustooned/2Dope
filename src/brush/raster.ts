@@ -1,6 +1,7 @@
 import { anySelected, maskCanvas } from './clip';
 import { symmetryCopies } from '../core/adjust';
 import type { StrokeRecord } from '../core/stroke';
+import type { BrushSettings } from '../core/brush';
 import { hash01 } from '../core/rng';
 import { jitterColor, mixColor } from '../core/color';
 import { strokeLength } from '../core/stroke';
@@ -238,10 +239,48 @@ function grainFor(url: string | undefined): HTMLCanvasElement {
   return grainCanvas();
 }
 
-/** One paper-aligned pattern per stroke, reused by all its stamps. */
-function paperPattern(g: CanvasRenderingContext2D, scale: number, image?: string): CanvasPattern | null {
-  const pat = g.createPattern(grainFor(image), 'repeat');
-  pat?.setTransform(new DOMMatrix().scale(Math.max(0.05, scale)));
+// Height grain (Procreate's height blend): the mask becomes a threshold at the depth, soft-edged.
+const heightMasks = new Map<string, HTMLCanvasElement>();
+
+function heightFor(url: string | undefined, depth: number): HTMLCanvasElement {
+  const src = grainFor(url);
+  const level = Math.round(Math.min(1, Math.max(0, depth)) * 50) / 50;
+  // the built-in grain stands in while a picture loads: key it apart so the picture replaces it
+  const key = `${src === grainTile ? '' : url}|${level}`;
+  const have = heightMasks.get(key);
+  if (have) return have;
+  const c = makeCanvas(src.width, src.height);
+  const g = ctx2d(c);
+  g.drawImage(src, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height);
+  const t = 1 - level;
+  for (let i = 3; i < d.data.length; i += 4) {
+    const x = Math.min(1, Math.max(0, (d.data[i]! / 255 - (t - 0.12)) / 0.24));
+    d.data[i] = Math.round(x * x * (3 - 2 * x) * 255);
+  }
+  g.putImageData(d, 0, 0);
+  if (heightMasks.size > 64) heightMasks.clear();
+  heightMasks.set(key, c);
+  return c;
+}
+
+/** The grain scale a brush paints with: `grainScale`, following the brush size by `grainFollow`. */
+export function grainScaleOf(b: BrushSettings): number {
+  const follow = b.grainFollow ?? 0;
+  return follow > 0 ? b.grainScale * (1 + follow * (b.size / (b.grainRef ?? b.size) - 1)) : b.grainScale;
+}
+
+/** The pattern's placement: scaled and rotated about the document origin. */
+function paperMatrix(scale: number, rotation = 0): DOMMatrix {
+  const m = new DOMMatrix();
+  if (rotation) m.rotateSelf(rotation);
+  return m.scaleSelf(Math.max(0.05, scale));
+}
+
+/** One paper-aligned pattern per stroke, reused by all its stamps. `height` = the depth of a height grain. */
+function paperPattern(g: CanvasRenderingContext2D, scale: number, image?: string, height?: number, rotation = 0): CanvasPattern | null {
+  const pat = g.createPattern(height === undefined ? grainFor(image) : heightFor(image, height), 'repeat');
+  pat?.setTransform(paperMatrix(scale, rotation));
   return pat;
 }
 
@@ -289,6 +328,12 @@ export class RasterEngine {
   private pullFrom: Uint8ClampedArray | null = null;
   private paper: CanvasPattern | null = null;
   private shadePaper: CanvasPattern | null = null;
+  /** The brush grain: strength, strength at the firmest press, and how much it rolls with the stroke. */
+  private paperDepth = 0;
+  private paperMin = 0;
+  private paperRoll = 0;
+  private paperPlace = new DOMMatrix();
+  private rollFrom: { x: number; y: number } | null = null;
   /** The selection the stroke is clipped to (document pixels, 1 = selected), fixed at pen-down. */
   private clipMask: Uint8Array | null = null;
   /** `clipMask` as an alpha canvas, built once per stroke when first needed. */
@@ -392,7 +437,14 @@ export class RasterEngine {
     this.dabColour = (varies && !b.strokeColor) || pull > 0;
     this.pullFrom = pull > 0 ? ctx2d(this.target).getImageData(0, 0, this.width, this.height).data : null;
     const scratch = ctx2d(this.scratch);
-    this.paper = b.grain > 0 ? paperPattern(scratch, b.grainScale, b.grainImage) : null;
+    const height = b.grainMode === 'height' ? b.grain : undefined;
+    this.paperPlace = paperMatrix(grainScaleOf(b), b.grainRotation ?? 0);
+    this.paper = b.grain > 0 ? paperPattern(scratch, grainScaleOf(b), b.grainImage, height, b.grainRotation ?? 0) : null;
+    // a height grain holds the valleys back fully; its depth is already in the mask
+    this.paperDepth = Math.min(0.95, height === undefined ? b.grain : 0.95);
+    this.paperMin = Math.min(this.paperDepth, b.grainMin ?? 0);
+    this.paperRoll = 1 - (b.grainMovement ?? 1);
+    this.rollFrom = null;
     this.shadePaper = b.tiltShade.enabled && b.tiltShade.grain > 0 ? paperPattern(scratch, b.grainScale) : null;
     this.tip = this.tipIn(color);
     this.shadeTip = tipSprite(record.brush.tiltShade.hardness, color);
@@ -442,6 +494,15 @@ export class RasterEngine {
       drawDab(ctx, d, tip, alphaScale);
       return;
     }
+    let depth = Math.min(0.95, grain) * (1 - 0.25 * d.pressure);
+    if (paper === this.paper) {
+      depth = this.paperMin + (this.paperDepth - this.paperMin) * (1 - 0.25 * d.pressure);
+      if (this.paperRoll > 0) {
+        // a rolling grain travels with the dab instead of staying on the paper
+        this.rollFrom ??= { x: d.x, y: d.y };
+        paper.setTransform(new DOMMatrix().translateSelf((d.x - this.rollFrom.x) * this.paperRoll, (d.y - this.rollFrom.y) * this.paperRoll).multiplySelf(this.paperPlace));
+      }
+    }
     const r = this.clip(dabBounds(d));
     if (!r) return;
     if (r.w < ATLAS && r.h < ATLAS) {
@@ -461,7 +522,7 @@ export class RasterEngine {
       a.setTransform(1, 0, 0, 1, sx - r.x, sy - r.y);
       drawDab(a, d, tip, alphaScale);
       a.globalCompositeOperation = 'destination-out';
-      a.globalAlpha = Math.min(0.95, grain) * (1 - 0.25 * d.pressure);
+      a.globalAlpha = depth;
       a.fillStyle = paper;
       a.fillRect(r.x, r.y, r.w, r.h);
       a.restore();
@@ -482,7 +543,7 @@ export class RasterEngine {
     drawDab(s, d, tip, alphaScale);
     s.save();
     s.globalCompositeOperation = 'destination-out';
-    s.globalAlpha = Math.min(0.95, grain) * (1 - 0.25 * d.pressure);
+    s.globalAlpha = depth;
     s.fillStyle = paper;
     s.fillRect(r.x, r.y, r.w, r.h);
     s.restore();

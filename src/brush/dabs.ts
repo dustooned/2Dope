@@ -32,6 +32,18 @@ export function taperAt(brush: BrushSettings, distance: number, totalLength = In
   return Math.min(start ? ease(distance / start) : 1, end && Number.isFinite(totalLength) ? ease((totalLength - distance) / end) : 1);
 }
 
+/**
+ * The taper as a size and an alpha multiplier. `taperShape` keeps the ends thin for longer,
+ * `taperSize` sets how thin they get (1 = to a point), `taperOpacity` fades them.
+ */
+export function taperProfile(brush: BrushSettings, distance: number, totalLength = Infinity, diameter = brush.size): { size: number; alpha: number } {
+  let f = taperAt(brush, distance, totalLength, diameter);
+  if (f >= 1) return { size: 1, alpha: 1 };
+  if (brush.taperShape) f = Math.pow(f, 1 + 2 * brush.taperShape);
+  const amount = brush.taperSize ?? 1;
+  return { size: 1 - amount * (1 - f), alpha: 1 - (brush.taperOpacity ?? 0) * (1 - f) };
+}
+
 /** Conservative bounds also cover the corners of rotating image tips. */
 export function dabBounds(d: Dab): { x0: number; y0: number; x1: number; y1: number } {
   const c = Math.abs(Math.cos(d.angle)), s = Math.abs(Math.sin(d.angle)), r = d.size / 2;
@@ -129,11 +141,13 @@ export class DabWalker {
     const ts = b.tiltShade;
     const shade = shadeAmount(ts, p.tiltX, p.tiltY);
     const diameter = b.size * (1 + (ts.size - 1) * shade);
+    const taper = taperProfile(b, distance, this.totalLength, diameter);
     const size = Math.max(
       0.5,
-      diameter * evalDynamic(b.sizeDyn, s, hash01(this.seed, i, 1)) * taperAt(b, distance, this.totalLength, diameter),
+      diameter * evalDynamic(b.sizeDyn, s, hash01(this.seed, i, 1)) * taper.size,
     );
     const alpha =
+      taper.alpha *
       b.flow *
       evalDynamic(b.flowDyn, s, hash01(this.seed, i, 2)) *
       evalDynamic(b.opacityDyn, s, hash01(this.seed, i, 3)) *

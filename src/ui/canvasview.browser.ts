@@ -50,7 +50,7 @@ try{
   // the Eraser cuts the line where it runs past the page
   app.setTool('eraser');app.setPlane('line');stroke(line(180,40,180,90));await settle();
   // (the default Eraser takes a line up to its crossings: this one has none, so all of it goes)
-  check('The Eraser reaches vector lines past the page edge (one Undo step)',app.history.peekUndo()?.label==='Erase' && !d.vectors.some(v=>v.points.some(p=>p.x>175 && p.x<185)),d.vectors.map(v=>v.points.map(p=>Math.round(p.x))));
+  check('The Eraser reaches vector lines past the page edge (one Undo step)',app.history.peekUndo()?.label==='Erase (vector: up to crossings)' && !d.vectors.some(v=>v.points.some(p=>p.x>175 && p.x<185)),d.vectors.map(v=>v.points.map(p=>Math.round(p.x))));
   app.undo();await settle();check('Undo brings the whole line back',d.vectors.length===1 && d.vectors[0]!.points.some(p=>p.x>190));
   app.setTool('pen');stroke(line(150,20,220,20));await settle();
   check('A Vector stroke wholly outside the page is kept',d.vectors.length===2 && d.vectors[1]!.points.every(p=>p.x>140));

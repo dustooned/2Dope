@@ -1,6 +1,5 @@
-import { evalDynamic } from '../core/brush';
-import { hash01 } from '../core/rng';
-import { tiltAmount, type StrokePoint, type StrokeRecord } from '../core/stroke';
+import { vectorWidths } from '../core/vectorcut';
+import type { StrokePoint, StrokeRecord } from '../core/stroke';
 import { drawStyledVector, applyVectorClips } from './vectorstyled';
 import { prepareVectorStroke, vectorBounds } from '../core/vectorstyle';
 export { clearVectorRenderCache } from './vectorstyled';
@@ -8,29 +7,9 @@ export { clearVectorRenderCache } from './vectorstyled';
 /**
  * Vector pen: the stroke stays as points with a per-point width (from pressure), drawn as one
  * filled outline with round caps. Editable later (point editing, smoothing, width profiles).
+ * The widths (`vectorWidths`) live with the pure geometry so the eraser reaches the drawn width.
  */
-export function vectorWidths(rec: StrokeRecord, totalLength: number): number[] {
-  const b = rec.brush;
-  const out: number[] = [];
-  let dist = 0;
-  for (let i = 0; i < rec.points.length; i++) {
-    const p = rec.points[i]!;
-    if (i > 0) {
-      const q = rec.points[i - 1]!;
-      dist += Math.hypot(p.x - q.x, p.y - q.y);
-    }
-    const s = { pressure: p.pressure, tilt: tiltAmount(p), speed: 0 };
-    let w = (b.size / 2) * evalDynamic(b.sizeDyn, s, hash01(rec.seed, i, 1)) * (p.w ?? 1);
-    let f = 1;
-    if (b.taperStart > 0) f = Math.min(f, Math.sqrt(Math.min(1, dist / b.taperStart)));
-    if (b.taperEnd > 0 && Number.isFinite(totalLength)) {
-      f = Math.min(f, Math.sqrt(Math.max(0, Math.min(1, (totalLength - dist) / b.taperEnd))));
-    }
-    w *= Math.max(0.05, f);
-    out.push(Math.max(0.3, w));
-  }
-  return out;
-}
+export { vectorWidths } from '../core/vectorcut';
 
 /** Drop points closer than `minDist` so the outline doesn't wobble on dense input. */
 function thin(points: StrokePoint[], minDist: number): StrokePoint[] {

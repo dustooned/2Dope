@@ -1,11 +1,13 @@
 /**
  * Brush files from other apps: Procreate (.brushset, .brush) and Photoshop (.abr).
  *
- * What comes across is each brush's name and its tip picture, plus the few settings whose meaning
- * is clear (size, opacity, spacing, scatter, pressure size). The rest of Procreate's and
- * Photoshop's engines (grain textures, dual brushes, wet mixing, most dynamics) does not exist in
- * 2Dope, so imported brushes are close, not identical. Everything is parsed locally; malformed or
- * oversized files are refused with a message.
+ * What comes across is each brush's name, its tip and grain pictures, plus the settings whose
+ * meaning is clear: size, opacity, spacing, scatter, pressure and speed dynamics with their response
+ * curves, tapers, StreamLine and stabilisation, jitter, and the grain's depth, blend (multiply and
+ * height), movement, scale and rotation. The rest of Procreate's and Photoshop's engines (dual
+ * brushes, wet mixing, tilt dynamics, material maps) does not exist in 2Dope, so imported brushes are
+ * close, not identical; each Procreate brush carries a `report` of what was mapped and what was not.
+ * Everything is parsed locally; malformed or oversized files are refused with a message.
  *
  * Formats, as published and implemented elsewhere:
  * - .brushset / .brush: a zip; each brush is a folder with Brush.archive (an NSKeyedArchiver binary
@@ -15,6 +17,7 @@
  */
 
 import { readZip } from './zip';
+import { readCurvePoints } from '../core/brush';
 
 /** A tip as alpha (0..255, 255 paints) or as a PNG to decode. */
 export type ImportedTip = { kind: 'alpha'; w: number; h: number; alpha: Uint8Array } | { kind: 'png'; bytes: Uint8Array };
@@ -23,8 +26,29 @@ export interface ImportedBrush {
   name: string;
   /** The tip picture; null = the round tip (Procreate brushes that use its own round shape). */
   tip: ImportedTip | null;
-  /** A grain (texture) picture: white lets paint through, black holds it back. */
-  grain?: { bytes: Uint8Array; scale?: number; depth?: number; invert?: boolean };
+  /**
+   * A grain (texture) picture: white lets paint through, black holds it back. `mode` 'height' is
+   * Procreate's grain blend 27 or 28; `depthMin` the depth minimum; `movement` 1 = fixed to the paper,
+   * 0 = rolls with the stroke; `rotation` in degrees; `zoom` 0..1 how far the scale follows size.
+   */
+  grain?: { bytes: Uint8Array; scale?: number; depth?: number; invert?: boolean; mode?: 'height'; depthMin?: number; movement?: number; rotation?: number; zoom?: number };
+  /** The pressure response curves (input, output) for size and opacity; missing = straight. */
+  sizeCurve?: [number, number][];
+  opacityCurve?: [number, number][];
+  /** Negative pressure dynamics: a firmer press makes the dab smaller / lighter. */
+  pressureSizeInvert?: boolean;
+  pressureOpacityInvert?: boolean;
+  /** -1..1: how much speed changes the size / opacity (negative = the other way), when pressure does not. */
+  speedSize?: number;
+  speedOpacity?: number;
+  /** Stabilisation (moving average), 0..1. */
+  stabilize?: number;
+  /** Taper size (how thin the ends get), opacity and tip sharpness, 0..1 each. */
+  taperSize?: number;
+  taperOpacity?: number;
+  taperShape?: number;
+  /** Every key in the brush's archive: used, not supported (with why), or not known at all. */
+  report?: BrushImportReport;
   /** Procreate's Invert shape: black paints instead of white. */
   tipInvert?: boolean;
   /** Rotate the tip with the stroke. */
@@ -54,6 +78,12 @@ export interface ImportedBrush {
   scatter?: number;
   /** 0..1: how much pen pressure changes the size. */
   pressureSize?: number;
+}
+
+export interface BrushImportReport {
+  mapped: string[];
+  unsupported: { key: string; why: string }[];
+  unknown: string[];
 }
 
 export class BrushImportError extends Error {}
@@ -238,18 +268,25 @@ export function unarchive(plist: unknown): Record<string, unknown> | null {
   const p = plist as { $objects?: unknown[]; $top?: Record<string, unknown> };
   if (!Array.isArray(p.$objects) || !p.$top) return plist as Record<string, unknown>;
   const objects = p.$objects;
+  // nested objects (response curves: { points: { NS.objects: ['{0, 0}', …] } }) resolve too, a few levels deep
   const resolve = (x: unknown, depth: number): unknown => {
-    if (depth > 6) return null;
+    if (depth > 8) return null;
     const u = asUid(x);
     if (u) return resolve(objects[u.uid], depth + 1);
     if (x === '$null') return null;
+    if (Array.isArray(x)) return x.map((v) => resolve(v, depth + 1));
+    if (x && typeof x === 'object' && !(x instanceof Uint8Array)) {
+      const o: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(x)) if (k !== '$class') o[k] = resolve(v, depth + 1);
+      return o;
+    }
     return x;
   };
   const rootRef = p.$top.root ?? Object.values(p.$top)[0];
   const root = resolve(rootRef, 0);
   if (!root || typeof root !== 'object' || Array.isArray(root)) return null;
   const out: Record<string, unknown> = {};
-  for (const [k, val] of Object.entries(root)) out[k] = resolve(val, 0);
+  for (const [k, val] of Object.entries(root)) if (k !== '$class') out[k] = resolve(val, 0);
   return out;
 }
 
@@ -277,6 +314,64 @@ const pick = (info: Record<string, unknown> | null, keys: string[]): number | un
   return undefined;
 };
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+
+/** A Procreate response curve ({ points: { NS.objects: ['{x, y}', …] } } or a list) as points, or null. */
+export function curvePoints(v: unknown): [number, number][] | null {
+  let list: unknown = v;
+  if (list && typeof list === 'object' && !Array.isArray(list)) list = (list as Record<string, unknown>).points;
+  if (list && typeof list === 'object' && !Array.isArray(list)) list = (list as Record<string, unknown>)['NS.objects'];
+  if (!Array.isArray(list)) return null;
+  const pts: [number, number][] = [];
+  for (const p of list) {
+    const m = /^\{\s*(-?[\d.eE+-]+)\s*,\s*(-?[\d.eE+-]+)\s*\}$/.exec(str(p)?.trim() ?? '');
+    if (!m || !Number.isFinite(Number(m[1])) || !Number.isFinite(Number(m[2]))) return null;
+    pts.push([clamp(Number(m[1]), 0, 1), clamp(Number(m[2]), 0, 1)]);
+  }
+  pts.sort((a, b) => a[0] - b[0]);
+  return readCurvePoints(pts);
+}
+
+/**
+ * Why each Procreate setting 2Dope does not use is left out, by key pattern (first match wins).
+ * Keys the importer read are reported as mapped; a key in neither is "unknown".
+ */
+const NOT_MAPPED: [RegExp, string][] = [
+  [/^(authorName|creationDate|previewSize|version|taperVersion|plotSpacingVersion|importedFromABR|color|stamp|pencilTipAnimation)$/, 'about the brush, not the stroke'],
+  [/^(minSize|maxSize|minOpacity|maxOpacity|paintPressure|maxPressureSizeClamped)$/, 'the size / opacity range sliders (2Dope uses one size and opacity)'],
+  [/^(smudge|erase|clone)(Size|Opacity)$|^saved\w+$/, 'the smudge, erase and clone tool sizes'],
+  [/^(blendMode|extendedBlend|blendGammaCorrect)$/, 'the brush blend mode (2Dope paints normally)'],
+  [/^(dualBlendMode|secondaryBrush)$|Secondary/, 'dual brush and secondary colour'],
+  [/^(height|metallic|roughness)\w*$|^bundled(Height|Metallic|Roughness)Path$/, 'paint material maps (height, metallic, roughness)'],
+  [/^hover/, 'hover preview'],
+  [/[Tt]ilt/, 'tilt dynamics (2Dope has tilt shading only)'],
+  [/^dynamics(Wet\w*|Glaze\w*|Smudge\w*|Load|Mix|MixSoftening|Charge|Falloff|RenderType|PressureMix|PressureCharge|PressureBleed\w*|ColorVariation)$|^(wetEdges|burntEdges)\w*$|^rendering\w+$|^texturizedGrainFollowsCamera$/, 'wet mix, glaze and rendering modes'],
+  [/^dynamics(Blur|BlurJitter|PressureBlurCurve)$/, 'blur'],
+  [/^dynamicsPressure(Hue|Saturation|Brightness)(Curve)?$/, 'pressure colour'],
+  [/^dynamicsPressure(Response|Smoothing|Speed|SizeSpeed|OpacitySpeed|OpacityTransfer)$/, 'pressure response smoothing'],
+  [/^dynamicsPressure\w+Curve$|^dynamicsPressureShapeRoundness\w*$/, 'pressure on a setting 2Dope does not vary with pressure (roundness, grain, scatter, count)'],
+  [/^plotFFT\w+$/, "motion filtering (FFT): the mapping to 2Dope's motion filter is not confirmed"],
+  [/^shape(Count|CountJitter|FlipXJitter|FlipYJitter|Randomise|Azimuth|Angle|Filter|FilterMode|Orientation|Scatter)$|^oriented$/, 'tip variation (count, flips, randomise, scatter angle, filtering)'],
+  [/^(grainDepthJitter|grainOrientation|textureOffsetJitter|textureFilter|textureFilterMode|textureBrightness|textureContrast|textureApplication)$/, 'grain detail (jitter, filtering, brightness / contrast)'],
+  [/^(taperPressure|pencilTaperPressure)$/, 'taper pressure (2Dope tapers do not simulate pressure)'],
+  [/^(taper|pencilTaper)\w+$/, 'taper detail for a taper of length 0'],
+  [/^dynamicsJitter\w+$|^dynamicsSpeed\w+$|^dynamicsPressure(Size|Opacity)$/, 'zero or off in this brush'],
+  [/^(bundledShapePath|bundledGrainPath|name|shapeInverted|shapeRotation|shapeRoundness|plotSpacing|plotJitter|plotSmoothing|plotMovingAverageStabilization|paintSize|paintOpacity)$/, 'zero, empty or not used in this brush'],
+];
+
+function reportKeys(info: Record<string, unknown> | null, used: Set<string>, why: Map<string, string>): BrushImportReport {
+  const out: BrushImportReport = { mapped: [], unsupported: [], unknown: [] };
+  for (const key of Object.keys(info ?? {}).sort()) {
+    if (key.startsWith('$')) continue;
+    if (used.has(key)) out.mapped.push(key);
+    else if (why.has(key)) out.unsupported.push({ key, why: why.get(key)! });
+    else {
+      const rule = NOT_MAPPED.find(([re]) => re.test(key));
+      if (rule) out.unsupported.push({ key, why: rule[1] });
+      else out.unknown.push(key);
+    }
+  }
+  return out;
+}
 
 /** The brushes in a Procreate .brushset or .brush (a zip). */
 export async function readProcreate(bytes: Uint8Array, fileName: string): Promise<ImportedBrush[]> {
@@ -309,6 +404,7 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
   const base = fileName.replace(/\.[a-z]+$/i, '');
   const find = (dir: string, file: string) => lower.get(`${dir}${file}`.toLowerCase()) ?? lower.get(`${dir}reset/${file}`.toLowerCase());
   const out: ImportedBrush[] = [];
+  let unreadable = 0;
   for (const arch of archives.slice(0, MAX_BRUSHES)) {
     const dir = dirOf(arch);
     let info: Record<string, unknown> | null = null;
@@ -317,52 +413,143 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
     } catch {
       info = null;
     }
-    const shapeKey = find(dir, 'shape.png');
-    const grainKey = find(dir, 'grain.png');
-    const named = str(info?.name)?.trim();
-    const b: ImportedBrush = { name: (named || (archives.length === 1 ? base : `${base} ${out.length + 1}`)).slice(0, 60), tip: shapeKey ? { kind: 'png', bytes: files.get(shapeKey)! } : null };
-    if (grainKey) b.grain = { bytes: files.get(grainKey)!, scale: pick(info, ['textureScale', 'grainScale', 'textureZoom']), depth: pick(info, ['textureDepth', 'grainDepth']), invert: (pick(info, ['textureInverted', 'grainInverted', 'textureInvert']) ?? 0) > 0 };
-    if ((pick(info, ['shapeInverted', 'shapeInvert']) ?? 0) > 0) b.tipInvert = true;
-    const size = pick(info, ['paintSize', 'maxSize']);
+    // a damaged settings file: leave that brush out rather than bring in a blank one
+    if (!info) { unreadable++; continue; }
+    const used = new Set<string>();
+    const why = new Map<string, string>();
+    /** The first of several possible setting names the brush has, remembered as mapped. */
+    const get = (keys: string[]): number | undefined => {
+      for (const k of keys) {
+        const n = num(info?.[k]);
+        if (n !== undefined) { used.add(k); return n; }
+      }
+      return undefined;
+    };
+    /** A picture the archive names (bundled…Path), when the brush folder has it; else the usual file. */
+    const named = (pathKey: string, file: string): string | undefined => {
+      const want = str(info?.[pathKey])?.trim();
+      const hit = want ? find(dir, want.replace(/^.*[\\/]/, '')) : undefined;
+      if (want && hit) used.add(pathKey);
+      else if (want) why.set(pathKey, `${want} is one of Procreate's own pictures and is not in the file (the brush's own ${file}, or the built-in one, is used)`);
+      return hit ?? find(dir, file);
+    };
+    const shapeKey = named('bundledShapePath', 'shape.png');
+    const grainKey = named('bundledGrainPath', 'grain.png');
+    const brushName = str(info?.name)?.trim();
+    if (brushName) used.add('name');
+    const b: ImportedBrush = { name: (brushName || (archives.length === 1 ? base : `${base} ${out.length + 1}`)).slice(0, 60), tip: shapeKey ? { kind: 'png', bytes: files.get(shapeKey)! } : null };
+    if (grainKey) {
+      const g: NonNullable<ImportedBrush['grain']> = { bytes: files.get(grainKey)!, scale: get(['textureScale', 'grainScale']), depth: get(['grainDepth', 'textureDepth']), invert: (get(['textureInverted', 'grainInverted', 'textureInvert']) ?? 0) > 0 };
+      const mode = num(info?.grainBlendMode);
+      // Procreate's grain blends: 1 multiplies (2Dope's grain); 27 and 28 (Procreate's two height blends,
+      // seen on low-depth canvas textures) are read as a height map. Others are not mapped yet.
+      if (mode === 1 || mode === 27 || mode === 28) used.add('grainBlendMode');
+      else if (mode !== undefined) why.set('grainBlendMode', `blend ${mode} is not supported (multiply is used)`);
+      if (mode === 27 || mode === 28) g.mode = 'height';
+      const dmin = get(['grainDepthMinimum']);
+      if (dmin !== undefined) g.depthMin = clamp(dmin, 0, 1);
+      const mov = get(['textureMovement']);
+      if (mov !== undefined) g.movement = clamp(mov, 0, 1);
+      const rot = get(['textureRotation']);
+      // kept as -1..1 of a half turn (assumed: no reference render to check it against)
+      if (rot !== undefined) g.rotation = clamp(rot, -1, 1) * 180;
+      const zoom = get(['textureZoom']);
+      if (zoom !== undefined) g.zoom = clamp(zoom, 0, 1);
+      const orient = num(info?.textureOrientation);
+      if (orient === 1) used.add('textureOrientation');
+      else if (orient !== undefined) why.set('textureOrientation', `orientation ${orient} is not supported (the grain stays on the canvas)`);
+      b.grain = g;
+    } else for (const k of ['grainBlendMode', 'grainDepth', 'grainDepthMinimum', 'textureScale', 'textureMovement', 'textureZoom', 'textureRotation', 'textureOrientation', 'textureInverted']) if (k in (info ?? {})) why.set(k, 'no grain picture in the file');
+    if ((get(['shapeInverted', 'shapeInvert']) ?? 0) > 0) b.tipInvert = true;
+    const size = get(['paintSize', 'maxSize']);
     if (size !== undefined) b.size = clamp(Math.round(size * 100), 2, 200);
-    const op = pick(info, ['paintOpacity', 'maxOpacity']);
+    const op = get(['paintOpacity', 'maxOpacity']);
     if (op !== undefined) b.opacity = clamp(op, 0.05, 1);
-    const sp = pick(info, ['plotSpacing']);
+    const sp = get(['plotSpacing']);
     if (sp !== undefined) b.spacing = clamp(sp, 0.02, 2);
-    const jit = pick(info, ['plotJitter']);
-    if (jit !== undefined) b.scatter = clamp(jit, 0, 2);
-    const ps = pick(info, ['dynamicsPressureSize']);
-    if (ps !== undefined) b.pressureSize = clamp(ps, 0, 1);
-    const po = pick(info, ['dynamicsPressureOpacity']);
-    if (po !== undefined) b.pressureOpacity = clamp(po, 0, 1);
-    const sj = pick(info, ['dynamicsJitterSize']);
+    const jit = get(['plotJitter']);
+    // the dab walker scatters by any multiple of the dab size; Procreate's own range reaches ~8
+    if (jit !== undefined) b.scatter = clamp(jit, 0, 8);
+    // pressure: a negative amount works the other way; the curve shapes the response
+    const ps = get(['dynamicsPressureSize']);
+    if (ps !== undefined) {
+      b.pressureSize = clamp(Math.abs(ps), 0, 1);
+      if (ps < 0) b.pressureSizeInvert = true;
+    }
+    const po = get(['dynamicsPressureOpacity']);
+    if (po !== undefined) {
+      b.pressureOpacity = clamp(Math.abs(po), 0, 1);
+      if (po < 0) b.pressureOpacityInvert = true;
+    }
+    const curve = (key: string, active: boolean): [number, number][] | undefined => {
+      if (!(key in (info ?? {}))) return undefined;
+      const pts = curvePoints(info?.[key]);
+      if (!active) { why.set(key, 'the dynamic it shapes is off'); return undefined; }
+      if (!pts) { why.set(key, 'the curve could not be read'); return undefined; }
+      used.add(key);
+      const straight = pts.length === 2 && pts[0]![0] === 0 && pts[0]![1] === 0 && pts[1]![0] === 1 && pts[1]![1] === 1;
+      return straight ? undefined : pts;
+    };
+    const sc = curve('dynamicsPressureSizeCurve', (b.pressureSize ?? 0) > 0);
+    if (sc) b.sizeCurve = sc;
+    const oc = curve('dynamicsPressureOpacityCurve', (b.pressureOpacity ?? 0) > 0);
+    if (oc) b.opacityCurve = oc;
+    // speed: one input per setting in 2Dope, so only when pressure does not drive it
+    for (const [key, has, field] of [['dynamicsSpeedSize', (b.pressureSize ?? 0) > 0, 'speedSize'], ['dynamicsSpeedOpacity', (b.pressureOpacity ?? 0) > 0, 'speedOpacity']] as const) {
+      const v = num(info?.[key]);
+      if (v === undefined || v === 0) continue;
+      if (has) why.set(key, 'pressure already drives it (one input per setting)');
+      else { used.add(key); b[field] = clamp(v, -1, 1); }
+    }
+    const sj = get(['dynamicsJitterSize']);
     if (sj !== undefined) b.sizeJitter = clamp(sj, 0, 1);
-    const oj = pick(info, ['dynamicsJitterOpacity']);
+    const oj = get(['dynamicsJitterOpacity']);
     if (oj !== undefined) b.opacityJitter = clamp(oj, 0, 1);
-    const rot = pick(info, ['shapeRotation']);
+    const rot = get(['shapeRotation']);
     if (rot !== undefined) b.follow = rot > 0.5;
-    const round = pick(info, ['shapeRoundness']);
+    const round = get(['shapeRoundness']);
     if (round !== undefined && round > 0) b.roundness = clamp(round, 0.05, 1);
-    const t0 = pick(info, ['taperStartLength', 'pencilTaperStartLength']);
+    // tapers: the Apple Pencil taper when it has one, otherwise the touch taper
+    const pencil = (num(info?.pencilTaperStartLength) ?? 0) + (num(info?.pencilTaperEndLength) ?? 0) > 0;
+    const tp = pencil ? 'pencilTaper' : 'taper';
+    const other = pencil ? 'taper' : 'pencilTaper';
+    const t0 = get([`${tp}StartLength`]);
     if (t0 !== undefined) b.taperStart = clamp(t0, 0, 1);
-    const t1 = pick(info, ['taperEndLength', 'pencilTaperEndLength']);
+    const t1 = get([`${tp}EndLength`]);
     if (t1 !== undefined) b.taperEnd = clamp(t1, 0, 1);
-    const sm = pick(info, ['plotSmoothing', 'streamLine', 'streamline']);
+    if ((b.taperStart ?? 0) + (b.taperEnd ?? 0) > 0) {
+      const ts = get([`${tp}Size`]);
+      if (ts !== undefined) b.taperSize = clamp(ts, 0, 1);
+      const to = get([`${tp}Opacity`]);
+      if (to !== undefined && to > 0) b.taperOpacity = clamp(to, 0, 1);
+      const tsh = get([`${tp}Shape`]);
+      if (tsh !== undefined && tsh > 0) b.taperShape = clamp(tsh, 0, 1);
+      // linked tip sizes: 2Dope has one taper size for both ends anyway
+      get([`${tp}SizeLinked`]);
+    }
+    for (const k of ['StartLength', 'EndLength', 'Size', 'Opacity', 'Shape', 'SizeLinked', 'Pressure']) {
+      const key = `${other}${k}`;
+      if (key in (info ?? {}) && !why.has(key)) why.set(key, pencil ? 'touch taper (the Apple Pencil taper is used)' : 'the Apple Pencil taper is empty (the touch taper is used)');
+    }
+    const sm = get(['plotSmoothing', 'streamLine', 'streamline']);
     if (sm !== undefined) b.smoothing = clamp(sm, 0, 1);
+    const st = get(['plotMovingAverageStabilization']);
+    if (st !== undefined && st > 0) b.stabilize = clamp(st, 0, 1);
     // colour dynamics: stamp (per dab) first, stroke jitter otherwise
-    const dh = pick(info, ['dynamicsHueJitter', 'colorDynamicsHue', 'stampHueJitter', 'hueJitter']);
-    const ds = pick(info, ['dynamicsSaturationJitter', 'colorDynamicsSaturation', 'stampSaturationJitter', 'saturationJitter']);
-    const dv = pick(info, ['dynamicsBrightnessJitter', 'dynamicsDarknessJitter', 'colorDynamicsBrightness', 'stampBrightnessJitter', 'brightnessJitter']);
-    const sh = pick(info, ['strokeHueJitter', 'colorDynamicsStrokeHue']);
-    const ss = pick(info, ['strokeSaturationJitter', 'colorDynamicsStrokeSaturation']);
-    const sv = pick(info, ['strokeBrightnessJitter', 'strokeDarknessJitter', 'colorDynamicsStrokeBrightness']);
-    if ((dh ?? 0) + (ds ?? 0) + (dv ?? 0) > 0) Object.assign(b, { hueJitter: clamp(dh ?? 0, 0, 1), satJitter: clamp(ds ?? 0, 0, 1), brightJitter: clamp(dv ?? 0, 0, 1) });
-    else if ((sh ?? 0) + (ss ?? 0) + (sv ?? 0) > 0) Object.assign(b, { hueJitter: clamp(sh ?? 0, 0, 1), satJitter: clamp(ss ?? 0, 0, 1), brightJitter: clamp(sv ?? 0, 0, 1), strokeColor: true });
-    const pull = pick(info, ['wetMixPull', 'dynamicsPull', 'paintPull', 'pull']);
+    const dh = get(['dynamicsJitterHue', 'dynamicsHueJitter', 'colorDynamicsHue', 'stampHueJitter', 'hueJitter']);
+    const ds = get(['dynamicsJitterSaturation', 'dynamicsSaturationJitter', 'colorDynamicsSaturation', 'stampSaturationJitter', 'saturationJitter']);
+    const dv = Math.max(get(['dynamicsJitterLightness', 'dynamicsBrightnessJitter', 'colorDynamicsBrightness', 'stampBrightnessJitter', 'brightnessJitter']) ?? 0, get(['dynamicsJitterDarkness', 'dynamicsDarknessJitter']) ?? 0);
+    const sh = get(['dynamicsJitterStrokeHue', 'strokeHueJitter', 'colorDynamicsStrokeHue']);
+    const ss = get(['dynamicsJitterStrokeSaturation', 'strokeSaturationJitter', 'colorDynamicsStrokeSaturation']);
+    const sv = Math.max(get(['dynamicsJitterStrokeLightness', 'strokeBrightnessJitter', 'colorDynamicsStrokeBrightness']) ?? 0, get(['dynamicsJitterStrokeDarkness', 'strokeDarknessJitter']) ?? 0);
+    if ((dh ?? 0) + (ds ?? 0) + dv > 0) Object.assign(b, { hueJitter: clamp(dh ?? 0, 0, 1), satJitter: clamp(ds ?? 0, 0, 1), brightJitter: clamp(dv, 0, 1) });
+    else if ((sh ?? 0) + (ss ?? 0) + sv > 0) Object.assign(b, { hueJitter: clamp(sh ?? 0, 0, 1), satJitter: clamp(ss ?? 0, 0, 1), brightJitter: clamp(sv, 0, 1), strokeColor: true });
+    const pull = get(['wetMixPull', 'dynamicsPull', 'paintPull', 'pull']);
     if (pull !== undefined && pull > 0) b.wetPull = clamp(pull, 0, 1);
+    b.report = reportKeys(info, used, why);
     out.push(b);
   }
-  if (!out.length) throw new BrushImportError(`${fileName} has no Procreate brushes in it.`);
+  if (!out.length) throw new BrushImportError(unreadable ? `${fileName}: the brush settings could not be read (the file may be damaged).` : `${fileName} has no Procreate brushes in it.`);
   return out;
 }
 

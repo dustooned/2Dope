@@ -1,14 +1,50 @@
-import type { StrokePoint, StrokeRecord } from './stroke';
+import { evalDynamic } from './brush';
+import { hash01 } from './rng';
+import { strokeLength, tiltAmount, type StrokePoint, type StrokeRecord } from './stroke';
 import { insideVectorClips, vectorReach } from './vectorstyle';
 
 /**
  * Erasing vector lines, the way Clip Studio's vector eraser works:
  * - "whole": a touched line goes away entirely;
  * - "crossing": only the piece between the nearest crossings with other lines goes, so
- *   overshoots at a corner clean up with one swipe.
+ *   overshoots at a corner clean up with one swipe;
+ * - "intersection": only where the eraser's path crosses the line itself is the line cut (the
+ *   width the eraser covers there); a touch that only starts, ends or grazes on a line leaves it.
+ * A line counts as touched within the eraser radius plus its own half-width at that spot, so a
+ * thin tail is missed where its base width would have been hit.
  * Pure geometry on stroke records; returns the new list, or null when nothing was touched.
  */
-export type VectorErase = 'off' | 'crossing' | 'whole';
+export type VectorErase = 'off' | 'crossing' | 'whole' | 'intersection';
+
+/** The modes as the eraser menu and undo labels name them. */
+export const VECTOR_ERASE_NAMES: Record<VectorErase, string> = { crossing: 'up to crossings', whole: 'whole line', intersection: 'only where it crosses', off: 'off' };
+
+/**
+ * Half-widths of a plain vector line at each point (pressure dynamics, point widths, tapers), as
+ * the outline renderer draws it. `totalLength` = Infinity skips the end taper (a line being drawn).
+ */
+export function vectorWidths(rec: StrokeRecord, totalLength: number): number[] {
+  const b = rec.brush;
+  const out: number[] = [];
+  let dist = 0;
+  for (let i = 0; i < rec.points.length; i++) {
+    const p = rec.points[i]!;
+    if (i > 0) {
+      const q = rec.points[i - 1]!;
+      dist += Math.hypot(p.x - q.x, p.y - q.y);
+    }
+    const s = { pressure: p.pressure, tilt: tiltAmount(p), speed: 0 };
+    let w = (b.size / 2) * evalDynamic(b.sizeDyn, s, hash01(rec.seed, i, 1)) * (p.w ?? 1);
+    let f = 1;
+    if (b.taperStart > 0) f = Math.min(f, Math.sqrt(Math.min(1, dist / b.taperStart)));
+    if (b.taperEnd > 0 && Number.isFinite(totalLength)) {
+      f = Math.min(f, Math.sqrt(Math.max(0, Math.min(1, (totalLength - dist) / b.taperEnd))));
+    }
+    w *= Math.max(0.05, f);
+    out.push(Math.max(0.3, w));
+  }
+  return out;
+}
 
 interface Pt {
   x: number;
@@ -23,8 +59,11 @@ function distToSegment(p: Pt, a: Pt, b: Pt): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
-/** Where segments ab and cd cross: the parameter along ab (0..1), or null. */
-function crossing(a: Pt, b: Pt, c: Pt, d: Pt): number | null {
+/**
+ * Where segments ab and cd cross: the parameter along ab (0..1), or null. `strict`: cd must pass
+ * through ab, not just start or end on it.
+ */
+function crossing(a: Pt, b: Pt, c: Pt, d: Pt, strict = false): number | null {
   const rx = b.x - a.x;
   const ry = b.y - a.y;
   const sx = d.x - c.x;
@@ -33,11 +72,16 @@ function crossing(a: Pt, b: Pt, c: Pt, d: Pt): number | null {
   if (Math.abs(den) < 1e-12) return null;
   const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
   const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
+  const e = strict ? 1e-9 : 0;
+  return t >= 0 && t <= 1 && u >= e && u <= 1 - e ? t : null;
 }
 
-/** Positions along a stroke (segment index + fraction) touched by the eraser path. */
-function touchedAt(points: StrokePoint[], path: Pt[], reach: number): [number,number][] {
+/**
+ * Positions along a stroke (segment index + fraction) touched by the eraser path: the distance from
+ * each segment (not just its points) to each eraser segment, against `reach(i, t)` at that spot.
+ * `crossedOnly` keeps only touches where the eraser path crosses the segment itself.
+ */
+function touchedAt(points: StrokePoint[], path: Pt[], reach: (i: number, t: number) => number, crossedOnly = false): [number,number][] {
   const out: [number,number][] = [];
   for (let i = 0; i < Math.max(1,points.length-1); i++) {
     const a=points[i],b=points[i+1] ?? a;
@@ -46,16 +90,19 @@ function touchedAt(points: StrokePoint[], path: Pt[], reach: number): [number,nu
     const project=(p:Pt)=>len?Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/len)):0;
     for(let k=0;k<path.length;k++) {
       const c=path[Math.max(0,k-1)]!,d=path[k]!;
-      const distance=(t:number)=>distToSegment({x:a.x+t*dx,y:a.y+t*dy},c,d);
-      const candidates=[0,1,project(c),project(d)];
-      const cross=crossing(a,b,c,d);if(cross!==null)candidates.push(cross);
-      const t=candidates.reduce((best,n)=>distance(n)<distance(best)?n:best,0);
-      if(distance(t)>reach)continue;
+      const cross=crossing(a,b,c,d,crossedOnly);
+      if(crossedOnly && cross===null)continue;
+      // how far outside the line's reach the eraser is at t (<= 0: touching)
+      const gap=(t:number)=>distToSegment({x:a.x+t*dx,y:a.y+t*dy},c,d)-reach(i,t);
+      const candidates=[0,1,.25,.5,.75,project(c),project(d)];
+      if(cross!==null)candidates.push(cross);
+      const t=cross ?? candidates.reduce((best,n)=>gap(n)<gap(best)?n:best,0);
+      if(gap(t)>0)continue;
       let lo=0,hi=t;
-      if(distance(0)>reach)for(let n=0;n<24;n++){const mid=(lo+hi)/2;if(distance(mid)<=reach)hi=mid;else lo=mid;}
+      if(gap(0)>0)for(let n=0;n<24;n++){const mid=(lo+hi)/2;if(gap(mid)<=0)hi=mid;else lo=mid;}
       else hi=0;
       const left=hi;lo=t;hi=1;
-      if(distance(1)>reach)for(let n=0;n<24;n++){const mid=(lo+hi)/2;if(distance(mid)<=reach)lo=mid;else hi=mid;}
+      if(gap(1)>0)for(let n=0;n<24;n++){const mid=(lo+hi)/2;if(gap(mid)<=0)lo=mid;else hi=mid;}
       else lo=1;
       out.push([i+left,i+lo]);
     }
@@ -136,13 +183,29 @@ export function eraseVectors(strokes: StrokeRecord[], path: Pt[], radius: number
       }
       if(!visible){out.push(rec);continue;}
     }
-    const touched = touchedAt(rec.points, path, radius + (rec.style ? vectorReach(rec) : rec.brush.size / 2));
+    // a styled line reaches as far as its stamps; a plain one as wide as it is drawn at that spot
+    const widths = rec.style ? null : vectorWidths(rec, strokeLength(rec.points));
+    const styled = rec.style ? radius + vectorReach(rec) : 0;
+    const reach = (i: number, t: number) => (widths ? radius + widths[i]! + ((widths[i + 1] ?? widths[i]!) - widths[i]!) * t : styled);
+    const touched = touchedAt(rec.points, path, reach, mode === 'intersection');
     if (!touched.length) {
       out.push(rec);
       continue;
     }
     changed = true;
     if (mode === 'whole' || rec.points.length < 2) continue;
+    if (mode === 'intersection') {
+      // cut out just the touched spans; the rest of the line stays, ends kept where they were
+      const spans = touched.map(([a, b]) => [Math.max(0, a), Math.min(rec.points.length - 1, b)] as [number, number]).sort((x, y) => x[0] - y[0]);
+      let from = 0, n = 0;
+      for (const [a, b] of spans) {
+        if (a > from) { const p = piece(rec, from, a, n++); if (p) out.push(p); }
+        from = Math.max(from, b);
+      }
+      const p = piece(rec, from, rec.points.length - 1, n++);
+      if (p) out.push(p);
+      continue;
+    }
     // cut points: the stroke's ends and every crossing with another line
     const cuts = [
       0,

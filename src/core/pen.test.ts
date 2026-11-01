@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultPenPrefs, diagnosePen, mapPressure, PenProbe, platformOf, readPenPrefs, type PenSample } from './pen';
+import { canvasCursorCss, defaultPenPrefs, diagnosePen, mapPressure, PenProbe, platformOf, readPenPrefs, type PenSample } from './pen';
 
 const pen = (pressure: number, buttons = 1, extra: Partial<PenSample> = {}): PenSample => ({ type: 'pen', pressure, tiltX: 0, tiltY: 0, twist: 0, buttons, ...extra });
 const stroke = (probe: PenProbe, pressures: number[], extra: Partial<PenSample> = {}): boolean => {
@@ -35,6 +35,23 @@ describe('pen prefs', () => {
     expect(r.eraserEnd).toBe(true);
     expect(r.barrel).toBe('menu');
     for (const b of ['pan', 'zoom', 'eraser'] as const) expect(readPenPrefs({ version: 1, barrel: b }).barrel).toBe(b);
+  });
+  it('reads the canvas cursor choice and builds its CSS', () => {
+    expect(readPenPrefs({ version: 1 }).cursor).toBe('crosshair');
+    expect(readPenPrefs({ version: 1, cursor: 'dot' }).cursor).toBe('dot');
+    expect(readPenPrefs({ version: 1, cursor: 'sparkles' }).cursor).toBe('crosshair');
+    expect(canvasCursorCss('crosshair')).toBe('crosshair');
+    expect(canvasCursorCss('none')).toBe('none');
+    for (const k of ['circle', 'dot'] as const) expect(canvasCursorCss(k)).toMatch(/^url\("data:image\/svg\+xml,.+"\) \d+ \d+, crosshair$/);
+    // Brush size: the ring's picture grows with the brush on screen, hotspot in the middle
+    const size = (css: string) => Number(/width%3D%22(\d+)%22/.exec(css)![1]);
+    const hot = (css: string) => /"\) (\d+) (\d+),/.exec(css)!.slice(1).map(Number);
+    const small = canvasCursorCss('brush', 10), big = canvasCursorCss('brush', 80);
+    expect(size(big)).toBeGreaterThan(size(small));
+    expect(hot(big)).toEqual([Math.floor(size(big) / 2), Math.floor(size(big) / 2)]);
+    // too big for a cursor picture, or a tool without a size
+    expect(canvasCursorCss('brush', 400)).toBe('crosshair');
+    expect(canvasCursorCss('brush', 0)).toBe(canvasCursorCss('circle'));
   });
 });
 

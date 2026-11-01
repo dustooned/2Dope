@@ -1,4 +1,4 @@
-import { cloneBrush, PRESETS, type BrushSettings } from './brush';
+import { cloneBrush, PRESETS, sanitizeBrushExtras, type BrushSettings } from './brush';
 import { readVectorStyle } from './vectorstyle';
 
 /**
@@ -150,5 +150,5 @@ export function readBrush(v: unknown): BrushSettings | null {
   }
   if (out.strokeColor !== undefined && typeof out.strokeColor !== 'boolean') delete out.strokeColor;
   if (out.grainImage !== undefined && !(typeof out.grainImage === 'string' && out.grainImage.startsWith('data:image/') && out.grainImage.length < 600_000)) delete out.grainImage;
-  return out;
+  return sanitizeBrushExtras(out);
 }

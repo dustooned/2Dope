@@ -168,6 +168,8 @@ export function buildPanel(app: App, root: HTMLElement): void {
       const out = el('output');
       const sync = () => {
         if(def.key==='spacing')input.max=app.tool==='pen' && app.brush.vectorStyle?.mode==='stamp'?'4':String(def.max);
+        // pixel brushes scatter as far as Procreate's (up to 8 dab sizes); styled vector stamps stop at 2
+        if(def.key==='scatter')input.max=app.brush.vectorStyle?'2':'8';
         input.value = String(app.brush[def.key] ?? 0);
         out.textContent = fmt(app.brush[def.key] ?? 0, def.step, def.unit);
       };
@@ -550,6 +552,8 @@ function dynamicEditor(app: App, key: DynKey, refreshers: (() => void)[]): HTMLE
     const out = el('output');
     input.addEventListener('input', () => {
       get()[s.prop] = Number(input.value);
+      // an imported response curve gives way to the curve slider once it is moved
+      if (s.prop === 'curve') delete get().points;
       out.textContent = fmt(get()[s.prop], s.step);
       app.brushChanged();
     });

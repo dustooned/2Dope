@@ -2,7 +2,7 @@ import type { ImportedBrush, ImportedTip } from '../io/brushimport';
 import { loadGrain, loadTip } from '../brush/raster';
 import { loadBrushes, saveBrushes } from '../io/brushstore';
 import type { App } from '../app';
-import { cloneBrush, PRESETS, type BrushSettings } from '../core/brush';
+import { cloneBrush, PRESETS, type BrushSettings, type Dynamic } from '../core/brush';
 import { addSet, allCategories, categoryOf, forget, isBuiltIn, moveTo, readBrush, readSets, removeSet, renamedIn, renameSet, uniqueName, type BrushCategory, type BrushSets } from '../core/brushlib';
 import type { StrokePoint, StrokeRecord } from '../core/stroke';
 import { strokeLength } from '../core/stroke';
@@ -282,6 +282,8 @@ export class BrushLibrary {
           if (ib.tip && !tip) failed++;
           const grain = ib.grain ? await picDataUrl({ kind: 'png', bytes: ib.grain.bytes }, 256, ib.grain.invert) : null;
           const b = importedBrush(ib, tip, grain, [...this.names(), ...names]);
+          // the debug report: every archive key is mapped or listed as not supported, with why
+          if (ib.report) console.debug(`[brush import] ${b.name}`, ib.report);
           this.mine = [...this.mine, b];
           names.push(b.name);
           added++;
@@ -634,9 +636,16 @@ function importedBrush(ib: ImportedBrush, tip: string | null, grain: string | nu
   b.followDirection = ib.follow ?? false;
   // the grain picture is the paper texture; its depth is how strongly it holds paint back
   if (grain) {
+    const g = ib.grain;
     b.grainImage = grain;
-    b.grain = ib.grain?.depth ?? 0.8;
-    b.grainScale = Math.max(0.1, Math.min(4, ib.grain?.scale ? ib.grain.scale * 2 : 1));
+    b.grain = g?.depth ?? 0.8;
+    b.grainScale = Math.max(0.1, Math.min(4, g?.scale ? g.scale * 2 : 1));
+    if (g?.mode) b.grainMode = g.mode;
+    if (g?.depthMin) b.grainMin = g.depthMin;
+    if (g?.movement !== undefined && g.movement < 1) b.grainMovement = g.movement;
+    if (g?.rotation) b.grainRotation = g.rotation;
+    // Procreate's zoom: the grain grows and shrinks with the brush from the imported size
+    if (g?.zoom) { b.grainFollow = g.zoom; b.grainRef = ib.size ?? b.size; }
   } else {
     delete b.grainImage;
     b.grain = 0;
@@ -646,14 +655,22 @@ function importedBrush(ib: ImportedBrush, tip: string | null, grain: string | nu
   if (ib.opacity !== undefined) b.opacity = ib.opacity;
   b.flow = 1;
   b.scatter = ib.scatter ?? 0;
-  if (ib.pressureSize !== undefined) b.sizeDyn = { ...b.sizeDyn, control: ib.pressureSize > 0 ? 'pressure' : 'off', min: Math.max(0, 1 - ib.pressureSize) };
+  // pressure (with its curve and direction), else speed, drives each dynamic
+  const dynamic = (d: Dynamic, pressure: number | undefined, invert: boolean | undefined, points: [number, number][] | undefined, speed: number | undefined): Dynamic => {
+    if (pressure !== undefined && pressure > 0) return { ...d, control: 'pressure', min: Math.max(0, 1 - pressure), curve: 1, invert: !!invert, ...(points ? { points } : {}) };
+    if (speed) return { ...d, control: 'speed', min: Math.max(0, 1 - Math.abs(speed)), curve: 1, invert: speed < 0 };
+    return pressure !== undefined ? { ...d, control: 'off' } : d;
+  };
+  b.sizeDyn = dynamic(b.sizeDyn, ib.pressureSize, ib.pressureSizeInvert, ib.sizeCurve, ib.speedSize);
   if (ib.sizeJitter !== undefined) b.sizeDyn = { ...b.sizeDyn, jitter: ib.sizeJitter };
-  if (ib.pressureOpacity !== undefined) b.opacityDyn = { ...b.opacityDyn, control: ib.pressureOpacity > 0 ? 'pressure' : 'off', min: Math.max(0, 1 - ib.pressureOpacity) };
+  b.opacityDyn = dynamic(b.opacityDyn, ib.pressureOpacity, ib.pressureOpacityInvert, ib.opacityCurve, ib.speedOpacity);
   if (ib.opacityJitter !== undefined) b.opacityDyn = { ...b.opacityDyn, jitter: ib.opacityJitter };
   // tapers: a fraction of a long stroke, as document pixels
   if (ib.taperStart !== undefined) b.taperStart = Math.round(ib.taperStart * 160);
   if (ib.taperEnd !== undefined) b.taperEnd = Math.round(ib.taperEnd * 160);
+  for (const k of ['taperSize', 'taperOpacity', 'taperShape'] as const) if (ib[k] !== undefined) b[k] = ib[k];
   if (ib.smoothing !== undefined) b.smoothing = ib.smoothing;
+  if (ib.stabilize !== undefined) b.stabilize = ib.stabilize;
   for (const k of ['hueJitter', 'satJitter', 'brightJitter', 'wetPull'] as const) if (ib[k] !== undefined) b[k] = ib[k];
   if (ib.strokeColor) b.strokeColor = true;
   return b;

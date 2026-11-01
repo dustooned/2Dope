@@ -16,6 +16,12 @@ export interface Dynamic {
   /** Random reduction per dab (0..1), seeded. */
   jitter: number;
   invert: boolean;
+  /**
+   * A response curve as points (input, output), both 0..1, input ascending (Procreate's pressure
+   * curves). Replaces `curve` when present (then `invert` flips the curve's output); older builds
+   * ignore it and use `curve`.
+   */
+  points?: [number, number][];
 }
 
 /**
@@ -88,6 +94,27 @@ export interface BrushSettings {
   /** Taper length at the start / end of a stroke, in document pixels. */
   taperStart: number;
   taperEnd: number;
+  /** How thin the taper ends get, 0..1 (missing = 1: down to a point). */
+  taperSize?: number;
+  /** How much the taper ends fade, 0..1 (missing = 0). */
+  taperOpacity?: number;
+  /** Tip sharpness 0..1: higher keeps the ends thin for longer (missing = 0, the soft ease). */
+  taperShape?: number;
+  /**
+   * How the grain picture holds paint back. Missing = multiply (the grain darkens coverage by its
+   * depth). 'height': the grain is a height map; paint misses the valleys deeper than the depth.
+   */
+  grainMode?: 'height';
+  /** Grain depth at the firmest press, 0..1 (Procreate's depth minimum; missing = 0). */
+  grainMin?: number;
+  /** How far the grain stays on the paper, 0..1: 1 (or missing) = fixed to the canvas, 0 = rolls with the stroke. */
+  grainMovement?: number;
+  /** Grain rotation in degrees. */
+  grainRotation?: number;
+  /** 0..1: how much the grain scale follows the brush size (from `grainRef`). */
+  grainFollow?: number;
+  /** The brush size the grain scale was set at (for `grainFollow`). */
+  grainRef?: number;
   /** Stabilizer amount 0..1. */
   smoothing: number;
   /** Pulled-string (lazy mouse) stabilizer instead of exponential smoothing. */
@@ -142,12 +169,33 @@ export function dyn(control: Control, min = 0, curve = 1, jitter = 0, invert = f
   return { control, min, curve, jitter, invert };
 }
 
+/** A points curve at `x` (0..1): straight between points, flat past the ends. */
+export function curveAt(points: [number, number][], x: number): number {
+  if (!points.length) return x;
+  if (x <= points[0]![0]) return points[0]![1];
+  for (let i = 1; i < points.length; i++) {
+    const [x1, y1] = points[i]!;
+    if (x <= x1) {
+      const [x0, y0] = points[i - 1]!;
+      return x1 - x0 > 1e-9 ? y0 + ((y1 - y0) * (x - x0)) / (x1 - x0) : y1;
+    }
+  }
+  return points[points.length - 1]![1];
+}
+
 /** Evaluate a dynamic to a 0..1 multiplier. `rnd` is a seeded 0..1 value for jitter. */
 export function evalDynamic(d: Dynamic, s: InputSample, rnd: number): number {
   let v = d.control === 'pressure' ? s.pressure : d.control === 'tilt' ? s.tilt : d.control === 'speed' ? s.speed : 1;
   if (d.control !== 'off') {
-    if (d.invert) v = 1 - v;
-    v = d.min + (1 - d.min) * Math.pow(clamp01(v), d.curve);
+    if (d.points) {
+      // a points curve shapes the input first; inverting flips its output (Procreate's negative amounts)
+      v = clamp01(curveAt(d.points, clamp01(v)));
+      if (d.invert) v = 1 - v;
+    } else {
+      if (d.invert) v = 1 - v;
+      v = Math.pow(clamp01(v), d.curve);
+    }
+    v = d.min + (1 - d.min) * v;
   }
   if (d.jitter > 0) v *= 1 - d.jitter * rnd;
   return clamp01(v);
@@ -335,4 +383,40 @@ for (const [name,mode,tip,size,spacing,aspect] of [
 
 export function cloneBrush(b: BrushSettings): BrushSettings {
   return structuredClone(b);
+}
+
+const unit = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
+
+/** A curve from a file: 2..16 points in 0..1 with ascending inputs, or null. */
+export function readCurvePoints(v: unknown): [number, number][] | null {
+  if (!Array.isArray(v) || v.length < 2 || v.length > 16) return null;
+  const out: [number, number][] = [];
+  for (const p of v) {
+    if (!Array.isArray(p) || p.length !== 2 || !unit(p[0]) || !unit(p[1])) return null;
+    if (out.length && p[0] < out[out.length - 1]![0]) return null;
+    out.push([p[0], p[1]]);
+  }
+  return out;
+}
+
+/** Drop or clamp the optional imported-brush fields of a brush read from a file or storage (in place). */
+export function sanitizeBrushExtras(b: BrushSettings): BrushSettings {
+  for (const k of ['sizeDyn', 'opacityDyn', 'flowDyn'] as const) {
+    const d = b[k];
+    if (d && d.points !== undefined) {
+      const pts = readCurvePoints(d.points);
+      if (pts) d.points = pts;
+      else delete d.points;
+    }
+  }
+  for (const k of ['taperSize', 'taperOpacity', 'taperShape', 'grainMin', 'grainMovement', 'grainFollow'] as const) {
+    const v = b[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v)) delete b[k];
+    else b[k] = clamp01(v);
+  }
+  if (b.grainRotation !== undefined && !(typeof b.grainRotation === 'number' && Number.isFinite(b.grainRotation))) delete b.grainRotation;
+  if (b.grainRef !== undefined && !(typeof b.grainRef === 'number' && Number.isFinite(b.grainRef) && b.grainRef > 0)) delete b.grainRef;
+  if (b.grainMode !== undefined && b.grainMode !== 'height') delete b.grainMode;
+  return b;
 }
