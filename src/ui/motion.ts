@@ -1070,7 +1070,7 @@ export class MotionPanel {
       ...(l.kind === 'drawings' || l.kind === 'comp' ? [{ label: 'Split at the playhead', hint: 'Ctrl+Shift+D', run: () => this.splitAt() }] : []),
       ...(ed.selected.length > 1 || l.kind !== 'camera' ? [{ label: ed.selected.length > 1 ? `Group ${ed.selected.length} layers` : 'Group into a comp', run: () => void ed.group() }] : []),
       ...(ed.selected.length > 1 ? [{ label: `Stagger ${ed.selected.length} layers…`, run: () => void this.askStagger() }] : []),
-      ...(l.kind === 'drawings' && !l.guide ? [{ label: 'Adjustment layer', checked: !!l.adjust, run: () => { ed.setAdjust(l.id, !l.adjust); if (!l.adjust) this.app.openEffects?.(l.id); } }] : []),
+      ...(l.kind === 'drawings' && l.adjust ? [{ label: 'Make it a normal layer', run: () => ed.setAdjust(l.id, false) }] : [{ label: 'New adjustment layer above', run: () => ed.addLayer('adjustment', l.id) }]),
       ...this.layerActions(l).map((a) => ({ label: a.label, run: () => this.runLayerAction(l, a.value), danger: a.value === 'delete' })),
     ];
   }

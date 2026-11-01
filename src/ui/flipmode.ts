@@ -92,6 +92,7 @@ export class FlipMode {
       { label: 'Background', run: () => this.app.addStillLayer('background') },
       { label: 'Object', run: () => this.app.addStillLayer('object') },
       { label: 'Notes', run: () => this.app.addNotesLayer() },
+      { label: 'Adjustment', run: () => this.app.editor.addLayer('adjustment', this.app.project.isPlaceholder ? undefined : this.app.project.activeLayer) },
       { label: 'Media\u2026', run: () => this.app.pickMedia?.() },
     ];
     const track = btn('Track', 'Add an animation track above this one, from frame 1. Hold (or right-click) for a background, object, notes or media track. Drag a track\u2019s box up or down to reorder.', 'layers', () => this.app.addFlipTrack(), () => { const r = track.getBoundingClientRect(); showContextMenu(r.left, r.bottom, trackKinds()); }, 'flip-btn flip-adv');
@@ -148,7 +149,8 @@ export class FlipMode {
 
   /** The tracks: the shot's drawing layers (not guides), front first. */
   private tracks(): DrawingsLayer[] {
-    return this.app.drawLayers().filter((l) => !l.guide);
+    // adjustment layers have nothing to draw: they are effects, set in Motion or Layers
+    return this.app.drawLayers().filter((l) => !l.guide && !l.adjust);
   }
 
   update(): void {

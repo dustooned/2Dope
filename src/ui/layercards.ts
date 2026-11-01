@@ -372,8 +372,8 @@ export class LayerCards {
       box.append(el('div', { class: 'lc-section' }, `Other layers in this shot${!app.showLayers ? ' · hidden while you draw (Others)' : ''}`));
       for (const x of elsewhere) {
         const row = el('div', { class: `lc-other${x.visible ? '' : ' off'}` });
-        const go = el('button', { type: 'button', class: 'lc-other-name', title: `Draw on ${x.name}` }, x.name);
-        go.addEventListener('click', () => { if (!app.strokeActive) { app.pickLayer(x.id); this.sig = ''; this.update(); } });
+        const go = el('button', { type: 'button', class: 'lc-other-name', title: x.adjust ? `${x.name}: its effects change the layers below. Tap for its effects` : `Draw on ${x.name}` }, x.adjust ? `${x.name} · adjustment` : x.name);
+        go.addEventListener('click', () => { if (app.strokeActive) return; if (x.adjust) { this.close(); app.openEffects?.(x.id); return; } app.pickLayer(x.id); this.sig = ''; this.update(); });
         const eye = el('button', { type: 'button', class: 'lc-eye', 'aria-pressed': String(x.visible), 'aria-label': x.visible ? `Hide ${x.name}` : `Show ${x.name}`, title: x.visible ? 'Hide this layer' : 'Show this layer' }, x.visible ? 'Hide' : 'Show');
         decorate(eye, 'eye');
         eye.addEventListener('click', () => { app.editor.setFlag(x.id, 'visible', !x.visible); this.sig = ''; this.update(); });
@@ -680,7 +680,7 @@ export class LayerCards {
       const flip = (key: 'clip' | 'alphaLock', label: string) => () => app.editor.edit(l[key] ? `${label} off` : label, (c) => { const x = c.layers.find((y) => y.id === l.id); if (x && x.kind === 'drawings') { if (x[key]) delete x[key]; else x[key] = true; } });
       sw('Alpha Lock', 'Brushes change only pixels that already have paint', l.alphaLock === true, flip('alphaLock', 'Alpha Lock'));
       sw('Clipping mask', 'Show this layer only where the layer below has paint', l.clip === true, flip('clip', 'Clipping mask'));
-      sw('Adjustment layer', 'Its effects change every layer below it; its own drawing is hidden', l.adjust === true, () => { app.editor.setAdjust(l.id, !l.adjust); if (!l.adjust) app.openEffects?.(l.id); });
+      if (l.adjust) sw('Adjustment layer', 'On: its effects change every layer below it and its own drawing is hidden. Off: it is a normal drawing layer again.', true, () => app.editor.setAdjust(l.id, false));
       sw('Reference', 'Fill and ColorDrop on any layer use this layer\u2019s lines as their edges (one per shot)', l.reference === true, () => app.setReference(l.id, !l.reference));
       if (l.mask) sw('Edit mask', 'Brushes paint on the mask: paint hides, the eraser reveals (all frames of this layer)', app.editingMask, () => app.setMaskEditing(!app.editingMask));
     }
@@ -718,6 +718,7 @@ export class LayerCards {
       else tile(layer, 'Mask', 'invert', 'Add a mask: paint to hide parts of this layer without erasing them', () => app.addMask());
       tile(layer, 'Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => app.addCelLayer(), false, true);
       tile(layer, 'Group', 'layers', 'Group this layer with the one below (a folder; tap it to fold open)', () => this.groupWithBelow(l), false, true);
+      tile(layer, 'Adjustment', 'fx', 'A new adjustment layer of its own above this one: its effects change this layer and everything below (nothing is drawn on it)', () => { const top = app.project.comp.layers.find((x) => app.celLayers.some((c) => c.id === x.id)) ?? l; app.editor.addLayer('adjustment', top.id); }, false, true);
       tile(layer, 'Merge', 'collapseall', 'Merge down: flatten this layer into the one below (same frames and placement)', () => app.mergeDown(l.id), false, true);
       if (this.sendTo) tile(layer, 'Send to\u2026', 'folder', 'Send a copy of this layer (with its linked art layers and every frame) to another project', () => this.sendLayer(l), false, true);
     }

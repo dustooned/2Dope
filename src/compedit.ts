@@ -732,7 +732,8 @@ export class CompEditor {
   }
 
   /** A new layer above the selected one (or on top). */
-  addLayer(kind: 'drawings' | 'null' | 'camera' | 'adjustment'): void {
+  /** A new layer; an adjustment layer is always its own layer, placed right above `above` (default: on top). */
+  addLayer(kind: 'drawings' | 'null' | 'camera' | 'adjustment', above?: string): void {
     const c = this.comp;
     const p = this.app.project;
     let made: Layer | null = null;
@@ -744,11 +745,13 @@ export class CompEditor {
       : 0;
     this.edit(`Add ${kind === 'drawings' ? 'drawing' : kind} layer`, (cc) => {
       if (kind === 'adjustment') {
-        // on top, for the whole shot: its effects change everything below it
+        // its own layer for the whole shot, right above the chosen layer (or on top): its effects
+        // change everything below it, and the layers themselves stay as they are
         const d = p.newDrawing();
         made = drawingsLayer(p.newId('L'), 'Adjustment', [{ drawing: d.id, length: Math.max(1, this.app.compEnd) }], p.width, p.height, cc.width, cc.height);
         made.adjust = true;
-        cc.layers.splice(0, 0, made);
+        const under = above ? cc.layers.findIndex((l) => l.id === above) : -1;
+        cc.layers.splice(Math.max(0, under), 0, made);
         return;
       }
       const id = p.newId('L');
@@ -765,9 +768,9 @@ export class CompEditor {
     const m = made as Layer | null;
     if (m) {
       this.open.add(m.id);
-      this.select(m.id);
-      // an adjustment layer is only its effects: open them to choose one
+      // an adjustment layer is only its effects: open them to choose one, and keep drawing where you were
       if (kind === 'adjustment') this.app.openEffects?.(m.id);
+      else this.select(m.id);
     }
   }
 

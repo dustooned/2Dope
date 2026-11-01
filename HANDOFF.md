@@ -2,6 +2,20 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Adjustment layers are always their own layer (2026-11-01, uncommitted)
+
+Owner feedback: turning a drawing layer into an adjustment layer hid that layer's art; they want a
+separate adjustment layer. `src/compedit.ts` `addLayer('adjustment', above?)` puts a new adjustment
+layer right above `above` (default top) and keeps the current layer active (no `select`), opening
+its Effects. Motion layer menu: "New adjustment layer above" (or "Make it a normal layer" on an
+adjustment layer); Draw/Animate layer options: an "Adjustment" tile (above the drawing's whole
+stack), and the Adjustment switch only shows on an adjustment layer (to turn it back); Animate Track
+menu: "Adjustment". Adjustment layers are left out of the flipbook tracks; "Other layers in this
+shot" labels them and opens their effects. Checked in the dev app: a new `Adjustment` layer above,
+the original layer unchanged and still active, Effects opened, not a flipbook track. Checks:
+624 tests, build, fixtures effects/paintingplanes/workspacefixes/flipbooksource/inkpaint/
+paintingworkflow/assetlayers pass.
+
 ### Adjustment layers; Motion/Timing tool row in Full (2026-11-01, uncommitted)
 
 - Bug: at the Full level Motion had no tool row. `body.ui-full .bub-tools` hides the bubble tools
