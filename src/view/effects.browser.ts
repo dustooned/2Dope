@@ -323,6 +323,7 @@ for (const [label, effect] of [['none', null], ['Roughen edges 3 (default)', fx(
   let a = 0, b = 0;
   for (let i = 3; i < plain.length; i += 4) { a += plain[i]!; b += rough[i]!; }
   note(`thin 1.5 px line keeps ${Math.round((100 * b) / a)}% of its ink at Roughen edges 3`);
+  check('Roughen edges at its default keeps a thin 1.5 px line together (at least 55% of its ink)', () => (b / a >= 0.55) || `kept ${Math.round((100 * b) / a)}%`);
 }
 
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

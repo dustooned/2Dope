@@ -352,7 +352,8 @@ function glow(c: HTMLCanvasElement, e: LayerEffect): void {
   for (let i = 0; i < s.length; i += 4) {
     const a = s[i + 3]! / 255;
     if (!a) continue;
-    const lum = (0.2126 * s[i]! + 0.7152 * s[i + 1]! + 0.0722 * s[i + 2]!) / 255;
+    // brightness as the brightest channel (HSV value): a vivid red or blue glows, not only near-white
+    const lum = Math.max(s[i]!, s[i + 1]!, s[i + 2]!) / 255;
     // a soft knee so the edge of the glowing area does not band
     const k = Math.min(1, Math.max(0, (lum - t + knee) / (2 * knee)));
     if (!k) continue;
@@ -579,6 +580,9 @@ function roughen(c: HTMLCanvasElement, e: LayerEffect, tick: number): void {
   for (let y = 0; y < bh; y++) {
     for (let x = 0; x < bw; x++) alpha[y * bw + x] = (px[(y + y0) * w + x + x0]! >>> 24) / 255;
   }
+  // how much paint is around each pixel (a box of the roughness radius): thin lines have little,
+  // so they roughen less instead of breaking apart; rims of thick strokes and shapes get the full amount
+  const local = boxMean(alpha, bw, bh, Math.max(1, Math.ceil(amount)));
   // a seeded noise field, two octaves, a new pattern every `hold` frames
   const seed = (e.seed ^ Math.imul(tick + 1, 0x9e3779b1)) >>> 0;
   const base = Math.max(4, e.size);
@@ -623,12 +627,39 @@ function roughen(c: HTMLCanvasElement, e: LayerEffect, tick: number): void {
       const al = v >>> 24;
       if (!al) continue;
       const [dx, dy] = offset(x, y);
+      const k = Math.min(1, local[y * bw + x]! / 0.5) ** 2, amt = amount * k;
       // outward pulls erase, inward pulls thicken: the rim breaks up but never grows new paint
-      const a = Math.round(al * alphaAt(x + dx * amount, y + dy * amount));
+      const a = Math.round(al * alphaAt(x + dx * amt, y + dy * amt));
       if (a !== al) px[(y + y0) * w + x + x0] = ((v & 0x00ffffff) | (a << 24)) >>> 0;
     }
   }
   g.putImageData(img, 0, 0);
+}
+
+/** Mean of `v` over a (2r+1)² box at each cell (two separable passes; edges count as empty). */
+function boxMean(v: Float32Array, w: number, h: number, r: number): Float32Array {
+  const tmp = new Float32Array(v.length), out = new Float32Array(v.length), n = 2 * r + 1;
+  for (let y = 0; y < h; y++) {
+    let sum = 0;
+    for (let x = -r; x <= r; x++) if (x >= 0 && x < w) sum += v[y * w + x]!;
+    for (let x = 0; x < w; x++) {
+      tmp[y * w + x] = sum / n;
+      const add = x + r + 1, drop = x - r;
+      if (add < w) sum += v[y * w + add]!;
+      if (drop >= 0) sum -= v[y * w + drop]!;
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let sum = 0;
+    for (let y = -r; y <= r; y++) if (y >= 0 && y < h) sum += tmp[y * w + x]!;
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = sum / n;
+      const add = y + r + 1, drop = y - r;
+      if (add < h) sum += tmp[add * w + x]!;
+      if (drop >= 0) sum -= tmp[drop * w + x]!;
+    }
+  }
+  return out;
 }
 
 /** Gaussian blur of the whole layer (premultiplied, so soft edges keep their colour). */
@@ -774,7 +805,7 @@ function retroTv(c: HTMLCanvasElement, e: LayerEffect, tick: number): void {
       const lum = 0.299 * r + 0.587 * gg + 0.114 * b;
       r += (lum - r) * loss; gg += (lum - gg) * loss; b += (lum - b) * loss;
       if (stat > 0) {
-        const v = (hash01(seed, y * Math.ceil(w / dash) + Math.floor(x / dash), 41) * 2 - 1) * stat * 160;
+        const v = (hash01(seed, y * Math.ceil(w / dash) + Math.floor(x / dash), 41) * 2 - 1) * stat * 96;
         r += v; gg += v; b += v;
       }
       src[i] = orig[i]! + (r - orig[i]!) * mix;

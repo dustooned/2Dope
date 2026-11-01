@@ -5,6 +5,7 @@ import { Autosaver } from '../io/autosave';
 import { encodePng } from '../io/codec';
 import { assetsOf, hasContent, metaFromFile, newId, requestPersistence, storageEstimate, type FolderRecord, type ProjectMeta, type Store, type VersionRecord } from '../io/persist';
 import { captureProject, loadProjectFile } from '../io/projectio';
+import { sampleProject, type SampleId } from '../io/samples';
 import { parseProjectFile, SchemaError, stringifyProjectFile, type ProjectFile } from '../io/schema';
 import { readZip, writeZip, ZipError } from '../io/zip';
 import { THUMB_H, THUMB_W } from '../view/planeops';
@@ -322,6 +323,24 @@ export class FileUI {
       return hasContent((await captureProject(this.app.project).settle()).file);
     } catch {
       return true;
+    }
+  }
+
+  /** Add a sample project to the library (a new copy each time) and open it. An untouched project open now is removed. */
+  async addSample(id: SampleId): Promise<void> {
+    try {
+      const prev = this.current, prevEmpty = prev ? !(await this.projectHasContent()) : false;
+      const project = sampleProject(id);
+      const { file, assets } = await captureProject(project).settle();
+      const pid = newId('p'), now = Date.now();
+      const meta = metaFromFile(pid, file, { folder: null, created: now, modified: now, opened: now });
+      await this.store.saveHead(meta, { id: pid, json: stringifyProjectFile(file), savedAt: now }, assets, [...assetsOf(file)]);
+      if (!(await this.openProject(pid, true))) return;
+      if (prev && prevEmpty && prev.id !== pid) await this.store.deleteProject(prev.id);
+      this.toast(`Opened the ${project.name.replace(/ \(sample\)$/, '').toLowerCase()} sample: play it, take it apart, change anything. It is your own copy.`, [], 5000);
+      this.onLibraryChanged();
+    } catch (e) {
+      this.toast(`Could not make the sample: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

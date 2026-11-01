@@ -564,7 +564,7 @@ export class LayerCards {
     });
   }
 
-  /** Quick actions after a swipe left: Lock, Duplicate, Delete. */
+  /** Quick actions after a swipe left: Lock, Duplicate, Clear (a drawing layer's drawing here), Delete. */
   private quick(l: Layer): HTMLElement {
     const app = this.app;
     const box = el('div', { class: 'lc-options lc-quick', role: 'group', 'aria-label': `${l.name} quick actions` });
@@ -576,6 +576,7 @@ export class LayerCards {
     };
     act(l.locked ? 'Unlock' : 'Lock', 'lock', () => app.editor.setFlag(l.id, 'locked', !l.locked));
     act('Duplicate', 'copy', () => app.duplicateLayer(l.id));
+    if (l.kind === 'drawings' && !l.guide && !l.locked) act('Clear', 'eraser', () => { app.pickLayer(l.id); app.clearFrame(); });
     act('Delete', 'trash', async () => {
       if (await confirmBox(`Delete \u201c${l.name}\u201d?`, 'You can undo this.', 'Delete', true)) app.editor.deleteLayers([l.id]);
     }, true);

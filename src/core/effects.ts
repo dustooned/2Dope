@@ -145,7 +145,7 @@ export const EFFECT_TYPES: EffectDef[] = [
     pad: (e) => e.amount + 2 },
   { id: 'tv', label: 'Retro TV', hint: 'An old TV or VHS tape: static, colour that slips off the lines, rolling picture (analog signal)', target: 'layer', amount: 100, size: 24, hold: 1, amountRange: [0, 100], sizeRange: [4, 120], amountLabel: 'Strength', sizeLabel: 'Noise size', amountUnit: '%', sizeUnit: ' px', animated: true,
     extras: [
-      { key: 'static', label: 'Static', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 12 },
+      { key: 'static', label: 'Static', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 6 },
       { key: 'chromaLoss', label: 'Chroma loss', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 30 },
       { key: 'chromaShift', label: 'Chroma shift', kind: 'range', min: 0, max: 8, step: 0.5, unit: ' px', def: 2 },
       { key: 'phase', label: 'Phase offset', kind: 'range', min: 0, max: 360, step: 15, unit: '\u00b0', def: 0 },

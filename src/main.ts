@@ -21,6 +21,9 @@ import { VideoExportUI } from './ui/videoexport';
 import { ShareView } from './ui/share';
 import { FileUI } from './ui/files';
 import { Gallery } from './ui/gallery';
+import { firstRunPending, showFirstRun } from './ui/firstrun';
+import { TimeLapse } from './ui/timelapse';
+import type { SampleId } from './io/samples';
 import { MotionPanel } from './ui/motion';
 import { Splitter } from './ui/splitter';
 import { NewProjectUI } from './ui/newdialog';
@@ -501,7 +504,9 @@ let exporter: ExportUI | null = null;
 const videoExporter = new VideoExportUI(app, (message) => files?.toast(message), audioPlayback.bank);
 // Share: the last mode (preview the movie, check it, make it, save or send it)
 let onShareChange = (): void => {};
+const timelapse = new TimeLapse(app);
 const share = new ShareView(app, {
+  timelapse: () => timelapse.show(),
   sounds: audioPlayback.bank,
   blender: () => void exportForBlender(),
   backup: () => void files?.exportProject(),
@@ -817,12 +822,22 @@ files = new FileUI(app, store, persistent);
 artworkUI.library.openProject = file => files!.importFile(file);
 app.onDocChanged = chain(app.onDocChanged, () => audioPlayback.invalidate());
 app.onDocChanged = chain(app.onDocChanged, () => reference.refresh());
+app.onDocChanged = chain(app.onDocChanged, () => timelapse.changed());
 if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = files;
 exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
 const newUI = new NewProjectUI(app.device.lite ? app.device.limits : null);
 const gallery = new Gallery(files, newUI, $('#gallery'));
-// every new project starts with its setup (size, frame rate, name), the first one too
-files.askNew = () => newUI.open(null);
+// every new project starts with its setup (size, frame rate, name), the first one too; on a
+// device's very first start, the welcome screen comes first (interface, then blank or a sample)
+let firstSample: SampleId | null = null;
+files.askNew = async () => {
+  if (firstRunPending()) {
+    const r = await showFirstRun(app.interfaceLevel === 'full' ? 'full' : 'simple');
+    if (r.level !== app.interfaceLevel) bubbles.setLevel(r.level);
+    if (r.start !== 'blank') { firstSample = r.start; return null; }
+  }
+  return newUI.open(null);
+};
 const showGallery = () => void gallery.open();
 $('#open-gallery').addEventListener('click', showGallery);
 document.querySelectorAll('[data-file="projects"]').forEach((b) => b.addEventListener('click', showGallery));
@@ -837,6 +852,7 @@ $('#export-seq').addEventListener('click', () => share.show());
 $('#focus-export').addEventListener('click', () => share.show());
 if (import.meta.env.DEV) (window as unknown as { __export: ExportUI }).__export = exporter;
 await files.start();
+if (firstSample) await files.addSample(firstSample);
 // Restore the view only after the project is available; no file schema or document edits.
 try {
   const saved = localStorage.getItem(WS_KEY);

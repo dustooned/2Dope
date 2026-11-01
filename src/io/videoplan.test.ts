@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { drawingsLayer, newComp } from '../core/comp';
-import { DEFAULT_VIDEO, planVideo, videoOptions, videoSize } from './videoplan';
+import { DEFAULT_VIDEO, planVideo, VIDEO_PRESETS, videoOptions, videoPresetOf, videoSize } from './videoplan';
 
 function project() {
   const shot = newComp('shot', 'Shot', 1920, 1080, 24);
@@ -53,5 +53,13 @@ describe('video planning', () => {
     const p = project();
     p.comps.get('shot')!.fps = 0;
     expect(() => planVideo(p, DEFAULT_VIDEO)).toThrow(/timing/);
+  });
+});
+
+describe('video presets', () => {
+  it('each preset is recognised from its own settings; a mix is your own; see-through master still counts', () => {
+    for (const p of VIDEO_PRESETS) expect(videoPresetOf(videoOptions({ ...p.opts, background: 'white' }))).toBe(p.id);
+    expect(videoPresetOf(videoOptions({ format: 'webm', size: '1080p', quality: 'standard' }))).toBeNull();
+    expect(videoPresetOf(videoOptions({ size: 'original', quality: 'high', background: 'transparent' }))).toBe('master');
   });
 });

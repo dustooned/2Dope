@@ -2,7 +2,10 @@ import type { App } from '../app';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
 import { drawRailState } from './rails';
-import { PART_LABEL } from '../core/comp';
+import { partOf, PART_LABEL, type Layer } from '../core/comp';
+
+/** What a track is, in words (Dreams labels its track types). */
+const TRACK_TYPE: Record<Layer['kind'], string> = { drawings: 'drawing', comp: 'group', camera: 'camera', null: 'anchor' };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -78,10 +81,10 @@ export class LayersPopover {
     if (this.root.hidden) return;
     const app = this.app;
     const ed = app.editor;
-    const layers = (app.workspace==='draw' && !app.project.comp.asset ? app.celLayers : app.project.comp.layers).filter((l) => l.kind === 'drawings' || l.kind === 'comp');
+    const layers = (app.workspace==='draw' && !app.project.comp.asset ? app.celLayers : app.project.comp.layers).filter((l) => l.kind === 'drawings' || l.kind === 'comp' || app.workspace !== 'draw');
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // rebuild only when something it shows changed (keeps double-taps and focus intact)
-    const sig = `${app.project.comp.id}|${active}|${app.plane}|${app.partVisible('line')}|${app.partVisible('fill')}|${app.showLayers}|${app.otherAlpha}|${app.boardAlpha}|${app.board?.id ?? ''}|${[...drawRailState.open].join(',')}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}`).join(',')}`;
+    const sig = `${app.project.comp.id}|${active}|${app.plane}|${app.partVisible('line')}|${app.partVisible('fill')}|${app.showLayers}|${app.otherAlpha}|${app.boardAlpha}|${app.board?.id ?? ''}|${[...drawRailState.open].join(',')}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.kind === 'drawings' ? `${JSON.stringify(l.parts ?? {})}:${l.effects?.length ?? 0}:${ed.valueNow(l, 'line.opacity')}:${ed.valueNow(l, 'fill.opacity')}` : ''}`).join(',')}`;
     const scopedSig=`${app.workspace}|${sig}`;
     if (scopedSig === this.sig) return;
     this.sig = scopedSig;
@@ -104,7 +107,7 @@ export class LayersPopover {
       const key = l.kind === 'comp' ? l.id : `${l.id}#parts`;
       const open = drawRailState.open.has(key);
       const fold = el('button', { type: 'button', class: 'lp-fold', 'aria-expanded': String(open), 'aria-label': `${open ? 'Collapse' : 'Expand'} ${l.name}` }, open ? '▾' : '▸');
-      fold.disabled = l.kind === 'drawings' && !!l.guide;
+      fold.disabled = (l.kind === 'drawings' && !!l.guide) || l.kind === 'camera' || l.kind === 'null';
       fold.addEventListener('click', () => drawRailState.toggle(key));
       row.append(fold);
       const eye = el('button', { type: 'button', class: 'lp-eye', 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer' }, l.visible ? 'Hide' : 'Show');
@@ -119,9 +122,16 @@ export class LayersPopover {
       decorate(lock, 'lock');
       lock.classList.add('icon-only');
       lock.addEventListener('click', () => ed.setFlag(l.id, 'locked', !l.locked));
-      const name = el('button', { type: 'button', class: 'lp-name', title: l.kind === 'comp' ? `Edit drawings inside ${l.name}` : 'Tap to draw on this layer. Double-tap to rename.' }, l.kind === 'comp' ? `${l.name} · group` : l.guide ? `${l.name} · board` : l.name);
+      const kind = l.kind === 'drawings' && l.guide ? 'board' : TRACK_TYPE[l.kind];
+      const name = el('button', { type: 'button', class: 'lp-name', title: l.kind === 'comp' ? `Edit drawings inside ${l.name}` : l.kind === 'drawings' ? 'Tap to draw on this layer. Double-tap to rename.' : `${l.name} is a ${kind} track: it moves things in Motion, it has no drawings` }, l.name);
+      if (kind !== 'drawing') name.append(el('span', { class: 'lp-type' }, ` \u00b7 ${kind}`));
       name.addEventListener('click', async (e) => {
         if (app.strokeActive) return;
+        if (l.kind === 'camera' || l.kind === 'null') {
+          // like Dreams: say why, instead of quietly painting somewhere else
+          app.onNotice?.(`${l.name} is a${kind === 'anchor' ? 'n' : ''} ${kind} track, so there is nothing to draw on. Pick a drawing track, or move it in Motion.`);
+          return;
+        }
         if (l.kind === 'comp') {
           this.close();
           ed.enter(l.id);
@@ -153,9 +163,9 @@ export class LayersPopover {
             vis ? 'Hide' : 'Show',
           );
           decorate(pe, 'eye');
-          pe.disabled = l.id !== active;
           pe.addEventListener('click', () => {
-            app.togglePart(part);
+            if (app.strokeActive) return;
+            ed.setPart(l.id, part, { visible: !vis });
             this.sig = '';
             this.update();
           });
@@ -171,9 +181,18 @@ export class LayersPopover {
             this.sig = '';
             this.update();
           });
-          chip.append(pe, pick, el('span', { class: 'hint' }, part === 'line' ? 'on top' : 'under the ink'));
+          // what this art layer looks like now: its opacity and recolour, when it has them
+          const q = partOf(l, part), op = Math.round(Number(ed.valueNow(l, `${part}.opacity`)));
+          const summary = [op < 100 ? `${op}%` : '', q.grad ? `${q.grad.kind} gradient` : q.tint ? 'recoloured' : ''].filter(Boolean).join(' \u00b7 ');
+          chip.append(pe, pick, el('span', { class: 'hint' }, summary || (part === 'line' ? 'on top' : 'under the ink')));
+          if (q.tint) chip.append(el('span', { class: 'lp-swatch', title: q.tint, style: `background:${q.tint}` }));
           parts.append(chip);
         }
+        const n = l.effects?.length ?? 0;
+        const fx = el('button', { type: 'button', class: 'lp-fx', title: `Effects of ${l.name}: line boil, shadows, glow and more (they show in Motion and every export)` }, n ? `Effects \u00b7 ${n}` : 'Effects');
+        decorate(fx, 'fx');
+        fx.addEventListener('click', () => { this.close(); app.openEffects?.(l.id); });
+        parts.append(fx);
         list.append(parts);
       }
       if (l.kind === 'comp' && open) {

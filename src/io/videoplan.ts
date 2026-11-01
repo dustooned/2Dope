@@ -11,6 +11,19 @@ export interface VideoOptions {
 }
 
 export const DEFAULT_VIDEO: VideoOptions = { format: 'mp4', size: '720p', quality: 'standard', background: 'white' };
+
+/** Ready-made video settings (the background stays the student's choice; see-through makes it WebM). */
+export const VIDEO_PRESETS: { id: string; label: string; hint: string; opts: Pick<VideoOptions, 'format' | 'size' | 'quality'> }[] = [
+  { id: 'web', label: 'Web video', hint: 'MP4, 1080p, high quality: YouTube, Classroom, the web', opts: { format: 'mp4', size: '1080p', quality: 'high' } },
+  { id: 'animatic', label: 'Animatic', hint: 'MP4, 720p, standard quality: quick to make and send', opts: { format: 'mp4', size: '720p', quality: 'standard' } },
+  { id: 'master', label: 'Master', hint: 'Full size, high quality: the copy to keep', opts: { format: 'mp4', size: 'original', quality: 'high' } },
+];
+
+/** The preset these options match (format, size and quality), or null for your own mix. */
+export function videoPresetOf(o: VideoOptions): string | null {
+  // a see-through master is WebM: it still counts as Master
+  return VIDEO_PRESETS.find((p) => p.opts.size === o.size && p.opts.quality === o.quality && (p.opts.format === o.format || (o.background === 'transparent' && p.id === 'master')))?.id ?? null;
+}
 export const VIDEO_MAX_BYTES = 64 * 1024 * 1024;
 export const VIDEO_LITE_MAX_BYTES = 32 * 1024 * 1024;
 

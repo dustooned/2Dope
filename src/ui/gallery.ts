@@ -3,6 +3,7 @@ import type { NewProjectUI } from './newdialog';
 import { askText, confirmBox, pickBox } from './dialogs';
 import { iconSvg } from './icons';
 import type { FileUI } from './files';
+import { SAMPLES, type SampleId } from '../io/samples';
 
 const SORT_KEY = '2dope.m2.sort';
 
@@ -195,11 +196,17 @@ export class Gallery {
     const imp = el('button', { type: 'button', title: 'Bring a .2dope file into your projects' }, 'Import');
     imp.addEventListener('click', () => document.querySelector<HTMLInputElement>('#openfile')?.click());
 
+    const samples = el('button', { type: 'button', title: 'Open a copy of a finished example to play and take apart' }, 'Samples');
+    samples.addEventListener('click', async () => {
+      const id = await pickBox<SampleId>('Open a sample', SAMPLES.map((s) => ({ label: s.name, value: s.id, hint: s.hint })));
+      if (id) await this.files.addSample(id);
+    });
+
     const add = el('button', { type: 'button', class: 'primary' }, '+ New project');
     add.addEventListener('click', () => void this.createNew());
 
     const logo = el('img', { class: 'glogo', src: `${import.meta.env.BASE_URL}logo.svg`, alt: '2Dope', width: '36', height: '36' });
-    h.append(back, logo, crumbs, el('span', { class: 'spacer' }), sort, select, folderBtn, imp, add);
+    h.append(back, logo, crumbs, el('span', { class: 'spacer' }), sort, select, folderBtn, imp, samples, add);
     return h;
   }
 

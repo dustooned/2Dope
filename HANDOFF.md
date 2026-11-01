@@ -2,6 +2,75 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Package 8: layers, Animate tracks and video presets (2026-10-31, uncommitted)
+
+Brief: `docs/research/NEXT-ITERATION-BRIEF.md`. Most of A already existed (row with thumbnail,
+name, state tags, eye; swipe right = multi-select, swipe left = quick actions; hold-drag reorder;
+options with opacity, blend, Alpha Lock, Clipping, Reference, Merge, Rename, Mask, Effects; groups
+as precomp folders, so **A6 needs no schema change**). D (mode labels, transport order, bottom bar)
+was done in the UI cleanup iterations.
+
+- A: `src/ui/layercards.ts` swipe-left quick actions gain **Clear** (picks the layer, then
+  `clearFrame`, one undo) for unlocked drawing layers.
+- B: `src/ui/layerspop.ts` — in Animate/Timing/Motion the list shows every track with a type label
+  (group, board, camera, anchor; drawing rows keep their plain name); tapping a camera/anchor gives a
+  notice instead of painting. Ink/Colour rows: the eye works on any track via `editor.setPart` (one
+  undo, same model as Motion), a summary of opacity and recolour (with a swatch), and an
+  **Effects** button that opens that layer's card. No solo/mute (the eye and Others cover it).
+- C: `src/io/videoplan.ts` `VIDEO_PRESETS` (Web video 1080p high MP4, Animatic 720p standard,
+  Master original high; see-through still forces WebM) and `videoPresetOf`; `src/ui/share.ts`
+  Video has a Preset row that sets format/size/quality and follows Advanced changes ("Your own
+  settings"). Remembered through the existing video options. Not done: a Frames preset (the PNG
+  frames card already exists), resolution Half/Custom, quality Studio, range = work area.
+- Styles at the end of `src/style.css`; UPDATES entry; `videoplan.test.ts` preset test.
+
+Checks (actual): `npx vitest run` 76 files / 610 passed; `npm run build` passed; browser fixtures
+**46/46** on 127.0.0.1:5217. Dev app (Animate): tracks listed as Anchor · anchor, Camera · camera,
+drawings plain; tapping Camera gave the notice; hiding Ink on a non-active track was one undo step
+("Hide ink") and undo restored it; Effects opened for that track. Share → Video: Quality change
+made the Preset row follow (custom → web), Animatic set 720p/standard. Not checked: the swipe Clear
+by touch (same functions as the options' Clear), phone widths, real touch.
+
+### E: welcome screen, samples and time-lapse (2026-10-31, uncommitted)
+
+- New `src/ui/firstrun.ts`: one-screen first run (five tips: modes, Draw, gestures, keyframes,
+  Share; Simple / Full; start blank or a sample). Shown once per device (`2dope.firstrun.done`), only
+  when the library is empty, through `files.askNew` in `src/main.ts`; a sample choice opens the
+  sample after `files.start()` and the untouched blank project is removed. Styles at the end of
+  `src/style.css`. Static text tips, not the animated demos the plan describes.
+- New `src/io/samples.ts`: code-drawn samples (no bundled files): Bouncing ball (12 drawings on 1s
+  at 12 fps, squash on contact, floor layer) and Sliding title (badge with eased position, rotation,
+  scale bounce, drop shadow). `src/ui/files.ts` `addSample()` saves a copy (with its PNG assets) and
+  opens it; `src/ui/gallery.ts` has a Samples button. No storyboard or walk-cycle sample yet.
+- New `src/ui/timelapse.ts`: after each document change (700 ms idle, never mid-stroke) a ≤360 px
+  JPEG of the shot at the playhead, per open project, **in memory for this session only** (not in
+  the project file, not in IndexedDB), capped at 600 by keeping every other picture. Share has a
+  ⏱ Time-lapse button (`ShareHooks.timelapse`): replay (play/scrub), Save as GIF (fixed palette,
+  12 fps, ≤480 px), and an on/off switch (`2dope.timelapse.off`).
+- Fixture `tests/firstrun.html` + `src/ui/firstrun.browser.ts` (MemoryStore; 5 checks: welcome
+  answers and Escape, both samples' structure and pixels, blank removed, time-lapse record/replay/
+  off). Unit test `src/ui/timelapse.test.ts`. Manual (Projects/Share) and an UPDATES entry.
+
+Checks (actual): first-run fixture 5/5; headless screenshot of the welcome screen at 390×844 (fits,
+readable); Save as GIF in the dev page produced a 3-frame GIF that decodes with the right colours.
+`npx vitest run` 76 files / 609 passed; `npm run build` passed; browser fixtures **46/46** on
+127.0.0.1:5217. Not checked: the real first start
+on a fresh device/origin (the fixture drives the same functions), touch, iPad memory with 600
+time-lapse pictures (~10 MB at most), and keeping a time-lapse across sessions (not built).
+
+### Effect default fixes: Glow, Roughen thin lines, Retro TV static (2026-10-31, uncommitted)
+
+- `src/view/effects.ts`: Glow's brightness is now the brightest channel (HSV value), so vivid
+  colours glow at the default 60 % threshold (the red test shape glows; black ink still does not).
+  Roughen scales its displacement by local paint coverage (`boxMean` over the roughness radius,
+  `k = min(1, coverage / 0.5)²`): a 1.5 px line keeps 68 % of its ink at the default (was 39 %),
+  rims of thick strokes/shapes unchanged (still 141 rim pixels on the 36 px square). Retro TV static
+  amplitude 160 → 96. `src/core/effects.ts`: Retro TV Static default 12 → 6 %.
+- `effects` fixture: new check that a thin line keeps ≥ 55 % at the default (19 checks). UPDATES entry.
+
+Checks (actual): `npx vitest run` 608 passed; `npm run build` passed; browser fixtures **45/45** on
+127.0.0.1:5217; looked at the headless look grid (thin line intact, glow on red, lighter static).
+
 ### Iteration 2 packages 2–7: key tools, twelve effects, dither/Fringe, Retro TV, GIF options (2026-10-31, uncommitted)
 
 Plan: `docs/research/CLAUDE-ITERATION-2.md` (packages 0–1 are the section below). Package 8 not started.

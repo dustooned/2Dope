@@ -11,7 +11,7 @@ import { DEFAULT_EXPORT, PASSES, sanitizeName, type ExportOptions, type Pass } f
 import { exportSequence } from '../io/exportseq';
 import { exportVideo, videoSupport } from '../io/exportvideo';
 import type { SoundBank } from '../io/sound';
-import { planVideo, videoOptions, VIDEO_LITE_MAX_BYTES, VIDEO_MAX_BYTES, type VideoOptions } from '../io/videoplan';
+import { planVideo, videoOptions, videoPresetOf, VIDEO_LITE_MAX_BYTES, VIDEO_MAX_BYTES, VIDEO_PRESETS, type VideoOptions } from '../io/videoplan';
 import { DEFAULT_STORYBOARD, type StoryboardOptions } from '../io/storyboard';
 import { storyboardPdf, storyboardPngs } from '../io/storyboardexport';
 import { drawComp, releaseScratch, setExportStamp } from '../view/composite';
@@ -77,6 +77,8 @@ export interface ShareHooks {
   blender(): void;
   backup(): void;
   onOpenChange(open: boolean): void;
+  /** Replay this session's time-lapse. */
+  timelapse?(): void;
 }
 
 /**
@@ -341,6 +343,11 @@ export class ShareView {
       grid.append(b);
     }
     s.append(el('h3', {}, 'Make a'), grid);
+    if (this.hooks.timelapse) {
+      const tl = el('button', { type: 'button', class: 'share-timelapse', title: 'Watch how this project was made, and save it as a GIF' }, '⏱ Time-lapse');
+      tl.addEventListener('click', () => this.hooks.timelapse?.());
+      s.append(tl);
+    }
 
     const main = el('div', { class: 'share-settings' });
     const adv = el('details', { class: 'share-advanced' });
@@ -359,11 +366,18 @@ export class ShareView {
       into.append(row);
       return input;
     };
-    const setVideo = (patch: Partial<VideoOptions>) => { this.opts = videoOptions({ ...this.opts, ...patch }); save(VIDEO_KEY, this.opts); };
+    const setVideo = (patch: Partial<VideoOptions>) => {
+      this.opts = videoOptions({ ...this.opts, ...patch });
+      save(VIDEO_KEY, this.opts);
+      // an Advanced change can leave a preset: the Preset row follows
+      const preset = this.side.querySelector<HTMLSelectElement>('select[aria-label="Preset"]');
+      if (preset) preset.value = videoPresetOf(this.opts) ?? 'custom';
+    };
     const bg3: [string, string][] = [['transparent', 'See-through'], ['white', 'White'], ['black', 'Black']];
 
     let movie = true;
     if (this.kind === 'video') {
+      select(main, 'Preset', videoPresetOf(this.opts) ?? 'custom', [...VIDEO_PRESETS.map((p): [string, string] => [p.id, `${p.label} · ${p.hint}`]), ['custom', 'Your own settings (Advanced)']], (v) => { const p = VIDEO_PRESETS.find((x) => x.id === v); if (p) setVideo(p.opts); this.renderSide(); });
       select(main, 'Background', this.opts.background, [['white', 'White'], ['black', 'Black'], ['transparent', 'See-through (WebM)']], (v) => { setVideo({ background: v as VideoOptions['background'] }); this.renderSide(); });
       select(advBody, 'Size', this.opts.size, [['720p', '720p · smaller file'], ['1080p', '1080p · full HD'], ['original', 'Original size']], (v) => setVideo({ size: v as VideoOptions['size'] }));
       select(advBody, 'Quality', this.opts.quality, [['standard', 'Standard'], ['high', 'High']], (v) => setVideo({ quality: v as VideoOptions['quality'] }));
