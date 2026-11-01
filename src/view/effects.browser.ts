@@ -298,6 +298,33 @@ check('A further setting (Shadow only, Direction) is one undo step each', () => 
   return effects().every((e) => e.type !== 'shadow') || 'undo did not remove the shadow';
 });
 
+check('An effect setting can be keyframed (◆), animates in the export, shows in Motion and takes React to audio', () => {
+  const l = app.project.layer, ed = app.editor;
+  app.project.comp.duration = 24;
+  ed.edit('long', (c) => { const x = c.layers.find((y) => y.id === l.id); if (x && x.kind === 'drawings') x.exposures = [{ drawing: x.exposures[0]!.drawing, length: 24 }]; });
+  const d = app.project.drawing(l.exposures[0]!.drawing);
+  const g = d.line.getContext('2d')!; g.fillStyle = '#ffffff'; g.fillRect(d.line.width / 2 - 20, d.line.height / 2 - 20, 40, 40); d.rev++;
+  panel.show(l.id);
+  const root = document.querySelector<HTMLElement>('.fxpanel')!;
+  [...root.querySelectorAll<HTMLButtonElement>('.fx-add button')].find((b) => b.textContent?.trim() === 'Glow')!.click();
+  const glow = () => effects().find((e) => e.type === 'glow')!;
+  app.setFrame(0);
+  const before = app.history.peekUndo();
+  root.querySelector<HTMLButtonElement>('button[aria-label="Keyframe Radius"]')!.click();
+  if (app.history.peekUndo() === before || app.history.peekUndo()?.label !== 'Keyframe effect' || glow().keys?.amount?.keys.length !== 1) return 'the ◆ was not one step that adds a key';
+  const row = `fx:${glow().id}:amount` as const;
+  if (!ed.rowsOf(app.project.layer).includes(row)) return 'no Motion row for the keyed setting';
+  ed.setValue(l.id, row, 0); app.setFrame(20); ed.setValue(l.id, row, 60);
+  if (glow().keys!.amount!.keys.length !== 2) return `keys ${glow().keys!.amount!.keys.length}`;
+  const at = (f: number) => { const c = document.createElement('canvas'); c.width = app.project.width; c.height = app.project.height; drawComp(c.getContext('2d')!, app.project, app.project.comp, f, { export: true }); return c.getContext('2d')!.getImageData(c.width / 2 + 34, c.height / 2, 1, 1).data[3]!; };
+  if (!(at(20) > at(0))) return `glow beside the art ${at(0)} → ${at(20)}`;
+  ed.bakeReaction([{ layer: l.id, prop: row }], [{ frame: 5, value: 10 }, { frame: 6, value: 30 }]);
+  const keys = glow().keys!.amount!.keys;
+  if (app.history.peekUndo()?.label !== 'React to audio' || !keys.some((k) => k.f === 6)) return 'React to audio did not write keys on the effect setting';
+  panel.close();
+  return true;
+});
+
 // What it looks like: a thin line, a thick stroke and a filled shape (for a person to look at)
 const looks = document.querySelector<HTMLElement>('#looks')!;
 const art: [string, Paint][] = [

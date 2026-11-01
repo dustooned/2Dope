@@ -373,6 +373,7 @@ motion.audio = { sig: () => audioTracks.railSig(), rows: (c, end) => audioTracks
 }
 // Effects card (line boil...): from Motion's fx bubble and layer menu, and the layer cards
 const effectsPanel = new EffectsPanel(app);
+app.onFrameChange = chain(app.onFrameChange, () => effectsPanel.frameChanged());
 if (app.device.lite) setEffectCacheBudget(32 * 1024 * 1024);
 app.openEffects = (id) => effectsPanel.show(id);
 // Media (Procreate Dreams style): pictures, movies and sounds each become a track from frame 1

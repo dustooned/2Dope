@@ -7,7 +7,7 @@ import { FPS_PRESETS } from '../core/project';
 import { newEffect } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { WIGGLE_DEFAULTS, type LoopMode, type StaggerOrder, type WiggleDims, type WiggleOptions } from '../core/keytools';
-import { isPartProp, isPin, keyId, PROP_LABEL, type KeyRef, type PropKey, type PropName } from '../compedit';
+import { isFx, isPartProp, isPin, keyId, PROP_LABEL, type KeyRef, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
 import { reactToAudio } from './audioreactdialog';
 import type { SoundBank } from '../io/sound';
@@ -53,6 +53,9 @@ function capture(el: HTMLElement, id: number): void {
 function fmt(n: number): string {
   return String(Math.round(n * 10) / 10);
 }
+
+/** An effect setting's value (its unit is in the row's name). */
+const fxText = (v: number | Vec2) => fmt(v as number);
 
 function show(n: PropName, v: number | Vec2): string {
   if (n === 'remap') return `#${Math.round(v as number) + 1}`;
@@ -329,7 +332,7 @@ export class MotionPanel {
     this.playhead.style.transform = `translateX(${LEFT_W + app.frame * this.cell}px)`;
     for (const v of this.grid.querySelectorAll<HTMLElement>('[data-val]')) {
       const l = ed.layer(v.dataset.layer ?? '');
-      if (l) v.textContent = show(ed.rowProp(v.dataset.val as PropKey), ed.valueNow(l, v.dataset.val as PropKey));
+      if (l) v.textContent = isFx(v.dataset.val!) ? fxText(ed.valueNow(l, v.dataset.val as PropKey)) : show(ed.rowProp(v.dataset.val as PropKey), ed.valueNow(l, v.dataset.val as PropKey));
     }
     for (const k of this.grid.querySelectorAll<HTMLElement>('[data-diamond]')) {
       const l = ed.layer(k.dataset.layer ?? '');
@@ -591,7 +594,7 @@ export class MotionPanel {
     const row = el('div', { class: `mrow prop${ed.selected.includes(l.id) ? ' selected' : ''}`, 'data-layer': l.id, 'data-prop': n });
     const left = el('div', { class: 'mleft' });
     left.append(
-      el('span', { class: `pname${isPin(n) ? ' pin' : ''}`, title: ed.rowLabel(l, n) }, isPin(n) ? ed.rowLabel(l, n) : PROP_LABEL[kind]),
+      el('span', { class: `pname${isPin(n) ? ' pin' : ''}${isFx(n) ? ' fx' : ''}`, title: ed.rowLabel(l, n) }, isPin(n) || isFx(n) ? ed.rowLabel(l, n) : PROP_LABEL[kind]),
       el(
         'button',
         {
@@ -602,7 +605,7 @@ export class MotionPanel {
           'data-act': 'value',
           title: isPin(n) ? "This instance's value. Tap to type one." : 'Tap to type a value',
         },
-        show(kind, ed.valueNow(l, n)),
+        isFx(n) ? fxText(ed.valueNow(l, n)) : show(kind, ed.valueNow(l, n)),
       ),
     );
     (left.lastElementChild as HTMLElement).title = 'Drag left / right to change (Shift ×10, Alt fine). Tap to type a value.';
@@ -893,6 +896,9 @@ export class MotionPanel {
         { label: 'Y', value: v[1], unit },
       ]);
       if (r) this.ed.setValue(l.id, n, [r[0]!, r[1]!], `Change ${PROP_LABEL[kind].toLowerCase()}`);
+    } else if (isFx(n)) {
+      const r = await askNumbers(title, [{ label: 'Value', value: v, unit: '' }]);
+      if (r) this.ed.setValue(l.id, n, r[0]!, `Change ${this.ed.rowLabel(l, n).replace(/^✨ /, '').toLowerCase()}`);
     } else {
       const r = await askNumbers(title, [{ label: PROP_LABEL[kind], value: v, unit: kind === 'rotation' ? '°' : '%' }]);
       if (r) this.ed.setValue(l.id, n, kind === 'opacity' ? Math.max(0, Math.min(100, r[0]!)) : r[0]!, `Change ${PROP_LABEL[kind].toLowerCase()}`);

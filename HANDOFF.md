@@ -2,6 +2,42 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Layers lists the shot's other layers (2026-11-01, uncommitted)
+
+Student report (2026-10-31): after the update their finished layers seemed gone and only the rough
+sketch showed; deleting the sketch layer made the finished layer appear. So the data was there all
+along (the earlier "old address" diagnosis was wrong for this case). Draw's Layers lists only the
+drawing you are on (its art layers, `app.celLayers`, unchanged since `4e48166`), so another drawing
+layer was never listed, and it was covered by the sketch or hidden by Others.
+- `src/ui/layercards.ts`: in Draw/Animate (not inside an asset) an "Other layers in this shot"
+  section under the list: each other non-board drawing layer with its eye and a tap to draw on it;
+  the header says when Others hides them. The card signature includes every layer's id/name/eye.
+  Styles at the end of `src/style.css`; UPDATES entry.
+- Checked in the dev app: with two layers, the section listed the other one and tapping it picked it.
+
+### Keyframed effect settings (2026-11-01, uncommitted)
+
+Owner asked for effect settings that React to audio can drive. Effect settings are now keyframable.
+
+- `src/core/effects.ts`: optional `LayerEffect.keys` (`Record<setting, Prop<number>>`, layer time;
+  settings = `amount`, `size` when the kind has one, numeric `range` extras); `keyableSettings`,
+  `stillSetting`, `effectAt(e, frame)` (keyed values clamped to the setting's range);
+  `effectsKey` uses the resolved values (so caching and still effects change per frame);
+  `effectsPad` pads for the largest key; `readEffects` validates keys (unknown settings, bad sides,
+  non-integer or unsorted frames dropped). Older builds drop `keys` and use the still values.
+- `src/view/effects.ts` `drawEffected` resolves each effect at the frame.
+- `src/compedit.ts`: `fx:<effect id>:<setting>` PropKeys (`isFx`): get/set through the effect,
+  rows appear in Motion once a setting has keys, labels "✨ Glow Radius", numbers format plain;
+  `keyEffectSetting` (◆ on/off, one undo step "Keyframe effect" / "Remove effect keys").
+- `src/ui/effectspanel.ts`: a ◆ next to every keyable slider; keyed sliders preview and set a
+  key at the playhead (`editor.setValue`). `src/ui/motion.ts`: label/value/typing for fx rows.
+- Tests: 3 unit tests in `effects.test.ts`; `effects` fixture check (◆ → one step, Motion row,
+  export alpha beside bright art grows from frame 0 to 20, `bakeReaction` writes keys on the row).
+- The open Effects card re-renders on frame change when a setting is keyed (`frameChanged`, chained
+  to `app.onFrameChange` in `src/main.ts`; skipped while a control in it has focus). Checked in the
+  dev app: Radius slider read 0 / 30 / 60 at frames 0 / 10 / 20.
+- UPDATES entry. Not done: choices, colours and toggles are not keyable.
+
 ### Send to another project (2026-10-31, uncommitted)
 
 Owner choice: Send-to (from the source project), not Bring-in. A student reuses a drawing (head and

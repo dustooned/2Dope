@@ -9,6 +9,7 @@
  */
 
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
+import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
 export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv';
 export type EffectTarget = 'line' | 'fill' | 'layer';
@@ -37,6 +38,11 @@ export interface LayerEffect {
   gray?: boolean;
   /** The kind's further settings (direction, colour, centre...), by `EffectDef.extras` key; missing = default. */
   params?: Record<string, number | string | boolean>;
+  /**
+   * Keyframed settings (in layer time), by setting: `amount`, `size` or a numeric `params` key. A
+   * setting without keys keeps its still value. Older builds ignore this (the still values stay).
+   */
+  keys?: Record<string, Prop<number>>;
 }
 
 /** A further setting of an effect kind, stored in `LayerEffect.params`. */
@@ -171,11 +177,73 @@ export function param<T extends number | string | boolean>(e: LayerEffect, key: 
   return (v !== undefined ? v : x?.def) as T;
 }
 
-/** How far the layer is padded for its effects (shadows and glows reach past the art). */
+/** How far the layer is padded for its effects (shadows and glows reach past the art). Keyed settings pad for their largest value. */
 export function effectsPad(l: { id: string; effects?: LayerEffect[] }): number {
   let pad = 0;
-  for (const e of activeEffects(l)) pad += effectDef(e.type).pad?.(e) ?? 0;
+  for (const e of activeEffects(l)) {
+    const big = { ...e, params: { ...e.params } };
+    for (const [k, p] of Object.entries(e.keys ?? {})) {
+      const most = Math.max(...p.keys.map((x) => Math.abs(x.v)), Math.abs(p.value));
+      if (k === 'amount') big.amount = most; else if (k === 'size') big.size = most; else big.params[k] = most;
+    }
+    pad += effectDef(e.type).pad?.(big) ?? 0;
+  }
   return Math.ceil(pad);
+}
+
+/** The settings an effect can keyframe: Amount, Size (when the kind has one) and its numeric extras. */
+export function keyableSettings(type: EffectType): { key: string; label: string; min: number; max: number; unit: string }[] {
+  const d = effectDef(type);
+  const out = [{ key: 'amount', label: d.amountLabel, min: d.amountRange[0], max: d.amountRange[1], unit: d.amountUnit }];
+  if (d.sizeRange[1] > 0) out.push({ key: 'size', label: d.sizeLabel, min: d.sizeRange[0], max: d.sizeRange[1], unit: d.sizeUnit });
+  for (const x of d.extras ?? []) if (x.kind === 'range') out.push({ key: x.key, label: x.label, min: x.min, max: x.max, unit: x.unit });
+  return out;
+}
+
+/** A setting's still value (what it is without keys). */
+export function stillSetting(e: LayerEffect, key: string): number {
+  if (key === 'amount') return e.amount;
+  if (key === 'size') return e.size;
+  return Number(param<number>(e, key)) || 0;
+}
+
+/** The effect as it is at a layer frame: keyed settings take their animated value (clamped to the setting's range). */
+export function effectAt(e: LayerEffect, frame: number): LayerEffect {
+  if (!e.keys) return e;
+  const out: LayerEffect = { ...e, params: { ...e.params } };
+  const lim = new Map(keyableSettings(e.type).map((s) => [s.key, s]));
+  for (const [k, p] of Object.entries(e.keys)) {
+    const s = lim.get(k);
+    if (!s || !p.keys.length) continue;
+    const v = Math.min(s.max, Math.max(s.min, valueAt(p, frame)));
+    if (k === 'amount') out.amount = v; else if (k === 'size') out.size = v; else out.params![k] = v;
+  }
+  return out;
+}
+
+/** Validate stored keyframes of effect settings (unknown settings and bad keys dropped). */
+function readEffectKeys(type: EffectType, v: unknown): Record<string, Prop<number>> | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const ok = new Set(keyableSettings(type).map((s) => s.key)), out: Record<string, Prop<number>> = {};
+  const side = (x: unknown): Side | null => {
+    const r = x as Record<string, unknown> | null;
+    if (!r || (r.interp !== 'linear' && r.interp !== 'bezier' && r.interp !== 'hold')) return null;
+    const slope = typeof r.slope === 'number' && Number.isFinite(r.slope) ? r.slope : 0, influence = typeof r.influence === 'number' && Number.isFinite(r.influence) ? Math.min(1, Math.max(0.01, r.influence)) : 1 / 3;
+    return { interp: r.interp as Interp, slope, influence };
+  };
+  for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
+    const r = raw as Record<string, unknown> | null;
+    if (!ok.has(k) || !r || typeof r.value !== 'number' || !Number.isFinite(r.value) || !Array.isArray(r.keys)) continue;
+    const keys: Key<number>[] = [];
+    for (const kr of r.keys.slice(0, 20000) as Record<string, unknown>[]) {
+      const i = side(kr?.in), o = side(kr?.out);
+      if (!kr || typeof kr.f !== 'number' || !Number.isInteger(kr.f) || typeof kr.v !== 'number' || !Number.isFinite(kr.v) || !i || !o) continue;
+      if (keys.length && keys[keys.length - 1]!.f >= kr.f) continue;
+      keys.push({ f: kr.f, v: kr.v, in: i, out: o });
+    }
+    if (keys.length) out[k] = { value: r.value, keys };
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** Validate stored further settings against the kind (unknown keys dropped, numbers clamped). */
@@ -249,6 +317,8 @@ export function readEffects(v: unknown): LayerEffect[] | undefined {
     });
     const params = readParams(def, r.params);
     if (params) out[out.length - 1]!.params = params;
+    const keys = readEffectKeys(def.id, r.keys);
+    if (keys) out[out.length - 1]!.keys = keys;
   }
   return out.length ? out : undefined;
 }
@@ -268,7 +338,7 @@ export function activeEffects(l: { id: string; effects?: LayerEffect[] }): Layer
 /** A short signature of what effects do at a frame (frame keys, caches). */
 export function effectsKey(l: { id: string; effects?: LayerEffect[] }, frame: number): string {
   const fx = activeEffects(l);
-  return fx.length ? fx.map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${e.params ? `:${JSON.stringify(e.params)}` : ''}`).join(',') : '';
+  return fx.length ? fx.map((e) => effectAt(e, frame)).map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${e.params ? `:${JSON.stringify(e.params)}` : ''}`).join(',') : '';
 }
 
 // ---------------------------------------------------------------------------------------------

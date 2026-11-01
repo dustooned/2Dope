@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeEffects, effectPreview, effectsKey, effectsPad, effectTick, newEffect, param, readEffects, resetEffect } from './effects';
+import { activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, param, readEffects, resetEffect } from './effects';
 
 describe('layer effects', () => {
   it('makes a line boil with its defaults, aimed at the Line', () => {
@@ -83,5 +83,31 @@ describe('further settings (params)', () => {
     expect(effectsPad({ id: 'b', effects: [newEffect('glow', 'g', 1)] })).toBe(17);
     expect(effectsPad({ id: 'c', effects: [newEffect('blur', 'b', 1)] })).toBe(0);
     expect(resetEffect({ ...newEffect('shadow', 's', 1), params: { angle: 10 } }).params).toBeUndefined();
+  });
+});
+
+describe('keyframed effect settings', () => {
+  const lin = { interp: 'linear' as const, slope: 1, influence: 1 / 3 };
+  const keyed = () => ({ ...newEffect('glow', 'g', 1), keys: { amount: { value: 10, keys: [{ f: 0, v: 0, in: lin, out: lin }, { f: 10, v: 40, in: lin, out: lin }] }, intensity: { value: 1, keys: [{ f: 0, v: 1, in: lin, out: lin }, { f: 10, v: 9, in: lin, out: lin }] } } });
+
+  it('takes each keyed setting at the frame, clamped to its range; unkeyed ones stay', () => {
+    const e = keyed();
+    expect(effectAt(e, 5).amount).toBeCloseTo(20);
+    expect(effectAt(e, 10).params!.intensity).toBe(4); // 9 is past Intensity's 0–4 range
+    expect(effectAt(e, 5).params!.threshold).toBeUndefined();
+    expect(effectAt({ ...e, keys: undefined }, 5)).toEqual({ ...e, keys: undefined });
+  });
+
+  it('changes the cache key frame to frame, and pads for the biggest key', () => {
+    const l = { id: 'L', effects: [keyed()] };
+    expect(effectsKey(l, 2)).not.toBe(effectsKey(l, 3));
+    expect(effectsPad(l)).toBe(Math.ceil(1.5 * 40 + 2));
+  });
+
+  it('reads keys back, dropping unknown settings, bad keys and choices', () => {
+    const [e] = readEffects([{ ...keyed(), keys: { ...keyed().keys, composite: { value: 1, keys: [] }, bogus: { value: 1, keys: [{ f: 0, v: 1, in: lin, out: lin }] }, size: { value: 2, keys: [{ f: 0.5, v: 1, in: lin, out: lin }] } } }])!;
+    expect(Object.keys(e!.keys!).sort()).toEqual(['amount', 'intensity']);
+    expect(e!.keys!.amount!.keys).toHaveLength(2);
+    expect(readEffects([{ type: 'glow', keys: 'nope' }])![0]!.keys).toBeUndefined();
   });
 });

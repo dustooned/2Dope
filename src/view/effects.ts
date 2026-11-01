@@ -1,5 +1,5 @@
 import { makeCanvas } from '../brush/raster';
-import { activeEffects, effectsKey, effectsPad, effectTick, param, type LayerEffect } from '../core/effects';
+import { activeEffects, effectAt, effectsKey, effectsPad, effectTick, param, type LayerEffect } from '../core/effects';
 import { applyBlur } from '../core/adjust';
 import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
@@ -71,7 +71,8 @@ export function drawEffected(
   /** The comp's frame rate (moving effects such as Wave warp run in seconds). */
   fps = 24,
 ): HTMLCanvasElement | null {
-  const fx = activeEffects(l);
+  // keyframed settings take their value at this frame
+  const fx = activeEffects(l).map((e) => effectAt(e, frame));
   if (!fx.length) return null;
   // shadows and glows reach past the art: work on a page grown by the pad
   const pad = effectsPad(l);

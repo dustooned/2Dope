@@ -1,7 +1,8 @@
 import { syncCelGroups } from './core/cellink';
 import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
-import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
+import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
 import { loopKeys, smoothKeys, staggerOffsets, wiggle, type LoopMode, type StaggerOrder, type WiggleOptions } from './core/keytools';
+import { effectDef, keyableSettings, plainName, stillSetting } from './core/effects';
 import {
   apply,
   cameraLayer,
@@ -86,7 +87,11 @@ function setPropOn(l: Layer, n: PropName, p: Prop): void {
 }
 
 /** A property row: a layer's own property, or `pin:<layerId>:<prop>` on a precomp layer (a pinned property of its comp). */
-export type PropKey = PropName | `pin:${string}`;
+export type PropKey = PropName | `pin:${string}` | `fx:${string}`;
+
+/** An effect setting row: `fx:<effect id>:<setting>` (Amount, Size or a numeric extra), keyed in layer time. */
+export const isFx = (k: string): k is `fx:${string}` => k.startsWith('fx:');
+const fxParts = (k: `fx:${string}`) => { const [, id, key] = k.split(':'); return { id: id!, key: key! }; };
 
 export const isPin = (k: string): k is `pin:${string}` => k.startsWith('pin:');
 
@@ -235,6 +240,10 @@ export class CompEditor {
 
   /** A property of a layer, including pinned properties of a precomp (this instance's value). */
   getProp(l: Layer, n: PropKey): Prop {
+    if (isFx(n)) {
+      const { id, key } = fxParts(n), e = l.kind === 'drawings' ? l.effects?.find((x) => x.id === id) : undefined;
+      return e ? (e.keys?.[key] ?? staticProp(stillSetting(e, key))) : staticProp(0);
+    }
     if (isPin(n)) {
       if (l.kind !== 'comp') return l.transform.opacity as Prop;
       const key = n.slice(4);
@@ -249,6 +258,18 @@ export class CompEditor {
   }
 
   private setProp(l: Layer, n: PropKey, p: Prop): void {
+    if (isFx(n)) {
+      const { id, key } = fxParts(n), e = l.kind === 'drawings' ? l.effects?.find((x) => x.id === id) : undefined;
+      if (!e) return;
+      const q = p as Prop<number>, keys = { ...e.keys };
+      // keys animate the setting; without keys it keeps a still value (readable by older builds)
+      if (q.keys.length) keys[key] = q; else {
+        delete keys[key];
+        if (key === 'amount') e.amount = q.value; else if (key === 'size') e.size = q.value; else e.params = { ...e.params, [key]: q.value };
+      }
+      if (Object.keys(keys).length) e.keys = keys; else delete e.keys;
+      return;
+    }
     if (isPin(n)) {
       if (l.kind === 'comp') l.overrides = { ...l.overrides, [n.slice(4)]: p };
       return;
@@ -259,6 +280,8 @@ export class CompEditor {
   /** The rows a layer shows: its own properties, then a precomp's pinned ones. */
   rowsOf(l: Layer): PropKey[] {
     const rows: PropKey[] = [...propsOf(l)];
+    // effect settings show once they have keys (a ◆ on the Effects card starts them)
+    if (l.kind === 'drawings') for (const e of l.effects ?? []) for (const k of Object.keys(e.keys ?? {})) rows.push(`fx:${e.id}:${k}`);
     if (l.kind === 'comp') {
       const nested = this.app.project.comps.get(l.comp);
       for (const p of nested?.pins ?? []) if (nested?.layers.some((x) => x.id === p.layer)) rows.push(`pin:${p.layer}:${p.prop}`);
@@ -268,6 +291,10 @@ export class CompEditor {
 
   /** "★ Ball Position" for a pin row, "Position" otherwise. */
   rowLabel(l: Layer, n: PropKey): string {
+    if (isFx(n)) {
+      const { id, key } = fxParts(n), e = l.kind === 'drawings' ? l.effects?.find((x) => x.id === id) : undefined;
+      return e ? `\u2728 ${plainName(effectDef(e.type))} ${keyableSettings(e.type).find((s) => s.key === key)?.label ?? key}` : '\u2728 ?';
+    }
     if (!isPin(n)) return PROP_LABEL[n];
     const [, id, prop] = n.split(':') as [string, string, PropName];
     const inner = l.kind === 'comp' ? this.app.project.comps.get(l.comp)?.layers.find((x) => x.id === id) : undefined;
@@ -276,6 +303,8 @@ export class CompEditor {
 
   /** The value kind of a row (for formatting and the value editor). */
   rowProp(n: PropKey): PropName {
+    // an effect setting is a plain number (it scrubs and formats like rotation; Motion shows its own unit)
+    if (isFx(n)) return 'rotation';
     const name = isPin(n) ? (n.split(':')[2] as PropName) : n;
     // part rows format like the layer's own opacity / position
     if (isPartProp(name)) return name.endsWith('opacity') ? 'opacity' : 'position';
@@ -1171,6 +1200,22 @@ export class CompEditor {
         }
         this.setProp(l, r.prop, p);
       }
+    });
+    this.onChange();
+    return done;
+  }
+
+  /**
+   * Start or stop keyframing an effect setting (the ◆ on the Effects card): on puts a key at the
+   * playhead with the value it has now; off drops the keys and keeps that value. One undo step.
+   */
+  keyEffectSetting(layerId: string, effectId: string, key: string, on: boolean): boolean {
+    const n: PropKey = `fx:${effectId}:${key}`;
+    const done = this.edit(on ? 'Keyframe effect' : 'Remove effect keys', (c) => {
+      const l = c.layers.find((x) => x.id === layerId);
+      if (!l) return;
+      const p = this.getProp(l, n) as Prop<number>, f = this.frameOf(l), v = valueAt(p, f);
+      this.setProp(l, n, on ? setKey(p, f, v, this.lastEase) : { value: v, keys: [] });
     });
     this.onChange();
     return done;

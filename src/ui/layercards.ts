@@ -243,7 +243,7 @@ export class LayerCards {
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${[...this.foldedStacks].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const sig = `${app.project.comp.layers.map((x) => `${x.id}:${x.name}:${x.visible}`).join(',')}|${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${[...this.foldedStacks].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     const scopedSig=`${app.workspace}|${app.project.comp.name}|${sig}`;
     if (scopedSig === this.sig) return;
     this.sig = scopedSig;
@@ -363,6 +363,24 @@ export class LayerCards {
       if (l.kind === 'comp' && this.openGroups.has(l.id)) list.append(...this.children(l));
     }
     if (!layers.length) list.append(el('p', { class: 'hint' }, 'No layers yet. Draw, or tap +.'));
+    // the shot's other drawing layers (the list above is only the drawing you are on): name, eye,
+    // tap to draw on it, so finished work on another layer never seems to be gone
+    const elsewhere = paint && !app.project.comp.asset ? app.project.comp.layers.filter((x): x is DrawingsLayer => x.kind === 'drawings' && !x.guide && !layers.some((y) => y.id === x.id)) : [];
+    if (elsewhere.length) {
+      const box = el('div', { class: 'lc-elsewhere', role: 'group', 'aria-label': 'Other layers in this shot' });
+      box.append(el('div', { class: 'lc-section' }, `Other layers in this shot${!app.showLayers ? ' · hidden while you draw (Others)' : ''}`));
+      for (const x of elsewhere) {
+        const row = el('div', { class: `lc-other${x.visible ? '' : ' off'}` });
+        const go = el('button', { type: 'button', class: 'lc-other-name', title: `Draw on ${x.name}` }, x.name);
+        go.addEventListener('click', () => { if (!app.strokeActive) { app.pickLayer(x.id); this.sig = ''; this.update(); } });
+        const eye = el('button', { type: 'button', class: 'lc-eye', 'aria-pressed': String(x.visible), 'aria-label': x.visible ? `Hide ${x.name}` : `Show ${x.name}`, title: x.visible ? 'Hide this layer' : 'Show this layer' }, x.visible ? 'Hide' : 'Show');
+        decorate(eye, 'eye');
+        eye.addEventListener('click', () => { app.editor.setFlag(x.id, 'visible', !x.visible); this.sig = ''; this.update(); });
+        row.append(go, eye);
+        box.append(row);
+      }
+      list.append(box);
+    }
     this.root.append(list);
     this.place();
     list.scrollTop = scrollTop;

@@ -5059,3 +5059,11 @@ dialog.timelapse .tl-bar input { flex: 1; }
 .lp-type { opacity: 0.7; font-weight: normal; }
 .lp-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.4); flex: none; }
 .lp-fx { justify-self: start; margin-top: 4px; }
+/* Effect settings: the keyframe diamond */
+.fx-key { min-width: 28px; min-height: 28px; padding: 0; border-radius: 6px; font-size: 12px; opacity: 0.55; }
+.fx-key.on { opacity: 1; color: var(--accent); border-color: var(--accent); }
+/* Draw/Animate Layers: the shot's other drawing layers, below the drawing's own */
+.lc-elsewhere { display: grid; gap: 4px; margin-top: 8px; }
+.lc-other { display: flex; align-items: center; gap: 6px; }
+.lc-other.off .lc-other-name { opacity: 0.55; }
+.lc-other-name { flex: 1; text-align: left; min-height: 36px; padding: 0 10px; }

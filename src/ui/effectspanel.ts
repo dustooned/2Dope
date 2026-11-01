@@ -1,8 +1,9 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
 import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
-import { canMerge, duplicateEffect, EFFECT_TYPES, effectDef, effectPreview, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
+import { canMerge, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
+import { setKey } from '../core/anim';
 import { showContextMenu, type CtxItem } from './contextmenu';
 import { decorate } from './icons';
 
@@ -60,6 +61,11 @@ export class EffectsPanel {
     const list = this.effects();
     if (list.length === 1) this.opened.add(list[0]!.id);
     this.render();
+  }
+
+  /** The playhead moved: keyed settings show their value at the new frame. */
+  frameChanged(): void {
+    if (!this.root.hidden && this.effects().some((e) => e.keys) && !this.root.contains(document.activeElement) ) this.render();
   }
 
   close(): void {
@@ -217,19 +223,35 @@ export class EffectsPanel {
       }
       body.append(seg);
     }
+    // keyframed settings: the ◆ starts or stops keys; a keyed slider sets a key at the playhead
+    const layer = this.layer(), ed = this.app.editor;
+    const frame = layer ? ed.frameOf(layer) : 0, now = effectAt(e, frame);
+    const keyed = (key: string) => !!e.keys?.[key]?.keys.length;
+    const keyButton = (key: string, label: string) => {
+      const on = keyed(key);
+      const b = el('button', { type: 'button', class: `fx-key${on ? ' on' : ''}`, 'aria-pressed': String(on), 'aria-label': `Keyframe ${label}`, title: on ? `${label} is animated: sliders set a key at the playhead. Tap to remove its keys (keeps the value here).` : `Animate ${label}: puts a key at the playhead. It then shows in Motion, where React to audio, Wiggle and easing work on it.` }, '\u25c6');
+      b.addEventListener('click', (ev) => { ev.preventDefault(); ed.keyEffectSetting(this.layerId, e.id, key, !on); this.render(); });
+      return b;
+    };
+    const preview = (key: string, v: number) => effectPreview.set(this.layerId, list.map((f, k) => {
+      if (k !== i) return f;
+      if (keyed(key)) return { ...f, keys: { ...f.keys, [key]: setKey(f.keys![key]!, frame, v) } };
+      return key === 'amount' || key === 'size' ? { ...f, [key]: v } : { ...f, params: { ...f.params, [key]: v } };
+    }));
+    const commitKeyed = (key: string, v: number, label: string) => { effectPreview.delete(this.layerId); ed.setValue(this.layerId, `fx:${e.id}:${key}`, v, `${name} ${label.toLowerCase()}`); this.app.requestRender(); this.render(); };
     const slider = (label: string, key: 'amount' | 'size', lim: readonly [number, number], step: number, unit: string) => {
       const row = el('label', { class: 'fx-row' });
       const input = el('input', { type: 'range', min: String(lim[0]), max: String(lim[1]), step: String(step), 'aria-label': label });
-      input.value = String(e[key]);
-      const out = el('output', {}, `${e[key]}${unit}`);
+      input.value = String(now[key]);
+      const out = el('output', {}, `${Math.round(now[key] * 10) / 10}${unit}`);
       input.addEventListener('input', () => {
         const v = Number(input.value);
         out.textContent = `${v}${unit}`;
-        effectPreview.set(this.layerId, list.map((f, k) => (k === i ? { ...f, [key]: v } : f)));
+        preview(key, v);
         this.app.requestRender();
       });
-      input.addEventListener('change', () => this.patch(i, { [key]: Number(input.value) }, `${name} ${label.toLowerCase()}`));
-      row.append(el('span', {}, label), input, out);
+      input.addEventListener('change', () => { if (keyed(key)) commitKeyed(key, Number(input.value), label); else this.patch(i, { [key]: Number(input.value) }, `${name} ${label.toLowerCase()}`); });
+      row.append(el('span', {}, label), input, out, keyButton(key, label));
       body.append(row);
     };
     if (e.type === 'texture') {
@@ -271,17 +293,17 @@ export class EffectsPanel {
       const row = el('label', { class: 'fx-row' });
       row.append(el('span', {}, x.label));
       if (x.kind === 'range') {
-        const v = param<number>(e, x.key);
+        const v = Math.round(Number(param<number>(now, x.key)) * 10) / 10;
         const input = el('input', { type: 'range', min: String(x.min), max: String(x.max), step: String(x.step), 'aria-label': x.label });
         input.value = String(v);
         const out = el('output', {}, `${v}${x.unit}`);
         input.addEventListener('input', () => {
           out.textContent = `${input.value}${x.unit}`;
-          effectPreview.set(this.layerId, list.map((f, k) => (k === i ? { ...f, params: { ...f.params, [x.key]: Number(input.value) } } : f)));
+          preview(x.key, Number(input.value));
           this.app.requestRender();
         });
-        input.addEventListener('change', () => setParam(x.key, Number(input.value), x.label));
-        row.append(input, out);
+        input.addEventListener('change', () => { if (keyed(x.key)) commitKeyed(x.key, Number(input.value), x.label); else setParam(x.key, Number(input.value), x.label); });
+        row.append(input, out, keyButton(x.key, x.label));
       } else if (x.kind === 'choice') {
         const seg = el('div', { class: 'fx-seg small', role: 'group', 'aria-label': x.label });
         for (const o of x.options) {
