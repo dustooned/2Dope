@@ -2,6 +2,29 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Faster effects, floating Effects card, Vignette, Hard edges (2026-11-01, uncommitted)
+
+User feedback: stacked FX lag in Motion previews and while frames generate; the Effects card was awkward (closed on any outside tap, no quick switch between the add list and the layer's effects); Vignette wanted as an effect; pixelate effects only changed the inside of the art.
+
+- Speed (`src/view/effects.ts`): `warp()` and `smear()` no longer allocate an array per pixel (mappings write into a shared `Float64Array`), and bilinear sampling is inlined. `smear()` (Directional blur) and `warp()` (Wave warp) take a `reach` and only work on the painted box padded by it. Blurs (Gaussian, Drop shadow, Glow) go through `blurPainted()`, which blurs only the painted box plus the three-box reach (same pixels as a whole-page blur).
+- Preview quality: `fxPreview` 'full' | 'fast' | 'off' (saved as `2dope.fx.preview`), and `setFxPlaying()` from `App.render()`. `fxPreviewScale()` is 0.5 for Fast or while playing. `drawEffected(..., scale)` works at that fraction and pixel-sized settings shrink with it (`scaled()`). Exports always use 1. Off skips layer effects and adjustment layers while you work.
+- Effects card (`src/ui/effectspanel.ts`): a floating card that no longer closes on outside taps. Drag the title to move it (`2dope.fx.pos`; double-click resets). Shift+E toggles it for the selected layer (captured, so the eraser shortcut doesn't fire). It follows the selection (`follow()` on editor and tool changes). Tabs "On this layer (n)" and "+ Add effect" (`2dope.fx.tab`; Tab key switches); adding returns to the layer tab. Preview row: Full / Fast / Off.
+- New `vignette` effect: amount -100..100, size, softness, roundness, centre. Mosaic and Retro pixels (`dither`) have a `hard` toggle: blocks become fully opaque (average coverage ≥ 50%) or empty, so the outline is pixelated too.
+- Manual Effects section and UPDATES entry (2026-11-01) updated.
+
+Measured in Chrome (dev server, 1080p, median of 5):
+- Test art: a 300 px disc and a 1300×700 outline.
+- Shadow + glow + wave + TV stack: 1518 → 230 ms at Full, 405 → 60 ms at half size; a cached replay takes 0.1 ms.
+- Per effect, before → after: radial blur 1635 → 643, directional blur 708 → 139, wave 496 → 84, twirl 404 → 89, mirror 368 → 78, glow 385 → 71, Gaussian blur 345 → 149 ms.
+
+Checks: `npx vitest run` 624/624, `npm run build` passes (existing chunk-size warning). The effects fixture is 23/23, with new checks for Hard edges and Vignette; it also opens the + Add effect tab now. All 48 fixtures pass. railperf is excluded because it hangs headless Chrome; `_vectorportable` is a helper page the runner skips. Shift+E, the tabs and title drag were checked in the dev app.
+
+Gaps:
+- Not measured on a phone.
+- Twirl, Mirror, Offset and radial blur still walk the whole padded page: their sources can come from anywhere.
+- No whole-comp frame cache for Motion playback. Only the per-layer effect cache exists: 96 MB, about 11 padded 1080p frames at Full, about 4× that at half size.
+- A wider app performance audit with real student projects wasn't done.
+
 ### Adjustment layers are always their own layer (2026-11-01, uncommitted)
 
 Owner feedback: turning a drawing layer into an adjustment layer hid that layer's art; they want a

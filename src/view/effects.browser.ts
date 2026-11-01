@@ -7,6 +7,12 @@ import { EffectsPanel } from '../ui/effectspanel';
 import { drawComp, drawEditingLayer, releaseScratch } from './composite';
 import { drawEffected } from './effects';
 
+/** The effects you can add: they sit on the card's "+ Add effect" tab. */
+function addButtons(root: HTMLElement): HTMLButtonElement[] {
+  [...root.querySelectorAll<HTMLButtonElement>('.fx-tabs button')].find((b) => b.textContent?.includes('Add effect'))?.click();
+  return [...root.querySelectorAll<HTMLButtonElement>('.fx-add button')];
+}
+
 const W = 64, H = 64;
 const RED: [number, number, number] = [230, 57, 70];
 const BLUE: [number, number, number] = [24, 24, 140];
@@ -175,6 +181,33 @@ check('Posterize, Threshold and Mosaic', () => {
   for (let x = 0; x < 8; x++) if (at(m, x, 3)[0] !== at(m, 0, 3)[0] || at(m, x, 7)[0] !== at(m, 0, 0)[0]) return 'a mosaic block is not one colour';
   return at(m, 0, 0)[0] !== at(m, 8, 0)[0] || 'neighbouring blocks match';
 });
+check('Hard edges pixelate the outline too: Mosaic and Retro pixels blocks are all paint or none', () => {
+  const art = dot(32, 32, 13);
+  const alphas = (px: Uint8ClampedArray) => { const set = new Set<number>(); for (let i = 3; i < px.length; i += 4) set.add(px[i]!); return set; };
+  const soft = run([fx('mosaic', { amount: 8, size: 8 })], art);
+  if ([...alphas(soft)].every((a) => a === 0 || a === 255)) return 'the soft outline was already all-or-nothing (test art has no soft edge)';
+  for (const type of ['mosaic', 'dither'] as const) {
+    const hard = run([fx(type, { amount: 8, size: 8, params: { hard: true } })], art);
+    if (![...alphas(hard)].every((a) => a === 0 || a === 255)) return `${type}: a pixel is half covered`;
+    for (let by = 0; by < H; by += 8) for (let bx = 0; bx < W; bx += 8) {
+      const a0 = at(hard, bx, by)[3];
+      for (let y = by; y < by + 8; y++) for (let x = bx; x < bx + 8; x++) if (at(hard, x, y)[3] !== a0) return `${type}: block at ${bx},${by} is not one solid block`;
+    }
+    if (alphaCount(hard) === 0) return `${type}: everything vanished`;
+  }
+  return true;
+});
+check('Vignette darkens towards the frame edge (or lightens below 0), leaves the middle and alpha alone; 0 does nothing', () => {
+  const grey: Paint = (g) => { g.fillStyle = 'rgb(160,160,160)'; g.fillRect(0, 0, W, H); };
+  if (!same(run([fx('vignette', { amount: 0 })], grey), run([], grey))) return 'amount 0 changed pixels';
+  const dark = run([fx('vignette', { amount: 100, size: 40 })], grey);
+  if (at(dark, 32, 32)[0] !== 160) return `the middle changed to ${at(dark, 32, 32)[0]}`;
+  if (!(at(dark, 0, 0)[0]! < 60)) return `the corner is only ${at(dark, 0, 0)[0]}`;
+  if (!(at(dark, 2, 32)[0]! < at(dark, 20, 32)[0]!)) return 'it does not fall off towards the edge';
+  if (at(dark, 0, 0)[3] !== 255) return 'alpha changed';
+  const light = run([fx('vignette', { amount: -100, size: 40 })], grey);
+  return at(light, 0, 0)[0]! > 230 || `negative amount gave ${at(light, 0, 0)[0]} in the corner`;
+});
 check('Find edges: dark outline on white, inside stays white; Invert flips it', () => {
   const e = run([fx('edges')], rect(16, 16, 32, 32)), inv = run([fx('edges', { params: { invert: true } })], rect(16, 16, 32, 32));
   if (at(e, 32, 32)[0] !== 255 || at(e, 16, 32)[0]! > 128) return `inside ${at(e, 32, 32)[0]}, edge ${at(e, 16, 32)[0]}`;
@@ -238,7 +271,7 @@ const effects = () => { const l = app.project.layer; return l.kind === 'drawings
 check('Adding an effect, moving its slider and New pattern are one undo step each', () => {
   panel.show(app.project.layer.id);
   const root = document.querySelector<HTMLElement>('.fxpanel')!;
-  const add = [...root.querySelectorAll<HTMLButtonElement>('.fx-add button')].find((b) => b.textContent?.trim() === 'Roughen edges');
+  const add = addButtons(root).find((b) => b.textContent?.trim() === 'Roughen edges');
   if (!add) return 'no Roughen edges button';
   const start = app.history.peekUndo(), changes = docChanges;
   add.click();
@@ -278,7 +311,7 @@ check('Adding an effect, moving its slider and New pattern are one undo step eac
 check('A further setting (Shadow only, Direction) is one undo step each', () => {
   panel.show(app.project.layer.id);
   const root = document.querySelector<HTMLElement>('.fxpanel')!;
-  [...root.querySelectorAll<HTMLButtonElement>('.fx-add button')].find((b) => b.textContent?.trim() === 'Drop shadow')?.click();
+  addButtons(root).find((b) => b.textContent?.trim() === 'Drop shadow')?.click();
   if (effects().at(-1)?.type !== 'shadow') return 'no shadow added';
   const mode = localStorage.getItem('2dope.fx.mode');
   [...root.querySelectorAll<HTMLButtonElement>('.fx-mode button')].find((b) => b.textContent === 'Advanced')?.click();
@@ -307,7 +340,7 @@ check('An effect setting can be keyframed (◆), animates in the export, shows i
   const g = d.line.getContext('2d')!; g.fillStyle = '#ffffff'; g.fillRect(d.line.width / 2 - 20, d.line.height / 2 - 20, 40, 40); d.rev++;
   panel.show(l.id);
   const root = document.querySelector<HTMLElement>('.fxpanel')!;
-  [...root.querySelectorAll<HTMLButtonElement>('.fx-add button')].find((b) => b.textContent?.trim() === 'Glow')!.click();
+  addButtons(root).find((b) => b.textContent?.trim() === 'Glow')!.click();
   const glow = () => effects().find((e) => e.type === 'glow')!;
   app.setFrame(0);
   const before = app.history.peekUndo();

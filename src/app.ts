@@ -38,6 +38,7 @@ import { showCustomize } from './ui/customize';
 import { guardTouchContextMenus } from './ui/touchcontext';
 import { CompEditor } from './compedit';
 import { clipGroups, drawClipGroup, drawComp, drawEditingLayer, drawLayerAround, drawLayersAround, type DrawingSource } from './view/composite';
+import { setFxPlaying } from './view/effects';
 import { drawMotionOverlay } from './view/overlay';
 import {
   addAfter,
@@ -4051,6 +4052,7 @@ export class App {
       this.frame = range.start; this.requestRender();
     }
     this.playClock = { t0: performance.now(), f0: this.frame };
+    this.requestRender();
     this.onFrameChange();
   }
 
@@ -6253,6 +6255,8 @@ export class App {
 
   private render(): void {
     this.needsRender = false;
+    // while playing, effects work at half size so playback keeps up (Full again once it stops)
+    setFxPlaying(this.playing);
     const g = this.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalAlpha=1;g.globalCompositeOperation='source-over';g.setLineDash([]);

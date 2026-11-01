@@ -15,6 +15,15 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 }
 
 const MODE_KEY = '2dope.fx.mode';
+const POS_KEY = '2dope.fx.pos';
+const TAB_KEY = '2dope.fx.tab';
+const PREVIEW_KEY = '2dope.fx.preview';
+
+/** How effects show while you work (exports always use Full): Full, Fast (half size) or Off. */
+export type FxPreview = 'full' | 'fast' | 'off';
+export function loadFxPreview(): FxPreview {
+  try { const v = localStorage.getItem(PREVIEW_KEY); return v === 'fast' || v === 'off' ? v : 'full'; } catch { return 'full'; }
+}
 const SWIPE = 40;
 
 /**
@@ -32,16 +41,68 @@ export class EffectsPanel {
   private readonly opened = new Set<string>();
   /** The card swiped open to its actions. */
   private swiped = '';
+  /** Which list shows: this layer's effects, or the effects to add. */
+  private tab: 'layer' | 'add' = (() => { try { return localStorage.getItem(TAB_KEY) === 'add' ? 'add' : 'layer'; } catch { return 'layer'; } })();
+  /** Where the card was dragged to (null: its usual corner). */
+  private pos: { x: number; y: number } | null = (() => { try { const v = JSON.parse(localStorage.getItem(POS_KEY) ?? 'null'); return v && Number.isFinite(v.x) && Number.isFinite(v.y) ? v : null; } catch { return null; } })();
+  /** Called when the preview quality changes (the app redraws with it). */
+  onPreview: (q: FxPreview) => void = () => {};
 
   constructor(private readonly app: App) {
     document.body.append(this.root);
-    window.addEventListener('pointerdown', (e) => {
-      if (this.root.hidden) return;
-      const t = e.target as HTMLElement;
-      if (this.root.contains(t) || t.closest?.('.ctxmenu, dialog, [data-fx-open]')) return;
-      this.close();
+    // a floating card: it stays open while you scrub, select and play (✕, Escape or Shift+E close it)
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !this.root.hidden) { this.close(); return; }
+      const typing = (e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable]');
+      if (e.code === 'KeyE' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !typing) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (!this.root.hidden) this.close(); else { const id = this.target(); if (id) this.show(id); }
+      }
     }, true);
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !this.root.hidden) this.close(); });
+    window.addEventListener('resize', () => this.place());
+  }
+
+  /** The layer effects are for: Motion's selected layer, else the layer you draw on. */
+  private target(): string | null {
+    const a = this.app, sel = a.workspace === 'motion' ? a.editor.primary : undefined;
+    if (sel && sel.kind === 'drawings') return sel.id;
+    return a.project.isPlaceholder ? null : a.project.layer.id;
+  }
+
+  /** The selection or the layer you draw on changed: an open card follows it. */
+  follow(): void {
+    if (this.root.hidden) return;
+    const id = this.target();
+    if (id && id !== this.layerId && this.layer(id)?.kind === 'drawings') this.show(id);
+  }
+
+  /** Keep the card where it was dragged, inside the window. */
+  private place(): void {
+    const r = this.root;
+    if (!this.pos) { r.style.left = r.style.top = r.style.right = ''; return; }
+    const w = r.offsetWidth || 340, h = r.offsetHeight || 200;
+    const x = Math.min(Math.max(4, this.pos.x), window.innerWidth - Math.min(w, window.innerWidth) - 4), y = Math.min(Math.max(4, this.pos.y), window.innerHeight - 60);
+    r.style.left = `${x}px`; r.style.top = `${y}px`; r.style.right = 'auto';
+    void h;
+  }
+
+  /** Drag the card by its title bar (a tap on its buttons still works). */
+  private dragBy(handle: HTMLElement): void {
+    handle.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('button, input, select') || e.button > 0) return;
+      const box = this.root.getBoundingClientRect(), dx = e.clientX - box.left, dy = e.clientY - box.top;
+      try { handle.setPointerCapture(e.pointerId); } catch { /* a pointer that is already gone */ }
+      const move = (m: PointerEvent) => { this.pos = { x: m.clientX - dx, y: m.clientY - dy }; this.place(); };
+      const up = () => {
+        handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up);
+        try { localStorage.setItem(POS_KEY, JSON.stringify(this.pos)); } catch { /* optional */ }
+      };
+      handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up);
+    });
+    handle.addEventListener('dblclick', (e) => {
+      if ((e.target as HTMLElement).closest('button')) return;
+      this.pos = null; try { localStorage.removeItem(POS_KEY); } catch { /* optional */ } this.place();
+    });
   }
 
   get open(): boolean {
@@ -148,28 +209,58 @@ export class EffectsPanel {
       b.addEventListener('click', () => { this.advanced = adv; try { localStorage.setItem(MODE_KEY, adv ? 'advanced' : 'simple'); } catch { /* optional */ } this.render(); });
       mode.append(b);
     }
-    head.append(el('strong', {}, `Effects · ${l.name}`), mode, x);
-    r.append(head);
-    if (!list.length) r.append(el('p', { class: 'hint' }, 'No effects yet. Add one below: it shows in Motion, in Share and in every export; the layer you draw on stays clean while you draw.'));
-    else r.append(el('p', { class: 'hint fx-order' }, 'Top runs first. Drag ☰ to reorder, swipe left for more.'));
-    const box = el('div', { class: 'fx-list' });
+    const title = el('strong', { class: 'fx-title', title: 'Drag to move the card; double-click to put it back' }, `Effects \u00b7 ${l.name}`);
+    head.append(title, mode, x);
+    this.dragBy(head);
+    // this layer's effects, or the effects to add: one tap between them (Tab key too)
+    const setTab = (t: 'layer' | 'add') => { this.tab = t; try { localStorage.setItem(TAB_KEY, t); } catch { /* optional */ } this.render(); };
+    const tabs = el('div', { class: 'fx-seg fx-tabs', role: 'tablist', 'aria-label': 'Effects lists' });
+    for (const [t, label] of [['layer', `On this layer${list.length ? ` (${list.length})` : ''}`], ['add', '+ Add effect']] as const) {
+      const b = el('button', { type: 'button', role: 'tab', 'aria-selected': String(this.tab === t), 'aria-pressed': String(this.tab === t) }, label);
+      b.addEventListener('click', () => setTab(t));
+      tabs.append(b);
+    }
+    tabs.addEventListener('keydown', (e) => { if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); setTab(this.tab === 'layer' ? 'add' : 'layer'); } });
+    // while you work effects can show faster (half size) or not at all; exports always use full quality
+    const q = loadFxPreview();
+    const quality = el('div', { class: 'fx-seg small fx-quality', role: 'group', 'aria-label': 'Preview quality' });
+    for (const [v, label, tip] of [['full', 'Full', 'Effects at full quality while you work'], ['fast', 'Fast', 'Effects at half size while you work: much faster with several effects. Exports stay full quality'], ['off', 'Off', 'No effects while you work (they still go into Share and exports)']] as const) {
+      const b = el('button', { type: 'button', 'aria-pressed': String(q === v), title: tip }, label);
+      b.addEventListener('click', () => { try { localStorage.setItem(PREVIEW_KEY, v); } catch { /* optional */ } this.onPreview(v); this.app.requestRender(); this.render(); });
+      quality.append(b);
+    }
+    const qrow = el('div', { class: 'fx-row fx-preview' });
+    qrow.append(el('span', {}, 'Preview'), quality);
+    r.append(head, tabs, qrow);
+    if (this.tab === 'add') {
+      const add = el('div', { class: 'fx-add', role: 'tabpanel' });
+      for (const t of EFFECT_TYPES) {
+        const b = el('button', { type: 'button', title: t.hint }, plainName(t));
+        decorate(b, 'plus');
+        b.addEventListener('click', () => {
+          const id = this.newId();
+          this.opened.add(id);
+          // added: back to this layer's list with the new card open
+          this.tab = 'layer'; try { localStorage.setItem(TAB_KEY, 'layer'); } catch { /* optional */ }
+          this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, newEffect(t.id, id, newSeed())]);
+          requestAnimationFrame(() => { const lb = this.root.querySelector('.fx-list'); if (lb) lb.scrollTop = lb.scrollHeight; });
+        });
+        add.append(b);
+      }
+      r.append(add);
+      this.place();
+      return;
+    }
+    if (!list.length) {
+      const go = el('button', { type: 'button', class: 'fx-empty-add' }, '+ Add an effect');
+      go.addEventListener('click', () => setTab('add'));
+      r.append(el('p', { class: 'hint' }, 'No effects on this layer yet. They show in Motion, Share and every export; the layer you draw on stays clean while you draw.'), go);
+    } else r.append(el('p', { class: 'hint fx-order' }, 'Top runs first. Drag \u2630 to reorder, swipe left for more.'));
+    const box = el('div', { class: 'fx-list', role: 'tabpanel' });
     list.forEach((e, i) => box.append(this.card(e, i, list)));
     r.append(box);
     box.scrollTop = keepScroll;
-    // add
-    const add = el('div', { class: 'fx-add' });
-    for (const t of EFFECT_TYPES) {
-      const b = el('button', { type: 'button', title: t.hint }, plainName(t));
-      decorate(b, 'plus');
-      b.addEventListener('click', () => {
-        const id = this.newId();
-        this.opened.add(id);
-        this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, newEffect(t.id, id, newSeed())]);
-        requestAnimationFrame(() => { const lb = this.root.querySelector('.fx-list'); if (lb) lb.scrollTop = lb.scrollHeight; });
-      });
-      add.append(b);
-    }
-    r.append(add);
+    this.place();
   }
 
   private card(e: LayerEffect, i: number, list: LayerEffect[]): HTMLElement {

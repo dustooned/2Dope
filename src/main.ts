@@ -2,7 +2,8 @@ import { setEffectCacheBudget } from './view/effects';
 import { PaintingWorkspaceUI } from './ui/paintingworkspace';
 import { CanvasViewUI } from './ui/canvasview';
 import { ArtworkAssetsUI } from './ui/artworkassets';
-import { EffectsPanel } from './ui/effectspanel';
+import { EffectsPanel, loadFxPreview } from './ui/effectspanel';
+import { setFxPreview } from './view/effects';
 import { scrollArrows } from './ui/scrollarrows';
 import './style.css';
 import { AudioPlayback } from './audio';
@@ -373,6 +374,10 @@ motion.audio = { sig: () => audioTracks.railSig(), rows: (c, end) => audioTracks
 }
 // Effects card (line boil...): from Motion's fx bubble and layer menu, and the layer cards
 const effectsPanel = new EffectsPanel(app);
+setFxPreview(loadFxPreview());
+effectsPanel.onPreview = (q) => setFxPreview(q);
+app.editor.onChange = chain(app.editor.onChange, () => effectsPanel.follow());
+app.onToolChange = chain(app.onToolChange, () => effectsPanel.follow());
 app.onFrameChange = chain(app.onFrameChange, () => effectsPanel.frameChanged());
 if (app.device.lite) setEffectCacheBudget(32 * 1024 * 1024);
 app.openEffects = (id) => effectsPanel.show(id);

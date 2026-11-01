@@ -1,5 +1,5 @@
 import { makeCanvas } from '../brush/raster';
-import { activeEffects, effectAt, effectsKey, effectsPad, effectTick, param, type LayerEffect } from '../core/effects';
+import { activeEffects, effectAt, effectDef, effectsKey, effectsPad, effectTick, param, type LayerEffect } from '../core/effects';
 import { applyBlur } from '../core/adjust';
 import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
@@ -70,14 +70,16 @@ export function drawEffected(
   content?: string,
   /** The comp's frame rate (moving effects such as Wave warp run in seconds). */
   fps = 24,
+  /** Work at this fraction of the size (Fast preview); the result is that much smaller, so draw it scaled up. */
+  scale = 1,
 ): HTMLCanvasElement | null {
-  // keyframed settings take their value at this frame
-  const fx = activeEffects(l).map((e) => effectAt(e, frame));
+  // keyframed settings take their value at this frame (and, in Fast preview, pixel sizes shrink with the page)
+  const fx = activeEffects(l).map((e) => scaled(effectAt(e, frame), scale));
   if (!fx.length) return null;
   // shadows and glows reach past the art: work on a page grown by the pad
-  const pad = effectsPad(l);
-  w += 2 * pad;
-  h += 2 * pad;
+  const full = effectsPad(l), pad = full * scale;
+  w = Math.max(1, Math.round((w + 2 * full) * scale));
+  h = Math.max(1, Math.round((h + 2 * full) * scale));
   const key = content ? `${l.id}|${content}|${planes}|${w}x${h}|${fps}|${effectsKey(l, frame)}` : '';
   const hit = key ? cache.get(key) : undefined;
   if (hit) {
@@ -89,7 +91,7 @@ export function drawEffected(
   const og = out.getContext('2d')!;
   const per = (t: Part) => fx.filter((e) => e.target === t);
   if (!per('line').length && !per('fill').length) {
-    og.setTransform(1, 0, 0, 1, pad, pad);
+    og.setTransform(scale, 0, 0, scale, pad, pad);
     paint(og, planes);
     og.setTransform(1, 0, 0, 1, 0, 0);
   } else {
@@ -97,7 +99,7 @@ export function drawEffected(
       if (planes !== 'all' && planes !== part) continue;
       const c = canvasFor(`${part}${depth}`, w, h);
       const pg = c.getContext('2d')!;
-      pg.setTransform(1, 0, 0, 1, pad, pad);
+      pg.setTransform(scale, 0, 0, scale, pad, pad);
       paint(pg, part);
       pg.setTransform(1, 0, 0, 1, 0, 0);
       for (const e of per(part)) applyEffect(c, e, frame, pad, fps);
@@ -112,6 +114,32 @@ export function drawEffected(
   cacheBytes += w * h * 4;
   trim();
   return keep;
+}
+
+/** How effects show while you work: Full, Fast (half size) or Off. Exports always render in full. */
+export let fxPreview: 'full' | 'fast' | 'off' = 'full';
+export function setFxPreview(q: 'full' | 'fast' | 'off'): void {
+  fxPreview = q;
+}
+/** True while the timeline plays: Full preview then works at half size too, so playback keeps up. */
+let fxPlaying = false;
+export function setFxPlaying(on: boolean): void {
+  fxPlaying = on;
+}
+/** The size effects work at while you work (1 = full); exports always use 1. */
+export function fxPreviewScale(): number {
+  return fxPreview === 'fast' || fxPlaying ? 0.5 : 1;
+}
+
+/** An effect with its pixel-sized settings shrunk by `s` (for a page drawn at that scale). */
+function scaled(e: LayerEffect, s: number): LayerEffect {
+  if (s === 1) return e;
+  const d = effectDef(e.type), px = (u: string) => u.trim() === 'px';
+  const out: LayerEffect = { ...e, params: { ...e.params } };
+  if (px(d.amountUnit)) out.amount = e.amount * s;
+  if (px(d.sizeUnit)) out.size = e.size * s;
+  for (const x of d.extras ?? []) if (x.kind === 'range' && px(x.unit)) out.params![x.key] = Number(param<number>(e, x.key)) * s;
+  return out;
 }
 
 function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number, pad = 0, fps = 24): void {
@@ -136,6 +164,7 @@ function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number, pad = 
   else if (e.type === 'offset') offset(c, e, pad);
   else if (e.type === 'fringe') fringe(c, e);
   else if (e.type === 'tv') retroTv(c, e, tick);
+  else if (e.type === 'vignette') vignette(c, e, pad);
   else if (e.type === 'wave') waveWarp(c, e, pad, (tick * Math.max(1, Math.round(e.hold))) / fps);
 }
 
@@ -163,7 +192,7 @@ function mosaic(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
   const w = c.width, h = c.height, g = c.getContext('2d', { willReadFrequently: true })!;
   const img = g.getImageData(0, 0, w, h), d = img.data;
   const bw = Math.max(1, (w - 2 * pad) / Math.max(1, Math.round(e.amount))), bh = Math.max(1, (h - 2 * pad) / Math.max(1, Math.round(e.size)));
-  const sharp = param<boolean>(e, 'sharp');
+  const sharp = param<boolean>(e, 'sharp'), hard = param<boolean>(e, 'hard');
   for (let by = pad - Math.ceil(pad / bh) * bh; by < h; by += bh) {
     for (let bx = pad - Math.ceil(pad / bw) * bw; bx < w; bx += bw) {
       const x0 = Math.max(0, Math.round(bx)), y0 = Math.max(0, Math.round(by)), x1 = Math.min(w, Math.round(bx + bw)), y1 = Math.min(h, Math.round(by + bh));
@@ -180,6 +209,8 @@ function mosaic(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
         if (a) { r /= a; gg /= a; b /= a; }
         a /= n;
       }
+      // Hard edges: a block is solid or empty, so the outline turns into blocks too
+      if (hard) a = a >= 128 ? 255 : 0;
       for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
         const j = (y * w + x) * 4;
         d[j] = r; d[j + 1] = gg; d[j + 2] = b; d[j + 3] = a;
@@ -215,26 +246,56 @@ function findEdges(c: HTMLCanvasElement, e: LayerEffect): void {
   g.putImageData(img, 0, 0);
 }
 
-/** Resample `c` through `from(x, y)` (where each pixel comes from), bilinear on premultiplied colour. */
-function warp(c: HTMLCanvasElement, from: (x: number, y: number) => [number, number], wrap = false): void {
-  const w = c.width, h = c.height, g = c.getContext('2d', { willReadFrequently: true })!;
-  const src = g.getImageData(0, 0, w, h).data;
+/** Where a pixel comes from: `from(x, y, to)` writes the source position into to[0], to[1]. */
+type Mapping = (x: number, y: number, to: Float64Array) => void;
+
+/** Colour premultiplied by alpha (so resampling does not darken edges), from `src`. */
+function premultiplied(src: Uint8ClampedArray): Float32Array {
   const pm = new Float32Array(src.length);
-  for (let i = 0; i < src.length; i += 4) { const a = src[i + 3]! / 255; pm[i] = src[i]! * a; pm[i + 1] = src[i + 1]! * a; pm[i + 2] = src[i + 2]! * a; pm[i + 3] = src[i + 3]!; }
-  const out = new Uint8ClampedArray(src.length);
-  const px = (x: number, y: number, k: number) => {
-    if (wrap) { x = ((x % w) + w) % w; y = ((y % h) + h) % h; } else if (x < 0 || y < 0 || x >= w || y >= h) return 0;
-    return pm[(y * w + x) * 4 + k]!;
-  };
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const [sx, sy] = from(x, y);
-      const x0 = Math.floor(sx), y0 = Math.floor(sy), tx = sx - x0, ty = sy - y0;
-      const v = [0, 0, 0, 0];
-      for (let k = 0; k < 4; k++) v[k] = (px(x0, y0, k) * (1 - tx) + px(x0 + 1, y0, k) * tx) * (1 - ty) + (px(x0, y0 + 1, k) * (1 - tx) + px(x0 + 1, y0 + 1, k) * tx) * ty;
-      if (v[3]! <= 0) continue;
-      const i = (y * w + x) * 4, a = v[3]! / 255;
-      out[i] = v[0]! / a; out[i + 1] = v[1]! / a; out[i + 2] = v[2]! / a; out[i + 3] = v[3]!;
+  for (let i = 0; i < src.length; i += 4) {
+    const a = src[i + 3]!;
+    if (!a) continue;
+    const k = a / 255;
+    pm[i] = src[i]! * k; pm[i + 1] = src[i + 1]! * k; pm[i + 2] = src[i + 2]! * k; pm[i + 3] = a;
+  }
+  return pm;
+}
+
+/**
+ * Resample `c` through `from` (where each pixel comes from), bilinear on premultiplied colour. When
+ * no pixel moves further than `reach`, only the paint's neighbourhood is worked on.
+ */
+function warp(c: HTMLCanvasElement, from: Mapping, reach = Infinity): void {
+  const w = c.width, h = c.height, g = c.getContext('2d', { willReadFrequently: true })!;
+  const img = g.getImageData(0, 0, w, h);
+  const box = Number.isFinite(reach) ? paintedBox(new Uint32Array(img.data.buffer), w, h, Math.ceil(reach) + 2) : { x0: 0, y0: 0, x1: w - 1, y1: h - 1 };
+  if (!box) return;
+  const pm = premultiplied(img.data);
+  const out = new Uint8ClampedArray(pm.length), to = new Float64Array(2);
+  // this runs for every pixel: no arrays or closures inside the loop
+  for (let y = box.y0; y <= box.y1; y++) {
+    for (let x = box.x0; x <= box.x1; x++) {
+      from(x, y, to);
+      const sx = to[0]!, sy = to[1]!;
+      const x0 = Math.floor(sx), y0 = Math.floor(sy);
+      if (x0 < -1 || y0 < -1 || x0 >= w || y0 >= h) continue;
+      const tx = sx - x0, ty = sy - y0;
+      const w00 = (1 - tx) * (1 - ty), w10 = tx * (1 - ty), w01 = (1 - tx) * ty, w11 = tx * ty;
+      let r = 0, gg = 0, b = 0, a = 0;
+      const inX0 = x0 >= 0, inX1 = x0 + 1 < w;
+      if (y0 >= 0) {
+        const row = y0 * w;
+        if (inX0) { const j = (row + x0) * 4; r += pm[j]! * w00; gg += pm[j + 1]! * w00; b += pm[j + 2]! * w00; a += pm[j + 3]! * w00; }
+        if (inX1) { const j = (row + x0 + 1) * 4; r += pm[j]! * w10; gg += pm[j + 1]! * w10; b += pm[j + 2]! * w10; a += pm[j + 3]! * w10; }
+      }
+      if (y0 + 1 < h) {
+        const row = (y0 + 1) * w;
+        if (inX0) { const j = (row + x0) * 4; r += pm[j]! * w01; gg += pm[j + 1]! * w01; b += pm[j + 2]! * w01; a += pm[j + 3]! * w01; }
+        if (inX1) { const j = (row + x0 + 1) * 4; r += pm[j]! * w11; gg += pm[j + 1]! * w11; b += pm[j + 2]! * w11; a += pm[j + 3]! * w11; }
+      }
+      if (a <= 0) continue;
+      const i = (y * w + x) * 4, k = 255 / a;
+      out[i] = r * k; out[i + 1] = gg * k; out[i + 2] = b * k; out[i + 3] = a;
     }
   }
   g.putImageData(new ImageData(out, w, h), 0, 0);
@@ -247,20 +308,20 @@ const centre = (c: HTMLCanvasElement, e: LayerEffect, pad: number): [number, num
 function twirl(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
   if (!e.amount) return;
   const [cx, cy] = centre(c, e, pad), R = (Math.min(c.width, c.height) - 2 * pad) * 0.5 * (e.size / 50), turn = (e.amount * Math.PI) / 180;
-  warp(c, (x, y) => {
-    const dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy);
-    if (r >= R) return [x, y];
+  warp(c, (x, y, to) => {
+    const dx = x - cx, dy = y - cy, r = Math.sqrt(dx * dx + dy * dy);
+    if (r >= R) { to[0] = x; to[1] = y; return; }
     const t = turn * (1 - r / R) ** 2, cs = Math.cos(-t), sn = Math.sin(-t);
-    return [cx + dx * cs - dy * sn, cy + dx * sn + dy * cs];
+    to[0] = cx + dx * cs - dy * sn; to[1] = cy + dx * sn + dy * cs;
   });
 }
 
 /** Mirror: a line through the centre at Angle; the side the line faces is replaced by the reflection of the other. */
 function mirror(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
   const [cx, cy] = centre(c, e, pad), a = (e.amount * Math.PI) / 180, nx = Math.cos(a), ny = Math.sin(a);
-  warp(c, (x, y) => {
-    const s = (x - cx) * nx + (y - cy) * ny;
-    return s > 0 ? [x - 2 * s * nx, y - 2 * s * ny] : [x, y];
+  warp(c, (x, y, to) => {
+    const s = Math.max(0, (x - cx) * nx + (y - cy) * ny);
+    to[0] = x - 2 * s * nx; to[1] = y - 2 * s * ny;
   });
 }
 
@@ -273,7 +334,7 @@ function offset(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
   const before = mix > 0 ? canvasFor('offsetMix', c.width, c.height) : null;
   before?.getContext('2d')!.drawImage(c, 0, 0);
   // wrap inside the page (not the pad)
-  warp(c, (x, y) => [pad + ((((x - pad + dx) % w) + w) % w), pad + ((((y - pad + dy) % h) + h) % h)]);
+  warp(c, (x, y, to) => { to[0] = pad + ((((x - pad + dx) % w) + w) % w); to[1] = pad + ((((y - pad + dy) % h) + h) % h); });
   if (before) {
     const g = c.getContext('2d')!;
     g.save();
@@ -297,11 +358,11 @@ function waveWarp(c: HTMLCanvasElement, e: LayerEffect, pad: number, seconds: nu
     return Math.sin(2 * Math.PI * f);
   };
   const pin = param<boolean>(e, 'pin'), pw = c.width - 2 * pad, ph = c.height - 2 * pad, edge = Math.min(pw, ph) * 0.15;
-  warp(c, (x, y) => {
+  warp(c, (x, y, to) => {
     let k = H * wave((x * tx + y * ty) / W - phase);
     if (pin) k *= Math.min(1, Math.max(0, Math.min(x - pad, y - pad, pad + pw - x, pad + ph - y) / edge));
-    return [x - nx * k, y - ny * k];
-  });
+    to[0] = x - nx * k; to[1] = y - ny * k;
+  }, Math.abs(H));
 }
 
 /** A copy of `c` in one colour (its alpha kept), on a scratch canvas. */
@@ -319,8 +380,26 @@ function blurCanvas(c: HTMLCanvasElement, radius: number): void {
   if (radius < 1) return;
   const g = c.getContext('2d', { willReadFrequently: true })!;
   const img = g.getImageData(0, 0, c.width, c.height);
-  applyBlur(img.data, img.data, c.width, c.height, radius);
+  blurPainted(img.data, c.width, c.height, radius);
   g.putImageData(img, 0, 0);
+}
+
+/**
+ * Blur `d` (w × h, in place) only around the paint: the blur reaches at most three boxes from it,
+ * and everything further out stays empty, so the result is the same as blurring the whole page.
+ */
+function blurPainted(d: Uint8ClampedArray, w: number, h: number, radius: number): void {
+  const r = Math.round(radius);
+  if (r < 1) return;
+  const reach = 3 * Math.max(1, Math.round(r / 1.7)) + 1;
+  const box = paintedBox(new Uint32Array(d.buffer, d.byteOffset, w * h), w, h, reach);
+  if (!box) return;
+  const bw = box.x1 - box.x0 + 1, bh = box.y1 - box.y0 + 1;
+  if (bw === w && bh === h) { applyBlur(d, d, w, h, radius); return; }
+  const part = new Uint8ClampedArray(bw * bh * 4);
+  for (let y = 0; y < bh; y++) part.set(d.subarray(((box.y0 + y) * w + box.x0) * 4, ((box.y0 + y) * w + box.x1 + 1) * 4), y * bw * 4);
+  applyBlur(part, part, bw, bh, radius);
+  for (let y = 0; y < bh; y++) d.set(part.subarray(y * bw * 4, (y + 1) * bw * 4), ((box.y0 + y) * w + box.x0) * 4);
 }
 
 /**
@@ -360,7 +439,7 @@ function glow(c: HTMLCanvasElement, e: LayerEffect): void {
     if (!k) continue;
     d[i] = s[i]!; d[i + 1] = s[i + 1]!; d[i + 2] = s[i + 2]!; d[i + 3] = Math.round(s[i + 3]! * k);
   }
-  applyBlur(d, d, w, h, e.amount);
+  blurPainted(d, w, h, e.amount);
   if (gain !== 1) for (let i = 3; i < d.length; i += 4) d[i] = Math.min(255, d[i]! * gain);
   bg.putImageData(img, 0, 0);
   const g = c.getContext('2d')!, mode = param<string>(e, 'composite');
@@ -378,30 +457,33 @@ function glow(c: HTMLCanvasElement, e: LayerEffect): void {
   g.restore();
 }
 
-/** Average premultiplied samples of `src` at `n` offsets per pixel (nearest pixel), into `c`. */
-function smear(c: HTMLCanvasElement, at: (x: number, y: number, k: number) => [number, number], n: number): void {
+/**
+ * Average premultiplied samples at `n` positions per pixel (nearest pixel), into `c`. `at(x, y, k, to)`
+ * writes sample k's position. Only pixels within `reach` of the paint can pick any up, so the rest
+ * of the page is skipped (leave it out when samples can come from anywhere).
+ */
+function smear(c: HTMLCanvasElement, at: (x: number, y: number, k: number, to: Float64Array) => void, n: number, reach = Infinity): void {
   const w = c.width, h = c.height, g = c.getContext('2d', { willReadFrequently: true })!;
-  const img = g.getImageData(0, 0, w, h), s = img.data;
-  const pm = new Float32Array(s.length);
-  for (let i = 0; i < s.length; i += 4) {
-    const a = s[i + 3]! / 255;
-    pm[i] = s[i]! * a; pm[i + 1] = s[i + 1]! * a; pm[i + 2] = s[i + 2]! * a; pm[i + 3] = s[i + 3]!;
-  }
-  const out = new Uint8ClampedArray(s.length);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
+  const img = g.getImageData(0, 0, w, h);
+  const box = paintedBox(new Uint32Array(img.data.buffer), w, h, Number.isFinite(reach) ? Math.ceil(reach) + 1 : Math.max(w, h));
+  if (!box) return;
+  const pm = premultiplied(img.data);
+  const out = new Uint8ClampedArray(pm.length), to = new Float64Array(2);
+  for (let y = box.y0; y <= box.y1; y++) {
+    for (let x = box.x0; x <= box.x1; x++) {
       let r = 0, gg = 0, b = 0, a = 0;
       for (let k = 0; k < n; k++) {
-        const [sx, sy] = at(x, y, k);
-        const X = Math.round(sx), Y = Math.round(sy);
+        at(x, y, k, to);
+        const X = Math.round(to[0]!), Y = Math.round(to[1]!);
         if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
-        const j = (Y * w + X) * 4;
-        r += pm[j]!; gg += pm[j + 1]!; b += pm[j + 2]!; a += pm[j + 3]!;
+        const j = (Y * w + X) * 4, al = pm[j + 3]!;
+        if (!al) continue;
+        r += pm[j]!; gg += pm[j + 1]!; b += pm[j + 2]!; a += al;
       }
-      const i = (y * w + x) * 4;
       if (!a) continue;
       // back to straight colour (alpha is the average coverage)
-      out[i] = (r / a) * 255; out[i + 1] = (gg / a) * 255; out[i + 2] = (b / a) * 255; out[i + 3] = a / n;
+      const i = (y * w + x) * 4, k = 255 / a;
+      out[i] = r * k; out[i + 1] = gg * k; out[i + 2] = b * k; out[i + 3] = a / n;
     }
   }
   g.putImageData(new ImageData(out, w, h), 0, 0);
@@ -413,7 +495,9 @@ function directionalBlur(c: HTMLCanvasElement, e: LayerEffect): void {
   if (len < 1) return;
   const a = (param<number>(e, 'angle') * Math.PI) / 180, dx = Math.cos(a), dy = Math.sin(a);
   const n = Math.min(48, Math.max(2, Math.ceil(len)));
-  smear(c, (x, y, k) => { const t = (k / (n - 1) - 0.5) * len; return [x + dx * t, y + dy * t]; }, n);
+  const ox = new Float64Array(n), oy = new Float64Array(n);
+  for (let k = 0; k < n; k++) { const t = (k / (n - 1) - 0.5) * len; ox[k] = dx * t; oy[k] = dy * t; }
+  smear(c, (x, y, k, to) => { to[0] = x + ox[k]!; to[1] = y + oy[k]!; }, n, len / 2);
 }
 
 /** Radial blur: spin around the centre (Amount = degrees) or zoom out from it (Amount = % of the distance). */
@@ -423,13 +507,15 @@ function radialBlur(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
   const cx = pad + ((c.width - 2 * pad) * param<number>(e, 'cx')) / 100, cy = pad + ((c.height - 2 * pad) * param<number>(e, 'cy')) / 100;
   const n = 24;
   if (param<string>(e, 'mode') === 'zoom') {
-    smear(c, (x, y, k) => { const s = 1 - (amt / 100) * 0.5 * (k / (n - 1)); return [cx + (x - cx) * s, cy + (y - cy) * s]; }, n);
+    const sc = new Float64Array(n);
+    for (let k = 0; k < n; k++) sc[k] = 1 - (amt / 100) * 0.5 * (k / (n - 1));
+    smear(c, (x, y, k, to) => { to[0] = cx + (x - cx) * sc[k]!; to[1] = cy + (y - cy) * sc[k]!; }, n);
     return;
   }
   const span = (amt * Math.PI) / 180;
-  const cos: number[] = [], sin: number[] = [];
-  for (let k = 0; k < n; k++) { const t = (k / (n - 1) - 0.5) * span; cos.push(Math.cos(t)); sin.push(Math.sin(t)); }
-  smear(c, (x, y, k) => { const ox = x - cx, oy = y - cy; return [cx + ox * cos[k]! - oy * sin[k]!, cy + ox * sin[k]! + oy * cos[k]!]; }, n);
+  const cos = new Float64Array(n), sin = new Float64Array(n);
+  for (let k = 0; k < n; k++) { const t = (k / (n - 1) - 0.5) * span; cos[k] = Math.cos(t); sin[k] = Math.sin(t); }
+  smear(c, (x, y, k, to) => { const ox = x - cx, oy = y - cy; to[0] = cx + ox * cos[k]! - oy * sin[k]!; to[1] = cy + ox * sin[k]! + oy * cos[k]!; }, n);
 }
 
 /**
@@ -465,15 +551,19 @@ function dither(c: HTMLCanvasElement, e: LayerEffect): void {
     }
   }
   ditherPixels(cells, cw, ch, { palette: e.palette ?? 'pico8', method: e.method ?? 'bayer4', gray: e.gray, strength: e.amount / 100, bias: [param<number>(e, 'tr') * 1.28, param<number>(e, 'tg') * 1.28, param<number>(e, 'tb') * 1.28] });
-  // paint the cells back as blocks, keeping each pixel's own alpha so edges stay smooth
+  // paint the cells back as blocks, keeping each pixel's own alpha so edges stay smooth; with Hard
+  // edges a block is all paint (at least half covered) or none, so the outline is pixelated too
+  const hard = param<boolean>(e, 'hard');
   for (let cy = 0; cy < ch; cy++) {
     for (let cx = 0; cx < cw; cx++) {
       const o = (cy * cw + cx) * 4;
       if (!cells[o + 3]) continue;
+      const solid = cells[o + 3]! >= 128;
       const xs = (cx0 + cx) * p, ys = (cy0 + cy) * p;
       for (let y = ys; y < Math.min(h, ys + p); y++) {
         for (let x = xs; x < Math.min(w, xs + p); x++) {
           const i = (y * w + x) * 4;
+          if (hard) { d[i] = cells[o]!; d[i + 1] = cells[o + 1]!; d[i + 2] = cells[o + 2]!; d[i + 3] = solid ? 255 : 0; continue; }
           if (!d[i + 3]) continue;
           d[i] = cells[o]!; d[i + 1] = cells[o + 1]!; d[i + 2] = cells[o + 2]!;
         }
@@ -669,7 +759,7 @@ function blurLayer(c: HTMLCanvasElement, e: LayerEffect): void {
   if (radius < 1) return;
   const g = c.getContext('2d', { willReadFrequently: true })!;
   const img = g.getImageData(0, 0, c.width, c.height);
-  applyBlur(img.data, img.data, c.width, c.height, radius);
+  blurPainted(img.data, c.width, c.height, radius);
   g.putImageData(img, 0, 0);
 }
 
@@ -813,6 +903,34 @@ function retroTv(c: HTMLCanvasElement, e: LayerEffect, tick: number): void {
       src[i + 1] = orig[i + 1]! + (gg - orig[i + 1]!) * mix;
       src[i + 2] = orig[i + 2]! + (b - orig[i + 2]!) * mix;
       src[i + 3] = orig[i + 3]! + (a - orig[i + 3]!) * mix;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+
+/**
+ * Vignette: colours fade darker (Amount > 0) or lighter (< 0) towards the frame's edges. Size is
+ * how far the clear middle reaches, Softness how gradual the fall-off is, Roundness from the
+ * frame's own shape (0) to a circle (100); alpha is kept, so on an adjustment layer it frames the shot.
+ */
+function vignette(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
+  const amt = e.amount / 100;
+  if (!amt) return;
+  const w = c.width, h = c.height, pw = w - 2 * pad, ph = h - 2 * pad;
+  const cx = pad + (pw * param<number>(e, 'cx')) / 100, cy = pad + (ph * param<number>(e, 'cy')) / 100;
+  const round = param<number>(e, 'round') / 100, inner = e.size / 100, soft = Math.max(0.01, param<number>(e, 'softness') / 100);
+  // half-axes: the frame's own proportions, pulled towards a circle by Roundness
+  const r = Math.min(pw, ph) / 2, ax = (pw / 2) * (1 - round) + r * round, ay = (ph / 2) * (1 - round) + r * round;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
+  const img = g.getImageData(0, 0, w, h), d = img.data;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (!d[i + 3]) continue;
+      const dist = Math.hypot((x - cx) / ax, (y - cy) / ay); // 1 at the frame's edge
+      const t = Math.min(1, Math.max(0, (dist - inner) / soft));
+      const k = t * t * (3 - 2 * t) * Math.abs(amt);
+      for (let j = 0; j < 3; j++) d[i + j] = amt > 0 ? d[i + j]! * (1 - k) : d[i + j]! + (255 - d[i + j]!) * k;
     }
   }
   g.putImageData(img, 0, 0);

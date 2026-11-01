@@ -11,7 +11,7 @@
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
-export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette';
 export type EffectTarget = 'line' | 'fill' | 'layer';
 export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
 
@@ -115,7 +115,7 @@ export const EFFECT_TYPES: EffectDef[] = [
     ] },
   { id: 'posterize', label: 'Posterize', hint: 'Fewer shades of each colour: flat, poster-like bands (posterize)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [2, 32], sizeRange: [0, 0], amountLabel: 'Levels', sizeLabel: 'Size', amountUnit: '', sizeUnit: '', animated: false },
   { id: 'mosaic', label: 'Mosaic', hint: 'Big square blocks of colour, like a censored or low-res picture (mosaic)', target: 'layer', amount: 10, size: 10, hold: 1, amountRange: [1, 200], sizeRange: [1, 200], amountLabel: 'Blocks across', sizeLabel: 'Blocks down', amountUnit: '', sizeUnit: '', animated: false,
-    extras: [{ key: 'sharp', label: 'Sharp colours', kind: 'toggle', def: false }] },
+    extras: [{ key: 'sharp', label: 'Sharp colours', kind: 'toggle', def: false }, { key: 'hard', label: 'Hard edges', kind: 'toggle', def: false }] },
   { id: 'edges', label: 'Find edges', hint: 'Only the outlines stay, like a pencil tracing of the picture (find edges)', target: 'layer', amount: 0, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Mix with original', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
     extras: [{ key: 'invert', label: 'Invert', kind: 'toggle', def: false }] },
   { id: 'threshold', label: 'Threshold', hint: 'Every colour becomes black or white, like a photocopy (threshold)', target: 'layer', amount: 128, size: 0, hold: 1, amountRange: [0, 255], sizeRange: [0, 0], amountLabel: 'Level', sizeLabel: 'Size', amountUnit: '', sizeUnit: '', animated: false },
@@ -159,12 +159,20 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'roll', label: 'Roll', kind: 'range', min: -4, max: 4, step: 0.5, unit: ' rows/frame', def: 0 },
       { key: 'speed', label: 'Distortion speed', kind: 'range', min: 0, max: 8, step: 0.5, unit: '', def: 2 },
     ] },
+  { id: 'vignette', label: 'Vignette', hint: 'Darker (or lighter) towards the edges of the frame, like an old lens (vignette)', target: 'layer', amount: 50, size: 60, hold: 1, amountRange: [-100, 100], sizeRange: [1, 100], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '%', animated: false,
+    extras: [
+      { key: 'softness', label: 'Softness', kind: 'range', min: 1, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'round', label: 'Roundness', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+    ] },
   { id: 'texture', label: 'Texture', hint: 'Paper, hatching, dots or canvas weave in the paint (best on the Fill)', target: 'fill', amount: 60, size: 14, hold: 1, amountRange: [0, 100], sizeRange: [3, 80], amountLabel: 'Strength', sizeLabel: 'Scale', amountUnit: '%', sizeUnit: ' px', animated: false },
   { id: 'dither', label: 'Retro pixels', hint: 'Old-console look: chunky pixels and a few colours, mixed with a dot pattern (dither)', target: 'layer', amount: 100, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Mix', sizeLabel: 'Pixel size', amountUnit: '%', sizeUnit: ' px', animated: false,
     extras: [
       { key: 'tr', label: 'Red threshold', kind: 'range', min: -100, max: 100, step: 1, unit: '', def: 0 },
       { key: 'tg', label: 'Green threshold', kind: 'range', min: -100, max: 100, step: 1, unit: '', def: 0 },
       { key: 'tb', label: 'Blue threshold', kind: 'range', min: -100, max: 100, step: 1, unit: '', def: 0 },
+      { key: 'hard', label: 'Hard edges', kind: 'toggle', def: false },
     ] },
 ];
 

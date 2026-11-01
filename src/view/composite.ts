@@ -1,5 +1,5 @@
 import { activeEffects, effectsPad } from '../core/effects';
-import { drawEffected, releaseEffectScratch } from './effects';
+import { drawEffected, fxPreview, fxPreviewScale, releaseEffectScratch } from './effects';
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { valueAt } from '../core/anim';
@@ -299,7 +299,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
   const shows = (l: Layer) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps) || (depth === 0 && opt.skip === l.id) || (depth === 0 && opt.onlyGuide && l.id !== opt.guide) || (opt.export && skippedInExport(l) && !(depth === 0 && l.id === opt.guide)));
   const alphaOf = (l: Layer) => opacityAt(l, frame) * (depth === 0 ? (opt.alpha ?? 1) : 1);
   // adjustment layers work on what is below them: the comp is drawn on its own page first
-  const adjusts = (l: Layer) => l.kind === 'drawings' && !!l.adjust && shows(l) && activeEffects(l).length > 0;
+  const adjusts = (l: Layer) => l.kind === 'drawings' && !!l.adjust && shows(l) && activeEffects(l).length > 0 && (!!opt.export || fxPreview !== 'off');
   const page = c.layers.some(adjusts) ? scratchFor(`adj${depth}`, c.width, c.height) : null;
   const out = g;
   if (page) {
@@ -313,7 +313,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
   for (let i = c.layers.length - 1; i >= 0; i--) {
     const l = c.layers[i]!;
     if (l.kind === 'drawings' && l.adjust) {
-      if (page && adjusts(l)) applyAdjustment(page, l, frame, alphaOf(l), depth, c.fps);
+      if (page && adjusts(l)) applyAdjustment(page, l, frame, alphaOf(l), depth, c.fps, opt.export ? 1 : fxPreviewScale());
       continue;
     }
     // a clipped layer draws with its base (a clipped layer with nothing to clip to shows nothing)
@@ -352,17 +352,17 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
 }
 
 /** An adjustment layer: its effects on the comp drawn so far (`page`), mixed in by its opacity. */
-function applyAdjustment(page: HTMLCanvasElement, l: DrawingsLayer, frame: number, alpha: number, depth: number, fps: number): void {
+function applyAdjustment(page: HTMLCanvasElement, l: DrawingsLayer, frame: number, alpha: number, depth: number, fps: number, scale = 1): void {
   if (alpha <= 0) return;
   const pad = effectsPad(l);
-  const fx = drawEffected(l, layerFrame(l, frame), page.width, page.height, 'all', depth + 1, (t, part) => { if (part !== 'fill') t.drawImage(page, 0, 0); }, undefined, fps);
+  const fx = drawEffected(l, layerFrame(l, frame), page.width, page.height, 'all', depth + 1, (t, part) => { if (part !== 'fill') t.drawImage(page, 0, 0); }, undefined, fps, scale);
   if (!fx) return;
   const g = page.getContext('2d')!;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalCompositeOperation = 'source-over';
   if (alpha >= 1) { g.globalAlpha = 1; g.clearRect(0, 0, page.width, page.height); }
   else g.globalAlpha = alpha;
-  g.drawImage(fx, -pad, -pad);
+  g.drawImage(fx, -pad, -pad, page.width + 2 * pad, page.height + 2 * pad);
   g.globalAlpha = 1;
 }
 
@@ -380,7 +380,9 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     const masked = !!mask && !mask.parked;
     const lf = layerFrame(l, frame);
     // effects (line boil...): the layer is painted part by part and processed first
-    const fx = activeEffects(l).length ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, d, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}:${l.parts ? JSON.stringify(l.parts) : ''}`, c.fps) : null;
+    // while you work effects can be faster (half size) or off; exports always render them in full
+    const fxScale = opt.export ? 1 : fxPreviewScale();
+    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, d, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}:${l.parts ? JSON.stringify(l.parts) : ''}`, c.fps, fxScale) : null;
     if (alpha >= 1 && l.blend === 'normal' && !masked && !fx) direct = d;
     else {
       // effects that reach past the art (shadow, glow) come back on a grown page
@@ -390,7 +392,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
       if (fx) {
         sg.setTransform(1, 0, 0, 1, 0, 0);
         sg.clearRect(0, 0, source.width, source.height);
-        sg.drawImage(fx, 0, 0);
+        sg.drawImage(fx, 0, 0, source.width, source.height);
       } else paintPlanes(sg, d, planes, opt, { layer: l, lf, depth });
       if (masked) {
         sg.setTransform(1, 0, 0, 1, pad, pad);
