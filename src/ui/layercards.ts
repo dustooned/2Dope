@@ -329,6 +329,7 @@ export class LayerCards {
       else if (l.kind === 'drawings' && l.guide) tags.push('board');
       if (linked && !inStack && !paint) tags.push('linked');
       if (l.kind === 'drawings' && l.still) tags.push('still');
+      if (l.kind === 'drawings' && l.adjust) tags.push('adjustment · changes the layers below');
       if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
       if (l.kind === 'drawings' && l.reference) tags.push('reference');
       if (l.kind === 'drawings' && l.mask) tags.push(on && app.editingMask ? 'editing mask' : 'mask');
@@ -679,6 +680,7 @@ export class LayerCards {
       const flip = (key: 'clip' | 'alphaLock', label: string) => () => app.editor.edit(l[key] ? `${label} off` : label, (c) => { const x = c.layers.find((y) => y.id === l.id); if (x && x.kind === 'drawings') { if (x[key]) delete x[key]; else x[key] = true; } });
       sw('Alpha Lock', 'Brushes change only pixels that already have paint', l.alphaLock === true, flip('alphaLock', 'Alpha Lock'));
       sw('Clipping mask', 'Show this layer only where the layer below has paint', l.clip === true, flip('clip', 'Clipping mask'));
+      sw('Adjustment layer', 'Its effects change every layer below it; its own drawing is hidden', l.adjust === true, () => { app.editor.setAdjust(l.id, !l.adjust); if (!l.adjust) app.openEffects?.(l.id); });
       sw('Reference', 'Fill and ColorDrop on any layer use this layer\u2019s lines as their edges (one per shot)', l.reference === true, () => app.setReference(l.id, !l.reference));
       if (l.mask) sw('Edit mask', 'Brushes paint on the mask: paint hides, the eraser reveals (all frames of this layer)', app.editingMask, () => app.setMaskEditing(!app.editingMask));
     }

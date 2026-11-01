@@ -298,9 +298,24 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
   const groups = clipGroups(c.layers);
   const shows = (l: Layer) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps) || (depth === 0 && opt.skip === l.id) || (depth === 0 && opt.onlyGuide && l.id !== opt.guide) || (opt.export && skippedInExport(l) && !(depth === 0 && l.id === opt.guide)));
   const alphaOf = (l: Layer) => opacityAt(l, frame) * (depth === 0 ? (opt.alpha ?? 1) : 1);
-  const matOf = (l: Layer) => base.multiply(toDom(mul(view, worldMatrix(c, l, frame))));
+  // adjustment layers work on what is below them: the comp is drawn on its own page first
+  const adjusts = (l: Layer) => l.kind === 'drawings' && !!l.adjust && shows(l) && activeEffects(l).length > 0;
+  const page = c.layers.some(adjusts) ? scratchFor(`adj${depth}`, c.width, c.height) : null;
+  const out = g;
+  if (page) {
+    g = page.getContext('2d')!;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, c.width, c.height);
+  }
+  const matOf = (l: Layer) => (page ? new DOMMatrix() : base).multiply(toDom(mul(view, worldMatrix(c, l, frame))));
   for (let i = c.layers.length - 1; i >= 0; i--) {
     const l = c.layers[i]!;
+    if (l.kind === 'drawings' && l.adjust) {
+      if (page && adjusts(l)) applyAdjustment(page, l, frame, alphaOf(l), depth, c.fps);
+      continue;
+    }
     // a clipped layer draws with its base (a clipped layer with nothing to clip to shows nothing)
     if (clips(l)) continue;
     if (!shows(l)) continue;
@@ -323,10 +338,32 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     if (alpha <= 0) continue;
     drawLayer(g, project, c, l, frame, matOf(l), alpha, planes, opt, depth);
   }
+  if (page) {
+    g = out;
+    g.setTransform(base);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.drawImage(page, 0, 0);
+  }
   g.setTransform(base);
   if (depth === 0 && opt.export && exportStamp && opt.planes === undefined) drawStamp(g, c, exportStamp);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
+}
+
+/** An adjustment layer: its effects on the comp drawn so far (`page`), mixed in by its opacity. */
+function applyAdjustment(page: HTMLCanvasElement, l: DrawingsLayer, frame: number, alpha: number, depth: number, fps: number): void {
+  if (alpha <= 0) return;
+  const pad = effectsPad(l);
+  const fx = drawEffected(l, layerFrame(l, frame), page.width, page.height, 'all', depth + 1, (t, part) => { if (part !== 'fill') t.drawImage(page, 0, 0); }, undefined, fps);
+  if (!fx) return;
+  const g = page.getContext('2d')!;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'source-over';
+  if (alpha >= 1) { g.globalAlpha = 1; g.clearRect(0, 0, page.width, page.height); }
+  else g.globalAlpha = alpha;
+  g.drawImage(fx, -pad, -pad);
+  g.globalAlpha = 1;
 }
 
 function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, m: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number, editingDrawing?: Drawing): void {
@@ -424,7 +461,7 @@ export function drawLayersAround(g: CanvasRenderingContext2D, project: Project, 
   const groups = clipGroups(c.layers);
   for (let i = c.layers.length - 1; i >= 0; i--) {
     const l = c.layers[i]!;
-    if (i === idx || exclude?.has(l.id) || clips(l)) continue;
+    if (i === idx || exclude?.has(l.id) || clips(l) || (l.kind === 'drawings' && l.adjust)) continue;
     // layers[0] is the top; a layer not yet in the comp (a placeholder) goes to the bottom
     const above = idx < 0 || i < idx;
     if ((side === 'above') !== above) continue;

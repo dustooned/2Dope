@@ -2,6 +2,28 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Adjustment layers; Motion/Timing tool row in Full (2026-11-01, uncommitted)
+
+- Bug: at the Full level Motion had no tool row. `body.ui-full .bub-tools` hides the bubble tools
+  (the top bar has them for Draw), but `body.ws-motion|ws-time .topbar .tools` hides the top bar's
+  drawing tools, so Motion and Timing had none. `src/style.css` (end): Full keeps `.bub-tools` in
+  Motion/Timing and moves `.bub-ctx` below it (66 px, or `--tools-bottom` under 700 px). Checked in
+  the dev app at 1024 px: Motion tools 510–964 × 105–159, context row at 163; Timing likewise.
+- Adjustment layers: optional `adjust?: true` on a drawings layer (`src/core/comp.ts`, read/written
+  in `src/io/schema.ts`; older builds ignore the field and draw it as a normal, usually empty, layer).
+  `src/view/composite.ts` `drawComp`: when a shown adjustment layer with active effects exists, the
+  comp is drawn onto its own page (`scratchFor('adj'+depth)`) bottom-up; at the adjustment layer,
+  `applyAdjustment` runs its effects on the page so far through `drawEffected` (paint = the page,
+  once, not per part), replaces it (opacity 100) or mixes it over (lower opacity); its own drawing is
+  never drawn; the page is then drawn onto the target with the caller's transform. Layers above are
+  untouched. `drawLayersAround` (Draw/Animate view) skips adjustment layers (effects stay off while
+  painting, as for layer effects). No mask from the layer's own pixels yet (whole frame).
+- UI: `src/compedit.ts` `addLayer('adjustment')` (top, whole shot, opens Effects) and `setAdjust`;
+  Motion comp menu chip "+ Adjustment" and layer menu "Adjustment layer" (check); layer cards tag and
+  an "Adjustment layer" switch in the layer options (`src/ui/layercards.ts`).
+- Tests: `io.test.ts` flag round-trip; `effects` fixture: threshold on an adjustment layer turns the
+  red layer below black, the blue layer above is unchanged, 50 % opacity mixes, no effects = no change.
+
 ### Layers lists the shot's other layers (2026-11-01, uncommitted)
 
 Student report (2026-10-31): after the update their finished layers seemed gone and only the rough

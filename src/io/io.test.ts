@@ -200,6 +200,17 @@ describe('project schema', () => {
     expect(assetPaths(again)).toEqual(new Set(['assets/abc-1.png', 'assets/def-2.png']));
   });
 
+  it('keeps an adjustment layer flag through save and load (and drops a non-true one)', () => {
+    const p = sample();
+    const layer = Object.values(p.comps)[0]!.layers.find((l) => l.kind === 'drawings')! as { adjust?: unknown };
+    layer.adjust = true;
+    const again = parseProjectFile(stringifyProjectFile(p));
+    expect((Object.values(again.comps)[0]!.layers.find((l) => l.kind === 'drawings') as { adjust?: boolean }).adjust).toBe(true);
+    layer.adjust = 'yes';
+    const bad = parseProjectFile(stringifyProjectFile(p));
+    expect((Object.values(bad.comps)[0]!.layers.find((l) => l.kind === 'drawings') as { adjust?: boolean }).adjust).toBeUndefined();
+  });
+
   it('refuses files from a newer schema with a helpful message', () => {
     const p = { ...sample(), schema: SCHEMA + 1 };
     expect(() => validateProjectFile(p)).toThrow(/newer version/);

@@ -60,6 +60,11 @@ interface LayerBase {
   clip?: boolean;
   /** Alpha Lock: brushes change only pixels that already have paint. */
   alphaLock?: boolean;
+  /**
+   * Adjustment layer (After Effects): its own drawing is not shown; its effects work on everything
+   * below it in the comp, mixed in by the layer's opacity. Older builds draw it as an ordinary layer.
+   */
+  adjust?: boolean;
   /** Reference (Procreate): Fill and ColorDrop on any layer use this layer's lines as edges. */
   reference?: boolean;
   /** Layer mask: a drawing whose paint hides this layer (on every frame); erasing it reveals again. */

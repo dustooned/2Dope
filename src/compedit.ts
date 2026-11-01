@@ -732,7 +732,7 @@ export class CompEditor {
   }
 
   /** A new layer above the selected one (or on top). */
-  addLayer(kind: 'drawings' | 'null' | 'camera'): void {
+  addLayer(kind: 'drawings' | 'null' | 'camera' | 'adjustment'): void {
     const c = this.comp;
     const p = this.app.project;
     let made: Layer | null = null;
@@ -743,6 +743,14 @@ export class CompEditor {
         )
       : 0;
     this.edit(`Add ${kind === 'drawings' ? 'drawing' : kind} layer`, (cc) => {
+      if (kind === 'adjustment') {
+        // on top, for the whole shot: its effects change everything below it
+        const d = p.newDrawing();
+        made = drawingsLayer(p.newId('L'), 'Adjustment', [{ drawing: d.id, length: Math.max(1, this.app.compEnd) }], p.width, p.height, cc.width, cc.height);
+        made.adjust = true;
+        cc.layers.splice(0, 0, made);
+        return;
+      }
       const id = p.newId('L');
       if (kind === 'camera') made = cameraLayer(id, cc);
       else if (kind === 'null') made = nullLayer(id, 'Anchor', cc);
@@ -758,7 +766,17 @@ export class CompEditor {
     if (m) {
       this.open.add(m.id);
       this.select(m.id);
+      // an adjustment layer is only its effects: open them to choose one
+      if (kind === 'adjustment') this.app.openEffects?.(m.id);
     }
+  }
+
+  /** Turn a drawings layer into an adjustment layer or back: one undo step. */
+  setAdjust(id: string, on: boolean): void {
+    this.edit(on ? 'Adjustment layer' : 'Adjustment layer off', (c) => {
+      const l = c.layers.find((x) => x.id === id);
+      if (l && l.kind === 'drawings') { if (on) l.adjust = true; else delete l.adjust; }
+    });
   }
 
   deleteLayers(ids = this.selected): void {

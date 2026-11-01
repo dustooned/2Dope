@@ -1070,6 +1070,7 @@ export class MotionPanel {
       ...(l.kind === 'drawings' || l.kind === 'comp' ? [{ label: 'Split at the playhead', hint: 'Ctrl+Shift+D', run: () => this.splitAt() }] : []),
       ...(ed.selected.length > 1 || l.kind !== 'camera' ? [{ label: ed.selected.length > 1 ? `Group ${ed.selected.length} layers` : 'Group into a comp', run: () => void ed.group() }] : []),
       ...(ed.selected.length > 1 ? [{ label: `Stagger ${ed.selected.length} layers…`, run: () => void this.askStagger() }] : []),
+      ...(l.kind === 'drawings' && !l.guide ? [{ label: 'Adjustment layer', checked: !!l.adjust, run: () => { ed.setAdjust(l.id, !l.adjust); if (!l.adjust) this.app.openEffects?.(l.id); } }] : []),
       ...this.layerActions(l).map((a) => ({ label: a.label, run: () => this.runLayerAction(l, a.value), danger: a.value === 'delete' })),
     ];
   }
@@ -1077,10 +1078,10 @@ export class MotionPanel {
   /** Context menu on empty space: add layers, view options. */
   layerListItems(): CtxItem[] {
     const ed = this.ed;
-    const add = (kind: 'drawings' | 'null' | 'camera', label: string) => ({ label, run: () => ed.addLayer(kind) });
+    const add = (kind: 'drawings' | 'null' | 'camera' | 'adjustment', label: string) => ({ label, run: () => ed.addLayer(kind) });
     return [
       { title: 'Comp' },
-      { chips: [add('drawings', '+ Drawing'), add('null', '+ Anchor'), add('camera', '+ Camera')] },
+      { chips: [add('drawings', '+ Drawing'), add('null', '+ Anchor'), add('camera', '+ Camera'), add('adjustment', '+ Adjustment')] },
       { label: 'Auto-key', checked: ed.autoKey, run: () => ((ed.autoKey = !ed.autoKey), ed.onChange()) },
       ...(ed.hasCamera() ? [{ label: 'Look through camera', checked: ed.throughCamera, run: () => ((ed.throughCamera = !ed.throughCamera), this.app.requestRender(), ed.onChange()) }] : []),
       ...(ed.crumbs().length > 1 ? [{ label: 'Back out of this comp', run: () => ed.exit(ed.crumbs().length - 2) }] : []),

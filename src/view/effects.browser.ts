@@ -1,6 +1,7 @@
 /** Real-browser pixel checks for Roughen edges and Gaussian blur, opened through /tests/effects.html. */
 import { App } from '../app';
 import { effectsPad, newEffect, type EffectType, type LayerEffect } from '../core/effects';
+import { drawingsLayer } from '../core/comp';
 import { Project, planeCanvas } from '../core/project';
 import { EffectsPanel } from '../ui/effectspanel';
 import { drawComp, drawEditingLayer, releaseScratch } from './composite';
@@ -323,6 +324,27 @@ check('An effect setting can be keyframed (◆), animates in the export, shows i
   if (app.history.peekUndo()?.label !== 'React to audio' || !keys.some((k) => k.f === 6)) return 'React to audio did not write keys on the effect setting';
   panel.close();
   return true;
+});
+
+check('An adjustment layer’s effects change the layers below it, not above, mixed by its opacity', () => {
+  const p = new Project(W, H), comp = p.comp, below = p.layer;
+  if (below.kind !== 'drawings') return 'no drawings layer';
+  rect(10, 10, 20, 20)(p.drawing(below.exposures[0]!.drawing)!.line.getContext('2d')!);
+  const adjD = p.newDrawing(), topD = p.newDrawing();
+  rect(40, 40, 16, 16, BLUE)(topD.line.getContext('2d')!);
+  const adj = drawingsLayer('A', 'Adjustment', [{ drawing: adjD.id, length: 1 }], W, H);
+  adj.adjust = true; adj.effects = [fx('threshold', { amount: 128 })];
+  const top = drawingsLayer('T', 'Top', [{ drawing: topD.id, length: 1 }], W, H);
+  comp.layers.unshift(top, adj); // front first: Top, Adjustment, Drawing
+  const out = () => { const c = blank(); drawComp(c.getContext('2d')!, p, p.comp, 0, { export: true }); return c.getContext('2d')!.getImageData(0, 0, W, H).data; };
+  const full = out();
+  if (at(full, 20, 20)[0] !== 0 || at(full, 20, 20)[3] !== 255) return `below not thresholded: ${at(full, 20, 20)}`; // red is darker than 128 → black
+  if (at(full, 48, 48)[2] !== BLUE[2]) return `the layer above changed: ${at(full, 48, 48)}`;
+  adj.transform.opacity.value = 50;
+  const half = out()[(20 * W + 20) * 4]!;
+  if (!(half > 40 && half < 200)) return `opacity did not mix (red ${half})`;
+  adj.transform.opacity.value = 100; adj.effects = [];
+  return at(out(), 20, 20)[0] === RED[0] || 'without effects it should change nothing';
 });
 
 // What it looks like: a thin line, a thick stroke and a filled shape (for a person to look at)

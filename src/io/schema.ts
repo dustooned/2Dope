@@ -122,6 +122,7 @@ export interface LayerFile {
   still?: boolean;
   clip?: boolean;
   alphaLock?: boolean;
+  adjust?: boolean;
   reference?: boolean;
   mask?: string;
   effects?: LayerEffect[];
@@ -449,6 +450,7 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   if (v.still === true) out.still = true;
   if (v.clip === true) out.clip = true;
   if (v.alphaLock === true) out.alphaLock = true;
+  if (v.adjust === true) out.adjust = true;
   if (v.reference === true) out.reference = true;
   if (typeof v.mask === 'string' && Object.prototype.hasOwnProperty.call(drawings, v.mask)) out.mask = v.mask;
   const fx = readEffects(v.effects);
@@ -738,6 +740,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
         ...(l.still ? { still: true } : {}),
         ...(l.clip ? { clip: true } : {}),
         ...(l.alphaLock ? { alphaLock: true } : {}),
+        ...(l.adjust ? { adjust: true } : {}),
         ...(l.reference ? { reference: true } : {}),
         ...(l.mask ? { mask: l.mask } : {}),
         ...(l.effects?.length ? { effects: structuredClone(l.effects) } : {}),
@@ -817,6 +820,7 @@ export function compFile(c: Comp): CompFile {
       if (l.still) base.still = true;
       if (l.clip) base.clip = true;
       if (l.alphaLock) base.alphaLock = true;
+      if (l.adjust) base.adjust = true;
       if (l.reference) base.reference = true;
       if (l.mask) base.mask = l.mask;
       if (l.effects?.length) base.effects = readEffects(l.effects);
