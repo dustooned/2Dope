@@ -2,6 +2,96 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Send to another project (2026-10-31, uncommitted)
+
+Owner choice: Send-to (from the source project), not Bring-in. A student reuses a drawing (head and
+hair) in another project in about three taps.
+
+- New `src/io/sendto.ts`: `sendToProject(src, item, store, targetId, where, residency)` copies a
+  layer stack (`{kind:'layer', layers}`: the layer with its linked art layers, every exposure and
+  mask) or an asset graph (`artworkGraph`) into a project loaded from the store (not opened, no
+  History), via `copyArtworkGraph` + `cloneStoredDrawing`, then saves it at once (`captureProject`
+  library mode: the target's existing drawings keep their stored keys; `saveHead` like autosave).
+  `start`: a layer's layers go on top of the target's main comp from frame 1; an asset is added
+  and placed (`compLayer`, loop, locked) on top. `library`: an unplaced asset (a layer stack is
+  wrapped in an asset comp named after the layer). Limits checked (`MAX_COMPS/DRAWINGS/VECTORS`).
+  Same page size: the exact bytes or stored keys (`snapshotArtwork`). Different size: pixels
+  scaled to fit and centred (`fitPage`), vectors (points, brush size, symmetry centre, control
+  anchors/handles, clip matrices), layer position/anchor (values and keys), part offsets and comp
+  sizes follow (`fitStroke`, `fitComp`). Sounds of an asset are copied by path. `style.mask`
+  of styled vectors is not rescaled (left as is).
+- UI: `src/ui/layercards.ts` Send to… in the swipe-left quick actions and the options' Layer
+  section (`sendTo` hook); `src/ui/artworkassets.ts` Send to… on asset cards and in the
+  placement's Copies menu (`sendTo` hook); `src/main.ts` `sendToFlow`: pick a project (`pickBox`,
+  most recently opened first, open project excluded), then where, then a toast with Open project.
+- Tests: `src/io/sendto.test.ts` (fit maths, 3 tests); fixture `tests/sendto.html` +
+  `src/ui/sendto.browser.ts` (MemoryStore, 6 checks: same-size layer with identical pixels on
+  frames 1–2, different size scaled and centred, layer to library, asset to start and library,
+  source unchanged with no undo step, targets still open with their old drawings).
+- Manual (Projects) line and an UPDATES entry.
+
+Checks (actual): `npx vitest run` 78 files / 620 passed; `npm run build` passed; browser fixtures on
+127.0.0.1:5217: sendto 6/6, paintingplanes, assetlayers, artworkworkflow, artworklibrary,
+paintingworkflow, assetnames, inkpaint all pass (8/8). Not checked: the full fixture suite, the
+pickBox flow clicked through in the real app (the fixture calls `sendToProject` directly), touch,
+very large layers (encoding cost), styled vectors with `style.mask` on a different page size.
+
+### Audio React: bake audio-reactive keys (2026-10-31, uncommitted)
+
+Brief: pasted by the owner (spec `docs/research/CLAUDE-ITERATION-2.md` §9, evidence
+`docs/research/freqreact/README.md`). Bake only: no expressions, no live analysis.
+
+- New `src/core/audioreact.ts` (+ `audioreact.test.ts`, 7 tests): radix-2 `fft`; `bandEnvelope`
+  (Hann window, **FFT 2048** centred on each frame, band magnitudes summed and scaled so a full-scale
+  sine in the band ≈ 1, **absolute, not normalised to the clip's peak**, so a quiet band stays low;
+  Decay = peak hold, Smoothing = one-pole); reactors `pulse`, `elastic` (FreqReact's
+  `triangle(τ·10)/exp(τ·decay)·mod` with τ = time since the last hit, see note), `oscillate`,
+  `flicker` (seeded `hash01`); `bake` (one offset per frame, ×Master, Time offset); `monoMix`;
+  `MAX_REACT_FRAMES = 3600`.
+- New `src/ui/audioreactdialog.ts`: "React to audio…" dialog (Source clip, Band start/end, Reactor,
+  Intensity, Decay, Smoothing, Time offset, Master, Elasticity / Speed + Wave / Seed shown per
+  reactor, Direction for points, Range: selected keys / work area / whole shot), settings saved per
+  device (`2dope.audioreact`, validated), envelope cache keyed by clip placement, trim, fps, range and
+  band settings; decodes through the existing `SoundBank` (no Web Audio graph). Nothing selected →
+  notice, no dialog; no clip → notice.
+- `src/compedit.ts`: `bakeReaction` (one undo step "React to audio", base value + offset through
+  `setKey`, per-axis for points) and `selectedRows`. `src/ui/motion.ts`: key menu entry and a
+  `sounds` field set from `src/main.ts` (`motion.sounds = audioPlayback.bank`). Timing has no key
+  rows, so it is Motion only. Settings are device-only (not stored on the layer).
+- Fixture `tests/audioreact.html` + `src/ui/audioreact.browser.ts` (9 checks). Manual line + UPDATES.
+
+Measured: 100 Hz sine in 90–110 Hz ≈ 0.5+ at mid-clip; a 1 kHz tone in the same band < 0.01
+(ratio > 100); 1 kHz tone in 900–1100 Hz > 0.5. `bandEnvelope` 10 s / 240 frames / FFT 2048:
+**40 ms** (node), so 2048 was kept. Browser fixture: decode + analyse + bake of a 2 s WAV 83–90 ms;
+48 keys, values within 50…90 for Intensity 40 on a base of 50, beat frames high and quiet frames low;
+undo restores in one step, redo re-applies; save → reopen gives the same values; the export
+compositor's alpha follows the baked opacity; same settings bake identical keys.
+Note on Elastic: the brief's `exp(env·decay)` with the envelope as `env` would wobble during
+silence; FreqReact's trigger input is a time since the hit, so τ is used (stated in the code).
+Not checked: long clips near 120 s (cap at 3600 frames is reported in the notice), Lite/iPad memory
+and time, Steps/Switch/Trigger (later), storing settings on the layer for re-baking.
+
+### Animate: layers belong to the drawing, tracks to the timeline (2026-10-31, uncommitted)
+
+Owner decision (2026-10-31): in Animate, Layers = the layers inside the drawing (Procreate Dreams
+style, same capabilities as Draw); tracks (drawing, assets, media, camera, anchors) live on the
+timeline; a placed asset shows its own layers, **editable in Animate with a shared banner**.
+
+- `src/ui/layercards.ts`: scoping uses `isPaintingWorkspace` (Draw and Animate) instead of Draw
+  only, so Animate's Layers shows the current track's art layers (`app.celLayers`), + adds an art
+  layer, and the Animation/Background/Object/Notes/Media add menu no longer shows there.
+- `src/ui/flipmode.ts`: the Track button still adds an animation track on tap; hold or right-click
+  opens New track: Animation, Background, Object, Notes, Media (moved from the Layers + menu).
+- `src/ui/layerspop.ts` ("All layers"): back to drawing and group tracks only (the package 8
+  camera/anchor rows and their notice are removed; type labels for group/board stay).
+- `src/core/assets.ts` `open(id, layer, stay)`; `src/ui/artworkassets.ts` `openSource(…, here)`
+  and the auto-exit from source editing in Animate is removed; `src/main.ts` passes `here` when a
+  layer is tapped in Animate's Layers. Edit source (placement toolbar) still opens Draw. The existing
+  header ("Source: X · Updates N placements · Done") is the banner; Make independent already exists.
+- Fixtures updated to the new model: `assetlayers` (stays in Animate; Animate Layers shows the
+  drawing's layers, not tracks), `paintingplanes` (Background via the Track menu).
+- UPDATES entry.
+
 ### Package 8: layers, Animate tracks and video presets (2026-10-31, uncommitted)
 
 Brief: `docs/research/NEXT-ITERATION-BRIEF.md`. Most of A already existed (row with thumbnail,
@@ -190,6 +280,45 @@ browser fixtures **45/45** on 127.0.0.1:5218.
 Not checked: a real Pixel 9 or iPad (desktop GPU only); Animate with many onion skins; the
 per-move `#stats` DOM update (left as is, `app.ts` is being edited by the Story session).
 
+### Story C iteration 2: scenes and shot / camera stickers (2026-10-31, uncommitted)
+
+Before this: Script to panels was checked (vitest 581, build, 44/44 fixtures) and committed as
+`f2ed57b` (not pushed). Nothing from another session was pending.
+
+**No file-format change**: both features read and write existing captions.
+
+- New `src/core/scenes.ts` (+ `scenes.test.ts`, 3 tests). Stickers live in Camera / framing as
+  " · "-separated words: `SHOT_STICKERS` (EWS, WS, MS, CU, ECU, OTS, POV; one per panel,
+  `toggleShot` replaces/clears) and `MOVE_STICKERS` (Pan/Tilt/Dolly/Zoom/Truck ×2, Shake; `toggleMove`
+  on/off); typed words are kept. Scenes come from Shot / scene: `parseShot` ("Sc 2 · Sh 3 · rest"),
+  `scenesOf` (a panel without "Sc" belongs to the scene before; 0 = none yet), `sceneColour` (fixed
+  hue per number), `renumberScenes(shots, at)` (a scene starts at `at`, at a "Sh 1" / bare "Sc N", or
+  where the number changes; scenes and shots are renumbered in order, the heading text kept, panels
+  before the first scene untouched, 60-char cap).
+- `App.newSceneAt(i)`: one Undo step ("New scene") that rewrites every shot caption via
+  `editTimeline`. `App.setCaption` takes an optional Undo label (stickers say "Add/Remove sticker").
+- Panels cards (`board.ts`): sticker chips under Camera / framing (aria-pressed; focus stays on the
+  tapped chip after the rebuild), **New scene here** under Shot / scene, a scene-colour top border.
+- Grid (`boardgrid.ts`): a full-row scene header before each scene's first panel ("▾ Scene 2 ·
+  EXT. STREET · 2 panels · 72f", colour bar) that folds the scene's tiles (session only), scene
+  colour on tiles, sticker badges on the picture. Current/selected marking now goes by `data-i`
+  (folded tiles are absent); keyboard counts only tiles.
+- CSS at the end of `style.css`; manual (Story) and an UPDATES entry.
+
+Checks (actual): `npx vitest run` **584 passed** (+3); `npm run build` passed; browser fixtures
+**44/44**. Dev app on 127.0.0.1:5217 (9-panel test board from the script iteration): on panel 3,
+CU then Pan left then WS gave Camera "WS · Pan left" with WS and Pan left pressed and focus kept on
+WS; New scene here on panel 7 renumbered panels 6–9 to "Sc 2 · Sh 2", "Sc 3 · Sh 1…3" while panel 1
+(no scene) stayed empty; Undo restored the old shots, Redo reapplied; Grid showed three scene
+headers with panel counts/lengths, the "WS←" badge, and folding scene 2 hid its 2 tiles (9 → 7) with
+aria-expanded false and focus on the header (screenshots). The New scene button first sat in the
+card header and was clipped at 230px; it moved under Shot / scene and fits. Not checked: the PDF
+with stickers (Camera text is printed by the existing exporter), touch, phone width, export numbering
+per scene (shot list 1A/1B is not built), scene colours chosen by people (fixed by number).
+
+Still open for C: "Animate this" from a panel (panel → shot), dragging stickers from a tray onto
+panels, per-scene numbering in exports.
+
 ### Story C iteration 1: Script to panels (2026-10-31, uncommitted)
 
 Before this: the Story views work was checked (vitest 576, build, 44/44 fixtures) and committed as
@@ -307,12 +436,12 @@ and Gaussian blur.
 **Built (source):**
 
 - `src/core/effects.ts`: two new effect types. `roughen` (label Roughen edges; target Ink; Roughness
-  0–24 default 5; Size 8–160 default 34; Hold 1–8 default 2; seeded) and `blur` (label Gaussian
+  0–20 default 3; Size 8–160 default 34; Hold 1–8 default 2; seeded) and `blur` (label Gaussian
   blur; whole layer; radius 0–40 default 6; `sizeRange [0,0]`). `effectTick` treats blur as static.
-- `src/view/effects.ts`: `roughen()` is **alpha-only** (soften alpha by Roughness/2 with two box
-  passes, push the rim with 3-octave seeded value noise, multiply alpha; colour untouched, so thin
-  ink does not grey out and shape interiors stay solid). `blurLayer()` reuses `applyBlur()` (three
-  separable box passes, premultiplied). New helper `boxPlane()`.
+- `src/view/effects.ts`: `roughen()` is **alpha-only** (pull the alpha from where a 2-octave seeded
+  noise points, scaled by Roughness; colour untouched, so thin ink does not grey out and shape
+  interiors stay solid; nothing is added past the artwork). `blurLayer()` reuses `applyBlur()` (three
+  separable box passes, premultiplied).
 - `src/ui/effectspanel.ts`: the Advanced Size row is skipped when the effect has no second knob.
 - `src/core/effects.test.ts`: defaults, clamping and target for both.
 - `src/ui/manualtext.ts`: Effects wording now lists both, and a 2026-10-31 UPDATES entry.
@@ -332,11 +461,44 @@ and Gaussian blur.
 - `docs/research/procreate-5.4.9/DRAW-ANIMATE-CONTINUATION-2026-10-31.md` (+ `inspect_draw_metadata.py`,
   `strings_scan.py`) — brush parameter surface, stabilisation pipeline, guides/QuickShape, Animation
   Assist (onion tint colours, playback modes).
+- `docs/research/layer-systems/README.md` — REA decode of the Procreate/Dreams `LayersResources.bundle`
+  (10 documents, 637 nodes, 415 edges): layer-cell outlets (thumbnail, alpha-lock background, clipping,
+  lock, blend target, depth, swipe actions), Procreate group vocabulary, Dreams track/onion vocabulary.
+- `docs/research/export-settings/README.md` — Procreate formats/quality/codec/profile, Dreams
+  Quick-vs-Advanced export, Harmony `EXPORTMMX_*` saved prefs, and a proposed 2Dope preset matrix.
+- `docs/research/NEXT-ITERATION-BRIEF.md` — acceptance criteria for the Draw layer row/groups, the
+  Animate track + art-layer panel, and the format-aware export sheet.
+- `docs/research/wunk-plugins/README.md` — `D:\Downloads\wunk`: the `.aseprite` is a **dither-pattern
+  promo sheet**, not brushes; `B.Carve` is seam-carving resize; `B.Fringe` has two controls
+  (Iterations, Offset); `PixDither` adds per-channel thresholds and non-square matrices; `PixStipple`
+  parameters unknown. Integration order + limits inside.
+- `docs/research/grab-bag-rea-triage/README.md` — what in the Ultimate Mograph grab bag is actually
+  REA-able: ~90 native `.aex` (ranked: Bendio, BlockSwap, Auto_Crop first), 25 `.zxp` of which several
+  carry plain `.jsx` source (read, no REA), and 451 `.jsxbin` that REA cannot decompile.
+- `docs/research/gifgun-ntsc/README.md` — GifGun 2.0.12: CEP + ffmpeg/gifextras pipeline, settings
+  (max colours 256, fps 10, loop, dither=bayer scale 3, two-pass palette, pixel-art resampling);
+  ntsc-rs 1.5.4: full parameter inventory grouped, and a five-control "Retro TV" subset that fits
+  Canvas 2D without NTSC modulation.
+- `docs/research/zaebects-signal/README.md` — Zaebects `signal.aex` (match name `ADBE Signal`):
+  fourteen VHS controls (signal strength, static, luma/chroma/hue noise, chroma loss/blend, scanline
+  blur, phase shift + offset, roll/distortion speed, frequency) and a proposed eight-control
+  "Retro TV" effect for 2Dope.
+- `docs/research/mograph-tool-shortlist/README.md` — ranked mograph tools to build (stagger, loop,
+  ease copy, settle/bounce, wiggle/sway, camera presets, retime, repeat/cloner), with evidence class
+  and effort; recommends the keyframe toolkit (stagger + loop + ease copy) first.
+- `docs/research/CLAUDE-ITERATION-2.md` — ordered work packages for the next Claude session (verify
+  effects → easing → keyframe toolkit incl. Wiggle/Smoother → default FX waves → wunk slice →
+  Retro TV → GIF options → layers/export next round), with acceptance criteria and open decisions.
+- `docs/research/freqreact/README.md` — FreqReact 3.0.47 (CEP, readable JSX + 34 `.ffx` with embedded
+  JSON control schema): reactor types (Pulse/Elastic/Oscillate/Steps/Wiggle/Flicker/Switch/Trigger ×
+  1D/2D/3D/Color), controls and defaults, expression maths, and the bake-based "Audio React" design
+  for 2Dope (package 9, future).
 
-Checks (actual): `npm test` **72 files / 574 passed**; `npm run build` passed (existing chunk-size
-warning only). **Not checked:** the new effects in a browser/pixel fixture, iPad cost of a 40 px
-blur, roughen on thin vs thick ink. Next sensible step is a fixture plus a visual check on
-`127.0.0.1:5217`, then the easing library in the report's Tier 1.
+Checks (actual): `npm test` **74 files / 584 passed** (the two extra files are the concurrent onion
+and Story work); `npm run build` passed (existing chunk-size warning only). **Not checked:** the new
+effects in a browser/pixel fixture, iPad cost of a 40 px blur, roughen on thin vs thick ink. Next
+sensible step is a fixture plus a visual check on `127.0.0.1:5217`, then the easing library in the
+report's Tier 1.
 
 ### Onion skin settings on the Onion button (2026-10-31, uncommitted)
 

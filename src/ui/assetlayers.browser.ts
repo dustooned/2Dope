@@ -14,7 +14,7 @@ const flip = new FlipMode(app, stage);
 const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh());
 const ui = new ArtworkAssetsUI(app, document.querySelector<HTMLElement>('.painting-header')!);
 const cards = new LayerCards(app);
-app.editAssetSource = (comp, layer) => ui.openSource(comp, layer);
+app.editAssetSource = (comp, layer) => ui.openSource(comp, layer, app.workspace === 'animate' && layer !== undefined);
 function refresh() { painting.update(); ui.update(); cards.update(); }
 app.onFrameChange = refresh; app.onWorkspaceChange = refresh; app.editor.onChange = refresh; app.history.onChange = refresh;
 const settle = () => new Promise<void>((r) => setTimeout(r, 120));
@@ -37,18 +37,18 @@ try {
   check('Layers names the artwork and offers the shot tracks', panel().getAttribute('aria-label') === 'Layers' && !!backButton()?.textContent?.includes('Shot tracks') && !!panel().querySelector('[aria-label="Layers of Tree"]'));
   check('Nothing to add or merge to the shot from the artwork view', !panel().querySelector('[aria-label="New layer"]'));
   backButton()!.click(); await settle();
-  check('Shot tracks shows the shot’s layers with the artwork as one group', names().includes('Tree') && !names().includes(sourceLayers[0]!), names());
+  check('Shot tracks leaves the artwork’s layers for the drawing you are on (tracks are on the timeline)', !names().includes(sourceLayers[0]!), names());
   check('A button goes back to the artwork’s layers', !!backButton()?.textContent?.includes('Layers of Tree'));
   backButton()!.click(); await settle();
   const target = [...panel().querySelectorAll<HTMLElement>('.lc-card')].find((c) => c.querySelector('.lc-name')?.textContent === sourceLayers[0])!;
   const targetId = target.dataset.id;
   target.click(); await settle();
-  check('Tapping a layer draws on it inside the artwork source', ui.assets.editing && app.project.activeComp === id && app.project.activeLayer === targetId && app.workspace === 'draw' && panel().hidden);
+  check('Tapping a layer draws on it inside the artwork source, staying in Animate (shared edits)', ui.assets.editing && app.project.activeComp === id && app.project.activeLayer === targetId && app.workspace === 'animate' && panel().hidden);
   ui.assets.done(); await settle();
   check('Done returns to the shot', app.project.activeComp === shot && !ui.assets.editing);
   app.setArrangeAssets(false); await settle();
   if (panel().hidden) cards.toggle(canvas); await settle();
-  check('Outside Move assets Layers shows the shot as before', names().includes('Tree') && !backButton(), names());
+  check('Outside Move assets, Animate’s Layers shows the drawing’s own layers, not the shot’s tracks', !names().includes('Tree') && !backButton() && names().length > 0, names());
 } catch (e) { check(String(e), false); }
 keys.forEach((k, i) => saved[i] === null ? localStorage.removeItem(k) : localStorage.setItem(k, saved[i]!));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

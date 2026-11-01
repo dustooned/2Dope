@@ -5,6 +5,7 @@ import type { AudioPlayback } from '../audio';
 import { BoardTimeline } from './boardtimeline';
 import { BoardGrid } from './boardgrid';
 import { parseScript, SCRIPT_MAX_PANELS } from '../core/script';
+import { MOVE_STICKERS, SHOT_STICKERS, sceneColour, scenesOf, stickersOf, toggleMove, toggleShot } from '../core/scenes';
 import { askLongText } from './dialogs';
 import { attachContextMenu, type CtxItem } from './contextmenu';
 import { frameMenu } from './framemenu';
@@ -227,9 +228,12 @@ export class BoardPanel {
     const p = app.project;
     const frag = document.createDocumentFragment();
     let startAt = b.start;
+    const scenes = scenesOf(b.exposures.map((x) => x.shot));
     b.exposures.forEach((e, i) => {
       if (i > 0) startAt += b.exposures[i - 1]!.length;
       const card = el('div', { class: 'bcard', role: 'listitem', 'data-i': String(i) });
+      // the scene's colour along the top (scenes come from "Sc N" in Shot / scene)
+      if (scenes[i]) { card.style.setProperty('--scene', sceneColour(scenes[i]!)); card.classList.add('in-scene'); }
       const head = el('div', { class: 'bhead' });
       head.append(el('span', { class: 'bnum', title: `Panel ${i + 1}` }, String(i + 1)));
       const dur = el('input', {
@@ -288,6 +292,12 @@ export class BoardPanel {
         const field = el('label', { class: 'board-writing-field' });
         field.append(el('span', {}, WRITING_LABEL[f.key]), t);
         card.append(field);
+        if (f.key === 'camera') card.append(this.stickers(i, e.camera));
+        if (f.key === 'shot') {
+          const scene = el('button', { type: 'button', class: 'bscene-new', title: 'This panel starts a new scene; every Shot / scene is renumbered (one Undo)', 'aria-label': `Panel ${i + 1}: new scene here` }, 'New scene here');
+          scene.addEventListener('click', () => app.newSceneAt(i));
+          card.append(scene);
+        }
       }
       frag.append(card);
     });
@@ -423,6 +433,28 @@ export class BoardPanel {
     (document.activeElement as HTMLElement | null)?.blur();
     this.sig = '';
     this.update();
+  }
+
+  /**
+   * Shot and camera stickers: tap a shot type (one per panel) or camera moves (any number). They
+   * write the Camera / framing words, so they print in the storyboard PDF; typed words stay.
+   */
+  private stickers(i: number, camera: string | undefined): HTMLElement {
+    const app = this.app;
+    const on = stickersOf(camera);
+    const row = el('div', { class: 'bstickers', role: 'group', 'aria-label': `Panel ${i + 1} shot and camera stickers` });
+    const chip = (label: string, title: string, pressed: boolean, next: () => string, kind: string) => {
+      const b = el('button', { type: 'button', class: `bsticker ${kind}`, title, 'aria-pressed': String(pressed) }, label);
+      b.addEventListener('click', () => {
+        app.setCaption(i, 'camera', next(), pressed ? 'Remove sticker' : 'Add sticker');
+        // keep the keyboard on the same sticker after the cards rebuild
+        setTimeout(() => this.cards.querySelector<HTMLElement>(`.bcard[data-i="${i}"] .bsticker[title="${title}"]`)?.focus(), 0);
+      });
+      row.append(b);
+    };
+    for (const [k, name] of SHOT_STICKERS) chip(k, name, on.shot === k, () => toggleShot(app.board?.exposures[i]?.camera, k), 'shot');
+    for (const [k, arrow] of MOVE_STICKERS) chip(arrow, k, on.moves.includes(k), () => toggleMove(app.board?.exposures[i]?.camera, k), 'move');
+    return row;
   }
 
   /** Script → panels: paste, see what it makes, add (after the selected panel). */

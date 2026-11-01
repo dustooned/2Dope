@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { BLEND_MODES, partOf, PART_LABEL, type BlendMode, type DrawingsLayer, type Layer, type PartName } from '../core/comp';
 import type { PropKey } from '../compedit';
 import { drawingAt } from '../core/timeline';
+import { isPaintingWorkspace } from '../core/workspace';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
 
@@ -88,7 +89,7 @@ export class LayerCards {
 
   /** The selection: the layer you draw on first, then the picked ones (in stack order). */
   private selection(): string[] {
-    const layers = this.app.workspace==='draw' && !this.app.project.comp.asset ? this.app.celLayers : this.app.project.comp.layers;
+    const layers = isPaintingWorkspace(this.app.workspace) && !this.app.project.comp.asset ? this.app.celLayers : this.app.project.comp.layers;
     const active = this.app.project.isPlaceholder ? '' : this.app.project.activeLayer;
     for (const id of [...this.picked]) if (!layers.some((l) => l.id === id) || id === active) this.picked.delete(id);
     const ids = layers.filter((l) => l.id === active || this.picked.has(l.id)).map((l) => l.id);
@@ -228,7 +229,8 @@ export class LayerCards {
     // Move assets with a placement chosen: the layers of that artwork, not the shot's tracks
     const placed = app.placedAsset;
     if (placed && !this.showTracks) return this.assetLayers(placed);
-    const paint=app.workspace==='draw';
+    // Draw and Animate: the layers of the drawing itself (its art layers); tracks live on the timeline
+    const paint=isPaintingWorkspace(app.workspace);
     const layers = (paint && !app.project.comp.asset ? app.celLayers : app.project.comp.layers).filter((l) => l.kind === 'drawings' || l.kind === 'comp');
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // options belong to the layer you draw on; picking another closes them
@@ -564,6 +566,15 @@ export class LayerCards {
     });
   }
 
+  /** Send a layer to another project (set by the app): the layer with its linked art layers. */
+  sendTo: ((layers: string[], name: string) => void) | null = null;
+  private sendLayer(l: Layer): void {
+    const comp = this.app.project.comp;
+    const ids = l.kind === 'drawings' && l.cel ? comp.layers.filter((x) => x.kind === 'drawings' && x.cel === l.cel).map((x) => x.id) : [l.id];
+    this.close();
+    this.sendTo?.(ids, l.name);
+  }
+
   /** Quick actions after a swipe left: Lock, Duplicate, Clear (a drawing layer's drawing here), Delete. */
   private quick(l: Layer): HTMLElement {
     const app = this.app;
@@ -577,6 +588,7 @@ export class LayerCards {
     act(l.locked ? 'Unlock' : 'Lock', 'lock', () => app.editor.setFlag(l.id, 'locked', !l.locked));
     act('Duplicate', 'copy', () => app.duplicateLayer(l.id));
     if (l.kind === 'drawings' && !l.guide && !l.locked) act('Clear', 'eraser', () => { app.pickLayer(l.id); app.clearFrame(); });
+    if (l.kind === 'drawings' && !l.guide && this.sendTo) act('Send to\u2026', 'folder', () => this.sendLayer(l));
     act('Delete', 'trash', async () => {
       if (await confirmBox(`Delete \u201c${l.name}\u201d?`, 'You can undo this.', 'Delete', true)) app.editor.deleteLayers([l.id]);
     }, true);
@@ -687,6 +699,7 @@ export class LayerCards {
       tile(layer, 'Art layer', 'plus', 'A linked art layer: the same frames and timing, its own drawing', () => app.addCelLayer(), false, true);
       tile(layer, 'Group', 'layers', 'Group this layer with the one below (a folder; tap it to fold open)', () => this.groupWithBelow(l), false, true);
       tile(layer, 'Merge', 'collapseall', 'Merge down: flatten this layer into the one below (same frames and placement)', () => app.mergeDown(l.id), false, true);
+      if (this.sendTo) tile(layer, 'Send to\u2026', 'folder', 'Send a copy of this layer (with its linked art layers and every frame) to another project', () => this.sendLayer(l), false, true);
     }
     if (l.kind === 'comp') tile(section('Group'), 'Ungroup', 'expandall', 'Put the group’s layers back in place of the group', () => { app.editor.ungroup(l.id); this.openGroups.delete(l.id); }, false, true);
     box.append(grid);

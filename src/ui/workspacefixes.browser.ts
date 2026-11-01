@@ -52,7 +52,7 @@ try {
   const target=app.project.comp.layers.find(l=>l.id===original.id)!;pickCard(target.id);await settle();check('Picking a paint card changes the drawing target within the same source',app.project.activeComp===asset && app.project.activeLayer===target.id);
   const eye=document.querySelector<HTMLButtonElement>(`.lc-card[data-id="${target.id}"] .lc-eye`)!;eye.click();await settle();check('The paint layer eye changes source visibility, preserving the placement',!app.project.comp.layers.find(l=>l.id===target.id)!.visible && app.project.comps.get(shotId)!.layers.some(l=>l.id===placement.id));app.undo();await settle();
   cards.close();assets.assets.done();await settle();check('Done restores the shot and preserves its placement and tracks',app.project.activeComp===shotId && !assets.assets.editing && app.project.comp.layers.some(l=>l.id===placement.id));
-  app.setWorkspace('animate');cards.toggle(canvas);await settle();check('Animate still shows shot tracks',names().includes(placement.name));cards.close();
+  app.setWorkspace('animate');cards.toggle(canvas);await settle();check('Animate shows the drawing’s own layers, not the shot tracks (tracks are on the timeline)',!names().includes(placement.name)&&names().length>0);cards.close();
   app.editor.select(null);app.setWorkspace('draw');app.project.activeLayer=app.project.comp.layers.find(l=>l.kind==='drawings')!.id;cards.toggle(canvas);await settle();
   check('Standalone Draw shows only the current drawing’s paint stack',!names().includes(placement.name) && names().length===app.celLayers.length);
   cards.close();assets.assets.open(asset);app.editor.deleteLayers(app.project.comp.layers.map(l=>l.id));app.addPaintLayer();await settle();

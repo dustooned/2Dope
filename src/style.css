@@ -5026,6 +5026,16 @@ body.presenting .subtitle { bottom: 132px; font-size: clamp(16px, 2.4vw, 26px); 
 /* Script to panels: a wide box for pasting */
 dialog.long-text { width: min(640px, calc(100vw - 32px)); }
 .long-textbox { width: 100%; min-height: 220px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+/* Story scenes (from "Sc N" in Shot / scene) and shot / camera stickers */
+.bcard.in-scene, .btile.in-scene { border-top: 4px solid var(--scene); }
+.bscene-new { align-self: flex-start; min-height: 32px; padding: 0 10px; font-size: 12px; }
+.bstickers { display: flex; flex-wrap: wrap; gap: 4px; }
+.bsticker { min-width: 34px; min-height: 32px; padding: 0 6px; border-radius: var(--radius-md); font-size: 12px; font-weight: 600; }
+.bsticker.move { min-width: 32px; font-size: 14px; }
+.bsticker[aria-pressed='true'] { background: var(--accent); color: var(--on-accent, #fff); border-color: var(--accent); }
+.bgrid-scene { grid-column: 1 / -1; justify-self: stretch; text-align: left; min-height: 40px; padding: 0 10px; border: 0; border-left: 6px solid var(--scene); border-radius: var(--radius-md); background: var(--panel-2); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btile-stickers { position: absolute; left: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 3px; pointer-events: none; }
+.btile-stickers span { padding: 1px 5px; border-radius: var(--pill); background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 11px; font-weight: 700; }
 
 /* First run: one welcome screen (tips, interface, how to start) */
 dialog.firstrun { max-width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }

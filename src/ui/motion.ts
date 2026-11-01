@@ -9,6 +9,8 @@ import { newSeed } from '../core/rng';
 import { WIGGLE_DEFAULTS, type LoopMode, type StaggerOrder, type WiggleDims, type WiggleOptions } from '../core/keytools';
 import { isPartProp, isPin, keyId, PROP_LABEL, type KeyRef, type PropKey, type PropName } from '../compedit';
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
+import { reactToAudio } from './audioreactdialog';
+import type { SoundBank } from '../io/sound';
 import { attachContextMenu, type CtxItem } from './contextmenu';
 import { rulerStep } from '../core/timecode';
 
@@ -930,6 +932,9 @@ export class MotionPanel {
 
   private wiggleLast: WiggleOptions = { ...WIGGLE_DEFAULTS, seed: 1 };
 
+  /** The shot's decoded audio (set by the app), for React to audio. */
+  sounds: SoundBank | null = null;
+
   private async askSmooth(): Promise<void> {
     const r = await askNumbers('Smooth keys', [{ label: 'Tolerance', value: 1, step: 0.5, unit: 'how far the motion may drift' }], 'Smooth');
     if (r) this.ed.smoothSelectedKeys(Math.max(0, r[0]!));
@@ -981,6 +986,7 @@ export class MotionPanel {
         { label: 'Wiggle…', run: () => void this.askWiggle(ref) },
         { label: 'Smooth keys…', run: () => void this.askSmooth() },
         { label: 'Loop keys…', run: () => void this.askLoop() },
+        { label: 'React to audio…', run: () => reactToAudio(this.app, this.sounds) },
         { label: 'Copy easing', run: () => ed.copyEasing() },
         { label: 'Paste easing', disabled: !ed.easeClipboard, run: () => ed.pasteEasing() },
         { label: 'Go to this key', run: () => this.app.setFrame((ed.layer(ref.layer)?.start ?? 0) + ref.f) },

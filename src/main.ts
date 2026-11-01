@@ -21,6 +21,8 @@ import { VideoExportUI } from './ui/videoexport';
 import { ShareView } from './ui/share';
 import { FileUI } from './ui/files';
 import { Gallery } from './ui/gallery';
+import { pickBox } from './ui/dialogs';
+import { sendToProject, type SendItem, type SendWhere } from './io/sendto';
 import { firstRunPending, showFirstRun } from './ui/firstrun';
 import { TimeLapse } from './ui/timelapse';
 import type { SampleId } from './io/samples';
@@ -349,6 +351,7 @@ const present = new StoryPresent(app, $('#stage'), () => {
 });
 app.onFrameChange = chain(app.onFrameChange, () => present.update());
 const audioPlayback = new AudioPlayback(app);
+motion.sounds = audioPlayback.bank;
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 // In the tracks sheet, sounds are rows under the layers; their settings open in a floating card.
 strip.audio = { active: () => sheet.active, sig: () => audioTracks.railSig(), rows: (t, x, c, w) => audioTracks.railRows(t, x, c, w) };
@@ -703,7 +706,8 @@ paintingUI.editWorkspace = anchor => editWorkspace(anchor);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
 paintingUI.onReset = () => artworkUI.resetLayout();
-app.editAssetSource = (comp, layer) => artworkUI.openSource(comp, layer);
+// a layer tapped in Animate's Layers edits the artwork right there; Edit source goes to Draw
+app.editAssetSource = (comp, layer) => artworkUI.openSource(comp, layer, app.workspace === 'animate' && layer !== undefined);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => artworkUI.update());
 app.onFrameChange = chain(app.onFrameChange, () => artworkUI.update());
 app.history.onChange = chain(app.history.onChange, () => artworkUI.update());
@@ -838,6 +842,30 @@ files.askNew = async () => {
   }
   return newUI.open(null);
 };
+// Send to project: a layer (with its linked art layers) or an asset, copied into another project
+// without opening it: pick the project, then where (its start, or its asset library)
+async function sendToFlow(item: SendItem, label: string): Promise<void> {
+  const f = files;
+  if (!f || app.strokeActive) return;
+  const others = (await f.store.listProjects()).filter((m) => m.id !== f.current?.id).sort((a, b) => b.opened - a.opened);
+  if (!others.length) { f.toast('Make another project first, then send things to it.', [], 5000); return; }
+  const target = await pickBox(`Send ${label} to`, others.map((m) => ({ label: m.name, value: m.id, hint: `${m.width}×${m.height} · ${m.frames > 1 ? `${m.frames} frames` : 'still'}` })));
+  const meta = others.find((m) => m.id === target);
+  if (!target || !meta) return;
+  const where = await pickBox<SendWhere>(`Where in “${meta.name}”?`, [
+    { label: 'Start of the animation', value: 'start', hint: item.kind === 'asset' ? 'Placed at frame 1' : 'As a layer, exactly as it is, from frame 1' },
+    { label: 'Asset library', value: 'library', hint: 'Ready to place, not placed yet' },
+  ]);
+  if (!where) return;
+  try {
+    const r = await sendToProject(app.project, item, f.store, target, where, app.residency);
+    f.toast(`Sent ${r.name} to “${r.target}”${where === 'library' ? ' (in its assets)' : ''}${r.scaled ? ', scaled to fit its page' : ''}.`, [{ label: 'Open project', run: () => void f.openProject(target) }], 8000);
+  } catch (e) {
+    f.toast(`Could not send ${label}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+layerCards.sendTo = (layers, name) => void sendToFlow({ kind: 'layer', layers }, name);
+artworkUI.sendTo = (comp, name) => void sendToFlow({ kind: 'asset', comp }, name);
 const showGallery = () => void gallery.open();
 $('#open-gallery').addEventListener('click', showGallery);
 document.querySelectorAll('[data-file="projects"]').forEach((b) => b.addEventListener('click', showGallery));

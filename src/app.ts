@@ -74,6 +74,7 @@ import { constrainShape, editShape, fitAs, pressureProfile, recognizeShape, samp
 import { drawVectorStroke, clearVectorRenderCache, hasVisibleVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
 import type { ScriptPanel } from './core/script';
+import { renumberScenes } from './core/scenes';
 import { snapRotation, Viewport } from './view/viewport';
 
 const BRUSH_KEY = '2dope.m0.brush';
@@ -3836,8 +3837,16 @@ export class App {
     this.editTimeline('Panel duration', (ex) => ({ ex: setHolds(ex, [index], Math.round(frames)), frame: this.lf }), true);
   }
 
-  setCaption(index: number, field: CaptionField, text: string): void {
-    this.editTimeline('Edit caption', (ex) => ({ ex: setCaption(ex, index, field, text), frame: this.lf }), true);
+  setCaption(index: number, field: CaptionField, text: string, label = 'Edit caption'): void {
+    this.editTimeline(label, (ex) => ({ ex: setCaption(ex, index, field, text), frame: this.lf }), true);
+  }
+
+  /** Start a new scene at this panel: every panel's Shot / scene is renumbered ("Sc 2 · Sh 1"), one Undo step. */
+  newSceneAt(index: number): void {
+    this.editTimeline('New scene', (ex) => {
+      const shots = renumberScenes(ex.map((e) => e.shot), index);
+      return { ex: shots.reduce((out, s, i) => setCaption(out, i, 'shot', s), ex), frame: this.lf };
+    }, true);
   }
 
   /** Images (board sketches, photos) as new two-second panels after the current one: one undo step. */

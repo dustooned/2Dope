@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick } from './contextmenu';
 import { frameMenu } from './framemenu';
 import { parseDialogue } from '../core/dialogue';
+import { MOVE_STICKERS, parseShot, sceneColour, scenesOf, stickersOf } from '../core/scenes';
 
 /**
  * Story → Grid: the board as a wall of pictures (the panels' order at a glance). Each tile shows its
@@ -32,6 +33,8 @@ export class BoardGrid {
   private readonly colsOut = el('output', { class: 'bgrid-cols', 'aria-live': 'polite' });
   private cols = GRID_COLS.default;
   private sig = '';
+  /** Scenes folded shut in this grid (this session only). */
+  private readonly folded = new Set<number>();
   private drag: { i: number; x: number; y: number; id: number; moved: boolean; hold: number; over: number } | null = null;
 
   constructor(
@@ -114,6 +117,16 @@ export class BoardGrid {
     this.list.addEventListener('pointerup', (e) => end(e, false));
     this.list.addEventListener('pointercancel', (e) => end(e, true));
     this.list.addEventListener('click', (e) => {
+      const head = (e.target as HTMLElement).closest<HTMLElement>('.bgrid-scene');
+      if (head) {
+        const sc = Number(head.dataset.scene);
+        if (this.folded.has(sc)) this.folded.delete(sc);
+        else this.folded.add(sc);
+        this.sig = '';
+        this.update();
+        this.list.querySelector<HTMLElement>(`.bgrid-scene[data-scene="${sc}"]`)?.focus();
+        return;
+      }
       const tile = (e.target as HTMLElement).closest<HTMLElement>('.btile');
       if (tile) app.goPanel(Number(tile.dataset.i));
     });
@@ -125,7 +138,7 @@ export class BoardGrid {
       const tile = (e.target as HTMLElement).closest<HTMLElement>('.btile');
       if (!tile) return;
       const i = Number(tile.dataset.i);
-      const n = this.list.children.length;
+      const n = this.list.querySelectorAll('.btile').length;
       const go = (j: number) => { if (j < 0 || j >= n) return; e.preventDefault(); e.stopPropagation(); app.goPanel(j); this.list.querySelector<HTMLElement>(`.btile[data-i="${j}"]`)?.focus(); };
       if (e.key === 'ArrowRight') go(i + 1);
       else if (e.key === 'ArrowLeft') go(i - 1);
@@ -172,11 +185,25 @@ export class BoardGrid {
     if (!b || this.root.hidden) return;
     const p = app.project;
     const ex = b.exposures;
-    const sig = `${b.id}|${p.comp.fps}|${app.timeFormat}|` + ex.map((e) => `${e.drawing}:${e.length}:${e.dialogue ?? ''}:${e.action ?? ''}:${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join('|');
+    const sig = `${b.id}|${p.comp.fps}|${app.timeFormat}|${[...this.folded].join(',')}|` + ex.map((e) => `${e.drawing}:${e.length}:${e.dialogue ?? ''}:${e.action ?? ''}:${e.shot ?? ''}:${e.camera ?? ''}:${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join('|');
     if (sig !== this.sig && !this.drag) {
       this.sig = sig;
       const h = Math.round((192 * p.height) / p.width);
-      this.list.replaceChildren(...ex.map((e, i) => {
+      const scenes = scenesOf(ex.map((e) => e.shot));
+      const items: HTMLElement[] = [];
+      ex.forEach((e, i) => {
+        const sc = scenes[i]!;
+        // a scene's header before its first panel: colour, heading, how many panels and how long
+        if (sc && scenes[i - 1] !== sc) {
+          let n = 0, len = 0;
+          for (let j = i; j < ex.length && scenes[j] === sc; j++) { n++; len += ex[j]!.length; }
+          const heading = parseShot(e.shot)?.rest ?? '';
+          const open = !this.folded.has(sc);
+          const head = el('button', { type: 'button', class: 'bgrid-scene', 'data-scene': String(sc), 'aria-expanded': String(open), title: open ? 'Fold this scene' : 'Show this scene’s panels' }, `${open ? '▾' : '▸'} Scene ${sc}${heading ? ` · ${heading}` : ''} · ${n} panel${n === 1 ? '' : 's'} · ${app.fmtDur(len)}`);
+          head.style.setProperty('--scene', sceneColour(sc));
+          items.push(head);
+        }
+        if (sc && this.folded.has(sc)) return;
         const line = tileLine(e.dialogue, e.action);
         const tile = el('div', { class: 'btile', role: 'listitem', tabindex: '0', 'data-i': String(i), 'aria-label': `Panel ${i + 1}, ${app.fmtDur(e.length)}${line ? `: ${line}` : ''}`, title: line || `Panel ${i + 1}` });
         const pic = el('canvas', { class: 'btile-pic', width: '192', height: String(h), 'aria-hidden': 'true' });
@@ -184,18 +211,30 @@ export class BoardGrid {
         const meta = el('div', { class: 'btile-meta' });
         meta.append(el('span', { class: 'btile-num' }, String(i + 1)), el('span', { class: 'btile-len' }, app.fmtDur(e.length)));
         tile.append(pic, meta, el('p', { class: 'btile-line' }, line));
-        return tile;
-      }));
+        // shot and camera stickers as small badges on the picture
+        const st = stickersOf(e.camera);
+        if (st.shot || st.moves.length) {
+          const badges = el('span', { class: 'btile-stickers', 'aria-hidden': 'true' });
+          if (st.shot) badges.append(el('span', { class: 'shot' }, st.shot));
+          for (const m of st.moves) badges.append(el('span', { class: 'move', title: m }, MOVE_STICKERS.find(([k]) => k === m)?.[1] ?? m));
+          tile.append(badges);
+        }
+        if (sc) { tile.style.setProperty('--scene', sceneColour(sc)); tile.classList.add('in-scene'); }
+        items.push(tile);
+      });
+      this.list.replaceChildren(...items);
     }
     let at = 0;
     const cur = app.lf;
-    this.list.querySelectorAll<HTMLElement>('.btile').forEach((t, i) => {
-      const len = ex[i]?.length ?? 0;
-      const on = cur >= at && cur < at + len;
+    const tiles = new Map([...this.list.querySelectorAll<HTMLElement>('.btile')].map((t) => [Number(t.dataset.i), t]));
+    ex.forEach((e, i) => {
+      const t = tiles.get(i);
+      const on = cur >= at && cur < at + e.length;
+      at += e.length;
+      if (!t) return;
       t.classList.toggle('on', on);
       t.classList.toggle('selected', app.selection.includes(i));
       t.setAttribute('aria-current', String(on));
-      at += len;
     });
   }
 }

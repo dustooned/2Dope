@@ -30,15 +30,16 @@ export class ArtworkAssets {
     return id;
   }
 
-  /** Draw in a source: on `layerId` when given, else where you last were in it. */
-  open(id: string, layerId?: string): boolean {
+  /** Draw in a source: on `layerId` when given, else where you last were in it. `stay` keeps Animate (else Draw). */
+  open(id: string, layerId?: string, stay = false): boolean {
     const a = this.app, p = a.project, c = p.comps.get(id);
     if (a.strokeActive || !c?.asset || id === p.main) return false;
     this.rememberPosition();
     if (!this.editing || this.origin?.project !== p) this.origin = {
       project: p, comp: p.activeComp, layer: p.activeLayer, frame: a.frame, workspace: a.workspace,
     };
-    a.setWorkspace('draw');
+    // Animate keeps Animate (edit the artwork live in the shot's mode); everywhere else, Draw
+    if (!(stay && a.workspace === 'animate')) a.setWorkspace('draw');
     const position = this.positions.get(p)?.get(id);
     const chosen = c.layers.find(l => l.kind === 'drawings' && l.id === layerId);
     const layer = c.layers.find(l => l.kind === 'drawings' && l.id === position?.layer);

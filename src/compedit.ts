@@ -1152,6 +1152,40 @@ export class CompEditor {
     return done;
   }
 
+  /**
+   * Audio React: add baked offsets to properties, one key per frame (comp frames, turned into each
+   * layer's time); a point gets them on both axes or one. One undo step, "React to audio".
+   */
+  bakeReaction(rows: { layer: string; prop: PropKey }[], values: { frame: number; value: number }[], axis: 'both' | 'x' | 'y' = 'both'): boolean {
+    if (!rows.length || !values.length) return false;
+    const done = this.edit('React to audio', (c) => {
+      for (const r of rows) {
+        const l = c.layers.find((x) => x.id === r.layer);
+        if (!l) continue;
+        const before = this.getProp(l, r.prop);
+        let p = before;
+        for (const { frame, value } of values) {
+          const f = frame - l.start, base = valueAt(before, f);
+          const v = typeof base === 'number' ? base + value : ([base[0] + (axis === 'y' ? 0 : value), base[1] + (axis === 'x' ? 0 : value)] as Vec2);
+          p = setKey(p, f, v as never, 'linear');
+        }
+        this.setProp(l, r.prop, p);
+      }
+    });
+    this.onChange();
+    return done;
+  }
+
+  /** The property rows of the selected keys (one entry per row). */
+  selectedRows(): { layer: string; prop: PropKey; from: number; to: number }[] {
+    const rows = new Map<string, { layer: string; prop: PropKey; from: number; to: number }>();
+    for (const r of this.selectedKeys()) {
+      const id = `${r.layer}|${r.prop}`, row = rows.get(id);
+      if (row) { row.from = Math.min(row.from, r.f); row.to = Math.max(row.to, r.f); } else rows.set(id, { layer: r.layer, prop: r.prop, from: r.f, to: r.f });
+    }
+    return [...rows.values()];
+  }
+
   /** The easing copied with Copy easing (both sides of a segment). */
   easeClipboard: { out: Side; in: Side } | null = null;
 

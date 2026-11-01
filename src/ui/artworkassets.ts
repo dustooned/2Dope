@@ -162,7 +162,6 @@ export class ArtworkAssetsUI {
   update(): void {
     const a = this.app;
     this.library.update();
-    if (this.assets.editing && a.workspace === 'animate' && !a.strokeActive) this.assets.done(true);
     this.create.hidden = a.workspace !== 'draw' || this.assets.editing;
     this.browse.hidden = !isPaintingWorkspace(a.workspace);
     this.context.hidden = !this.assets.editing;
@@ -249,8 +248,11 @@ export class ArtworkAssetsUI {
     this.update();
   }
   /** Draw in a source (on one of its layers, when given). */
-  openSource(id: string, layer?: string): void {
-    if (this.assets.open(id, layer)) { this.update(); this.app.focusCanvas(); }
+  /** `here`: stay in Animate (a layer tapped in Animate's Layers; the header says how many places it updates). */
+  /** Send an asset to another project (set by the app: pick the project, then where). */
+  sendTo: ((comp: string, name: string) => void) | null = null;
+  openSource(id: string, layer?: string, here = false): void {
+    if (this.assets.open(id, layer, here)) { this.update(); this.app.focusCanvas(); }
   }
   private async renameSelected(): Promise<void> {
     const a=this.app,l=a.placedAsset,project=a.project,comp=project.activeComp;
@@ -273,9 +275,11 @@ export class ArtworkAssetsUI {
       const choice=await pickBox('Copy artwork',[
         {label:'Duplicate placement',value:'duplicate' as const,hint:'Add another placement linked to the same editable source.'},
         {label:'Make independent',value:'independent' as const,hint:'Give this placement its own editable artwork. Other placements keep their shared source.'},
+        ...(this.sendTo?[{label:'Send to another project\u2026',value:'send' as const,hint:'A copy of this asset in another of your projects: at its start, or in its asset library.'}]:[]),
       ]);
       if(!choice||a.project!==project||project.activeComp!==comp||a.placedAsset?.id!==l.id||a.strokeActive||a.playing)return;
-      if(choice==='duplicate')a.duplicatePlacedAsset();
+      if(choice==='send'){const src=project.comps.get(l.comp);if(src)this.sendTo?.(src.id,src.name);}
+      else if(choice==='duplicate')a.duplicatePlacedAsset();
       else {
         const pending=this.assets.makeIndependent(l.id);this.update();
         const source=await pending;
@@ -390,6 +394,7 @@ export class ArtworkAssetsUI {
         rename.disabled=this.app.playing;actions.append(rename);
         const save = button('Save', 'save', () => void this.saveToLibrary(c.id, save), `Save ${c.name} to My Assets`);
         save.disabled = this.app.playing || this.library.busy; actions.append(save);
+        if (this.sendTo) { const send = action('Send to\u2026', 'folder', () => this.sendTo?.(c.id, c.name), `Send ${c.name} to another project`); send.disabled = this.app.playing; actions.append(send); }
       }
       card.append(thumb, info, actions); grid.append(card); previews.push({comp:c, canvas});
     }

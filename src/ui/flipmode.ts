@@ -85,7 +85,17 @@ export class FlipMode {
     const prev = btn('Previous drawing', 'Previous drawing (hold: the first frame)', 'prev', () => this.app.prevDrawing(), () => this.app.setLayerFrame(0), 'flip-btn flip-icon', '');
     const next = btn('Next drawing', 'Next drawing (hold: the last frame)', 'next', () => this.app.nextDrawing(), () => this.app.setLayerFrame(this.app.project.length - 1), 'flip-btn flip-icon', '');
     const add = btn('Frame', 'Add a frame right after this drawing (after its whole hold). Hold the button to end the hold here instead.', 'plus', () => this.app.flipAddFrame(true), () => this.app.flipAddFrame(false), 'flip-btn flip-add');
-    const track = btn('Track', 'Add a track right above this one, from frame 1 (drag a track\u2019s box up or down to reorder)', 'layers', () => this.app.addFlipTrack(), undefined, 'flip-btn flip-adv');
+    // tracks are added here, on the timeline: tap for an animation track, hold or right-click for every kind
+    const trackKinds = (): CtxItem[] => [
+      { title: 'New track' },
+      { label: 'Animation', hint: 'Shift+N', run: () => this.app.addFlipTrack() },
+      { label: 'Background', run: () => this.app.addStillLayer('background') },
+      { label: 'Object', run: () => this.app.addStillLayer('object') },
+      { label: 'Notes', run: () => this.app.addNotesLayer() },
+      { label: 'Media\u2026', run: () => this.app.pickMedia?.() },
+    ];
+    const track = btn('Track', 'Add an animation track above this one, from frame 1. Hold (or right-click) for a background, object, notes or media track. Drag a track\u2019s box up or down to reorder.', 'layers', () => this.app.addFlipTrack(), () => { const r = track.getBoundingClientRect(); showContextMenu(r.left, r.bottom, trackKinds()); }, 'flip-btn flip-adv');
+    attachContextMenu(track, () => trackKinds());
     const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
     onion.classList.add('flip-onion');
     onionHold(this.app, onion);

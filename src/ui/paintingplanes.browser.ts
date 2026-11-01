@@ -37,9 +37,10 @@ const hit=(e:HTMLElement)=>{const r=e.getBoundingClientRect();return r.width>=43
 let passed=0,failed=0;
 function check(name:string,ok:boolean){const li=document.createElement('li');li.textContent=`${ok?'PASS':'FAIL'}: ${name}`;document.querySelector('#results')!.append(li);if(ok)passed++;else failed++;}
 try{
-  await settle();app.setWorkspace('animate');click('Layers',tools());click('New layer',panel());click('Background',panel());await settle();app.setWorkspace('draw');await settle();
+  // tracks (background, object, media) are added on the timeline: the flipbook's Track menu
+  await settle();app.setWorkspace('animate');flip.set(true);await settle();getButton('Track',document.querySelector('.flip-head')!).dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:10,clientY:10}));click('Background',document.querySelector('.ctxmenu')!);await settle();app.setWorkspace('draw');await settle();click('Layers',tools());await settle();
   const background=app.project.layer,drawing=app.drawing;
-  check('Layers creates a selected still background behind the drawing layer',background.kind==='drawings'&&background.still===true&&app.project.comp.layers.at(-1)?.id===background.id);
+  check('The Track menu creates a selected still background behind the drawing layer',background.kind==='drawings'&&background.still===true&&app.project.comp.layers.at(-1)?.id===background.id);
   click('Close layers',panel());check('Close layers returns focus to the canvas',!cards.open&&document.activeElement===canvas);
   app.history.clear();click('Fill',options());
   check('Options Fill selects the Fill plane and keeps Brush',app.plane==='fill'&&app.tool==='brush'&&!app.history.canUndo);
