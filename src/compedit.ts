@@ -719,13 +719,17 @@ export class CompEditor {
   // -------------------------------------------------------------------------------------------
   // Layers
 
+  /** Counts explicit selections (the Effects card follows a pick, even of the layer already selected). */
+  picks = 0;
+
   select(id: string | null, add = false): void {
+    this.picks++;
     if (id === null) this.selected = [];
     else if (add) this.selected = this.selected.includes(id) ? this.selected.filter((x) => x !== id) : [...this.selected, id];
     else this.selected = [id];
     const l = this.primary;
     if (l && l.kind === 'drawings') this.app.focusLayer(l.id);
-    if (l) this.open.add(l.id);
+    // selecting never unfolds a row: its ▸ arrow shows the properties
     this.keys.clear();
     this.onChange();
     this.app.requestRender();

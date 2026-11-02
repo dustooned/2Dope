@@ -380,6 +380,41 @@ check('An adjustment layer’s effects change the layers below it, not above, mi
   return at(out(), 20, 20)[0] === RED[0] || 'without effects it should change nothing';
 });
 
+// A new adjustment layer opens its effects while you keep your layer: the card must stay on it
+check('Effects added after + Adjustment go on the adjustment layer, not the layer you draw on', () => {
+  app.openEffects = (id) => panel.show(id);
+  const edChange = app.editor.onChange, toolChange = app.onToolChange;
+  app.editor.onChange = () => { edChange(); panel.follow(); };
+  app.onToolChange = () => { toolChange?.(); panel.follow(); };
+  const mine = app.project.layer.id, before = app.project.comp.layers.length;
+  app.editor.addLayer('adjustment', mine);
+  const adj = app.project.comp.layers.find((l) => l.kind === 'drawings' && l.adjust);
+  if (!adj || app.project.comp.layers.length !== before + 1) return 'no adjustment layer made';
+  if (app.project.layer.id !== mine) return 'the layer you draw on changed';
+  // what happens around a new layer: the selection and tool notifications fire again
+  app.editor.onChange(); app.onToolChange?.();
+  const root = document.querySelector<HTMLElement>('.fxpanel')!;
+  addButtons(root).find((b) => b.textContent?.trim() === 'Vignette')?.click();
+  const fxOf = (id: string) => { const l = app.project.comp.layers.find((x) => x.id === id); return l?.kind === 'drawings' ? (l.effects ?? []).map((e) => e.type) : []; };
+  if (!fxOf(adj.id).includes('vignette')) return `the adjustment layer has ${JSON.stringify(fxOf(adj.id))}`;
+  if (fxOf(mine).includes('vignette')) return 'the effect went on the layer you draw on';
+  // picking another layer still moves the card along
+  app.setWorkspace('motion'); app.editor.select(mine);
+  addButtons(root).find((b) => b.textContent?.trim() === 'Vignette')?.click();
+  const followed = fxOf(mine).includes('vignette');
+  app.history.undo(); app.history.undo(); app.history.undo();
+  app.setWorkspace('draw');
+  return followed || 'after selecting another layer the card did not follow';
+});
+
+check('Selecting a layer in Motion leaves its properties folded; the arrow unfolds them', () => {
+  const id = app.project.layer.id;
+  app.editor.open.delete(id);
+  app.editor.select(id);
+  if (app.editor.open.has(id)) return 'selecting unfolded the layer';
+  return true;
+});
+
 // What it looks like: a thin line, a thick stroke and a filled shape (for a person to look at)
 const looks = document.querySelector<HTMLElement>('#looks')!;
 const art: [string, Paint][] = [

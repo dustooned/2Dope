@@ -2,6 +2,47 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Motion layers: blend mode, clipping mask, layer mask (2026-11-01, committed)
+
+Owner: "layers should have masking, color modes etc" in Motion (Draw's layer options had them;
+Motion's layer menu did not).
+- `src/ui/motion.ts` `layerActions` / `runLayerAction`: Blend mode… (pickBox of `BLEND_MODES`;
+  not on camera / anchor layers), Clipping mask on/off, Add mask / Edit mask / Delete mask (drawings
+  layers that are not guides or adjustment layers). Same edits as Draw (`editor.edit`, `app.addMask`,
+  `app.deleteMask`), one undo step each. Add / Edit mask focus the layer, switch to Draw and turn
+  mask painting on (brushes paint masks; Motion has no brushes). Both the ⋯ button and the
+  right-click / hold menu use this list. Row name shows ↳ (clip) and ◐ (mask); the tooltip names
+  the blend mode.
+- Manual (Motion list) and an UPDATES entry.
+- Checks: `npx vitest run` 643 + 1 skipped; build passes; fixtures effects 25/25, quickmenu 34/34,
+  workspacefixes 23/23, commandrow 44/44. In the dev app (test-origin project, Drawing 4): the ⋯
+  menu listed the three new entries; Multiply and Clipping mask updated the row (↳, tooltip);
+  Add mask opened Draw with "Mask on"; three Undos restored the layer (↳ ◐ and Multiply gone).
+- Not checked: touch hold menu, mask on a layer inside a group (comp), blend on comp layers by eye.
+  No new fixture covers the Motion menu entries (MotionView is not built in a fixture).
+
+### Adjustment-layer effects go on the right layer; Motion rows fold by arrow (2026-11-01, committed)
+
+Owner report: effects added right after making an adjustment layer went on the wrong layer, and
+tapping a layer in Motion always unfolded all its properties.
+- Cause 1: `addLayer('adjustment')` opens the card on the new layer but keeps your layer selected
+  (by design); the next `editor.onChange` / `onToolChange` ran `EffectsPanel.follow()`, which saw
+  your layer as the target and switched the card back, so + Add effect landed on your layer.
+  Fix (`src/ui/effectspanel.ts`): the card remembers the target and `CompEditor.picks` (a new
+  counter bumped by every `select()`, `src/compedit.ts`) from when it opened or last followed, and
+  only follows when the layer you draw on changes or you pick a layer (even the same one again).
+- Cause 2: both `CompEditor.select()` and Motion's name tap (`src/ui/motion.ts`) added the layer to
+  `editor.open`. Removed; the existing ▸/▾ chevron is now the only way to unfold. New layers still
+  open unfolded (`addLayer`). Name tooltip mentions the arrow.
+- Manual (Motion list) and an UPDATES entry.
+- Checks: `npx vitest run` 643 passed + 1 skipped; `npm run build` passes; fixture `effects` 25/25
+  (2 new checks: Vignette after + Adjustment lands on the adjustment layer and not yours, picking
+  your layer moves the card back; selecting leaves the row folded). audioreact, canvasview,
+  paintinglayout, playbackrange, quickmenu, storyexport, workspacefixes, assetreplace, placement
+  pass (run before the `picks` refinement, which only touches the Effects card). In the dev app
+  (test origin): a name tap selected Drawing 4 and left it folded; ▸ showed 8 rows, ▾ folded them.
+- Not checked: touch, the Draw-side Adjustment tile clicked by hand.
+
 ### Cursor choice; iteration 3 follow-ups (2026-11-01, committed with iteration 3)
 
 Owner: "add all those changes" (the open iteration-3 decisions), plus student feedback asking for

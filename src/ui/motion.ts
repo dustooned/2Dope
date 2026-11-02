@@ -2,7 +2,7 @@ import type { App } from '../app';
 import { PlaybackRangeControl } from './playbackrange';
 import { autoIcon, iconSvg, setLabel } from './icons';
 import { CURVES, curveOf, easingOf, EASINGS, isAnimated, spacingTicks, type Curve, type Easing, type Prop, type Vec2 } from '../core/anim';
-import { compLength, layerEnd, PART_LABEL, PART_NAMES, partOf, playsOn, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
+import { BLEND_MODES, compLength, layerEnd, PART_LABEL, PART_NAMES, partOf, playsOn, type BlendMode, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
 import { newEffect } from '../core/effects';
 import { newSeed } from '../core/rng';
@@ -20,7 +20,8 @@ const LEFT_W = 196;
 const DRAG = 4;
 const LABELS = ['#9a9aa8', '#ff5a8a', '#ffd24a', '#4aa3ff', '#4ade80', '#c084fc', '#fb923c'];
 const KIND_COLOR: Record<Layer['kind'], string> = { drawings: '#6f82e8', comp: '#3fbf8f', camera: '#e0a83c', null: '#8f8fa3' };
-type LayerAct = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'play' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique' | 'effects';
+const blendName = (b: BlendMode) => `${b[0]!.toUpperCase()}${b.slice(1)}`;
+type LayerAct = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'play' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique' | 'effects' | 'blend' | 'clip' | 'mask' | 'editmask' | 'unmask';
 
 const KIND_ICON: Record<Layer['kind'], string> = { drawings: '✎', comp: '▣', camera: '🎥', null: '✛' };
 
@@ -503,7 +504,9 @@ export class MotionPanel {
     const chev = el('button', { type: 'button', class: 'chev', 'aria-label': ed.open.has(l.id) ? 'Hide properties' : 'Show properties', 'data-act': 'twirl' }, ed.open.has(l.id) ? '▾' : '▸');
     const dot = el('span', { class: 'ldot' });
     dot.style.background = LABELS[l.label] ?? LABELS[0]!;
-    const name = el('button', { type: 'button', class: 'lname', 'data-act': 'name', title: 'Tap to select. Double-tap to rename.' }, `${KIND_ICON[l.kind]} ${l.name}`);
+    const marks = `${l.kind === 'drawings' && l.clip ? ' ↳' : ''}${l.kind === 'drawings' && l.mask ? ' ◐' : ''}`;
+    const how = [l.kind === 'drawings' && l.clip ? 'clipping mask' : '', l.kind === 'drawings' && l.mask ? 'has a mask' : '', l.blend !== 'normal' ? `${blendName(l.blend)} blend` : ''].filter(Boolean).join(', ');
+    const name = el('button', { type: 'button', class: 'lname', 'data-act': 'name', title: `${how ? `${how[0]!.toUpperCase()}${how.slice(1)}. ` : ''}Tap to select. Double-tap to rename. ▸ shows its properties.` }, `${KIND_ICON[l.kind]} ${l.name}${marks}`);
     const eye = el('button', { type: 'button', class: 'leye', 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'data-act': 'eye' }, l.visible ? '' : '–');
     if (l.visible) eye.innerHTML = iconSvg('eye');
     const more = el('button', { type: 'button', class: 'lmore', 'aria-label': `More for ${l.name}`, 'data-act': 'more' }, '⋯');
@@ -811,7 +814,6 @@ export class MotionPanel {
           }
         } else {
           ed.select(id, ed.multiSelect || e.shiftKey || e.ctrlKey || e.metaKey);
-          ed.open.add(id);
           this.signature = '';
           this.update();
         }
@@ -1106,6 +1108,13 @@ export class MotionPanel {
     );
     if (l.kind === 'drawings' || l.kind === 'comp') items.push({ label: 'Playback (once, loop, ping-pong, hold a frame, speed)…', value: 'play' });
     if (l.kind === 'drawings') items.push({ label: `Effects…${l.effects?.length ? ` (${l.effects.length})` : ''}`, value: 'effects' });
+    // blending and masking, the same as a layer's options in Draw (one undo step each)
+    if (l.kind !== 'camera' && l.kind !== 'null') items.push({ label: `Blend mode… (${blendName(l.blend)})`, value: 'blend' });
+    if (l.kind === 'drawings' && !l.guide && !l.adjust) {
+      items.push({ label: l.clip ? 'Clipping mask: on (turn off)' : 'Clipping mask (show only over the layer below)', value: 'clip' });
+      if (l.mask) items.push({ label: 'Edit mask (paint it in Draw)', value: 'editmask' }, { label: 'Delete mask', value: 'unmask' });
+      else items.push({ label: 'Add mask (paint to hide parts, in Draw)', value: 'mask' });
+    }
     items.push({ label: 'Delete', value: 'delete' });
     return items;
   }
@@ -1160,6 +1169,29 @@ export class MotionPanel {
       }
       case 'play':
         await this.playMenu(l);
+        break;
+      case 'blend': {
+        const m = await pickBox<BlendMode>(`${l.name}: blend mode`, BLEND_MODES.map((b) => ({ label: `${b === l.blend ? '● ' : ''}${blendName(b)}`, value: b })));
+        if (m && m !== l.blend) ed.edit('Blend mode', (c) => { const x = c.layers.find((y) => y.id === l.id); if (x) x.blend = m; });
+        break;
+      }
+      case 'clip':
+        ed.edit(l.kind === 'drawings' && l.clip ? 'Clipping mask off' : 'Clipping mask', (c) => {
+          const x = c.layers.find((y) => y.id === l.id);
+          if (x && x.kind === 'drawings') { if (x.clip) delete x.clip; else x.clip = true; }
+        });
+        break;
+      case 'mask':
+      case 'editmask':
+        // a mask is painted with the brushes: draw on this layer, in Draw, with mask painting on
+        this.app.focusLayer(l.id);
+        if (pick === 'mask') this.app.addMask();
+        this.app.setWorkspace('draw');
+        this.app.setMaskEditing(true);
+        break;
+      case 'unmask':
+        this.app.focusLayer(l.id);
+        this.app.deleteMask();
         break;
       case 'delete':
         if (await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true)) ed.deleteLayers([l.id]);

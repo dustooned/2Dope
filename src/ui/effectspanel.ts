@@ -69,12 +69,22 @@ export class EffectsPanel {
     return a.project.isPlaceholder ? null : a.project.layer.id;
   }
 
-  /** The selection or the layer you draw on changed: an open card follows it. */
+  /**
+   * The selection or the layer you draw on changed: an open card follows it. A card opened for
+   * another layer (a new adjustment layer, while you keep drawing on yours) stays on that layer
+   * until you pick a layer (any, even the one already selected) or draw on another one.
+   */
   follow(): void {
     if (this.root.hidden) return;
-    const id = this.target();
+    const id = this.target(), picks = this.app.editor.picks;
+    if (id === this.openedAt && picks === this.openedPicks) return;
+    this.openedAt = id;
+    this.openedPicks = picks;
     if (id && id !== this.layerId && this.layer(id)?.kind === 'drawings') this.show(id);
   }
+  /** What `target()` and the editor's pick count were when the card last opened or followed. */
+  private openedAt: string | null = null;
+  private openedPicks = 0;
 
   /** Keep the card where it was dragged, inside the window. */
   private place(): void {
@@ -117,6 +127,8 @@ export class EffectsPanel {
     }
     if (layerId !== this.layerId) { this.opened.clear(); this.swiped = ''; }
     this.layerId = layerId;
+    this.openedAt = this.target();
+    this.openedPicks = this.app.editor.picks;
     this.root.hidden = false;
     // one effect: open it straight away
     const list = this.effects();
