@@ -2,6 +2,27 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Motion view switches; new default tools reach saved bars; QuickMenu / ☰ overlap (2026-11-01, committed)
+
+Owner: the QuickMenu button and the ☰ button overlapped; Motion needs the title safe and other
+view toggles.
+- `src/ui/quickmenu.ts` `placeTrigger`: `.canvas-menu-btn` is an obstacle, so the edge button sits
+  above ☰ (measured on an emulated 768×1024 touch tablet: QuickMenu 859–903, ☰ 913–953).
+- `src/app.ts` `drawCanvasView` also runs in Motion (after `drawComp`, before the overlay): safe
+  frames, centre cross, Overscan's dimmed pasteboard. The frame overview strip stays Draw/Animate.
+- Tool keys `safeareas`, `centrecross`, `overscan` (`setCanvasView` toggles, lit when on; icons
+  `safearea`, `centrecross`, `overscan`): in Motion's tool set and default bar; pinnable in
+  Draw/Animate. Bubbles signature includes `canvasView`.
+- `src/core/workspacelayout.ts`: layouts save `seen` (every tool the mode offered); on read, a
+  default tool missing from `seen` is appended once (saves without `seen` use `SEEN_BEFORE`, the
+  lists before this change). So users with a saved Motion bar get the switches, and the Draw /
+  Animate Eyedropper; a tool removed later stays removed. Two validation tests now pass `seen`.
+- Manual (Motion), UPDATES.
+- Checks: `workspacelayout.test.ts` (new migration test); fixture toolbars 37/37 (Motion bar has
+  the switches; Title safe lit and orange safe frames drawn over the shot).
+  `npx vitest run` 645 + 1 skipped; `npm run build`; all 50 fixtures pass (railperf excluded).
+- Not checked: real touch hardware; QuickMenu on the left edge (no overlap expected there).
+
 ### Touch: hold = eyedropper, double-tap = menu, Eyedropper tool, ☰ button (2026-11-01, committed)
 
 Owner, in order: keep two-finger tap undo (a staple); a menu icon at the bottom right for touch;

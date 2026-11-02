@@ -6445,6 +6445,8 @@ export class App {
         g.restore();
       }
       drawComp(g, this.project, this.project.comp.id, this.frame, { camera: this.editor.throughCamera });
+      // title / action safe, the centre cross and Overscan's pasteboard, as in Draw
+      this.drawCanvasView(g, true);
       drawMotionOverlay(g, this.editor, this.view, this.dpr);
       return;
     }
@@ -6468,7 +6470,7 @@ export class App {
    * action-safe and title-safe frames, and the centre cross.
    */
   private drawCanvasView(g: CanvasRenderingContext2D, dim: boolean): void {
-    if (!isPaintingWorkspace(this.workspace)) return;
+    if (!isPaintingWorkspace(this.workspace) && this.workspace !== 'motion') return;
     const v = this.canvasView, W = this.docW, H = this.docH, z = this.view.zoom;
     g.save();
     g.globalAlpha = 1;

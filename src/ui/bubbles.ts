@@ -66,10 +66,14 @@ const TOOL_HELP: Partial<Record<string, string>> = {
   assets: 'Tap placed artwork, drag to move, corners to resize',
   eyedrop: 'Tap the canvas to take the colour you see there (or hold a finger still on it)',
   play: 'Play or pause the shot', onion: 'Show the drawings before and after (hold for its settings)', prevdraw: 'Go to the previous drawing', nextdraw: 'Go to the next drawing',
+  safeareas: 'Show or hide the title and action safe frames (never exported)', centrecross: 'Show or hide the centre cross (never exported)',
+  overscan: 'Show the art past the page edge, dimmed (exports keep the page)',
   insert: 'A new blank drawing after this one', dup: 'Duplicate this drawing', del: 'Delete this drawing', fx: 'Effects of the layer you draw on',
 };
 /** Animation actions on a painting tool bar: they act at once, they are not a current tool. */
-const ACTION_KEYS = new Set(['play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx']);
+const ACTION_KEYS = new Set(['play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx', 'safeareas', 'centrecross', 'overscan']);
+/** Canvas view switches a bar can carry (Motion has them by default). */
+const VIEW_TOOLS: [ToolKey, string, string][] = [['safeareas', 'Title safe', 'safearea'], ['centrecross', 'Centre cross', 'centrecross'], ['overscan', 'Overscan', 'overscan']];
 const PANEL_HELP: Partial<Record<string, string>> = {
   color: 'Opens the colour panel; drag it onto the canvas to fill an area', layers: 'Opens the layer list', reference: 'Opens the reference window', more: 'Opens every tool for this mode and Edit workspace',
 };
@@ -77,7 +81,7 @@ const SECOND_TAP: Partial<Record<string, string>> = { brush: 'Tap again for brus
 
 type ToolKey = 'assets' | 'more' | 'transform' | 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
   | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look'
-  | 'prevdraw' | 'nextdraw' | 'eyedrop';
+  | 'prevdraw' | 'nextdraw' | 'eyedrop' | 'safeareas' | 'centrecross' | 'overscan';
 
 /**
  * Bubbles: a simpler way around the app. Mode bubbles (Draw, Animate, Move, Story) at the top left,
@@ -487,7 +491,7 @@ export class Bubbles {
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
     if (ws === 'draw' || ws === 'animate') {
-      const anim: [ToolKey, string, string][] = [['play', 'Play', 'play'], ['onion', 'Onion skin', 'onion'], ['prevdraw', 'Previous drawing', 'prev'], ['nextdraw', 'Next drawing', 'next'], ['insert', 'New drawing', 'newframe'], ['dup', 'Duplicate drawing', 'dupframe'], ['del', 'Delete drawing', 'delframe'], ['fx', 'Effects', 'fx']];
+      const anim: [ToolKey, string, string][] = [['play', 'Play', 'play'], ['onion', 'Onion skin', 'onion'], ['prevdraw', 'Previous drawing', 'prev'], ['nextdraw', 'Next drawing', 'next'], ['insert', 'New drawing', 'newframe'], ['dup', 'Duplicate drawing', 'dupframe'], ['del', 'Delete drawing', 'delframe'], ['fx', 'Effects', 'fx'], ...VIEW_TOOLS];
       const all: [ToolKey, string, string][] = [...draw, ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference', 'image'], ...anim];
       if (expanded) return all;
       const pinned = this.app.workspaceLayouts[ws].tools;
@@ -496,7 +500,7 @@ export class Bubbles {
     // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
     if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
     if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard or an animatic', 'export']];
-    if (ws === 'motion') return [['addlayer', 'New drawing layer', 'plus'], ['camera', 'Add a camera', 'camera'], ['group', 'Group the selected layers', 'layers'], ['split', 'Split at the playhead', 'scissors'], ['autokey', 'Auto-key: every change writes a keyframe', 'key'], ['look', 'Look through the camera', 'viewfinder'], ['flipbook', 'Edit the selected drawing layer as a flipbook (Flip)', 'flipbook'], ['fx', 'Effects of the selected layer (line boil...)', 'fx']];
+    if (ws === 'motion') return [['addlayer', 'New drawing layer', 'plus'], ['camera', 'Add a camera', 'camera'], ['group', 'Group the selected layers', 'layers'], ['split', 'Split at the playhead', 'scissors'], ['autokey', 'Auto-key: every change writes a keyframe', 'key'], ['look', 'Look through the camera', 'viewfinder'], ['flipbook', 'Edit the selected drawing layer as a flipbook (Flip)', 'flipbook'], ['fx', 'Effects of the selected layer (line boil...)', 'fx'], ...VIEW_TOOLS];
     return [];
   }
 
@@ -556,6 +560,9 @@ export class Bubbles {
         break;
       }
       case 'eyedrop': a.armEyedropper(); break;
+      case 'safeareas': a.setCanvasView({ safeAreas: !a.canvasView.safeAreas }); break;
+      case 'centrecross': a.setCanvasView({ centre: !a.canvasView.centre }); break;
+      case 'overscan': a.setCanvasView({ overscan: !a.canvasView.overscan }); break;
       case 'prevdraw': a.prevDrawing(); break;
       case 'nextdraw': a.nextDrawing(); break;
       case 'fx': {
@@ -687,7 +694,7 @@ export class Bubbles {
     // what changes from frame to frame: frozen while playing, so the bubbles are not rebuilt on every
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
-    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.eyedropArmed, a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.transformFreeform, a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
+    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.eyedropArmed, JSON.stringify(a.canvasView), a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.transformFreeform, a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]')?.setAttribute('aria-pressed', String(sharing));
@@ -721,7 +728,7 @@ export class Bubbles {
         : k === 'autokey' ? a.editor.autoKey
         : k === 'look' ? a.editor.throughCamera
         : k === 'play' ? a.playing
-        : k === 'more' ? this.moreTools : k === 'eyedrop' ? a.eyedropArmed : k === 'transform' ? a.transforming : k === cur || (k === 'onion' && a.onion.enabled);
+        : k === 'more' ? this.moreTools : k === 'eyedrop' ? a.eyedropArmed : k === 'safeareas' ? a.canvasView.safeAreas : k === 'centrecross' ? a.canvasView.centre : k === 'overscan' ? a.canvasView.overscan : k === 'transform' ? a.transforming : k === cur || (k === 'onion' && a.onion.enabled);
       b.setAttribute('aria-pressed', String(on));
       if (drawWs) {
         // one wording for every painting tool: what it does, then what a tap (or a second tap) does

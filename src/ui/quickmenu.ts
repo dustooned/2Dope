@@ -66,7 +66,7 @@ export class QuickMenu {
     const stage = this.trigger.parentElement!, bounds = stage.getBoundingClientRect();
     const trigger = this.trigger.getBoundingClientRect();
     const left = trigger.width ? trigger.left : bounds.left + 8, right = trigger.width ? trigger.right : left + 100;
-    const obstacles = [...stage.querySelectorAll<HTMLElement>('.painting-header, .bub-tools, .bub-ctx, .painting-handle, .sidebar, .asset-placement-tools, .flip-row')]
+    const obstacles = [...stage.querySelectorAll<HTMLElement>('.painting-header, .bub-tools, .bub-ctx, .painting-handle, .sidebar, .asset-placement-tools, .flip-row, .canvas-menu-btn')]
       .filter(e => !e.hidden && e.getBoundingClientRect().height && getComputedStyle(e).display !== 'none')
       .map(e => e.getBoundingClientRect()).filter(r => r.left < right + 4 && r.right > left - 4);
     const max = Math.max(8, bounds.height - 52), candidates: number[] = [];

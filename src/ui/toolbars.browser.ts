@@ -165,8 +165,19 @@ try {
   check('…which opens the QuickMenu', quickMenus === 1);
   closeContextMenu();
 
-  // Motion: a hold does nothing, a double-tap opens the menu
+  // Motion: the canvas view switches are on its bar, and Title safe draws over the shot
   app.setWorkspace('motion'); await settle(400);
+  check('Motion has Title safe, Centre cross and Overscan on its bar', ['safeareas', 'centrecross', 'overscan'].every((k) => tools().includes(k)), tools());
+  const orange = () => { const d = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i]! > 200 && d[i + 1]! > 90 && d[i + 1]! < 150 && d[i + 2]! < 40) n++; return n; };
+  const view0 = app.canvasView.safeAreas;
+  if (view0) tool('safeareas').click();
+  await settle(150); const noSafe = orange();
+  tool('safeareas').click(); await settle(200);
+  check('Motion: Title safe lights up and draws the safe frames', tool('safeareas').getAttribute('aria-pressed') === 'true' && orange() > noSafe + 20, [noSafe, orange()]);
+  if (!view0) tool('safeareas').click();
+  await settle(100);
+
+  // Motion: a hold does nothing, a double-tap opens the menu
   const [mx, my] = at(140, 110);
   ev('pointerdown', canvas, mx, my, 'touch', 81); await settle(HOLD_MS + 150); ev('pointerup', canvas, mx, my, 'touch', 81); await settle(400);
   check('Motion: a finger hold opens nothing', !document.querySelector('.ctxmenu'));
