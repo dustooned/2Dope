@@ -33,6 +33,13 @@ const row = () => [...document.querySelectorAll<HTMLButtonElement>('.bub-ctx but
 const labels = () => row().map((b) => b.getAttribute('aria-label')!);
 const chip = (name: string) => row().find((b) => b.getAttribute('aria-label') === name) ?? null;
 const tools = () => [...document.querySelectorAll<HTMLButtonElement>('.bub-tools button')].map((b) => b.getAttribute('aria-label')).join();
+const trayItem = (id: string) => document.querySelector<HTMLButtonElement>(`.bar-tray [data-add="${id}"]`);
+/** A tap on a tray item, as a finger: down and up on the spot. */
+function tapTray(id: string) {
+  const b = trayItem(id); if (!b) return;
+  const r = b.getBoundingClientRect(), o = { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 5, clientX: r.left + 5, clientY: r.top + 5, button: 0 };
+  b.dispatchEvent(new PointerEvent('pointerdown', { ...o, buttons: 1 })); b.dispatchEvent(new PointerEvent('pointerup', { ...o, buttons: 0 })); b.click();
+}
 const menuItem = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('.ctxmenu button')].find((b) => (b.firstChild?.textContent ?? '').trim() === text) ?? null;
 function pointer(type: string, x: number, y: number) {
   const r = canvas.getBoundingClientRect(), p = app.view.docToScreen(x, y);
@@ -79,9 +86,10 @@ async function otherRows() {
   hideSmaller?.click(); await settle();
   check('Hiding Smaller leaves the rest of the Transform row', labels().join() === TRANSFORM.filter((n) => n !== '−').join(), labels());
   chip('Customize')!.click(); await settle();
-  check('Transform Customize lists its 11 commands by name', document.querySelectorAll('.ctxmenu button[role="menuitem"]').length === 11 && !!menuItem('Smaller'));
-  menuItem('Smaller')?.click(); await settle();
-  check('Customize brings Smaller back', labels().join() === TRANSFORM.join(), labels());
+  check('Transform Customize opens the row for editing, Smaller in its tray', document.querySelector('.bub-ctx')!.classList.contains('bar-editing') && !!trayItem('transform.smaller'));
+  tapTray('transform.smaller'); await settle();
+  document.querySelector<HTMLButtonElement>('.bar-tray-done')!.click(); await settle();
+  check('A tap on Smaller in the tray brings it back in its place', labels().join() === TRANSFORM.join(), labels());
   app.cancelTransform(); await settle();
 
   // Fill: the style chips stay; Swap with a gradient; Fill selection with a selection
@@ -173,9 +181,9 @@ try {
 
     // Customize lists every Select command and brings Copy back
     chip('Customize')!.click(); await settle();
-    const shown = menuItem('✓ Transform'), hidden = menuItem('Copy');
-    check('Customize lists every Select command, ticked when shown', !!shown && !!hidden && document.querySelectorAll('.ctxmenu button[role="menuitem"]').length === 14);
-    hidden?.click(); await settle();
+    check('Customize offers the hidden Copy in its tray, and only hidden commands', !!trayItem('select.copy') && !trayItem('select.transform'));
+    tapTray('select.copy'); await settle();
+    document.querySelector<HTMLButtonElement>('.bar-tray-done')!.click(); await settle();
     check('Customize → Copy shows it again in its place', labels().join() === [...SHAPES, ...WITH_SELECTION, 'Customize'].join(), labels());
 
     // App settings: Hidden controls lists it, Show applies with Apply, and profiles do not include it

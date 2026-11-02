@@ -16,7 +16,10 @@ import { rulerStep } from '../core/timecode';
 
 const ZOOM_KEY = '2dope.m3.mcell';
 const ROW_KEY = '2dope.m3.mrow';
-const LEFT_W = 196;
+/** The layer column's width: drag its right edge (or the ruler corner's grip); remembered on this device. */
+const LEFT_KEY = '2dope.motion.leftw';
+const LEFT_DEFAULT = 196, LEFT_MIN = 140, LEFT_MAX = 520;
+const leftWidth = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(LEFT_MAX, Math.max(LEFT_MIN, v))) : LEFT_DEFAULT);
 const DRAG = 4;
 const LABELS = ['#9a9aa8', '#ff5a8a', '#ffd24a', '#4aa3ff', '#4ade80', '#c084fc', '#fb923c'];
 const KIND_COLOR: Record<Layer['kind'], string> = { drawings: '#6f82e8', comp: '#3fbf8f', camera: '#e0a83c', null: '#8f8fa3' };
@@ -79,6 +82,7 @@ export class MotionPanel {
   private readonly bar = el('div', { class: 'mbar' });
   private readonly scroll = el('div', { class: 'mscroll', tabindex: '0', role: 'region', 'aria-label': 'Layers and keyframes' });
   private readonly grid = el('div', { class: 'mgrid' });
+  private leftW = leftWidth((() => { try { return Number(localStorage.getItem(LEFT_KEY) ?? LEFT_DEFAULT); } catch { return LEFT_DEFAULT; } })());
   private readonly playhead = el('div', { class: 'mplayhead' });
   private cell = loadNum(ZOOM_KEY, 28, 8, 80);
   private rowH = loadNum(ROW_KEY, 44, 32, 72);
@@ -245,6 +249,8 @@ export class MotionPanel {
     this.bar.append(rowA, extra);
     this.scroll.append(this.grid);
     root.append(this.bar, this.scroll);
+    this.scroll.style.setProperty('--mleft-w', `${this.leftW}px`);
+    this.resizeLeft();
     root.style.setProperty('--row-h', `${this.rowH}px`);
     this.bind();
     ed.onChange = () => this.update();
@@ -288,7 +294,7 @@ export class MotionPanel {
 
   private frameAtX(clientX: number): number {
     const r = this.grid.getBoundingClientRect();
-    return Math.max(0, Math.floor((clientX - r.left - LEFT_W) / this.cell));
+    return Math.max(0, Math.floor((clientX - r.left - this.leftW) / this.cell));
   }
 
   /** Redraw what depends on the frame, and rebuild the rows when anything structural changed. */
@@ -330,7 +336,7 @@ export class MotionPanel {
     this.curveSel.value = (ed.keys.size ? ed.curveOfSelection() : null) ?? '';
     // playhead and live values
     this.playhead.style.width = `${this.cell}px`;
-    this.playhead.style.transform = `translateX(${LEFT_W + app.frame * this.cell}px)`;
+    this.playhead.style.transform = `translateX(${this.leftW + app.frame * this.cell}px)`;
     for (const v of this.grid.querySelectorAll<HTMLElement>('[data-val]')) {
       const l = ed.layer(v.dataset.layer ?? '');
       if (l) v.textContent = isFx(v.dataset.val!) ? fxText(ed.valueNow(l, v.dataset.val as PropKey)) : show(ed.rowProp(v.dataset.val as PropKey), ed.valueNow(l, v.dataset.val as PropKey));
@@ -375,7 +381,7 @@ export class MotionPanel {
       this.editShiftEl.remove();
       return;
     }
-    const x = LEFT_W + e.frame * this.cell;
+    const x = this.leftW + e.frame * this.cell;
     this.editLineEl.style.left = `${x}px`;
     this.editLineEl.dataset.label = this.app.editLineLabel();
     this.editLineEl.classList.toggle('flip', x > this.grid.offsetWidth - 180);
@@ -414,12 +420,69 @@ export class MotionPanel {
 
   private keepVisible(): void {
     if (this.drag) return;
-    const x = LEFT_W + this.app.frame * this.cell;
+    const x = this.leftW + this.app.frame * this.cell;
     const s = this.scroll;
     if (this.app.playing || !this.pointers.size) {
       if (x + this.cell > s.scrollLeft + s.clientWidth) s.scrollLeft = x - s.clientWidth / 2;
-      else if (x < s.scrollLeft + LEFT_W) s.scrollLeft = Math.max(0, x - LEFT_W - this.cell * 2);
+      else if (x < s.scrollLeft + this.leftW) s.scrollLeft = Math.max(0, x - this.leftW - this.cell * 2);
     }
+  }
+
+  /** Set the layer column's width (clamped), keep it, and redraw the rows at it. */
+  setLeftWidth(w: number, save = true): void {
+    const next = leftWidth(w);
+    if (next === this.leftW) return;
+    this.leftW = next;
+    this.scroll.style.setProperty('--mleft-w', `${next}px`);
+    if (save) { try { localStorage.setItem(LEFT_KEY, String(next)); } catch { /* this session only */ } }
+    this.signature = '';
+    this.update();
+  }
+
+  get leftWidth(): number {
+    return this.leftW;
+  }
+
+  /**
+   * Drag the layer column's right edge on any row (or its grip in the ruler corner) to read more of
+   * the layer names and controls, or to give the timeline more room. Double-click resets; with the
+   * grip focused, the arrow keys step it.
+   */
+  private resizeLeft(): void {
+    const s = this.scroll;
+    const atEdge = (e: PointerEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('.mleft-grip')) return true;
+      const left = t.closest<HTMLElement>('.mleft');
+      if (!left) return false;
+      const r = left.getBoundingClientRect();
+      return e.clientX > r.right - 8 && e.clientX <= r.right + 2;
+    };
+    s.addEventListener('pointermove', (e) => {
+      if (e.buttons) return;
+      s.classList.toggle('mleft-resizable', atEdge(e));
+    });
+    s.addEventListener('pointerdown', (e) => {
+      if (e.button > 0 || !atEdge(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const x0 = e.clientX, w0 = this.leftW, id = e.pointerId;
+      try { s.setPointerCapture(id); } catch { /* a pointer that is already gone */ }
+      s.classList.add('mleft-resizing');
+      const move = (m: PointerEvent) => { if (m.pointerId === id) this.setLeftWidth(w0 + m.clientX - x0, false); };
+      const up = (u: PointerEvent) => {
+        if (u.pointerId !== id) return;
+        s.removeEventListener('pointermove', move); s.removeEventListener('pointerup', up); s.removeEventListener('pointercancel', up);
+        s.classList.remove('mleft-resizing');
+        try { localStorage.setItem(LEFT_KEY, String(this.leftW)); } catch { /* this session only */ }
+      };
+      s.addEventListener('pointermove', move); s.addEventListener('pointerup', up); s.addEventListener('pointercancel', up);
+    }, true);
+    s.addEventListener('dblclick', (e) => { if ((e.target as HTMLElement).closest('.mleft-grip') || (e.target as HTMLElement).closest('.mleft') && atEdge(e as PointerEvent)) this.setLeftWidth(LEFT_DEFAULT); }, true);
+    s.addEventListener('keydown', (e) => {
+      if (!(e.target as HTMLElement).closest('.mleft-grip')) return;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); this.setLeftWidth(this.leftW + (e.key === 'ArrowRight' ? 24 : -24)); this.scroll.querySelector<HTMLElement>('.mleft-grip')?.focus(); }
+    }, true);
   }
 
   private rebuild(): void {
@@ -428,7 +491,7 @@ export class MotionPanel {
     const c = ed.comp;
     const comps = app.project.comps;
     const end = Math.max(compLength(c, comps), 24) + 24;
-    const width = LEFT_W + end * this.cell;
+    const width = this.leftW + end * this.cell;
     this.grid.replaceChildren();
     this.grid.style.width = `${width}px`;
 
@@ -436,6 +499,7 @@ export class MotionPanel {
     const ruler = el('div', { class: 'mrow ruler' });
     const corner = el('div', { class: 'mleft' });
     corner.append(el('span', { class: 'hint' }, `${c.name} · ${c.width}×${c.height}`));
+    corner.append(el('span', { class: 'mleft-grip', role: 'separator', 'aria-orientation': 'vertical', 'aria-label': 'Layer column width', tabindex: '0', title: 'Drag to show more or less of the layer column (double-click: back to normal)' }));
     const rr = el('div', { class: 'mright' });
     rr.style.width = `${end * this.cell}px`;
     const step = rulerStep(this.cell, c.fps, app.timeFormat);

@@ -41,22 +41,26 @@ export function penSettingsSection(app: App): { section: HTMLDetailsElement; rea
   const cursorRow = el('label', 'app-settings-field'), cursor = el('select'); cursor.setAttribute('aria-label', 'Cursor on the canvas');
   for (const [v, t] of CANVAS_CURSORS) { const o = el('option', '', t); o.value = v; cursor.append(o); }
   cursorRow.append(el('span', '', 'Cursor'), cursor);
+  const holdRow = el('label', 'app-settings-field'), hold = el('select'); hold.setAttribute('aria-label', 'Touch and hold on the canvas');
+  for (const [v, t] of [['eyedropper', 'One finger: eyedropper · two fingers: menu'], ['menu', 'One finger: canvas menu']]) { const o = el('option', '', t); o.value = v!; hold.append(o); }
+  holdRow.append(el('span', '', 'Touch and hold'), hold);
+  holdRow.title = 'What holding a finger still on the canvas does. The right mouse button and the pen’s side button always open the menu.';
   cursorRow.title = 'The pointer over the canvas. Brush size shows the brush’s outline at the current zoom. Try it on the pad.';
   const actions = el('div', 'student-profile-actions');
   const fromPad = el('button', '', 'Set from my test strokes'), clear = el('button', '', 'Clear pad'), reset = el('button', '', 'Restore pen defaults');
   for (const b of [fromPad, clear, reset]) b.type = 'button';
   fromPad.title = 'Full strength at your strongest stroke on the pad';
   actions.append(fromPad, clear, reset);
-  section.append(firm.row, threshold.row, full.row, tilt.row, eraserEnd.row, barrelRow, cursorRow, actions,
+  section.append(firm.row, threshold.row, full.row, tilt.row, eraserEnd.row, barrelRow, cursorRow, holdRow, actions,
     el('p', 'menu-note', 'Turning the pen over to its eraser end switches to the Eraser; the tip brings back your tool. A tablet button set to Erase in the driver works the same way; one set to zoom with Ctrl + and Ctrl − zooms the canvas. Tilt off helps when a driver reports a tilt that never changes. Each brush’s own pressure settings still apply on top of these.'));
 
   const read = (): PenPrefs => readPenPrefs({
     version: 1, firmness: Number(firm.input.value) / 100, threshold: Number(threshold.input.value) / 100, full: Number(full.input.value) / 100,
-    tilt: tilt.input.checked, eraserEnd: eraserEnd.input.checked, barrel: barrel.value, cursor: cursor.value,
+    tilt: tilt.input.checked, eraserEnd: eraserEnd.input.checked, barrel: barrel.value, cursor: cursor.value, touchHold: hold.value,
   });
   const fill = (p: PenPrefs) => {
     firm.input.value = String(Math.round(p.firmness * 100)); threshold.input.value = String(Math.round(p.threshold * 100)); full.input.value = String(Math.round(p.full * 100));
-    tilt.input.checked = p.tilt; eraserEnd.input.checked = p.eraserEnd; barrel.value = p.barrel; cursor.value = p.cursor ?? 'crosshair'; outputs();
+    tilt.input.checked = p.tilt; eraserEnd.input.checked = p.eraserEnd; barrel.value = p.barrel; cursor.value = p.cursor ?? 'crosshair'; hold.value = p.touchHold ?? 'eyedropper'; outputs();
   };
   const outputs = () => {
     const f = Number(firm.input.value);

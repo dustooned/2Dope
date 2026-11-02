@@ -5458,8 +5458,14 @@ export class App {
   private armHold(e: PointerEvent): void {
     this.disarmHold();
     if (this.arrangingAssets) return;
+    const twoFingerMenu = (this.penPrefs.touchHold ?? 'eyedropper') === 'eyedropper';
+    // two still fingers: the canvas menu (at the point between them)
+    if (this.touches.size === 2 && twoFingerMenu) { this.armTwoHold(e); return; }
     // finger painting keeps a still finger for drawing dots; the menu is a right-click there
     if (this.touches.size !== 1 || (this.fingerPaint && this.workspace !== 'motion')) return;
+    // one finger picks a colour where you draw; elsewhere it waits for a second finger
+    const pick = twoFingerMenu && isPaintingWorkspace(this.workspace);
+    if (twoFingerMenu && !pick) return;
     const x = e.clientX;
     const y = e.clientY;
     this.holdArm = {
@@ -5470,6 +5476,7 @@ export class App {
         const arm = this.holdArm;
         this.holdArm = null;
         if (!arm || this.touches.size !== 1) return;
+        if (pick) { this.beginHoldPick(arm.id, arm.x, arm.y); return; }
         // a finger stroke that has not moved is dropped; a layer grab is let go
         if (this.live && this.live.pointerId === arm.id) this.endStroke(true);
         if (this.motionPointer === arm.id) {
@@ -5486,9 +5493,78 @@ export class App {
   }
 
   private disarmHold(): void {
+    if (this.twoHold) { clearTimeout(this.twoHold.timer); this.twoHold = null; }
     if (!this.holdArm) return;
     clearTimeout(this.holdArm.timer);
     this.holdArm = null;
+  }
+
+  /** Two fingers held still: the canvas menu. Neither may move further than the slop. */
+  private twoHold: { timer: number; ids: number[]; at: Map<number, { x: number; y: number }> } | null = null;
+  /** A two-finger hold opened the menu: the fingers neither pinch nor pan until they lift. */
+  private touchGestureDone = false;
+
+  private armTwoHold(e: PointerEvent): void {
+    const r = this.canvas.getBoundingClientRect();
+    const at = new Map([...this.touches].map(([id, t]) => [id, { x: r.left + t.sx, y: r.top + t.sy }]));
+    at.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    this.twoHold = {
+      ids: [...at.keys()],
+      at,
+      timer: window.setTimeout(() => {
+        const h = this.twoHold;
+        this.twoHold = null;
+        if (!h || this.touches.size !== 2 || this.scrub3) return;
+        const pts = [...h.at.values()];
+        const mx = (pts[0]!.x + pts[1]!.x) / 2, my = (pts[0]!.y + pts[1]!.y) / 2;
+        // a hold is not a pinch: put back the view the fingers nudged, and it is no undo tap
+        const s = this.tapSession;
+        if (s) { s.moved = true; Object.assign(this.view, { x: s.view.x, y: s.view.y, zoom: s.view.zoom, rot: s.view.rot }); this.requestRender(); }
+        this.pinch = null;
+        this.touchGestureDone = true;
+        this.lastHold = Date.now();
+        swallowNextClick();
+        this.openCanvasMenu(mx, my);
+      }, HOLD_MS),
+    };
+  }
+
+  /** One finger held still where you draw: an eyedropper that follows the finger until it lifts. */
+  private holdPick: { id: number; loupe: HTMLElement; was: string } | null = null;
+
+  private beginHoldPick(id: number, x: number, y: number): void {
+    // a finger stroke that has not moved is dropped
+    if (this.live && this.live.pointerId === id) this.endStroke(true);
+    if (this.tapSession) this.tapSession.moved = true;
+    this.lastHold = Date.now();
+    swallowNextClick();
+    const loupe = document.createElement('div');
+    loupe.className = 'hold-loupe';
+    loupe.setAttribute('role', 'status');
+    loupe.setAttribute('aria-label', 'Eyedropper');
+    document.body.append(loupe);
+    this.holdPick = { id, loupe, was: this.color };
+    this.holdPickAt(x, y);
+  }
+
+  private holdPickAt(x: number, y: number): void {
+    const h = this.holdPick;
+    if (!h) return;
+    const c = this.sampleScreen(x, y);
+    if (c) this.setColor(c);
+    // above the finger, so the finger does not hide it: the new colour round the old one
+    h.loupe.style.left = `${x}px`;
+    h.loupe.style.top = `${y - 72}px`;
+    h.loupe.style.setProperty('--now', c ?? this.color);
+    h.loupe.style.setProperty('--was', h.was);
+  }
+
+  private endHoldPick(cancelled: boolean): void {
+    const h = this.holdPick;
+    if (!h) return;
+    this.holdPick = null;
+    h.loupe.remove();
+    if (cancelled) this.setColor(h.was);
   }
 
   /** Pixel colour of the current drawing at a document point (line over fill), or null if empty there. */
@@ -5697,6 +5773,10 @@ export class App {
     }
     if (this.fillG && e.pointerId === this.fillG.pointerId) return this.fillMove(e);
     if (this.wandG && e.pointerId === this.wandG.pointerId) return this.wandMove(e);
+    if (this.holdPick && this.holdPick.id === e.pointerId) { this.holdPickAt(e.clientX, e.clientY); return; }
+    const two = this.twoHold?.at.get(e.pointerId);
+    if (two && Math.hypot(e.clientX - two.x, e.clientY - two.y) > HOLD_SLOP) this.disarmHold();
+    if (this.touchGestureDone && this.touches.has(e.pointerId)) return;
     const arm = this.holdArm;
     if (arm && arm.id === e.pointerId && Math.hypot(e.clientX - arm.x, e.clientY - arm.y) > HOLD_SLOP) this.disarmHold();
     if (this.motionPointer === e.pointerId) {
@@ -5812,6 +5892,7 @@ export class App {
     }
     if (this.fillG && e.pointerId === this.fillG.pointerId) this.endFill(cancelled);
     if (this.wandG && e.pointerId === this.wandG.pointerId) this.endWand(cancelled);
+    if (this.holdPick && this.holdPick.id === e.pointerId) this.endHoldPick(cancelled);
     this.disarmHold();
     if (this.held_ === e.pointerId) this.held_ = null;
     if (this.motionPointer === e.pointerId) {
@@ -5834,6 +5915,7 @@ export class App {
       this.startPinchIfNeeded();
       if (this.touches.size === 0) {
         this.scrub3 = null;
+        this.touchGestureDone = false;
         this.finishTapSession(cancelled);
       }
     }
@@ -5908,7 +5990,7 @@ export class App {
   }
 
   private startPinchIfNeeded(): void {
-    if (this.touches.size < 2 || this.pinch || this.scrub3) return;
+    if (this.touches.size < 2 || this.pinch || this.scrub3 || this.touchGestureDone) return;
     const ids = [...this.touches.keys()];
     const a = ids[0]!;
     const b = ids[1]!;

@@ -1842,8 +1842,8 @@ body.ws-time .panel {
   position: sticky;
   left: 0;
   z-index: 4;
-  flex: 0 0 196px;
-  width: 196px;
+  flex: 0 0 var(--mleft-w, 196px);
+  width: var(--mleft-w, 196px);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2120,7 +2120,7 @@ body.ws-time .panel {
 
 @media (max-width: 1100px) {
   .mleft {
-    flex-basis: 196px;
+    flex-basis: var(--mleft-w, 196px);
   }
 }
 
@@ -5073,3 +5073,40 @@ body.ui-full.ws-motion:not(.ui-hidden):not(.quick) .bub-tools:not(:empty),
 body.ui-full.ws-time:not(.ui-hidden):not(.quick) .bub-tools:not(:empty) { display: flex !important; }
 body.ui-full.ws-motion:not(.ui-hidden):not(.quick) .bub-ctx, body.ui-full.ws-time:not(.ui-hidden):not(.quick) .bub-ctx { top: 66px; }
 @media (max-width: 700px) { body.ui-full.ws-motion:not(.ui-hidden):not(.quick) .bub-ctx, body.ui-full.ws-time:not(.ui-hidden):not(.quick) .bub-ctx { top: var(--tools-bottom, 116px); } }
+
+/* Edit a bar (tool bar or options row) like the Mac Dock: items wiggle, a tray offers the rest */
+.bar-editing { outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: var(--radius-md); }
+.bar-editing > .bar-edit-item { touch-action: none; cursor: grab; animation: bar-wiggle 0.28s ease-in-out infinite alternate; }
+.bar-editing > .bar-edit-item:nth-child(2n) { animation-delay: -0.14s; }
+.bar-editing > .bar-edit-item.bar-picked { box-shadow: 0 0 0 2px var(--accent); animation: none; }
+.bar-editing > .bar-edit-item.bar-dragging { opacity: 0.25; animation: none; }
+.bar-editing > :not(.bar-edit-item):not(.bar-gap) { opacity: 0.45; }
+.bar-gap { display: inline-block; flex: 0 0 auto; border: 2px dashed var(--accent); border-radius: 10px; box-sizing: border-box; }
+@keyframes bar-wiggle { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
+@media (prefers-reduced-motion: reduce) { .bar-editing > .bar-edit-item { animation: none; } }
+.bar-ghost { position: fixed; z-index: 400; pointer-events: none; opacity: 0.9; transform: scale(1.08); box-shadow: 0 8px 20px #0008; }
+.bar-ghost.removing { opacity: 0.5; filter: grayscale(1); transform: scale(0.9); }
+.bar-tray { position: fixed; z-index: 300; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: 0 10px 30px #0009; max-height: calc(100vh - 16px); overflow: auto; }
+.bar-tray.dropping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 10px 30px #0009; }
+.bar-tray-head { display: flex; flex-direction: column; gap: 2px; }
+.bar-tray-hint, .bar-tray-empty { font-size: 12px; opacity: 0.75; }
+.bar-tray-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.bar-tray-item { touch-action: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border-radius: 10px; border: 1px dashed var(--line); background: var(--panel-2); color: var(--text); cursor: grab; }
+.bar-tray-item::before { content: '＋'; opacity: 0.7; }
+.bar-tray-item svg { width: 18px; height: 18px; }
+.bar-tray-pick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bar-tray-picked { font-weight: 600; margin-right: auto; }
+.bar-tray-pick button, .bar-tray-foot button { min-height: 34px; padding: 0 12px; border-radius: 10px; }
+.bar-tray-foot { display: flex; justify-content: space-between; gap: 8px; }
+.bar-tray-done { background: var(--accent); color: #fff; border-color: transparent; }
+
+/* Motion: the layer column's width follows a drag on its right edge */
+.mleft-grip { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none; background: linear-gradient(90deg, transparent 4px, var(--line) 4px, var(--line) 6px, transparent 6px); }
+.mleft-grip:hover, .mleft-grip:focus-visible, .mleft-resizing .mleft-grip { background: linear-gradient(90deg, transparent 3px, var(--accent) 3px, var(--accent) 7px, transparent 7px); outline: none; }
+.mleft-resizable, .mleft-resizable .mleft, .mleft-resizing, .mleft-resizing * { cursor: col-resize !important; }
+.mleft-resizing { user-select: none; }
+
+/* Touch and hold: the eyedropper's loupe (the new colour round the colour you had) */
+.hold-loupe { position: fixed; z-index: 500; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(var(--now, #000) 0 50%, var(--was, #000) 50% 100%); box-shadow: 0 0 0 3px #fff, 0 0 0 4px #0006, 0 6px 16px #0008; }
+.hold-loupe::after { content: ''; position: absolute; inset: 14px; border-radius: 50%; background: var(--now, #000); box-shadow: 0 0 0 2px #fff; }

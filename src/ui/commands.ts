@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { COMMANDS_HIDDEN_KEY, readCommandPrefs, setCommandHidden, type CommandPrefs } from '../core/commandprefs';
+import { COMMANDS_HIDDEN_KEY, orderCommands, readCommandPrefs, setCommandHidden, setCommandOrder, type CommandPrefs } from '../core/commandprefs';
 
 /**
  * One registry of option-row commands. Each has a permanent id, the rows (contexts) it shows in,
@@ -152,6 +152,21 @@ export function commandsFor(context: CommandContext, app: App): Command[] {
   return commandsIn(context).filter((c) => c.isEnabled?.(app) ?? true);
 }
 
+/**
+ * Put a built row's command chips (`[data-command]`) in the user's order for `context`. Each chip
+ * moves into one of the slots the row's command chips already held, so fixed controls (sliders,
+ * modes, Customize) stay where the row put them.
+ */
+export function orderRow(row: HTMLElement, context: CommandContext): void {
+  const slots = [...row.querySelectorAll<HTMLElement>(':scope > [data-command]')];
+  if (slots.length < 2) return;
+  const sorted = orderCommands(commandPrefs(), context, slots.map((el) => ({ id: el.dataset.command!, el }))).map((x) => x.el);
+  if (sorted.every((el, i) => el === slots[i])) return;
+  const marks = slots.map((el) => { const m = document.createComment('slot'); el.before(m); return m; });
+  for (const el of slots) el.remove();
+  marks.forEach((m, i) => { m.replaceWith(sorted[i]!); });
+}
+
 /** The command with this id, if it is registered. */
 export function commandById(id: string): Command | undefined {
   return COMMANDS.find((c) => c.id === id);
@@ -176,6 +191,25 @@ export function commandPrefs(): CommandPrefs {
 /** Hide or show a command on this device; rows listening redraw. */
 export function setHidden(id: string, hidden: boolean): void {
   prefs = setCommandHidden(commandPrefs(), id, hidden);
+  try { localStorage.setItem(COMMANDS_HIDDEN_KEY, JSON.stringify(prefs)); } catch { /* kept for this session */ }
+  for (const f of listeners) f();
+}
+
+/**
+ * A row's layout from its edit mode: `shown` in order; the row's other commands are hidden.
+ * One write, one redraw. An empty `shown` with `reset` puts the built-in row back.
+ */
+export function setRowLayout(context: CommandContext, shown: string[], reset = false): void {
+  let next = commandPrefs();
+  const all = customizable(context).map((c) => c.id);
+  if (reset) {
+    next = setCommandOrder(next, context, []);
+    for (const id of all) next = setCommandHidden(next, id, false);
+  } else {
+    for (const id of all) next = setCommandHidden(next, id, !shown.includes(id));
+    next = setCommandOrder(next, context, shown.filter((id) => all.includes(id)));
+  }
+  prefs = next;
   try { localStorage.setItem(COMMANDS_HIDDEN_KEY, JSON.stringify(prefs)); } catch { /* kept for this session */ }
   for (const f of listeners) f();
 }

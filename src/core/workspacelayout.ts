@@ -4,8 +4,9 @@ import type { Workspace } from './workspace';
 export const WORKSPACE_LAYOUT_KEY = '2dope.workspace.layouts';
 export const WORKSPACE_NAMES: Record<Workspace, string> = { board: 'Story', draw: 'Draw', animate: 'Animate', time: 'Timing', motion: 'Motion' };
 export const WORKSPACE_TOOLS = {
-  draw: ['brush', 'smudge', 'eraser', 'select', 'transform', 'pen', 'fill', 'adjust', 'color', 'layers', 'reference'],
-  animate: ['brush', 'smudge', 'eraser', 'select', 'transform', 'pen', 'fill', 'adjust', 'assets', 'color', 'layers', 'reference'],
+  // the animation actions (play, onion, step, new / duplicate / delete drawing, effects) can be pinned too
+  draw: ['brush', 'smudge', 'eraser', 'select', 'transform', 'pen', 'fill', 'adjust', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'],
+  animate: ['brush', 'smudge', 'eraser', 'select', 'transform', 'pen', 'fill', 'adjust', 'assets', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'],
   board: ['panel', 'images', 'dup', 'del', 'play', 'export'],
   time: ['play', 'onion', 'insert', 'dup', 'del', 'layers'],
   motion: ['addlayer', 'camera', 'group', 'split', 'autokey', 'look', 'flipbook', 'fx'],
@@ -18,6 +19,7 @@ export const WORKSPACE_TOOL_NAMES: Record<WorkspaceTool, string> = {
   dup: 'Duplicate', del: 'Delete', play: 'Play', export: 'Export storyboard / animatic', onion: 'Onion skin',
   insert: 'New drawing', addlayer: 'New layer', camera: 'Camera', group: 'Group', split: 'Split',
   autokey: 'Auto-key', look: 'Camera view', flipbook: 'Edit flipbook', fx: 'Effects',
+  prevdraw: 'Previous drawing', nextdraw: 'Next drawing',
 };
 export interface WorkspaceLayout {
   tools: WorkspaceTool[];

@@ -7,13 +7,16 @@ import type { Tool } from '../core/stroke';
 import { decorate } from './icons';
 import { STUDENT_TOOLS, type StudentTool } from '../core/studentprefs';
 import { isPaintingWorkspace, optionsRow, toolChoice, type OptionsState } from '../core/workspace';
-import { isCommandHidden } from '../core/commandprefs';
-import { commandById, commandName, commandPrefs, commandsFor, onCommandPrefsChange, setHidden, type Command, type CommandContext } from './commands';
+import { isCommandHidden, orderCommands } from '../core/commandprefs';
+import { commandById, commandName, commandPrefs, commandsFor, commandsIn, CONTEXT_NAMES, onCommandPrefsChange, orderRow, setHidden, setRowLayout, type Command, type CommandContext } from './commands';
+import { BarEditor } from './baredit';
 import { attachContextMenu } from './contextmenu';
 import { onionHold } from './onionpop';
 import type { BoardView } from './board';
-import { showCustomize } from './customize';
-import { WORKSPACE_TOOL_NAMES, type WorkspaceTool } from '../core/workspacelayout';
+import { defaultWorkspaceLayout, WORKSPACE_NAMES, WORKSPACE_TOOLS, WORKSPACE_TOOL_NAMES, type WorkspaceTool } from '../core/workspacelayout';
+
+/** Option rows whose actions the user can reorder (their command context has the same name). */
+const ORDERED_ROWS: string[] = ['select', 'transform', 'time', 'fill', 'smudge', 'paint', 'points'];
 
 export type UiLevel = 'clean' | 'simple' | 'full';
 const LEVEL_KEY = '2dope.ui.level';
@@ -61,14 +64,19 @@ const TOOL_HELP: Partial<Record<string, string>> = {
   eraser: 'Erase paint, and cut vector lines on Ink', fill: 'Fill closed areas', select: 'Select an area to move, copy or fill',
   transform: 'Move, size or rotate the selection, or the whole drawing', adjust: 'Colour and blur adjustments to the current drawing',
   assets: 'Tap placed artwork, drag to move, corners to resize',
+  play: 'Play or pause the shot', onion: 'Show the drawings before and after (hold for its settings)', prevdraw: 'Go to the previous drawing', nextdraw: 'Go to the next drawing',
+  insert: 'A new blank drawing after this one', dup: 'Duplicate this drawing', del: 'Delete this drawing', fx: 'Effects of the layer you draw on',
 };
+/** Animation actions on a painting tool bar: they act at once, they are not a current tool. */
+const ACTION_KEYS = new Set(['play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx']);
 const PANEL_HELP: Partial<Record<string, string>> = {
   color: 'Opens the colour panel; drag it onto the canvas to fill an area', layers: 'Opens the layer list', reference: 'Opens the reference window', more: 'Opens every tool for this mode and Edit workspace',
 };
 const SECOND_TAP: Partial<Record<string, string>> = { brush: 'Tap again for brushes', smudge: 'Tap again for brushes', pen: 'Tap again for brushes', eraser: 'Tap again for brushes', assets: 'Tap again (or Done) to go back to drawing' };
 
 type ToolKey = 'assets' | 'more' | 'transform' | 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
-  | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look';
+  | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look'
+  | 'prevdraw' | 'nextdraw';
 
 /**
  * Bubbles: a simpler way around the app. Mode bubbles (Draw, Animate, Move, Story) at the top left,
@@ -90,6 +98,10 @@ export class Bubbles {
   private moreTools = false;
   /** Point editing's on/off settings, folded behind one chip. */
   private pointSettings = false;
+  /** Dock-style editing of the tool bar or an options row. */
+  readonly barEdit = new BarEditor();
+  /** The tool bar is being edited: it shows exactly the pinned tools. */
+  private editingTools = false;
 
   /** How far down the bubble rows reach (px from the stage top); the canvas fits below it. */
   private topClear = -1;
@@ -332,9 +344,58 @@ export class Bubbles {
     return b;
   }
 
-  private customize(context: CommandContext, anchor: HTMLElement): void {
-    const r = anchor.getBoundingClientRect();
-    showCustomize(context, r.left, r.bottom);
+  private customize(context: CommandContext, _anchor: HTMLElement): void {
+    this.editRow(context);
+  }
+
+  /** Edit an options row: drag its actions to reorder, off the row to hide, from the tray to show. */
+  editRow(context: CommandContext): void {
+    const a = this.app;
+    const items = (bar: HTMLElement) => [...bar.querySelectorAll<HTMLElement>(':scope > [data-command]')];
+    const shown = () => { const p = commandPrefs(); return orderCommands(p, context, commandsIn(context)).filter((c) => !isCommandHidden(p, c.id)).map((c) => c.id); };
+    const redraw = () => { this.sig = ''; this.update(); };
+    this.barEdit.open({
+      name: CONTEXT_NAMES[context] ?? 'row',
+      bar: () => this.ctx,
+      items,
+      idOf: (x) => x.dataset.command!,
+      available: () => commandsIn(context).map((c) => ({ id: c.id, label: commandName(c), icon: c.icon })),
+      shown,
+      apply: (ids) => {
+        // actions not on the row right now (Paste with nothing copied) keep their place on it
+        const rendered = new Set(items(this.ctx).map((x) => x.dataset.command!));
+        const resting = shown().filter((id) => !rendered.has(id) && !ids.includes(id));
+        setRowLayout(context, [...ids, ...resting]);
+        redraw();
+      },
+      reset: () => { setRowLayout(context, [], true); redraw(); },
+      notice: (t) => a.onNotice?.(t),
+    });
+  }
+
+  /** Edit this mode's tool bar: drag tools along it, off it, or onto it from the tray. */
+  editTools(): void {
+    const a = this.app, ws = a.workspace;
+    if (a.interfaceLevel === 'full' && isPaintingWorkspace(ws)) a.onNotice?.('At the Full level Draw and Animate use the classic top bar; this edits the tool bubbles of the Clean and Simple levels.');
+    const allowed: readonly string[] = WORKSPACE_TOOLS[ws];
+    const save = (tools: string[]) => { a.setWorkspaceLayouts({ ...a.workspaceLayouts, [ws]: { ...a.workspaceLayouts[ws], tools: tools as WorkspaceTool[] } }); this.sig = ''; this.update(); };
+    this.moreTools = false;
+    this.editingTools = true;
+    this.sig = '';
+    this.update();
+    this.barEdit.open({
+      name: `${WORKSPACE_NAMES[ws]} tools`,
+      bar: () => this.tools,
+      items: (bar) => [...bar.querySelectorAll<HTMLElement>(':scope > [data-tool-key]')].filter((x) => x.dataset.toolKey !== 'more'),
+      idOf: (x) => x.dataset.toolKey!,
+      available: () => this.toolsFor(ws, true).filter(([k]) => allowed.includes(k)).map(([k, label, icon]) => ({ id: k, label: WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label, icon: icon || 'palette' })),
+      shown: () => [...a.workspaceLayouts[ws].tools],
+      apply: save,
+      reset: () => save(defaultWorkspaceLayout(ws).tools),
+      keep: isPaintingWorkspace(ws) ? { brush: 'Brush stays on the bar, so there is always a way to draw.' } : undefined,
+      notice: (t) => a.onNotice?.(t),
+      onClose: () => { this.editingTools = false; this.sig = ''; this.update(); },
+    });
   }
 
   /** Drawing Guide: one button that steps through the symmetries. */
@@ -425,7 +486,8 @@ export class Bubbles {
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
     if (ws === 'draw' || ws === 'animate') {
-      const all: [ToolKey, string, string][] = [...draw, ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference', 'image']];
+      const anim: [ToolKey, string, string][] = [['play', 'Play', 'play'], ['onion', 'Onion skin', 'onion'], ['prevdraw', 'Previous drawing', 'prev'], ['nextdraw', 'Next drawing', 'next'], ['insert', 'New drawing', 'newframe'], ['dup', 'Duplicate drawing', 'dupframe'], ['del', 'Delete drawing', 'delframe'], ['fx', 'Effects', 'fx']];
+      const all: [ToolKey, string, string][] = [...draw, ...(ws === 'animate' ? [assets] : []), ['color', 'Colour', ''], ['layers', 'Layers', 'layers'], ['reference', 'Reference', 'image'], ...anim];
       if (expanded) return all;
       const pinned = this.app.workspaceLayouts[ws].tools;
       return [...pinned.flatMap(id => all.filter(([k]) => k === id)), ['more', 'More tools', 'more']];
@@ -492,7 +554,10 @@ export class Bubbles {
         a.openFlipbook?.(id);
         break;
       }
+      case 'prevdraw': a.prevDrawing(); break;
+      case 'nextdraw': a.nextDrawing(); break;
       case 'fx': {
+        if (isPaintingWorkspace(a.workspace) && !a.project.isPlaceholder) { a.openEffects?.(a.project.layer.id); break; }
         const id = a.editor.selected.find((s) => a.editor.comp.layers.some((l) => l.id === s && l.kind === 'drawings')) ?? a.editor.comp.layers.find((l) => l.kind === 'drawings')?.id;
         if (id) a.openEffects?.(id);
         else a.onNotice?.('Add a drawing layer first, then give it effects.');
@@ -602,7 +667,7 @@ export class Bubbles {
   update(): void {
     const a = this.app;
     const ws = a.workspace;
-    if (ws !== this.lastWorkspace) { this.moreTools = false; this.layersOpen = false; this.lastWorkspace = ws; }
+    if (ws !== this.lastWorkspace) { this.moreTools = false; this.layersOpen = false; this.lastWorkspace = ws; this.barEdit.close(); }
     const layout = a.workspaceLayouts[ws];
     this.stage.dataset.toolDock = layout.toolDock;
     this.stage.classList.toggle('workspace-tool-labels', layout.labels);
@@ -625,18 +690,19 @@ export class Bubbles {
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]')?.setAttribute('aria-pressed', String(sharing));
     this.modeName.textContent = sharing ? 'Share' : { animate: 'Animate', draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
-    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}`;
+    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}|${this.editingTools}`;
     if (paintingSig === this.sig) return;
     this.sig = paintingSig;
 
     // tool bubbles for this mode
     this.tools.replaceChildren();
     const tools = drawWs ? this.toolsFor(ws) : [...layout.tools.flatMap(id => this.toolsFor(ws, true).filter(([k]) => k === id)), ['more', 'More tools', 'more'] as [ToolKey, string, string]];
-    if (drawWs && !tools.some(([k]) => k === cur)) {
+    if (drawWs && !this.editingTools && !tools.some(([k]) => k === cur)) {
       const active = this.toolsFor(ws, true).find(([k]) => k === cur); if (active) tools.splice(Math.max(0, tools.length - 1), 0, active);
     }
     for (const [k, label0, icon0] of tools) {
-      if ((ws === 'draw' || ws === 'animate') && STUDENT_TOOLS.some(([id]) => id === k) && !a.studentUI.tools[k as StudentTool] && k !== cur) continue;
+      // (while editing, every pinned tool shows, so a drag never unpins one a profile hides)
+      if (!this.editingTools && (ws === 'draw' || ws === 'animate') && STUDENT_TOOLS.some(([id]) => id === k) && !a.studentUI.tools[k as StudentTool] && k !== cur) continue;
       const pause = k === 'play' && a.playing;
       const label = pause ? 'Pause' : label0, icon = pause ? 'pause' : icon0;
       const b = icon ? this.bubble(label, icon, label) : el('button', { type: 'button', class: 'bub bub-color', title: 'Colour', 'aria-label': 'Colour' });
@@ -658,23 +724,26 @@ export class Bubbles {
       if (drawWs) {
         // one wording for every painting tool: what it does, then what a tap (or a second tap) does
         const name = WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label;
-        const panel = PANEL_HELP[k];
-        b.title = panel ? `${name}: ${panel}` : `${name}${on ? ' (current)' : ''}: ${TOOL_HELP[k] ?? label}. ${on ? SECOND_TAP[k] ?? 'In use' : 'Tap to use'}.`;
-        b.dataset.kind = panel ? 'panel' : 'tool';
+        const panel = PANEL_HELP[k], action = ACTION_KEYS.has(k);
+        b.title = panel ? `${name}: ${panel}` : action ? `${name}: ${TOOL_HELP[k] ?? label}.` : `${name}${on ? ' (current)' : ''}: ${TOOL_HELP[k] ?? label}. ${on ? SECOND_TAP[k] ?? 'In use' : 'Tap to use'}.`;
+        b.dataset.kind = panel ? 'panel' : action ? 'action' : 'tool';
         // tools first, then the panels, divided once
         const prev = this.tools.lastElementChild as HTMLElement | null;
         if (panel && k !== 'more' && prev?.dataset.kind === 'tool') this.tools.append(el('span', { class: 'bub-sep bub-tools-sep', 'aria-hidden': 'true' }));
       }
       b.addEventListener('click', () => this.pickTool(k, b));
+      // right-click or hold a tool: edit the bar (the colour drags paint, Onion holds its own menu)
+      if (k !== 'color' && k !== 'onion' && k !== 'more') attachContextMenu(b, () => [{ label: 'Edit tool bar…', run: () => this.editTools() }, ...(k !== 'brush' || !drawWs ? [{ label: `Remove ${WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label} from the bar`, run: () => a.setWorkspaceLayouts({ ...a.workspaceLayouts, [ws]: { ...layout, tools: layout.tools.filter((t) => t !== k) } }) }] : [])]);
       this.tools.append(b);
     }
     this.extraTools.id = 'workspace-extra-tools'; this.extraTools.hidden = !this.moreTools;
-    this.extraTools.replaceChildren(el('strong', {}, 'More tools'), el('p', { class: 'bub-drawer-hint' }, 'Tap a tool to use it now. Edit workspace pins tools to the bar.'));
+    this.extraTools.replaceChildren(el('strong', {}, 'More tools'), el('p', { class: 'bub-drawer-hint' }, 'Tap a tool to use it now. Edit tool bar drags tools onto the bar.'));
     const allTools = this.toolsFor(ws, true);
     for (const [k, label] of allTools) {
       const b = this.chip(WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label, label, k === cur, b => this.pickTool(k, b));
       b.dataset.extraTool = k; this.extraTools.append(b);
     }
+    this.extraTools.append(this.chip('Edit tool bar', 'Drag tools onto the bar, along it or off it', false, () => this.editTools(), 'freeform'));
     if (this.hooks.editWorkspace) this.extraTools.append(this.chip('Edit workspace', 'Move and pin tools, add controls and restore defaults', false, () => {
       this.moreTools = false; this.sig = ''; this.update(); this.hooks.editWorkspace!(this.tools);
     }, 'gear'));
@@ -794,6 +863,9 @@ export class Bubbles {
       }
       add(this.chip('Move from start', 'On: your first key also keeps where things were at the first frame, so they move from the start. Off: they jump straight to the key.', a.editor.keyAtStart, () => { a.editor.keyAtStart = !a.editor.keyAtStart; a.editor.onChange(); }));
     }
+    // the user's order of this row's actions (each moves into a slot the row's actions held)
+    if (ORDERED_ROWS.includes(row)) orderRow(this.ctx, row as CommandContext);
     this.ctx.hidden = !this.ctx.querySelector(':scope > :not(.scroll-arrow)');
+    this.barEdit.refresh();
   }
 }

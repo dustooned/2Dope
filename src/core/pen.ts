@@ -29,7 +29,14 @@ export interface PenPrefs {
   barrel: BarrelAction;
   /** The pointer over the canvas while drawing (missing = crosshair; older builds ignore it). */
   cursor?: CanvasCursor;
+  /**
+   * Touch and hold on the canvas. 'eyedropper' (the default): one finger picks a colour (Draw and
+   * Animate) and two fingers open the canvas menu. 'menu': one finger opens the menu (as before).
+   */
+  touchHold?: TouchHold;
 }
+
+export type TouchHold = 'eyedropper' | 'menu';
 
 export type CanvasCursor = 'crosshair' | 'circle' | 'dot' | 'brush' | 'none';
 export const CANVAS_CURSORS: [CanvasCursor, string][] = [['crosshair', 'Crosshair'], ['circle', 'Small circle'], ['dot', 'Dot'], ['brush', 'Brush size'], ['none', 'None (pen screens)']];
@@ -63,7 +70,7 @@ export function canvasCursorCss(kind: CanvasCursor = 'crosshair', diameter = 0):
 }
 
 export function defaultPenPrefs(): PenPrefs {
-  return { version: 1, firmness: 0, threshold: 0, full: 1, tilt: true, eraserEnd: true, barrel: 'menu', cursor: 'crosshair' };
+  return { version: 1, firmness: 0, threshold: 0, full: 1, tilt: true, eraserEnd: true, barrel: 'menu', cursor: 'crosshair', touchHold: 'eyedropper' };
 }
 
 const num = (v: unknown, lo: number, hi: number, d: number): number =>
@@ -84,6 +91,7 @@ export function readPenPrefs(value: unknown): PenPrefs {
     eraserEnd: typeof v.eraserEnd === 'boolean' ? v.eraserEnd : d.eraserEnd,
     barrel: BARREL.includes(v.barrel as BarrelAction) ? v.barrel as BarrelAction : 'menu',
     cursor: CANVAS_CURSORS.some(([k]) => k === v.cursor) ? v.cursor as CanvasCursor : 'crosshair',
+    touchHold: v.touchHold === 'menu' ? 'menu' : 'eyedropper',
   };
 }
 

@@ -2,6 +2,57 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Dock-style tool bars, Animate actions, Motion column width, touch-hold eyedropper (2026-11-01, committed)
+
+Owner: more tool icons in Animate; toolbars easy to customise by drag and drop (add and remove,
+Mac Dock style, same on desktop and tablet), both the tool bar and option rows; mid-task also
+asked for a resizable Motion layer column, a one-finger hold eyedropper into the colour puck, and
+a two-finger hold for the canvas menu instead of one finger.
+- `src/ui/baredit.ts` (new) `BarEditor`: edit mode for any bar (`BarEditTarget`): wiggle, tray of
+  what is not on the bar, drag along (reorder), off (remove), from the tray (add, at the drop
+  point; a tap puts it back in its built-in place), tap to pick → ◀ ▶ Remove, keyboard arrows /
+  Delete / Escape. Document-level capture Pointer Events (mouse, pen, touch the same; drag after
+  6 px); the bar's own handlers and clicks are blocked while editing. `keep` items (Brush) cannot
+  leave. Styles at the end of `src/style.css` (reduced motion: no wiggle).
+- Tool bar (`src/ui/bubbles.ts` `editTools`): edits `WorkspaceLayout.tools` (existing device
+  prefs, per workspace) live via `app.setWorkspaceLayouts`; while editing the bar shows exactly the
+  pinned tools (no current-tool insert, no student-profile filter, so a drag never unpins a hidden
+  tool). Entry: More tools → Edit tool bar; hold / right-click a tool → Edit tool bar… or Remove.
+  At the Full level Draw/Animate use the classic top bar (notice; not editable here). A folded
+  (hidden) bar is not opened (notice).
+- Option rows (`editRow`, Customize chip): `CommandPrefs.order` (optional, per context;
+  `orderCommands`, `setCommandOrder`, `setRowLayout`); `orderRow` (`src/ui/commands.ts`)
+  permutes a built row's `[data-command]` chips among their own slots so fixed controls stay.
+  `setCommandHidden` now keeps `order`. The old Customize checklist is no longer used by rows
+  (`showCustomize` still serves the canvas and frame menus).
+- Animate / Draw tools (`WORKSPACE_TOOLS`): play, onion, prevdraw, nextdraw, insert, dup, del,
+  fx (not pinned by default); new icons `newframe`, `dupframe`, `delframe`; fx on a painting bar
+  opens the layer you draw on. Titles for these "action" buttons.
+- Motion layer column (`src/ui/motion.ts`): width 140–520 (default 196, `2dope.motion.leftw`),
+  CSS `--mleft-w`; drag the `.mleft` right edge on any row or the ruler grip; double-click resets;
+  arrow keys on the grip. Replaced the `LEFT_W` constant.
+- Touch hold (`src/app.ts`): `PenPrefs.touchHold` ('eyedropper' default | 'menu'; App settings →
+  Pen and tablet → Touch and hold). Eyedropper: one finger still for `HOLD_MS` in Draw/Animate
+  (not with finger painting) samples the screen (`sampleScreen`) into the colour, a loupe
+  (`.hold-loupe`) follows the finger, lift keeps it, cancel restores. Two-finger hold: both within
+  `HOLD_SLOP` → canvas menu at their midpoint; restores the view the fingers nudged, marks the tap
+  session moved (no undo), blocks pinch/pan until all fingers lift (`touchGestureDone`). Elsewhere
+  (Motion, Timing, Story) a one-finger canvas hold now does nothing. Menus on frames, layers,
+  panels and tracks are unchanged (one-finger hold).
+- Manual (gestures table, tool bar, Motion), UPDATES entry.
+- Tests: `commandprefs.test.ts` (order), `pen.test.ts` (touchHold); new fixture
+  `tests/toolbars.html` + `src/ui/toolbars.browser.ts` (24): edit tool bar with mouse / finger /
+  pen drags, saved, tap picks, Remove, Brush kept, arrows, Reset, Escape; Animate Onion and New
+  drawing from the bar; Select row reorder saved and Reset; one-finger hold picks red, loupe,
+  slide, lift; two-finger hold opens the menu and is no undo; 'menu' setting. `commandrow`
+  updated for the tray (44/44).
+- Checks: `npx vitest run` 644 passed + 1 skipped; build passes; all 50 browser fixtures pass on 127.0.0.1:5217 (railperf excluded: it hangs
+  headless Chrome; the manual text was edited after the run started, code was not). In the dev app
+  (test origin): tool bar drags (mouse / touch / pen), tray placement, Brush guard, Reset, Done;
+  Select row reorder and Reset; Motion column 196 → 316 (touch) → 256 (grip, mouse) → 196.
+- Not checked: real touch hardware (iPad, Android) for the holds and drags; Safari; the wiggle by
+  eye; option rows that scroll sideways on a phone while editing.
+
 ### Motion layers: blend mode, clipping mask, layer mask (2026-11-01, committed)
 
 Owner: "layers should have masking, color modes etc" in Motion (Draw's layer options had them;

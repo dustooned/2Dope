@@ -40,6 +40,9 @@ describe('pen prefs', () => {
     expect(readPenPrefs({ version: 1 }).cursor).toBe('crosshair');
     expect(readPenPrefs({ version: 1, cursor: 'dot' }).cursor).toBe('dot');
     expect(readPenPrefs({ version: 1, cursor: 'sparkles' }).cursor).toBe('crosshair');
+    expect(readPenPrefs({ version: 1 }).touchHold).toBe('eyedropper');
+    expect(readPenPrefs({ version: 1, touchHold: 'menu' }).touchHold).toBe('menu');
+    expect(readPenPrefs({ version: 1, touchHold: 'dance' }).touchHold).toBe('eyedropper');
     expect(canvasCursorCss('crosshair')).toBe('crosshair');
     expect(canvasCursorCss('none')).toBe('none');
     for (const k of ['circle', 'dot'] as const) expect(canvasCursorCss(k)).toMatch(/^url\("data:image\/svg\+xml,.+"\) \d+ \d+, crosshair$/);
