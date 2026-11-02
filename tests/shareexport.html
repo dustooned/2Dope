@@ -1,0 +1,50 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Share export checks</title>
+<style>body{margin:0;background:#1d1d22;color:#e8e8ee;font:12px system-ui}#app{position:fixed;inset:0;width:100%;height:100%;border:0}#report{position:fixed;z-index:10;right:8px;bottom:8px;max-width:50%;font-size:10px;background:#16161ce8;padding:6px;max-height:50vh;overflow:auto;pointer-events:none}#report ol{padding-left:20px}</style>
+<body><iframe id="app" src="../index.html" title="2Dope"></iframe>
+<aside id="report"><strong id="summary">Running…</strong><ol id="results"></ol></aside>
+<script type="module">
+  // The real app (in a same-origin frame, its own empty storage per run): Share renders and exports
+  // the timeline Motion shows. An asset opened on its own stays open and is what the GIF contains;
+  // a group inside the shot still exports the whole shot.
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let passed = 0, failed = 0;
+  const check = (name, ok, info) => { const li = document.createElement('li'); li.textContent = `${ok ? 'PASS' : 'FAIL'}: ${name}${ok || info === undefined ? '' : ' ' + JSON.stringify(info)}`; document.querySelector('#results').append(li); ok ? passed++ : failed++; };
+  try {
+    const win = document.querySelector('#app').contentWindow;
+    for (let i = 0; i < 150 && !win.__2dope; i++) await wait(100);
+    const app = win.__2dope, doc = win.document;
+    await wait(1500);
+    doc.querySelectorAll('dialog[open]').forEach((d) => d.close());
+    doc.body.classList.remove('gallery-open');
+    const frames = [];
+    for (let i = 0; i < 12; i++) { const d = app.project.newDrawing(); const g = d.line.getContext('2d'); g.fillStyle = '#20c040'; g.fillRect(0, 0, app.project.width, app.project.height); frames.push(d); }
+    // a square timeline that is not part of the shot (as an asset opened on its own), with footage
+    const sq = { ...app.project.comp, id: 'sq', name: 'Square asset', width: 640, height: 640, layers: [], audio: [] };
+    app.project.comps.set('sq', sq);
+    app.project.activeComp = 'sq'; app.editor.reset(); app.onCompChange();
+    app.addMediaLayer('Footage', frames, false);
+    await wait(400);
+    const undoBefore = app.history.peekUndo();
+    const exportGif = async () => {
+      doc.querySelector('.bub-modes [data-mode="share"]').click(); await wait(800);
+      const open = app.project.activeComp;
+      [...doc.querySelectorAll('.share-kinds button')].find((b) => /GIF/.test(b.textContent)).click(); await wait(300);
+      doc.querySelector('.share-go').click();
+      let save = null;
+      for (let i = 0; i < 300 && !save; i++) { await wait(200); save = doc.querySelector('.share-save'); }
+      const b = save ? new Uint8Array(await (await fetch(save.href)).arrayBuffer()) : null;
+      doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await wait(600);
+      return { open, size: b ? [b[6] | (b[7] << 8), b[8] | (b[9] << 8)] : null, green: b ? b.length : 0 };
+    };
+    const solo = await exportGif();
+    check('Share keeps an asset that is open on its own open', solo.open === 'sq', solo.open);
+    check('The GIF is that timeline (square), not the shot', !!solo.size && solo.size[0] === solo.size[1], solo.size);
+    check('After Share the same timeline is open, with its footage, and no undo step was added', app.project.activeComp === 'sq' && sq.layers.some((l) => l.name === 'Footage') && app.history.peekUndo() === undoBefore, app.project.activeComp);
+    // back in the shot: the shot is exported
+    app.project.activeComp = app.project.main; app.editor.reset(); app.onCompChange(); await wait(300);
+    const shot = await exportGif();
+    const main = app.project.comps.get(app.project.main);
+    check('In the shot the GIF is the shot', !!shot.size && Math.abs(shot.size[0] / shot.size[1] - main.width / main.height) < 0.02, shot.size);
+  } catch (e) { check(String(e), false); }
+  document.querySelector('#summary').textContent = `${passed} passed, ${failed} failed`;
+</script></body></html>

@@ -2,6 +2,53 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Share screen clean-up; Blender export runs in Share (2026-11-02, uncommitted)
+
+Owner: "anything we need to clean up with the blender export? Also the export screen needs some UI
+clean up."
+- Blender (`src/io/blender.ts`): `planBlender` builds the scene from `exportComp` (the gap left by
+  the section below), so a solo asset goes to Blender by itself, like every other Share export;
+  `layerEnd` once per layer; unused `type Layer` re-export removed. `src/io/blenderpack.ts`
+  `exportBlender` takes an `AbortSignal`, and drops the `images` entry of a drawing missing from
+  the pool (the add-on already shows a blank frame).
+- Share (`src/ui/share.ts`): Blender uses Share's own make flow (progress bar, Cancel / Esc,
+  Ready page with Save / Share… and the two Blender steps, plus the planner's notes). Before
+  making, its Check list shows layers / precomps / frames, storyboard markers and every
+  "simplified in Blender" note; the summary gives size and image count. `ShareHooks.blender` and
+  `main.ts` `exportForBlender` (toast flow) are gone; Menu › Export for Blender opens
+  `share.show('blender')`. Plurals ("1 frame", "1 picture") via `count`.
+- CSS (`src/style.css`): `.share-kinds` had no rules at all (buttons wrapped raggedly, the chosen
+  one unmarked): now a two-column card grid with the chosen card lit. Also styled `.share-advanced`,
+  `.share-passes`, `.share-zip`, `.share-steps`, `.share-result.checker`, text / number rows.
+  Time-lapse moved into the header; header subtitle hidden under 760 px.
+- Also: `compLength`'s doc comment had ended up above `exportComp` (`src/core/comp.ts`); moved back.
+- Manual: UPDATES entry.
+- Checks: `blender.test.ts` new case (shot while a group is open; solo asset alone);
+  `npx vitest run` 647 + 1 skipped; `npm run build`;
+  fixtures storyexport 41/41 and shareexport 4/4. Dev app (127.0.0.1:5217): Menu › Export for
+  Blender opens Share on Blender, Make → Ready with a 113 KB ZIP; PNG frames with Advanced open;
+  375 px phone width, no sideways scroll.
+- Not checked: importing the ZIP in Blender; the full fixture suite; Safari's `-webkit-line-clamp`
+  on the card hints.
+
+### Share exports the open timeline (GIF "removes footage, returns on undo") (2026-11-01, uncommitted)
+
+Owner: GIF export glitched: the footage vanished and came back on undo; then: "it was rendering
+another timeline and not Motion; had to reimport the asset".
+- Cause: `ShareView.show()` stepped out of groups with `editor.exit()` while `crumbs()` had more than
+  one step. A timeline not reachable from `project.main` (an asset opened on its own) also gives a
+  multi-step trail, so opening Share switched the open timeline to the shot, and every exporter
+  rendered `project.main`. Undo restored the asset timeline. (A direct `exportGif` call was checked
+  first: it changes nothing, no residency or history side effects.)
+- Fix: `exportComp(p)` (`src/core/comp.ts`): the shot, also while a group inside it is open; the
+  open timeline when it is not part of the shot. Used by `planGif`, `planApng`, `planVideo`,
+  `exportSequence` and Share's preview / picture (`ShareView.comp`); storyboard and animatic stay
+  on the shot. `show()` only steps out of groups when `exportComp` is the shot.
+- Tests: `gif.test.ts` (exportComp: shot, group in shot, solo asset, no active comp; planGif sizes);
+  new fixture `tests/shareexport.html` (the real app in a same-origin iframe: solo square asset
+  stays open, its GIF is square, no undo step; in the shot the GIF has the shot's shape).
+- Not checked: Blender export (`planBlender` still uses `main`), the old ExportUI dialog paths.
+
 ### Motion view switches; new default tools reach saved bars; QuickMenu / ☰ overlap (2026-11-01, committed)
 
 Owner: the QuickMenu button and the ☰ button overlapped; Motion needs the title safe and other

@@ -4374,11 +4374,34 @@ body:not(.ui-full) .sidebar, body.ui-full.bar-collapsed .sidebar, body.ui-full.t
 .share-foot .primary, .share-go.primary { flex: 1; min-height: 48px; font-size: 15px; font-weight: 600; background: var(--accent); color: var(--on-accent); border: 0; border-radius: var(--radius-md); text-align: center; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .share-foot button { min-height: 48px; border-radius: var(--radius-md); }
 .share-result { width: 100%; border-radius: var(--radius); background: #000; }
+.share-result.checker { background: repeating-conic-gradient(#d7d7de 0 25%, #f4f4f7 0 50%) 0 0 / 16px 16px; }
+/* the format picker: two columns of cards, icon beside a name and a one-line hint */
+.share-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.share-kinds button { display: grid; grid-template-columns: 20px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 8px 10px; min-height: 52px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel-2); color: var(--text); }
+.share-kinds button > .lbl { display: none; }
+.share-kinds button > svg { grid-row: 1 / 3; width: 20px; height: 20px; }
+.share-kinds button strong { font-size: 13px; line-height: 1.2; }
+.share-kinds button > span:not(.lbl) { font-size: 11px; line-height: 1.25; opacity: .65; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.share-kinds button:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.share-kinds button[aria-checked="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--panel-2)); }
+.share-kinds button[aria-checked="true"] > svg { color: var(--accent); }
+.share-head .share-timelapse { margin-left: auto; min-height: 36px; padding: 0 12px; border-radius: var(--radius-md); }
+.share-settings { display: flex; flex-direction: column; gap: 4px; }
+.share-advanced { border-top: 1px solid var(--line); padding-top: 6px; }
+.share-advanced > summary { cursor: pointer; font-size: 13px; font-weight: 600; padding: 6px 0; opacity: .8; }
+.share-advanced[open] > summary { margin-bottom: 4px; }
+.share-passes { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 6px 10px 8px; margin: 4px 0; display: flex; flex-direction: column; gap: 2px; }
+.share-passes legend { font-size: 12px; font-weight: 700; padding: 0 4px; }
+.share-row input[type="text"], .share-row input[type="number"] { min-height: 36px; max-width: 60%; }
+.share-zip { margin: 0; padding: 12px; border-radius: var(--radius); background: var(--panel-2); font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 10px; }
+.share-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 760px) {
   .share-body { flex-direction: column; overflow-y: auto; }
   .share-stage { flex: 0 0 auto; min-height: 46vh; }
   .share-side { width: auto; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .share-sub { display: none; }
 }
+.share-head .share-timelapse { white-space: nowrap; }
 
 /* arrows at the ends of a bar that scrolls sideways */
 .scroll-arrow { position: sticky; z-index: 4; flex: 0 0 auto; align-self: center; width: 30px; min-width: 30px !important; height: 36px; min-height: 36px; padding: 0; border-radius: var(--pill); border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: 22px; line-height: 1; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45); touch-action: none; }
@@ -5054,7 +5077,6 @@ dialog.timelapse { max-width: min(560px, calc(100vw - 32px)); }
 dialog.timelapse .tl-view { display: block; width: 100%; height: auto; background: #fff; border-radius: 6px; }
 dialog.timelapse .tl-bar { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
 dialog.timelapse .tl-bar input { flex: 1; }
-.share-timelapse { margin-top: 8px; width: 100%; }
 /* Animate tracks: type label, an art layer's recolour, the layer's Effects */
 .lp-type { opacity: 0.7; font-weight: normal; }
 .lp-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.4); flex: none; }

@@ -229,21 +229,26 @@ vocabulary from five buttons to a real (but still student-sized) easing library.
 
 ### Built today: Roughen Edges
 
-`src/core/effects.ts` gains `'roughen'` (label **Roughen edges**, target Ink, Roughness 0–24 default
-5, Size 8–160 default 34, Hold 1–8 default 2); `src/view/effects.ts` implements it **alpha-only**, the
-way After Effects and EffectCraft do it:
+`src/core/effects.ts` gains `'roughen'` (label **Roughen edges**, target Ink, Roughness 0–20 default
+3, Size 8–160 default 34, Hold 1–8 default 2); `src/view/effects.ts` implements it **on the alpha
+channel only**:
 
 1. find the painted box and copy its alpha into a float plane;
-2. soften that alpha by `Roughness / 2` (two box passes each way, edges fading out like the page);
-3. sample a 3-octave value-noise field at `Size`, seeded by `seed ^ effectTick` (so Hold and New
+2. sample a 2-octave value-noise field at `Size`, seeded by `seed ^ effectTick` (so Hold and New
    pattern work exactly like the other effects);
-4. `keep = clamp((softAlpha − 0.5 + (noise − 0.5) · 0.5) · 4 + 0.5)`, then multiply the pixel's
-   alpha. Colour is never changed, so thin ink stays the same colour instead of turning grey, and
-   the inside of a filled shape stays solid — only the rim crumbles.
+3. for every painted pixel, read the alpha where that noise points
+   (`x + noiseX · Roughness`, `y + noiseY · Roughness`, bilinear, zero past the artwork) and multiply
+   the pixel's alpha by it.
 
-This is deliberately simpler than EffectCraft's 8 edge types and 13 parameters; it keeps the four
-numbers that change the look (border/roughness, sharpness fixed at 1, scale, fractal influence fixed
-at 0.5) and uses the existing Hold/Seed model instead of Evolution/Cycle.
+So the rim is pulled in and out: inward keeps paint, outward erodes it, nothing is added outside the
+artwork, and **colour is never touched** — thin ink keeps its colour instead of turning grey, and the
+inside of a filled shape stays solid. One honest limitation: at high Roughness a 1–2 px line breaks
+into dashes, because that is what eroding its edge does (AE's roughen behaves the same way); the
+default is deliberately low.
+
+This is simpler than EffectCraft's 8 edge types and 13 parameters. It keeps the numbers that change
+the look (border/roughness, scale) and uses the existing Hold/Seed model instead of
+Evolution/Cycle.
 
 ### Built today: Gaussian Blur
 
@@ -255,8 +260,9 @@ its cache key would change every frame).
 
 ### Checks actually run
 
-- `npm test`: **72 files / 574 tests passed**, including two new assertions in
-  `src/core/effects.test.ts` for the defaults, clamping and target of both effects.
+- `npm test`: **74 files / 584 tests passed** (the two extra files are unrelated concurrent work),
+  including two new assertions in `src/core/effects.test.ts` for the defaults, clamping and target
+  of both effects.
 - `npm run build`: passed (TypeScript strict included); the only output is the pre-existing
   chunk-size warning.
 - **Not checked**: the browser render (no fixture yet), iPad cost of a 40 px blur, and how the

@@ -4,7 +4,7 @@ import { paintDrawing, type Drawing, type Project } from '../core/project';
 import { strokeLength } from '../core/stroke';
 import { encodePng } from './codec';
 import { buildManifest, entryPath, framesToExport, scaledSize, type ExportOptions, type Pass, type PlannedFrame } from './exportplan';
-import { compLength, frameContent, isPlainFlipbook } from '../core/comp';
+import { compLength, frameContent, isPlainFlipbook, exportComp } from '../core/comp';
 import { drawComp, releaseScratch } from '../view/composite';
 import { APP_VERSION } from './projectio';
 import { writeZip, type ZipFile } from './zip';
@@ -88,7 +88,7 @@ export async function exportSequence(
 ): Promise<{ zip: Uint8Array; frames: number; images: number }> {
   if (!opts.passes.length) throw new Error('Pick at least one pass to export.');
   // always the shot, even while a precomp is open for editing
-  const comp = project.comps.get(project.main) ?? project.comp;
+  const comp = exportComp(project) ?? project.comp;
   const composite = !isPlainFlipbook(comp);
   const only = comp.layers[0];
   const flipbook = !composite && only && only.kind === 'drawings' ? only.exposures : project.exposures;

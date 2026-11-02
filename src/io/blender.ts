@@ -1,5 +1,5 @@
 import { blenderHandles, type Prop, type Value } from '../core/anim';
-import { compLength, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type Layer, partsActive, skippedInExport } from '../core/comp';
+import { compLength, exportComp, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, partsActive, skippedInExport } from '../core/comp';
 
 /**
  * The Blender handoff (spec principle 4). 2Dope writes a package: `scene.json` (this file's
@@ -175,11 +175,12 @@ export function runs(perFrame: (string | null)[]): FrameRun[] {
 
 /**
  * Describe the project for Blender without drawing anything: which comps become collections,
- * which images are needed, and which precomp frames 2Dope has to render.
+ * which images are needed, and which precomp frames 2Dope has to render. The scene is the
+ * timeline every export renders (`exportComp`): the shot, or an asset opened on its own.
  */
-export function planBlender(project: { name: string; main: string; width: number; height: number; comps: ReadonlyMap<string, Comp> }, savedBy: string): BlenderPlan {
+export function planBlender(project: { name: string; main: string; activeComp?: string; width: number; height: number; comps: ReadonlyMap<string, Comp> }, savedBy: string): BlenderPlan {
   const comps = project.comps;
-  const main = comps.get(project.main);
+  const main = exportComp(project);
   if (!main) throw new Error('the project has no main comp');
   const scene: BlenderScene = { format: BLENDER_FORMAT, version: BLENDER_VERSION, savedBy, name: project.name, main: main.id, pixelsPerUnit: 100, comps: {}, images: {} };
   const drawings = new Set<string>();
@@ -209,6 +210,7 @@ export function planBlender(project: { name: string; main: string; width: number
         ...channels(t.rotation, ['rotation'], l.start),
         ...channels(t.opacity, ['opacity'], l.start),
       };
+      const end = layerEnd(l, comps, c.fps);
       const base: BlenderLayer = {
         id: l.id,
         name: l.name,
@@ -217,7 +219,7 @@ export function planBlender(project: { name: string; main: string; width: number
         visible: l.visible,
         in: l.in,
         // where it really stops in 2Dope (a "once" layer ends with its content)
-        out: Number.isFinite(layerEnd(l, comps, c.fps)) ? layerEnd(l, comps, c.fps) : null,
+        out: Number.isFinite(end) ? end : null,
         blend: l.blend,
         anchor: [anchorValue[0], anchorValue[1]],
         size: [0, 0],
@@ -294,5 +296,3 @@ export function planBlender(project: { name: string; main: string; width: number
 export function plannedLayers(plan: BlenderPlan, comp: string): Record<string, BlenderLayer> {
   return Object.fromEntries((plan.scene.comps[comp]?.layers ?? []).map((l) => [l.id, l]));
 }
-
-export type { Layer };

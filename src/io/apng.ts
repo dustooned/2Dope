@@ -1,5 +1,5 @@
 import { makeCanvas } from '../brush/raster';
-import { compLength, frameContent } from '../core/comp';
+import { compLength, frameContent, exportComp } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { drawComp, releaseScratch } from '../view/composite';
 import { crc32 } from './zip';
@@ -18,8 +18,8 @@ export interface ApngOptions {
 
 export const DEFAULT_APNG: ApngOptions = { size: 720, background: 'transparent' };
 
-export function planApng(project: Pick<Project, 'comp' | 'comps' | 'main'>, opts: ApngOptions, lite: boolean) {
-  const comp = project.comps.get(project.main) ?? project.comp;
+export function planApng(project: Pick<Project, 'comp' | 'comps' | 'main'> & { activeComp?: string }, opts: ApngOptions, lite: boolean) {
+  const comp = exportComp(project) ?? project.comp;
   const frames = compLength(comp, project.comps), fps = comp.fps;
   if (!Number.isInteger(frames) || frames < 1 || !Number.isFinite(fps) || fps < 1 || fps > 120) throw new Error('Invalid shot timing.');
   const edge = opts.size > 0 ? opts.size : Math.max(comp.width, comp.height);

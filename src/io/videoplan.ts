@@ -1,4 +1,4 @@
-import { compLength } from '../core/comp';
+import { compLength, exportComp } from '../core/comp';
 import type { Project } from '../core/project';
 import { soundVoices } from './soundmix';
 
@@ -68,9 +68,9 @@ export function videoSize(width: number, height: number, size: VideoOptions['siz
 }
 
 /** Always export the main shot, including while a precomp is open for editing. */
-export function planVideo(project: Pick<Project, 'comps' | 'main' | 'comp'>, raw: unknown, maxBytes = VIDEO_MAX_BYTES, length?: number): VideoPlan {
+export function planVideo(project: Pick<Project, 'comps' | 'main' | 'comp'> & { activeComp?: string }, raw: unknown, maxBytes = VIDEO_MAX_BYTES, length?: number): VideoPlan {
   const options = videoOptions(raw);
-  const comp = project.comps.get(project.main) ?? project.comp;
+  const comp = exportComp(project) ?? project.comp;
   // `length` is a shorter or longer run of the same clock (an animatic ends with its board)
   const frames = length ?? compLength(comp, project.comps);
   const fps = comp.fps;

@@ -56,6 +56,18 @@ describe('Blender plan', () => {
     expect(plan.renders).toHaveLength(0);
   });
 
+  it('exports the timeline Share shows: the shot while a group in it is open, an asset opened on its own by itself', () => {
+    const p = project();
+    expect(planBlender({ ...p, activeComp: 'c2' }, 'test').scene.main).toBe('c1');
+    const solo = newComp('c3', 'Prop', 200, 200, 12);
+    solo.layers.push(drawingsLayer('X', 'Prop', [{ drawing: 'x1', length: 2 }], 200, 200));
+    p.comps.set('c3', solo);
+    const plan = planBlender({ ...p, activeComp: 'c3' }, 'test');
+    expect(plan.scene.main).toBe('c3');
+    expect(Object.keys(plan.scene.comps)).toEqual(['c3']);
+    expect([...plan.drawings]).toEqual(['x1']);
+  });
+
   it('guide layers (the storyboard) stay out of Blender unless set to export', () => {
     const p = project();
     const B = p.shot.layers.find((l) => l.id === 'B')!;

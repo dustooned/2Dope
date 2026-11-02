@@ -517,7 +517,6 @@ const timelapse = new TimeLapse(app);
 const share = new ShareView(app, {
   timelapse: () => timelapse.show(),
   sounds: audioPlayback.bank,
-  blender: () => void exportForBlender(),
   backup: () => void files?.exportProject(),
   onOpenChange: () => onShareChange(),
 });
@@ -610,36 +609,9 @@ const menuActions: Record<string, () => void> = {
   'export-hub': () => share.show(),
   'export-seq': () => exporter?.open(),
   'export-video': () => videoExporter.open(),
-  blender: () => void exportForBlender(),
+  blender: () => share.show('blender'),
 };
 
-/** Download a package Blender imports with the 2Dope add-on (it is inside the package). */
-async function exportForBlender(): Promise<void> {
-  const t = files?.toast('Preparing the Blender package…');
-  try {
-    const { exportBlender } = await import('./io/blenderpack');
-    const r = await exportBlender(app.project, app.residency, (p) => {
-      const s = t?.querySelector('span');
-      if (s) s.textContent = `Preparing the Blender package… ${p.done} of ${p.total}`;
-    });
-    t?.remove();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([r.zip as BlobPart], { type: 'application/zip' }));
-    const base =
-      app.project.name
-        .replace(/[^\w\- ]+/g, '')
-        .trim()
-        .replace(/\s+/g, '-') || 'shot';
-    a.download = `${base}-blender.zip`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-    files?.toast(`Saved ${a.download} (${r.images} images). In Blender: install 2dope_import.py from the zip once, then File > Import > 2Dope scene.`, [], 9000);
-    for (const n of r.notes.slice(0, 3)) files?.toast(n);
-  } catch (e) {
-    t?.remove();
-    files?.toast(`Could not make the Blender package: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
 menu.querySelectorAll<HTMLButtonElement>('[data-menu]').forEach((b) => b.addEventListener('click', () => menuActions[b.dataset.menu ?? '']?.()));
 
 app.onFrameChange = chain(app.onFrameChange, () => {

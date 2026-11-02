@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GIF_CLEAR, gifFrame, gifHeader } from './gif';
 import { GIF_DEFAULTS, mapToPalette, medianCut, readGifOptions, usesFixedPalette } from './gifpalette';
 import { planGif } from './exportgif';
-import { drawingsLayer, newComp } from '../core/comp';
+import { compLayer, drawingsLayer, exportComp, newComp } from '../core/comp';
 
 // Independent LZW decoder, including dictionary growth, to catch bit/block boundary errors.
 function decode(frame: Uint8Array): number[] {
@@ -54,6 +54,23 @@ describe('GIF encoding and budgets', () => {
     expect([...header.slice(6, 10)]).toEqual([64, 1, 180, 0]);
     expect(new TextDecoder().decode(header.slice(784, 795))).toBe('NETSCAPE2.0');
     expect([...header.slice(-5)]).toEqual([3, 1, 0, 0, 0]);
+  });
+  it('renders what Motion shows: the shot (also inside a group in it), or an asset opened on its own', () => {
+    const main = newComp('main', 'Shot', 1920, 1080, 24);
+    main.layers.push(drawingsLayer('L1', 'Art', [{ drawing: 'd1', length: 24 }], 1920, 1080));
+    const group = newComp('group', 'Group', 1920, 1080, 24);
+    group.layers.push(drawingsLayer('L2', 'In group', [{ drawing: 'd2', length: 24 }], 1920, 1080));
+    main.layers.push(compLayer('L3', 'Group', group, main));
+    const asset = newComp('asset', 'Footage asset', 640, 640, 24);
+    asset.layers.push(drawingsLayer('L4', 'Footage', [{ drawing: 'd3', length: 24 }], 640, 640));
+    const comps = new Map([[main.id, main], [group.id, group], [asset.id, asset]]);
+    expect(exportComp({ main: 'main', activeComp: 'main', comps })?.id).toBe('main');
+    expect(exportComp({ main: 'main', activeComp: 'group', comps })?.id).toBe('main');
+    expect(exportComp({ main: 'main', activeComp: 'asset', comps })?.id).toBe('asset');
+    expect(exportComp({ main: 'main', comps })?.id).toBe('main');
+    // the GIF follows: a square 640 asset comes out square
+    expect(planGif({ main: 'main', activeComp: 'asset', comp: asset, comps }, false)).toMatchObject({ comp: 'asset', width: 480, height: 480 });
+    expect(planGif({ main: 'main', activeComp: 'group', comp: group, comps }, false)).toMatchObject({ comp: 'main', width: 480, height: 270 });
   });
   it('uses the main comp and caps output sampling and Lite size without editing timing', () => {
     const main = newComp('main', 'Shot', 1920, 1080, 24);

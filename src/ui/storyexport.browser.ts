@@ -18,7 +18,7 @@ app.loadProject(new Project(160, 90));
 const notices: string[] = [];
 app.onNotice = (m) => notices.push(m);
 let exportCalls = 0;
-const share = new ShareView(app, { sounds: {} as SoundBank, blender: () => {}, backup: () => {}, onOpenChange: () => {} });
+const share = new ShareView(app, { sounds: {} as SoundBank, backup: () => {}, onOpenChange: () => {} });
 const board = new BoardPanel(app, document.querySelector<HTMLElement>('#board')!, () => { exportCalls++; share.show(share.lastKind === 'animatic' ? 'animatic' : 'board'); });
 const refresh = () => board.update();
 app.onFrameChange = refresh; app.onWorkspaceChange = refresh; app.onThumbs = refresh; app.history.onChange = refresh;

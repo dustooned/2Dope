@@ -1,12 +1,12 @@
 import { makeCanvas } from '../brush/raster';
-import { compLength, frameContent } from '../core/comp';
+import { compLength, frameContent, exportComp } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { drawComp, releaseScratch } from '../view/composite';
 import { gifFrame, gifHeader } from './gif';
 import { ColourSample, GIF_DEFAULTS, mapToPalette, medianCut, usesFixedPalette, type GifOptions } from './gifpalette';
 
-export function planGif(project: Pick<Project, 'comp' | 'comps' | 'main'>, lite: boolean) {
-  const comp = project.comps.get(project.main) ?? project.comp;
+export function planGif(project: Pick<Project, 'comp' | 'comps' | 'main'> & { activeComp?: string }, lite: boolean) {
+  const comp = exportComp(project) ?? project.comp;
   const frames = compLength(comp, project.comps), fps = comp.fps;
   if (!Number.isInteger(frames) || frames < 1 || !Number.isFinite(fps) || fps < 1 || fps > 120) throw new Error('Invalid shot timing.');
   const duration = frames / fps;

@@ -1,10 +1,11 @@
 import type { App, Workspace } from '../app';
-import { compLength, frameContent } from '../core/comp';
+import { compLength, frameContent, exportComp } from '../core/comp';
 import { soundStart } from '../core/audio';
 import type { Drawing } from '../core/project';
 import { boardCues, toSrt } from '../core/dialogue';
 import { animaticLength, animaticOptions, animaticPicture, boardOf, paintAnimatic, type AnimaticOptions } from '../io/animatic';
 import { DEFAULT_APNG, exportApng, planApng, type ApngOptions } from '../io/apng';
+import { planBlender } from '../io/blender';
 import { exportGif, planGif } from '../io/exportgif';
 import { readGifOptions, type GifOptions } from '../io/gifpalette';
 import { DEFAULT_EXPORT, PASSES, sanitizeName, type ExportOptions, type Pass } from '../io/exportplan';
@@ -35,6 +36,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
   if (text !== undefined) e.textContent = text;
   return e;
 }
+/** "1 frame", "2 frames". */
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const fileSize = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 function load<T>(key: string, fallback: T): T {
   try { const v = JSON.parse(localStorage.getItem(key) ?? 'null') as T | null; return v && typeof v === 'object' ? { ...fallback, ...v } : fallback; } catch { return fallback; }
@@ -74,7 +77,6 @@ function boardOpts(raw: unknown): BoardOpts {
 
 export interface ShareHooks {
   sounds: SoundBank;
-  blender(): void;
   backup(): void;
   onOpenChange(open: boolean): void;
   /** Replay this session's time-lapse. */
@@ -126,6 +128,11 @@ export class ShareView {
     decorate(back, 'close');
     back.addEventListener('click', () => this.close());
     head.append(back, el('span', { class: 'share-title' }, 'Share'), el('span', { class: 'share-sub' }, 'Watch it, check it, then make your movie'));
+    if (hooks.timelapse) {
+      const tl = el('button', { type: 'button', class: 'share-timelapse', title: 'Watch how this project was made, and save it as a GIF' }, '⏱ Time-lapse');
+      tl.addEventListener('click', () => this.hooks.timelapse?.());
+      head.append(tl);
+    }
 
     const stage = el('div', { class: 'share-stage' });
     const transport = el('div', { class: 'share-transport' });
@@ -164,8 +171,11 @@ export class ShareView {
     if (this.open || this.app.strokeActive) return;
     if (kind && kind !== this.kind) { this.kind = kind; save(KIND_KEY, kind); }
     const app = this.app;
-    // always the whole shot: step out of any group, and let Motion keep the shot's drawings loaded
-    while (app.editor.crumbs().length > 1) if (!app.editor.exit()) break;
+    // the whole shot: step out of any group in it, and let Motion keep the shot's drawings loaded.
+    // A timeline that is not part of the shot (an asset opened on its own) stays open: that is what
+    // Share shows and exports (exportComp); leaving it would switch the open timeline to the shot.
+    const p = app.project;
+    if (exportComp(p) === p.comps.get(p.main)) while (app.editor.crumbs().length > 1) if (!app.editor.exit()) break;
     this.prevWs = app.workspace;
     if (app.workspace !== 'motion') app.setWorkspace('motion');
     this.root.hidden = false;
@@ -212,7 +222,9 @@ export class ShareView {
 
   private get comp() {
     const p = this.app.project;
-    return p.comps.get(p.main) ?? p.comp;
+    // the storyboard and animatic belong to the shot; the rest is what Motion shows (exportComp)
+    if (this.kind === 'board' || this.kind === 'animatic') return p.comps.get(p.main) ?? p.comp;
+    return exportComp(p) ?? p.comp;
   }
 
   /** Does the chosen format keep see-through areas? (The preview shows a checkerboard then.) */
@@ -297,11 +309,12 @@ export class ShareView {
 
   /** What could surprise you in the movie: hidden layers, muted sounds, sound past the end. */
   private checks(): { ok: boolean; text: string }[] {
+    if (this.kind === 'blender') return this.blenderChecks();
     const c = this.comp;
     const comps = this.app.project.comps;
     const len = compLength(c, comps);
     const out: { ok: boolean; text: string }[] = [];
-    out.push({ ok: len / c.fps >= 1, text: `${len} frames · ${(len / c.fps).toFixed(1)} seconds at ${c.fps} fps${len / c.fps < 1 ? ' (very short)' : ''}` });
+    out.push({ ok: len / c.fps >= 1, text: `${count(len, 'frame')} ·${(len / c.fps).toFixed(1)} seconds at ${c.fps} fps${len / c.fps < 1 ? ' (very short)' : ''}` });
     const hidden = c.layers.filter((l) => (l.kind === 'drawings' || l.kind === 'comp') && !l.visible && !(l.kind === 'drawings' && l.guide));
     if (hidden.length) out.push({ ok: false, text: `Hidden, so not included: ${hidden.map((l) => l.name).slice(0, 4).join(', ')}${hidden.length > 4 ? ` and ${hidden.length - 4} more` : ''}` });
     const board = this.board;
@@ -329,6 +342,21 @@ export class ShareView {
     return out;
   }
 
+  /** What Blender gets, and what it gets in a simpler form (the planner's notes). */
+  private blenderChecks(): { ok: boolean; text: string }[] {
+    try {
+      const plan = planBlender(this.app.project, '');
+      const main = plan.scene.comps[plan.scene.main]!;
+      const precomps = Object.keys(plan.scene.comps).length - 1;
+      const out = [{ ok: true, text: `${count(main.layers.length, 'layer')}${precomps ? ` and ${count(precomps, 'precomp')}` : ''} · ${count(main.length, 'frame')} at ${main.fps} fps` }];
+      if (plan.scene.board) out.push({ ok: true, text: `The storyboard as ${count(plan.scene.board.length, 'timeline marker')}` });
+      for (const n of plan.notes) if (!n.startsWith('The storyboard')) out.push({ ok: false, text: n });
+      return out;
+    } catch (e) {
+      return [{ ok: false, text: e instanceof Error ? e.message : String(e) }];
+    }
+  }
+
   private renderSide(): void {
     this.releaseUrl();
     const s = this.side;
@@ -343,11 +371,6 @@ export class ShareView {
       grid.append(b);
     }
     s.append(el('h3', {}, 'Make a'), grid);
-    if (this.hooks.timelapse) {
-      const tl = el('button', { type: 'button', class: 'share-timelapse', title: 'Watch how this project was made, and save it as a GIF' }, '⏱ Time-lapse');
-      tl.addEventListener('click', () => this.hooks.timelapse?.());
-      s.append(tl);
-    }
 
     const main = el('div', { class: 'share-settings' });
     const adv = el('details', { class: 'share-advanced' });
@@ -375,7 +398,8 @@ export class ShareView {
     };
     const bg3: [string, string][] = [['transparent', 'See-through'], ['white', 'White'], ['black', 'Black']];
 
-    let movie = true;
+    // a Check list (what could surprise you) for the movies and the Blender package
+    let checked = true;
     if (this.kind === 'video') {
       select(main, 'Preset', videoPresetOf(this.opts) ?? 'custom', [...VIDEO_PRESETS.map((p): [string, string] => [p.id, `${p.label} · ${p.hint}`]), ['custom', 'Your own settings (Advanced)']], (v) => { const p = VIDEO_PRESETS.find((x) => x.id === v); if (p) setVideo(p.opts); this.renderSide(); });
       select(main, 'Background', this.opts.background, [['white', 'White'], ['black', 'Black'], ['transparent', 'See-through (WebM)']], (v) => { setVideo({ background: v as VideoOptions['background'] }); this.renderSide(); });
@@ -438,7 +462,7 @@ export class ShareView {
       nameRow.append(el('span', {}, 'File name'), nm);
       advBody.append(numRow, nameRow);
     } else if (this.kind === 'picture') {
-      movie = false;
+      checked = false;
       select(main, 'Background', this.picture.background, [['transparent', 'See-through'], ['white', 'White']], (v) => { this.picture = { ...this.picture, background: v as PictureOpts['background'] }; save(PICTURE_KEY, this.picture); });
       select(advBody, 'Size', String(this.picture.scale), [['1', 'Full size'], ['0.5', 'Half'], ['2', 'Double']], (v) => { this.picture = { ...this.picture, scale: Number(v) }; save(PICTURE_KEY, this.picture); });
       main.append(el('p', { class: 'hint' }, 'The frame the preview shows: move the slider under it to pick one.'));
@@ -462,7 +486,7 @@ export class ShareView {
       select(advBody, 'File', this.animaticVideo.format, [['mp4', 'MP4 · plays everywhere'], ['webm', 'WebM']], (v) => setVideo({ format: v as VideoOptions['format'] }));
       advBody.append(el('p', { class: 'hint' }, 'Size, file and background are the Video settings: changing them here changes them there too.'));
     } else if (this.kind === 'board') {
-      movie = false;
+      checked = false;
       const setSheets = (patch: Partial<BoardOpts>) => { this.sheets = boardOpts({ ...this.sheets, ...patch }); save(BOARD_KEY, this.sheets); };
       if (!this.board) main.append(el('p', { class: 'hint' }, 'No storyboard yet. Make some panels in Story first.'));
       select(main, 'Format', this.sheets.format, [['pdf', 'PDF sheets'], ['png', 'Panel PNGs + captions (ZIP)']], (v) => { setSheets({ format: v as BoardOpts['format'] }); this.renderSide(); });
@@ -477,10 +501,11 @@ export class ShareView {
         row.append(box, el('span', {}, 'Captions: shot, camera, dialogue lines, action, timing, notes'));
         main.append(row);
       } else main.append(el('p', { class: 'hint' }, 'Each panel as a PNG, captions.csv for a spreadsheet and, when panels have dialogue, subtitles.srt on the panel timing.'));
+    } else if (this.kind === 'blender') {
+      main.append(el('p', { class: 'hint' }, 'An editable Blender scene: layers as image planes, the camera, precomps and every keyframe. The add-on that opens it is inside the ZIP.'));
     } else {
-      movie = false;
-      const text = { blender: 'The shot as an editable Blender scene: layers, drawings as images, camera and timing.', backup: 'The whole project as one .2dope file, to keep or to open on another device.' }[this.kind];
-      main.append(el('p', { class: 'hint' }, text));
+      checked = false;
+      main.append(el('p', { class: 'hint' }, 'The whole project as one .2dope file, to keep or to open on another device.'));
     }
     const board = this.board;
     if (board && (this.kind === 'video' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'frames' || this.kind === 'picture')) {
@@ -519,7 +544,7 @@ export class ShareView {
     }
     s.append(main);
     if (advBody.childElementCount) s.append(adv);
-    if (movie) {
+    if (checked) {
       const list = el('ul', { class: 'share-checks', 'aria-label': 'Checks' });
       for (const c of this.checks()) list.append(el('li', { class: c.ok ? 'ok' : 'warn' }, c.text));
       s.append(el('h3', {}, 'Check'), list);
@@ -561,15 +586,15 @@ export class ShareView {
       } else if (this.kind === 'gif') {
         const p = planGif(this.app.project, this.app.device.lite);
         const loops = this.gif.loop === 'forever' ? 'loops for ever' : this.gif.loop === 'once' ? 'plays once' : `plays ${this.gif.loop} times`;
-        sum.textContent = `${p.width} × ${p.height} · ${p.samples} pictures · ${this.gif.colors} colours · ${loops}`;
+        sum.textContent = `${p.width} × ${p.height} · ${count(p.samples, 'picture')} ·${this.gif.colors} colours · ${loops}`;
         go.disabled = false;
       } else if (this.kind === 'apng') {
         const p = planApng(this.app.project, this.apng, this.app.device.lite);
-        sum.textContent = `${p.width} × ${p.height} · ${p.frames} frames · loops forever`;
+        sum.textContent = `${p.width} × ${p.height} · ${count(p.frames, 'frame')} · loops for ever`;
         go.disabled = false;
       } else if (this.kind === 'frames') {
         const len = compLength(c, this.app.project.comps);
-        sum.textContent = `${len} frames × ${this.frames.passes.length} pass${this.frames.passes.length === 1 ? '' : 'es'} · ${Math.round(c.width * this.frames.scale)} × ${Math.round(c.height * this.frames.scale)} · one ZIP`;
+        sum.textContent = `${count(len, 'frame')} × ${count(this.frames.passes.length, 'pass', 'passes')} ·${Math.round(c.width * this.frames.scale)} × ${Math.round(c.height * this.frames.scale)} · one ZIP`;
         go.disabled = false;
       } else if (this.kind === 'board') {
         const board = this.board;
@@ -579,6 +604,11 @@ export class ShareView {
         go.disabled = false;
       } else if (this.kind === 'picture') {
         sum.textContent = `Frame ${this.app.frame + 1} · ${Math.round(c.width * this.picture.scale)} × ${Math.round(c.height * this.picture.scale)} PNG`;
+        go.disabled = false;
+      } else if (this.kind === 'blender') {
+        const plan = planBlender(this.app.project, '');
+        const main = plan.scene.comps[plan.scene.main]!;
+        sum.textContent = `${main.width} × ${main.height} · ${count(plan.drawings.size + plan.renders.length, 'image')} · one ZIP`;
         go.disabled = false;
       } else go.disabled = false;
     } catch (e) {
@@ -621,8 +651,7 @@ export class ShareView {
 
   private async make(): Promise<void> {
     if (this.abort) return;
-    // the formats with their own flow
-    if (this.kind === 'blender') return this.hooks.blender();
+    // the format with its own flow
     if (this.kind === 'backup') return this.hooks.backup();
     if (this.app.playing) this.app.togglePlay();
     const s = this.side;
@@ -642,6 +671,7 @@ export class ShareView {
     // the hand-in label goes on what you watch (not on PNG frames: those are for compositing)
     if (this.kind === 'video' || this.kind === 'animatic' || this.kind === 'gif' || this.kind === 'apng' || this.kind === 'picture') setExportStamp(this.stampText);
     let extra: { blob: Blob; file: string } | undefined;
+    let notes: string[] = [];
     try {
       let blob: Blob, file: string;
       if (this.kind === 'animatic') {
@@ -680,6 +710,12 @@ export class ShareView {
       } else if (this.kind === 'apng') {
         blob = await exportApng(this.app.project, this.apng, this.app.device.lite, controller.signal, this.app.residency, (n, t) => progress(n, t, `Making animated PNG: ${n} of ${t}`));
         file = `${name}.png`;
+      } else if (this.kind === 'blender') {
+        const { exportBlender } = await import('../io/blenderpack');
+        const r = await exportBlender(this.app.project, this.app.residency, (p) => progress(p.done, p.total, `Making the Blender package: ${p.done} of ${p.total}`), controller.signal);
+        blob = new Blob([r.zip as BlobPart], { type: 'application/zip' });
+        file = `${name}-blender.zip`;
+        notes = r.notes;
       } else if (this.kind === 'frames') {
         const opts: ExportOptions = { ...DEFAULT_EXPORT, name: sanitizeName(this.frames.name || this.app.project.name), passes: this.frames.passes, scale: this.frames.scale, background: this.frames.background, range: 'all', start: this.frames.start };
         const r = await exportSequence(this.app.project, opts, [], (p) => progress(p.done, p.total, p.label ?? `Frame ${p.done} of ${p.total}`), controller.signal, this.app.residency);
@@ -692,7 +728,7 @@ export class ShareView {
       }
       if (controller.signal.aborted || !this.open) return;
       this.abort = null;
-      this.result(blob, file, extra);
+      this.result(blob, file, extra, notes);
     } catch (e) {
       if (!this.open) return;
       const msg = controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError') ? 'Stopped. Change the settings and try again.' : `Could not make it: ${e instanceof Error ? e.message : String(e)}`;
@@ -706,7 +742,7 @@ export class ShareView {
   }
 
   /** The finished file: look at it, then save it or send it. */
-  private result(blob: Blob, file: string, extra?: { blob: Blob; file: string }): void {
+  private result(blob: Blob, file: string, extra?: { blob: Blob; file: string }, notes: string[] = []): void {
     this.releaseUrl();
     this.url = URL.createObjectURL(blob);
     const s = this.side;
@@ -715,6 +751,20 @@ export class ShareView {
     if (this.kind === 'board') media = el('p', { class: 'share-zip' }, this.sheets.format === 'pdf' ? 'Storyboard sheets: each panel with its number, timing, picture and captions.' : 'A ZIP of panel PNGs with captions.csv (and subtitles.srt when panels have dialogue).');
     else if (this.kind === 'video' || this.kind === 'animatic') media = el('video', { controls: '', playsinline: '', loop: '', src: this.url, class: 'share-result', 'aria-label': 'Your video' });
     else if (this.kind === 'frames') media = el('p', { class: 'share-zip' }, 'A ZIP of numbered PNG frames, one folder per pass.');
+    else if (this.kind === 'blender') {
+      media = el('div', { class: 'share-zip' });
+      const steps = el('ol', { class: 'share-steps' });
+      steps.append(
+        el('li', {}, 'In Blender 4.2 or newer: Edit › Preferences › Add-ons › Install from Disk, pick 2dope_import.py from the ZIP and tick it (once).'),
+        el('li', {}, 'File › Import › 2Dope scene, and pick the ZIP.'),
+      );
+      media.append(steps);
+      if (notes.length) {
+        const list = el('ul', { class: 'share-checks', 'aria-label': 'Simplified in Blender' });
+        for (const n of notes) list.append(el('li', { class: n.startsWith('The storyboard') ? 'ok' : 'warn' }, n));
+        media.append(list);
+      }
+    }
     else media = el('img', { src: this.url, class: `share-result${this.seeThrough ? ' checker' : ''}`, alt: 'Your file' });
     s.append(media, el('p', { class: 'share-summary' }, `${file} · ${fileSize(blob.size)}`));
     const foot = el('div', { class: 'share-foot' });

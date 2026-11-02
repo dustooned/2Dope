@@ -393,6 +393,29 @@ export function contentFrameAt(l: DrawingsLayer | CompLayer, compFrame: number, 
 }
 
 /**
+ * The timeline an export renders: the whole shot (`main`), also while a group inside it is open,
+ * unless the timeline open now is not part of the shot at all (an asset opened on its own): then
+ * that timeline, so the export is what Motion shows.
+ */
+export function exportComp(p: { main: string; activeComp?: string; comps: ReadonlyMap<string, Comp> }): Comp | undefined {
+  const main = p.comps.get(p.main);
+  const open = p.activeComp === undefined ? undefined : p.comps.get(p.activeComp);
+  if (!open || !main || open === main) return main ?? open;
+  const seen = new Set<string>(), stack = [main.id];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const l of p.comps.get(id)?.layers ?? []) {
+      if (l.kind !== 'comp') continue;
+      if (l.comp === open.id) return main;
+      stack.push(l.comp);
+    }
+  }
+  return open;
+}
+
+/**
  * A comp's length in frames: its set duration, or the end of its last layer that ends (at least
  * 1). Guards against precomp cycles (the schema refuses them too).
  */

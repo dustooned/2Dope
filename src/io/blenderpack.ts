@@ -35,6 +35,7 @@ export async function exportBlender(
   project: Project,
   hold: { pin(d: Drawing): Promise<void>; unpin(d: Drawing): void },
   onProgress: (p: PackProgress) => void = () => {},
+  signal?: AbortSignal,
 ): Promise<{ zip: Uint8Array; notes: string[]; images: number }> {
   const plan = planBlender(project, APP_VERSION);
   const files: ZipFile[] = [];
@@ -46,8 +47,13 @@ export async function exportBlender(
   const page = makeCanvas(project.width, project.height);
   const g = page.getContext('2d')!;
   for (const id of plan.drawings) {
+    signal?.throwIfAborted();
     const d = project.drawings.get(id);
-    if (!d) continue;
+    if (!d) {
+      // nothing to write: the add-on shows a blank frame for an image it has no file for
+      delete plan.scene.images[`d:${id}`];
+      continue;
+    }
     await hold.pin(d);
     try {
       g.setTransform(1, 0, 0, 1, 0, 0);
@@ -63,6 +69,7 @@ export async function exportBlender(
   // precomp frames 2Dope renders itself
   try {
     for (const job of plan.renders) {
+      signal?.throwIfAborted();
       const c = makeCanvas(job.comp.width, job.comp.height);
       const cg = c.getContext('2d')!;
       const need = [...frameContent(project.comps, job.comp, job.frame).drawings].map((id) => project.drawings.get(id)).filter((d): d is Drawing => !!d);
