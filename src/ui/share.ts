@@ -29,6 +29,7 @@ const STAMP_KEY = '2dope.share.stamp';
 const ANIMATIC_KEY = '2dope.share.animatic';
 /** The storyboard sheet settings (the key the Story export dialog used, so earlier choices carry over). */
 const BOARD_KEY = '2dope.board.export';
+const BLENDER_KEY = '2dope.share.blender';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -113,7 +114,9 @@ export class ShareView {
   private picture: PictureOpts = load(PICTURE_KEY, { scale: 1, background: 'transparent' as const });
   /** One set of animatic and storyboard choices, whichever mode Share was opened from. */
   private animatic: AnimaticOptions = (() => { try { return animaticOptions(JSON.parse(localStorage.getItem(ANIMATIC_KEY) ?? 'null')); } catch { return animaticOptions(null); } })();
-  private sheets: BoardOpts = (() => { try { return boardOpts(JSON.parse(localStorage.getItem(BOARD_KEY) ?? 'null')); } catch { return boardOpts(null); } })();
+  /** Blender: planes the size of their art (default) or the whole page. */
+  private blender: { trim: boolean } = load(BLENDER_KEY, { trim: true });
+  private sheets: BoardOpts =(() => { try { return boardOpts(JSON.parse(localStorage.getItem(BOARD_KEY) ?? 'null')); } catch { return boardOpts(null); } })();
   private extraUrl: string | null = null;
   private advancedOpen = false;
   private prevWs: Workspace | null = null;
@@ -503,6 +506,7 @@ export class ShareView {
       } else main.append(el('p', { class: 'hint' }, 'Each panel as a PNG, captions.csv for a spreadsheet and, when panels have dialogue, subtitles.srt on the panel timing.'));
     } else if (this.kind === 'blender') {
       main.append(el('p', { class: 'hint' }, 'An editable Blender scene: layers as image planes, the camera, precomps and every keyframe. The add-on that opens it is inside the ZIP.'));
+      select(main, 'Layer size', this.blender.trim ? 'art' : 'page', [['art', 'Its art · small planes'], ['page', 'Whole page']], (v) => { this.blender = { trim: v === 'art' }; save(BLENDER_KEY, this.blender); });
     } else {
       checked = false;
       main.append(el('p', { class: 'hint' }, 'The whole project as one .2dope file, to keep or to open on another device.'));
@@ -608,7 +612,8 @@ export class ShareView {
       } else if (this.kind === 'blender') {
         const plan = planBlender(this.app.project, '');
         const main = plan.scene.comps[plan.scene.main]!;
-        sum.textContent = `${main.width} × ${main.height} · ${count(plan.drawings.size + plan.renders.length, 'image')} · one ZIP`;
+        const images = Object.keys(plan.scene.images).length;
+        sum.textContent = `${main.width} × ${main.height} scene · ${count(images, 'image')}${this.blender.trim ? ', each the size of its art' : ''} · one ZIP`;
         go.disabled = false;
       } else go.disabled = false;
     } catch (e) {
@@ -712,7 +717,7 @@ export class ShareView {
         file = `${name}.png`;
       } else if (this.kind === 'blender') {
         const { exportBlender } = await import('../io/blenderpack');
-        const r = await exportBlender(this.app.project, this.app.residency, (p) => progress(p.done, p.total, `Making the Blender package: ${p.done} of ${p.total}`), controller.signal);
+        const r = await exportBlender(this.app.project, this.app.residency, (p) => progress(p.done, p.total, `Making the Blender package: ${p.done} of ${p.total}`), controller.signal, this.blender);
         blob = new Blob([r.zip as BlobPart], { type: 'application/zip' });
         file = `${name}-blender.zip`;
         notes = r.notes;

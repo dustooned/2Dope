@@ -252,10 +252,12 @@ class Builder:
         return mat
 
     def plane(self, name, layer, collection):
-        """A page-sized plane, its origin at the layer's anchor, facing the camera (-Y)."""
+        """A plane the size of its images, where they sit on the layer's page (`offset`, the art's
+        top-left when trimmed), its origin at the layer's anchor, facing the camera (-Y)."""
         w, h = layer["size"]
         ax, ay = layer["anchor"]
-        verts = [(self.px(x - ax), 0.0, -self.px(y - ay)) for (x, y) in ((0, h), (w, h), (w, 0), (0, 0))]
+        ox, oy = layer.get("offset") or (0, 0)
+        verts = [(self.px(ox + x - ax), 0.0, -self.px(oy + y - ay)) for (x, y) in ((0, h), (w, h), (w, 0), (0, 0))]
         mesh = bpy.data.meshes.new(name)
         mesh.from_pydata(verts, [], [(0, 1, 2, 3)])
         uv = mesh.uv_layers.new(name="UVMap")

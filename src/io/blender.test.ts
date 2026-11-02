@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { setKey, setSegmentEasing, staticProp, type Vec2 } from '../core/anim';
 import { cameraLayer, compLayer, drawingsLayer, newComp, nullLayer, type Comp } from '../core/comp';
-import { channels, planBlender, plannedLayers, runs } from './blender';
+import { newEffect } from '../core/effects';
+import { channels, planBlender, plannedLayers, runs, trimScene } from './blender';
 
 function project() {
   const shot = newComp('c1', 'Shot', 400, 300, 12);
@@ -152,5 +153,111 @@ describe('Blender plan', () => {
     p.walk.pins = [{ layer: 'W', prop: 'rotation' }];
     const plan = planBlender(p, 'test');
     expect(plannedLayers(plan, 'c1').P!.kind).toBe('baked');
+  });
+});
+
+describe('Blender planes sized to their art', () => {
+  it('cuts each layer to the union of its drawings plus a margin, keeps anchors, and moves the plane by offset', () => {
+    const plan = planBlender(project(), 'test');
+    const bounds = new Map([
+      ['d:b1', { x: 100, y: 50, w: 20, h: 20 }],
+      ['d:b2', { x: 150, y: 60, w: 10, h: 30 }],
+      ['d:w1', null],
+      ['d:w2', null],
+    ]);
+    const images = trimScene(plan.scene, bounds, [400, 300], true);
+    const B = plannedLayers(plan, 'c1').B!;
+    expect(B.anchor).toEqual([200, 150]);
+    expect(B.offset).toEqual([98, 48]);
+    expect(B.size).toEqual([64, 44]);
+    expect(images.find((i) => i.source === 'd:b1')!.rect).toEqual({ x: 98, y: 48, w: 64, h: 44 });
+    // an empty layer: a 1-pixel blank plane
+    expect(plannedLayers(plan, 'c2').W!.size).toEqual([1, 1]);
+    expect(plan.scene.images['d:b1']).toBe('drawings/b1.png');
+  });
+
+  it('clamps the margin to the page; whole page when trimming is off', () => {
+    const plan = planBlender(project(), 'test');
+    trimScene(plan.scene, new Map([['d:b1', { x: 0, y: 0, w: 400, h: 300 }]]), [400, 300], true);
+    expect(plannedLayers(plan, 'c1').B!.size).toEqual([400, 300]);
+    expect(plannedLayers(plan, 'c1').B!.offset).toBeUndefined();
+    const full = planBlender(project(), 'test');
+    trimScene(full.scene, new Map([['d:b1', { x: 10, y: 10, w: 5, h: 5 }]]), [400, 300], false);
+    expect(plannedLayers(full, 'c1').B!.size).toEqual([400, 300]);
+  });
+
+  it('a drawing cut two ways (or used by a storyboard marker) gets one image per cut', () => {
+    const p = project();
+    const board = drawingsLayer('S', 'Storyboard', [{ drawing: 'b1', length: 4 }], 400, 300);
+    board.guide = true;
+    p.shot.layers.push(board);
+    const plan = planBlender(p, 'test');
+    const images = trimScene(plan.scene, new Map([['d:b1', { x: 10, y: 10, w: 5, h: 5 }]]), [400, 300], true);
+    const b1 = images.filter((i) => i.source === 'd:b1');
+    expect(b1.map((i) => i.key)).toEqual(['d:b1', 'd:b1~2']);
+    expect(plan.scene.board![0]!.image).toBe('d:b1~2');
+    expect(plan.scene.images['d:b1~2']).toBe('drawings/b1_2.png');
+    expect(b1[1]!.rect).toEqual({ x: 0, y: 0, w: 400, h: 300 });
+  });
+});
+
+describe('Blender: what an image plane cannot do', () => {
+  const ball = (p: ReturnType<typeof project>) => p.shot.layers.find((l) => l.id === 'B')! as Extract<Comp['layers'][number], { kind: 'drawings' }>;
+
+  it('an adjustment layer stays in 2Dope, with a note', () => {
+    const p = project();
+    ball(p).adjust = true;
+    const plan = planBlender(p, 'test');
+    expect(plannedLayers(plan, 'c1').B).toBeUndefined();
+    expect(plan.notes.some((n) => n.includes('adjustment layer'))).toBe(true);
+  });
+
+  it('a mask or effects: rendered frames on the layer page, keeping its moves; same pictures share a frame', () => {
+    const p = project();
+    const B = ball(p);
+    B.mask = 'm1';
+    B.transform.position = setKey(B.transform.position, 0, [10, 20] as Vec2);
+    const plan = planBlender(p, 'test');
+    const L = plannedLayers(plan, 'c1').B!;
+    expect(L.kind).toBe('drawings');
+    expect(L.size).toEqual([400, 300]);
+    expect(L.channels['position.x']!.keys).toHaveLength(1);
+    expect(L.frames!.every((r) => r.image?.startsWith('r:'))).toBe(true);
+    // b1 for 3 frames, b2 for 1: two renders, each with the mask
+    const jobs = plan.renders.filter((r) => r.image.startsWith('r:c1:B:'));
+    expect(jobs).toHaveLength(2);
+    const solo = jobs[0]!.comp;
+    expect(solo.layers).toHaveLength(1);
+    expect(solo.layers[0]!.parent).toBeNull();
+    expect(solo.layers[0]!.transform.position.value).toEqual(solo.layers[0]!.transform.anchor.value);
+    expect(plan.drawings.has('m1')).toBe(true);
+    expect(plan.notes.some((n) => n.includes('mask'))).toBe(true);
+    // effects: the same
+    const q = project();
+    ball(q).effects = [newEffect('boil', 'e1', 1)];
+    expect(plannedLayers(planBlender(q, 'test'), 'c1').B!.frames!.every((r) => r.image?.startsWith('r:'))).toBe(true);
+  });
+
+  it('a clipped layer: rendered in the comp space over its base at opacity 0, plane with no moves', () => {
+    const p = project();
+    const top = drawingsLayer('T', 'Shine', [{ drawing: 't1', length: 4 }], 400, 300);
+    top.clip = true;
+    top.transform.opacity = setKey(top.transform.opacity, 0, 50);
+    p.shot.layers.splice(p.shot.layers.findIndex((l) => l.id === 'B'), 0, top);
+    const plan = planBlender(p, 'test');
+    const L = plannedLayers(plan, 'c1').T!;
+    expect(L.parent).toBeNull();
+    expect(L.size).toEqual([400, 300]);
+    expect(L.channels['position.x']!.value).toBe(200);
+    expect(L.channels['opacity']!.keys).toHaveLength(1);
+    const job = plan.renders.find((r) => r.image.startsWith('r:c1:T:'))!;
+    const clip = job.comp;
+    expect(clip.layers.find((l) => l.id === 'B')!.transform.opacity.value).toBe(0);
+    expect(clip.layers.find((l) => l.id === 'B')!.visible).toBe(true);
+    expect(clip.layers.find((l) => l.id === 'N')!.visible).toBe(false);
+    expect(clip.layers.some((l) => l.kind === 'camera')).toBe(false);
+    expect(clip.layers.find((l) => l.id === 'T')!.transform.opacity.value).toBe(100);
+    // the base itself still goes as a plain drawings plane
+    expect(plannedLayers(plan, 'c1').B!.frames![0]!.image).toBe('d:b1');
   });
 });

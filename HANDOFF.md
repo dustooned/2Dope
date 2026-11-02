@@ -2,6 +2,62 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Blender: masks, effects, parts and clipping rendered; adjustment layers left out (2026-11-02, uncommitted)
+
+Owner: yes to fixing what Blender dropped without a note (clip, mask, adjustment, effects).
+- `src/io/blender.ts` `planBlender`, drawings layers:
+  - `adjust`: not exported, note.
+  - mask, active effects or `partsActive`: `soloComp` (one copy of the layer, no parent, position
+    on its anchor, no scale / turn, opacity 100, normal blend, project page size, no camera)
+    rendered per frame as `r:` images (deduped by `frameContent` key). The plane keeps the
+    layer's channels, so it still moves in Blender. Note. (The old "parts not in Blender" note is gone.)
+  - clipped (`clip`, not a guide): `clipComp` (the comp without cameras, its clip base at
+    opacity 0 so only the clipped paint shows, other layers hidden but kept for parents)
+    rendered in comp space; the plane is comp-sized, no parent, centred, with no moves, and
+    only the layer's opacity channel. Note.
+- `trimScene` now cuts any image a drawings layer shows (`d:` or `r:`), with bounds keyed by image key
+  and each layer's planned `size` as its page; `PlaneImage { key, source, rect }` replaces
+  `DrawingImage`. Precomp frames (kind `baked`) are still written whole.
+- `src/io/blenderpack.ts`: one `draw(key)` paints a drawing or renders a job onto a reused
+  canvas per size; measure, cut, then the whole precomp frames.
+- Checks: `blender.test.ts` 3 new tests (adjust, mask / effects, clip); `npx vitest run`
+  653 + 1 skipped; `npm run build`. End to end: a scene built in the dev app's modules (an
+  in-memory `Project`, the open test project untouched) with plain, masked, clipped, boiled
+  and adjustment layers → `exportBlender` ZIP (4 images) → headless Blender 5.1 import of that
+  ZIP with the repo add-on: plane bounds match the art (masked and clipped both cover only
+  x 400–500, y 100–300 px; no adjustment plane), and a camera render matches 2Dope's picture.
+- Not checked: a clipped layer that other layers are parented to (its Blender plane has no
+  moves, so their children would not follow); glow / shadow effects that reach past the page edge
+  are cut at the page; the Share UI with these notes in the Check list (same list as before).
+
+### Blender planes sized to their art (2026-11-02, uncommitted)
+
+Owner: "layers were exported whole aspect ratio size. any way we can export assets as their size
+of asset not video?"
+- `src/io/blender.ts` `trimScene`: each drawings layer's plane and images are cut to the union of
+  the painted bounds of its drawings, plus 2 px, clamped to the page. `BlenderLayer.offset` (new,
+  optional) says where the images start on the page; anchors are unchanged because the add-on
+  places children from their parent's anchor. When a drawing is cut two different ways (two layers, or a
+  storyboard marker, always the whole page), it gets `d:<id>~n` / `drawings/<id>_n.png`. An empty layer
+  becomes a 1×1 plane. `planBlender` only lists images for drawings that a layer or marker shows (no
+  longer the drawings used only by baked precomp frames).
+- `src/io/blenderpack.ts`: measures each shown drawing's painted rect (`getImageData` alpha scan),
+  then writes cropped PNGs; `BlenderOptions.trim` (default true). README line added.
+- `blender/2dope_import.py` `plane()`: vertices start at `offset` (default 0,0, so older packages
+  import as before).
+- Share: Blender › Layer size (Its art · small planes / Whole page), saved as
+  `2dope.share.blender`; summary says the image count.
+- Checks: `blender.test.ts` 3 new tests (union and margin, clamp and whole-page mode, two cuts
+  and the storyboard marker); `npx vitest run` 650 + 1 skipped; `npm run build`. Dev app: the red
+  600×400 rectangle exported as a 604×404 plane at offset 198,148, and the ZIP went from 113 KB to 34 KB.
+  Headless Blender 5.1 with the repo's add-on (`--background --factory-startup`, a hand-built
+  package matching that layer, both modes): the art's corners land at the same world points
+  (-7.6, 3.9) and (-1.6, -0.1) for the page-sized and trimmed planes.
+- Not checked: importing the app's own ZIP in Blender (the test package was built inside Blender);
+  baked precomp frames are still comp-sized (not trimmed); clip / mask / adjustment / effects
+  are still dropped from Blender without a note (see the review in the conversation of
+  2026-11-02).
+
 ### Share screen clean-up; Blender export runs in Share (2026-11-02, uncommitted)
 
 Owner: "anything we need to clean up with the blender export? Also the export screen needs some UI
