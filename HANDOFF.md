@@ -2,6 +2,34 @@
 
 ## Current state (2026-10-31) — read this first
 
+### Touch: hold = eyedropper, double-tap = menu, Eyedropper tool, ☰ button (2026-11-01, committed)
+
+Owner, in order: keep two-finger tap undo (a staple); a menu icon at the bottom right for touch;
+keep the QuickMenu reachable; then, after trying a staged 0.25 s / 0.55 s hold: "just an eyedropper
+tool, hold one finger to eyedropper like before, double tap activates the right-click menu".
+- `src/app.ts` `armHold`: with `touchHold` 'eyedropper' (default), a one-finger hold (`HOLD_MS`,
+  450) in Draw/Animate starts the eyedropper (`beginHoldPick`: loupe, slide, lift keeps, cancel
+  restores); elsewhere a hold does nothing. 'menu' setting: the hold opens the menu (`holdMenu`).
+  The two-finger hold and the staged menu are gone.
+- Double-tap: `finishTapSession` → `fingerTap` (tap session now keeps where the finger landed);
+  two one-finger taps within `DOUBLE_TAP_MS` (350) and `DOUBLE_TAP_PX` (30) open the canvas menu
+  there. Not while finger painting (a tap draws), in Timing (a tap plays), or on a group in Motion
+  (double-tap enters it). Two-finger tap still undoes (fixture-checked).
+- Eyedropper tool: `eyedrop` in `WORKSPACE_TOOLS` and the default Draw / Animate bars (users who
+  saved their own bar add it from Edit tool bar); arms `app.armEyedropper()`, lit while armed;
+  `main.ts` refreshes the bubbles on `onEyedrop`.
+- ☰ `.canvas-menu-btn` at the stage's bottom right on touch screens (`maxTouchPoints` or
+  `(any-pointer: coarse)`), above the flipbook (`--flip-h`). The canvas menu starts with QuickMenu
+  in Draw/Animate (`app.onQuickMenu` from `main.ts`; menu entry `canvas.quickmenu`, hideable).
+- Setting wording (`pensettings.ts`), manual gesture table, UPDATES.
+- Checks: fixture toolbars 35/35 (hold picks and stays the eyedropper, slide, lift, nothing drawn;
+  double-tap menu; slow taps nothing; two-finger tap undo; two-finger hold nothing; Eyedropper
+  tool lit / pick / out; ☰ → QuickMenu; Motion hold nothing, double-tap menu; Canvas-menu
+  setting).
+  `npx vitest run` 644 + 1 skipped; `npm run build`; all 50 fixtures pass (workspacelayout's
+  default-bar count updated from 8 to 9 buttons for the Eyedropper).
+- Not checked: real touch hardware (tap timing on an iPad), the ☰ button's position by eye.
+
 ### Dock-style tool bars, Animate actions, Motion column width, touch-hold eyedropper (2026-11-01, committed)
 
 Owner: more tool icons in Animate; toolbars easy to customise by drag and drop (add and remove,
@@ -31,7 +59,7 @@ a two-finger hold for the canvas menu instead of one finger.
 - Motion layer column (`src/ui/motion.ts`): width 140–520 (default 196, `2dope.motion.leftw`),
   CSS `--mleft-w`; drag the `.mleft` right edge on any row or the ruler grip; double-click resets;
   arrow keys on the grip. Replaced the `LEFT_W` constant.
-- Touch hold (`src/app.ts`): `PenPrefs.touchHold` ('eyedropper' default | 'menu'; App settings →
+- Touch hold (`src/app.ts`, superseded by the section above): `PenPrefs.touchHold` ('eyedropper' default | 'menu'; App settings →
   Pen and tablet → Touch and hold). Eyedropper: one finger still for `HOLD_MS` in Draw/Animate
   (not with finger painting) samples the screen (`sampleScreen`) into the colour, a loupe
   (`.hold-loupe`) follows the finger, lift keeps it, cancel restores. Two-finger hold: both within

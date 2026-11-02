@@ -110,7 +110,7 @@ export interface MenuEntry { id: `${string}.${string}`; name: string; contexts: 
 
 export const MENU_ENTRIES: readonly MenuEntry[] = [
   ...([
-    ['pickcolour', 'Pick this colour'], ['undo', 'Undo'], ['redo', 'Redo'], ['showlines', 'Show ink'], ['showfills', 'Show colour'],
+    ['quickmenu', 'QuickMenu'], ['pickcolour', 'Pick this colour'], ['undo', 'Undo'], ['redo', 'Redo'], ['showlines', 'Show ink'], ['showfills', 'Show colour'],
     ['onion', 'Onion skin'], ['newpage', 'New page after the last drawing'], ['scrublock', 'Scrub lock here'], ['overscan', 'Overscan'], ['safeareas', 'Title and action safe'], ['fit', 'Fit view'], ['flipview', 'Flip view'],
   ] as const).map(([k, name], i): MenuEntry => ({ id: `canvas.${k}`, name, contexts: ['canvas'], order: (i + 1) * 10 })),
   ...([

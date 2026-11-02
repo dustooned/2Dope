@@ -64,6 +64,7 @@ const TOOL_HELP: Partial<Record<string, string>> = {
   eraser: 'Erase paint, and cut vector lines on Ink', fill: 'Fill closed areas', select: 'Select an area to move, copy or fill',
   transform: 'Move, size or rotate the selection, or the whole drawing', adjust: 'Colour and blur adjustments to the current drawing',
   assets: 'Tap placed artwork, drag to move, corners to resize',
+  eyedrop: 'Tap the canvas to take the colour you see there (or hold a finger still on it)',
   play: 'Play or pause the shot', onion: 'Show the drawings before and after (hold for its settings)', prevdraw: 'Go to the previous drawing', nextdraw: 'Go to the next drawing',
   insert: 'A new blank drawing after this one', dup: 'Duplicate this drawing', del: 'Delete this drawing', fx: 'Effects of the layer you draw on',
 };
@@ -76,7 +77,7 @@ const SECOND_TAP: Partial<Record<string, string>> = { brush: 'Tap again for brus
 
 type ToolKey = 'assets' | 'more' | 'transform' | 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
   | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look'
-  | 'prevdraw' | 'nextdraw';
+  | 'prevdraw' | 'nextdraw' | 'eyedrop';
 
 /**
  * Bubbles: a simpler way around the app. Mode bubbles (Draw, Animate, Move, Story) at the top left,
@@ -481,7 +482,7 @@ export class Bubbles {
   }
 
   private toolsFor(ws: Workspace, expanded = false): [ToolKey, string, string][] {
-    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['fill', 'Bucket fill', 'fill'], ['select', 'Select', 'lasso'], ['transform', 'Transform', 'transform'], ['adjust', 'Adjustments', 'adjust']];
+    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['eyedrop', 'Eyedropper', 'eyedrop'], ['fill', 'Bucket fill', 'fill'], ['select', 'Select', 'lasso'], ['transform', 'Transform', 'transform'], ['adjust', 'Adjustments', 'adjust']];
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
@@ -554,6 +555,7 @@ export class Bubbles {
         a.openFlipbook?.(id);
         break;
       }
+      case 'eyedrop': a.armEyedropper(); break;
       case 'prevdraw': a.prevDrawing(); break;
       case 'nextdraw': a.nextDrawing(); break;
       case 'fx': {
@@ -685,7 +687,7 @@ export class Bubbles {
     // what changes from frame to frame: frozen while playing, so the bubbles are not rebuilt on every
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
-    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.transformFreeform, a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
+    const sig = [shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.eyedropArmed, a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.transformFreeform, a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]')?.setAttribute('aria-pressed', String(sharing));
@@ -719,7 +721,7 @@ export class Bubbles {
         : k === 'autokey' ? a.editor.autoKey
         : k === 'look' ? a.editor.throughCamera
         : k === 'play' ? a.playing
-        : k === 'more' ? this.moreTools : k === 'transform' ? a.transforming : k === cur || (k === 'onion' && a.onion.enabled);
+        : k === 'more' ? this.moreTools : k === 'eyedrop' ? a.eyedropArmed : k === 'transform' ? a.transforming : k === cur || (k === 'onion' && a.onion.enabled);
       b.setAttribute('aria-pressed', String(on));
       if (drawWs) {
         // one wording for every painting tool: what it does, then what a tap (or a second tap) does

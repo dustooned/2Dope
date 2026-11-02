@@ -42,9 +42,9 @@ export function penSettingsSection(app: App): { section: HTMLDetailsElement; rea
   for (const [v, t] of CANVAS_CURSORS) { const o = el('option', '', t); o.value = v; cursor.append(o); }
   cursorRow.append(el('span', '', 'Cursor'), cursor);
   const holdRow = el('label', 'app-settings-field'), hold = el('select'); hold.setAttribute('aria-label', 'Touch and hold on the canvas');
-  for (const [v, t] of [['eyedropper', 'One finger: eyedropper · two fingers: menu'], ['menu', 'One finger: canvas menu']]) { const o = el('option', '', t); o.value = v!; hold.append(o); }
+  for (const [v, t] of [['eyedropper', 'Eyedropper (double-tap: menu)'], ['menu', 'Canvas menu']]) { const o = el('option', '', t); o.value = v!; hold.append(o); }
   holdRow.append(el('span', '', 'Touch and hold'), hold);
-  holdRow.title = 'What holding a finger still on the canvas does. The right mouse button and the pen’s side button always open the menu.';
+  holdRow.title = 'What holding one finger still on the canvas does in Draw and Animate. Eyedropper: pick the colour under it (slide to choose, lift to keep). A one-finger double-tap, the ☰ button at the bottom right, the right mouse button and the pen’s side button open the menu; a two-finger tap is always undo.';
   cursorRow.title = 'The pointer over the canvas. Brush size shows the brush’s outline at the current zoom. Try it on the pad.';
   const actions = el('div', 'student-profile-actions');
   const fromPad = el('button', '', 'Set from my test strokes'), clear = el('button', '', 'Clear pad'), reset = el('button', '', 'Restore pen defaults');

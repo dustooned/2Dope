@@ -43,7 +43,7 @@ try {
   check('Settings and mode actions have reachable touch targets', hit(find('Edit workspace')) && hit(find('Toggle tool settings')) && hit(find('Animate', document.querySelector('.bub-modes')!)));
   check('More remains reachable when pinned tools exceed a narrow row', hit(tool('more')!));
   click('More tools'); await settle(); const drawer = document.querySelector<HTMLElement>('.bub-tool-drawer')!;
-  check('More opens a separate tool drawer without growing the pinned row', !drawer.hidden && !!drawer.querySelector('[data-extra-tool="pen"]') && document.querySelectorAll('.bub-tools button').length === 8);
+  check('More opens a separate tool drawer without growing the pinned row', !drawer.hidden && !!drawer.querySelector('[data-extra-tool="pen"]') && document.querySelectorAll('.bub-tools button').length === 9);
   click('Vector', drawer); await settle(); check('Picking an extra tool keeps it visible while active and closes the drawer', app.tool === 'pen' && !!tool('pen') && drawer.hidden);
   click('Brush', document.querySelector('.bub-tools')!); check('An unpinned tool steps aside when no longer active', !tool('pen'));
   click('Edit workspace'); toggle('Pin Vector'); click('Move Vector up'); select('Tool dock', 'left'); select('Brush controls edge', 'right'); click('Cancel');

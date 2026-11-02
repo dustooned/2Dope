@@ -31,7 +31,8 @@ export interface PenPrefs {
   cursor?: CanvasCursor;
   /**
    * Touch and hold on the canvas. 'eyedropper' (the default): one finger picks a colour (Draw and
-   * Animate) and two fingers open the canvas menu. 'menu': one finger opens the menu (as before).
+   * Animate); a one-finger double-tap (or the ☰ button) opens the menu. 'menu': the hold opens the
+   * menu. A two-finger tap is always undo.
    */
   touchHold?: TouchHold;
 }

@@ -5110,3 +5110,10 @@ body.ui-full.ws-motion:not(.ui-hidden):not(.quick) .bub-ctx, body.ui-full.ws-tim
 .hold-loupe { position: fixed; z-index: 500; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; pointer-events: none;
   background: conic-gradient(var(--now, #000) 0 50%, var(--was, #000) 50% 100%); box-shadow: 0 0 0 3px #fff, 0 0 0 4px #0006, 0 6px 16px #0008; }
 .hold-loupe::after { content: ''; position: absolute; inset: 14px; border-radius: 50%; background: var(--now, #000); box-shadow: 0 0 0 2px #fff; }
+
+/* Touch screens: the canvas menu's button, bottom right of the stage (above the flipbook) */
+.canvas-menu-btn { position: absolute; z-index: 30; right: 10px; bottom: calc(var(--flip-h, 0px) + 10px); width: 40px; height: 40px; padding: 0; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 88%, transparent); color: var(--text); box-shadow: 0 2px 8px #0006; }
+.canvas-menu-btn svg { width: 20px; height: 20px; }
+.canvas-menu-btn .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+body.ui-hidden .canvas-menu-btn, body.quick .canvas-menu-btn { display: none; }

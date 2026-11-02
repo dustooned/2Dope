@@ -703,6 +703,8 @@ const bubbles = new Bubbles(app, $('#stage'), {
   layers: (anchor) => layersPop.toggle(anchor),
   fit: () => app.refit(),
 });
+// the Eyedropper tool lights while armed and goes out after its pick
+app.onEyedrop = chain(app.onEyedrop, () => bubbles.update());
 board.onView = () => bubbles.update();
 
 const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
@@ -787,6 +789,7 @@ const quickMenu = new QuickMenu(app, $('#stage'), $<HTMLCanvasElement>('#canvas'
   layers: anchor => layerCards.toggle(anchor),
   assets: () => artworkUI.library.show(),
 });
+app.onQuickMenu = () => quickMenu.toggle();
 openSettings = () => { closeForQuickMenu(); quickMenu.close(false); quickMenu.settings.show(dock); };
 editWorkspace = anchor => { closeForQuickMenu(); quickMenu.close(false); quickMenu.settings.show(anchor, 'workspace'); };
 {

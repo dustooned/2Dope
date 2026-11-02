@@ -21,7 +21,7 @@ app.setWorkspace('draw');
 const bubbles = new Bubbles(app, stage, { brushLibrary() {}, colorPanel() {}, layers() {}, layerCards() {}, fit: () => app.refit(), editShape() {} });
 bubbles.setLevel('simple', false);
 const refresh = () => bubbles.update();
-app.onFrameChange = refresh; app.onToolChange = refresh; app.history.onChange = refresh;
+app.onFrameChange = refresh; app.onToolChange = refresh; app.history.onChange = refresh; app.onEyedrop = refresh;
 const settle = (ms = 120) => new Promise<void>((r) => setTimeout(r, ms));
 let passed = 0, failed = 0;
 function check(name: string, ok: boolean, info?: unknown) {
@@ -102,34 +102,83 @@ try {
   document.querySelector<HTMLButtonElement>('.bar-tray-done')!.click(); await settle();
   app.setTool('brush'); await settle();
 
-  // ---- touch and hold on the canvas
+  // ---- touch: one finger held = eyedropper; one-finger double-tap = canvas menu; two-finger tap = undo
+  let quickMenus = 0;
+  app.onQuickMenu = () => { quickMenus++; };
   const g = app.drawing.line.getContext('2d')!;
   g.fillStyle = '#d02030'; g.fillRect(20, 20, 60, 60); app.requestRender(); await settle(100);
   const r = canvas.getBoundingClientRect(), at = (x: number, y: number) => { const p = app.view.docToScreen(x, y); return [r.left + p.x, r.top + p.y] as const; };
+  const tap = async (x: number, y: number, id: number) => { ev('pointerdown', canvas, x, y, 'touch', id); await settle(40); ev('pointerup', canvas, x, y, 'touch', id); await settle(60); };
   app.setColor('#000000');
   const [rx, ry] = at(50, 50);
   ev('pointerdown', canvas, rx, ry, 'touch', 31); await settle(HOLD_MS + 150);
-  check('One finger held on red picks red', app.color.toLowerCase() === '#d02030', app.color);
+  check('A one-finger hold on red picks red', app.color.toLowerCase() === '#d02030', app.color);
   check('The loupe shows while the finger is down', !!document.querySelector('.hold-loupe'));
+  await settle(500);
+  check('Holding on stays the eyedropper (no menu)', !document.querySelector('.ctxmenu') && !!document.querySelector('.hold-loupe'));
   const [wx, wy] = at(130, 100);
   ev('pointermove', canvas, wx, wy, 'touch', 31); await settle(60);
-  check('Sliding the finger picks what is under it now', app.color.toLowerCase() !== '#d02030', app.color);
+  check('Sliding picks what is under it now', app.color.toLowerCase() !== '#d02030', app.color);
   ev('pointerup', canvas, wx, wy, 'touch', 31); await settle();
   check('Lifting keeps the colour and hides the loupe', !document.querySelector('.hold-loupe') && app.color.toLowerCase() !== '#000000');
   check('The eyedropper drew nothing', app.history.peekUndo()?.label !== 'Brush stroke');
 
+  const [dx, dy] = at(120, 60);
+  await tap(dx, dy, 33); await tap(dx + 4, dy + 3, 34); await settle();
+  check('A one-finger double-tap opens the canvas menu', !!document.querySelector('.ctxmenu'));
+  closeContextMenu(); await settle(400);
+  await tap(dx, dy, 35); await settle(450); await tap(dx, dy, 36);
+  check('Two slow taps open nothing', !document.querySelector('.ctxmenu'));
+  closeContextMenu(); await settle(400);
+
+  // the staple: a quick two-finger tap still undoes; a two-finger hold opens nothing
+  app.setTool('brush');
+  const [sx, sy] = at(100, 90);
+  ev('pointerdown', canvas, sx, sy, 'pen', 61); ev('pointermove', canvas, sx + 30, sy + 10, 'pen', 61); ev('pointerup', canvas, sx + 30, sy + 10, 'pen', 61); await settle(150);
+  const stroke = app.history.peekUndo();
+  const [tx, ty] = at(40, 100), [ux, uy] = at(80, 100);
+  ev('pointerdown', canvas, tx, ty, 'touch', 71); ev('pointerdown', canvas, ux, uy, 'touch', 72); await settle(60);
+  ev('pointerup', canvas, tx, ty, 'touch', 71); ev('pointerup', canvas, ux, uy, 'touch', 72); await settle(150);
+  check('A quick two-finger tap still undoes', !!stroke && app.history.peekUndo() !== stroke, stroke?.label);
+  app.redo(); await settle();
   const undoBefore = app.history.peekUndo();
-  const [ax, ay] = at(40, 40), [bx, by] = at(90, 70);
-  ev('pointerdown', canvas, ax, ay, 'touch', 41); ev('pointerdown', canvas, bx, by, 'touch', 42); await settle(HOLD_MS + 150);
-  check('Two fingers held still open the canvas menu', !!document.querySelector('.ctxmenu'));
-  ev('pointerup', canvas, ax, ay, 'touch', 41); ev('pointerup', canvas, bx, by, 'touch', 42); await settle();
-  check('…and it is not a two-finger undo', app.history.peekUndo() === undoBefore);
-  closeContextMenu(); await settle();
+  ev('pointerdown', canvas, tx, ty, 'touch', 73); ev('pointerdown', canvas, ux, uy, 'touch', 74); await settle(700);
+  ev('pointerup', canvas, tx, ty, 'touch', 73); ev('pointerup', canvas, ux, uy, 'touch', 74); await settle();
+  check('A two-finger hold opens no menu and is no undo', !document.querySelector('.ctxmenu') && app.history.peekUndo() === undoBefore);
+
+  // the Eyedropper tool: on the bar, lit while armed, a tap on the canvas picks and it goes out
+  await settle(400);
+  check('Eyedropper is on the Draw tool bar', tools().includes('eyedrop'), tools());
+  tool('eyedrop').click(); await settle();
+  check('Tapping it arms it (lit)', app.eyedropArmed && tool('eyedrop').getAttribute('aria-pressed') === 'true');
+  app.setColor('#000000');
+  ev('pointerdown', canvas, rx, ry, 'pen', 62); ev('pointerup', canvas, rx, ry, 'pen', 62); await settle();
+  check('A tap on red picks red and the tool goes out', app.color.toLowerCase() === '#d02030' && !app.eyedropArmed && tool('eyedrop').getAttribute('aria-pressed') === 'false', app.color);
+
+  // the ☰ button: the canvas menu, QuickMenu first in Draw and Animate
+  const btn = document.querySelector<HTMLButtonElement>('.canvas-menu-btn');
+  check('The ☰ button exists, shown only on touch screens', !!btn && btn.hidden === !((navigator.maxTouchPoints || 0) > 0 || matchMedia('(any-pointer: coarse)').matches));
+  btn?.click(); await settle();
+  const qmItem = document.querySelector<HTMLButtonElement>('.ctxmenu button[role="menuitem"]');
+  check('☰ opens the canvas menu, starting with QuickMenu', !!qmItem && (qmItem.firstChild?.textContent ?? '').trim() === 'QuickMenu', qmItem?.textContent);
+  qmItem?.click(); await settle();
+  check('…which opens the QuickMenu', quickMenus === 1);
+  closeContextMenu();
+
+  // Motion: a hold does nothing, a double-tap opens the menu
+  app.setWorkspace('motion'); await settle(400);
+  const [mx, my] = at(140, 110);
+  ev('pointerdown', canvas, mx, my, 'touch', 81); await settle(HOLD_MS + 150); ev('pointerup', canvas, mx, my, 'touch', 81); await settle(400);
+  check('Motion: a finger hold opens nothing', !document.querySelector('.ctxmenu'));
+  await tap(mx, my, 82); await tap(mx, my, 83); await settle();
+  check('Motion: a double-tap opens the canvas menu', !!document.querySelector('.ctxmenu'));
+  closeContextMenu();
+  app.setWorkspace('draw'); await settle();
 
   app.setPenPrefs({ ...app.penPrefs, touchHold: 'menu' });
   const [cx, cy] = at(100, 30);
   ev('pointerdown', canvas, cx, cy, 'touch', 51); await settle(HOLD_MS + 150);
-  check('Set to menu: one finger held opens the menu again', !!document.querySelector('.ctxmenu') && !document.querySelector('.hold-loupe'));
+  check('Set to Canvas menu: a finger hold opens the menu, no eyedropper', !!document.querySelector('.ctxmenu') && !document.querySelector('.hold-loupe'));
   ev('pointerup', canvas, cx, cy, 'touch', 51); await settle();
   closeContextMenu();
   app.setPenPrefs({ ...app.penPrefs, touchHold: 'eyedropper' });

@@ -35,6 +35,10 @@ import { BRUSH_PREFS_KEY, readBrushPreferences, rememberBrush, recalledBrush, us
 import { staticProp, valueAt } from './core/anim';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { showCustomize } from './ui/customize';
+import { decorate } from './ui/icons';
+
+/** A screen you can touch (tablets, phones, touch laptops): the canvas menu gets its own button. */
+const touchScreen = (): boolean => (navigator.maxTouchPoints || 0) > 0 || (typeof matchMedia === 'function' && matchMedia('(any-pointer: coarse)').matches);
 import { guardTouchContextMenus } from './ui/touchcontext';
 import { CompEditor } from './compedit';
 import { clipGroups, drawClipGroup, drawComp, drawEditingLayer, drawLayerAround, drawLayersAround, type DrawingSource } from './view/composite';
@@ -102,6 +106,9 @@ const VECTOR_ERASE_KEY = '2dope.eraser.vector';
 const QUICKSHAPE_KEY = '2dope.quickshape';
 /** QuickShape: how long the pen must rest (ms) and how far it may wander (screen px) to snap. */
 const SHAPE_HOLD_MS = 450;
+/** Two one-finger taps this close in time (ms) and space (px) are a double-tap: the canvas menu. */
+const DOUBLE_TAP_MS = 350;
+const DOUBLE_TAP_PX = 30;
 const SHAPE_SLOP = 5;
 const FILL_ACROSS_KEY = '2dope.fill.across';
 const FILL_REFER_KEY = '2dope.fill.refer';
@@ -437,7 +444,9 @@ export class App {
   private live: LiveStroke | null = null;
   private readonly touches = new Map<number, TouchInfo>();
   private pinch: PinchState | null = null;
-  private tapSession: { start: number; maxTouches: number; moved: boolean; view: { x: number; y: number; zoom: number; rot: number } } | null = null;
+  private tapSession: { start: number; maxTouches: number; moved: boolean; view: { x: number; y: number; zoom: number; rot: number }; x?: number; y?: number } | null = null;
+  /** The last one-finger tap (for a double-tap). */
+  private lastFingerTap: { at: number; x: number; y: number } | null = null;
   /** Three-finger scrub (clear the drawing): the fingers' mean x, its turning points, and whether it fired. */
   private scrub3: { startX: number; lastX: number; extreme: number; dir: 0 | 1 | -1; turns: number; done: boolean } | null = null;
   private nav: NavDrag | null = null;
@@ -5165,6 +5174,21 @@ export class App {
     c.addEventListener('pointerup', (e) => this.onUp(e, false));
     c.addEventListener('pointercancel', (e) => this.onUp(e, true));
     c.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+    // touch screens: a small menu button at the stage's bottom right opens the canvas menu
+    const menuBtn = document.createElement('button');
+    menuBtn.type = 'button';
+    menuBtn.className = 'canvas-menu-btn';
+    menuBtn.title = 'Canvas menu (right-click with a mouse)';
+    menuBtn.setAttribute('aria-label', 'Canvas menu');
+    menuBtn.setAttribute('aria-haspopup', 'menu');
+    decorate(menuBtn, 'menu');
+    menuBtn.hidden = !touchScreen();
+    menuBtn.addEventListener('click', () => {
+      if (this.strokeActive) return;
+      const r = menuBtn.getBoundingClientRect();
+      this.openCanvasMenu(r.left, r.top);
+    });
+    this.stage.append(menuBtn);
     c.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       if (Date.now() - this.lastHold < 1000) return; // the hold already opened it
@@ -5370,7 +5394,7 @@ export class App {
       }
       const p = this.local(e);
       this.touches.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y });
-      if (!this.tapSession) this.tapSession = { start: performance.now(), maxTouches: 0, moved: false, view: { x: this.view.x, y: this.view.y, zoom: this.view.zoom, rot: this.view.rot } };
+      if (!this.tapSession) this.tapSession = { start: performance.now(), maxTouches: 0, moved: false, view: { x: this.view.x, y: this.view.y, zoom: this.view.zoom, rot: this.view.rot }, x: e.clientX, y: e.clientY };
       this.tapSession.maxTouches = Math.max(this.tapSession.maxTouches, this.touches.size);
       if (this.touches.size >= 3 && !this.scrub3 && this.workspace !== 'motion' && !this.arrangingAssets) this.beginScrub3();
       // a second finger means "navigate": let go of a layer drag
@@ -5452,20 +5476,26 @@ export class App {
   /** The finger that opened a menu (its moves are ignored until it lifts). */
   private held_: number | null = null;
   private lastHold = 0;
+  /** Opens the QuickMenu (set by main.ts); the canvas menu lists it in Draw and Animate. */
+  onQuickMenu: (() => void) | null = null;
+
   /** Motion's layer menus (set by the Motion panel). */
   motionMenu: ((l: Layer | null) => CtxItem[]) | null = null;
 
+  /**
+   * One finger held still on the canvas (HOLD_MS). With the eyedropper setting (the default), in
+   * Draw and Animate it picks the colour under it (a loupe follows the finger; lift to keep it);
+   * the canvas menu is a one-finger double-tap (or ☰, right-click). The 'menu' setting makes the
+   * hold open the menu instead. A two-finger tap is always undo.
+   */
   private armHold(e: PointerEvent): void {
     this.disarmHold();
     if (this.arrangingAssets) return;
-    const twoFingerMenu = (this.penPrefs.touchHold ?? 'eyedropper') === 'eyedropper';
-    // two still fingers: the canvas menu (at the point between them)
-    if (this.touches.size === 2 && twoFingerMenu) { this.armTwoHold(e); return; }
+    const eyedropper = (this.penPrefs.touchHold ?? 'eyedropper') === 'eyedropper';
     // finger painting keeps a still finger for drawing dots; the menu is a right-click there
     if (this.touches.size !== 1 || (this.fingerPaint && this.workspace !== 'motion')) return;
-    // one finger picks a colour where you draw; elsewhere it waits for a second finger
-    const pick = twoFingerMenu && isPaintingWorkspace(this.workspace);
-    if (twoFingerMenu && !pick) return;
+    const pick = eyedropper && isPaintingWorkspace(this.workspace);
+    if (eyedropper && !pick) return;
     const x = e.clientX;
     const y = e.clientY;
     this.holdArm = {
@@ -5476,57 +5506,31 @@ export class App {
         const arm = this.holdArm;
         this.holdArm = null;
         if (!arm || this.touches.size !== 1) return;
-        if (pick) { this.beginHoldPick(arm.id, arm.x, arm.y); return; }
-        // a finger stroke that has not moved is dropped; a layer grab is let go
-        if (this.live && this.live.pointerId === arm.id) this.endStroke(true);
-        if (this.motionPointer === arm.id) {
-          this.editor.gestureEnd(true);
-          this.motionPointer = null;
-        }
-        if (this.tapSession) this.tapSession.moved = true; // not a tap (no undo)
-        this.held_ = arm.id;
-        this.lastHold = Date.now();
-        swallowNextClick();
-        this.openCanvasMenu(arm.x, arm.y);
+        if (pick) this.beginHoldPick(arm.id, arm.x, arm.y);
+        else this.holdMenu(arm);
       }, HOLD_MS),
     };
+  }
+
+  /** The canvas menu from a held finger: what it was doing is let go, and it is no tap. */
+  private holdMenu(arm: { id: number; x: number; y: number }): void {
+    // a finger stroke that has not moved is dropped; a layer grab is let go
+    if (this.live && this.live.pointerId === arm.id) this.endStroke(true);
+    if (this.motionPointer === arm.id) {
+      this.editor.gestureEnd(true);
+      this.motionPointer = null;
+    }
+    if (this.tapSession) this.tapSession.moved = true; // not a tap (no undo)
+    this.held_ = arm.id;
+    this.lastHold = Date.now();
+    swallowNextClick();
+    this.openCanvasMenu(arm.x, arm.y);
   }
 
   private disarmHold(): void {
-    if (this.twoHold) { clearTimeout(this.twoHold.timer); this.twoHold = null; }
     if (!this.holdArm) return;
     clearTimeout(this.holdArm.timer);
     this.holdArm = null;
-  }
-
-  /** Two fingers held still: the canvas menu. Neither may move further than the slop. */
-  private twoHold: { timer: number; ids: number[]; at: Map<number, { x: number; y: number }> } | null = null;
-  /** A two-finger hold opened the menu: the fingers neither pinch nor pan until they lift. */
-  private touchGestureDone = false;
-
-  private armTwoHold(e: PointerEvent): void {
-    const r = this.canvas.getBoundingClientRect();
-    const at = new Map([...this.touches].map(([id, t]) => [id, { x: r.left + t.sx, y: r.top + t.sy }]));
-    at.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    this.twoHold = {
-      ids: [...at.keys()],
-      at,
-      timer: window.setTimeout(() => {
-        const h = this.twoHold;
-        this.twoHold = null;
-        if (!h || this.touches.size !== 2 || this.scrub3) return;
-        const pts = [...h.at.values()];
-        const mx = (pts[0]!.x + pts[1]!.x) / 2, my = (pts[0]!.y + pts[1]!.y) / 2;
-        // a hold is not a pinch: put back the view the fingers nudged, and it is no undo tap
-        const s = this.tapSession;
-        if (s) { s.moved = true; Object.assign(this.view, { x: s.view.x, y: s.view.y, zoom: s.view.zoom, rot: s.view.rot }); this.requestRender(); }
-        this.pinch = null;
-        this.touchGestureDone = true;
-        this.lastHold = Date.now();
-        swallowNextClick();
-        this.openCanvasMenu(mx, my);
-      }, HOLD_MS),
-    };
   }
 
   /** One finger held still where you draw: an eyedropper that follows the finger until it lifts. */
@@ -5592,6 +5596,8 @@ export class App {
       const picked = this.colorAt(doc.x, doc.y);
       const tool = (t: Tool, label: string) => ({ label, on: this.tool === t, run: () => this.setTool(t) });
       items = [
+        // the ☰ button's way to the QuickMenu (its edge button and Q still work)
+        ...(this.onQuickMenu && isPaintingWorkspace(this.workspace) ? [{ id: 'canvas.quickmenu', label: 'QuickMenu', hint: 'Q', run: () => this.onQuickMenu?.() }] : []),
         ...(picked ? [{ id: 'canvas.pickcolour', label: 'Pick this colour', hint: picked, run: () => this.setColor(picked) }] : []),
         { title: 'Tool' },
         { chips: [tool('brush', 'Brush'), tool('eraser', 'Eraser'), tool('pen', 'Vector'), tool('fill', 'Bucket fill')] },
@@ -5774,9 +5780,6 @@ export class App {
     if (this.fillG && e.pointerId === this.fillG.pointerId) return this.fillMove(e);
     if (this.wandG && e.pointerId === this.wandG.pointerId) return this.wandMove(e);
     if (this.holdPick && this.holdPick.id === e.pointerId) { this.holdPickAt(e.clientX, e.clientY); return; }
-    const two = this.twoHold?.at.get(e.pointerId);
-    if (two && Math.hypot(e.clientX - two.x, e.clientY - two.y) > HOLD_SLOP) this.disarmHold();
-    if (this.touchGestureDone && this.touches.has(e.pointerId)) return;
     const arm = this.holdArm;
     if (arm && arm.id === e.pointerId && Math.hypot(e.clientX - arm.x, e.clientY - arm.y) > HOLD_SLOP) this.disarmHold();
     if (this.motionPointer === e.pointerId) {
@@ -5915,7 +5918,6 @@ export class App {
       this.startPinchIfNeeded();
       if (this.touches.size === 0) {
         this.scrub3 = null;
-        this.touchGestureDone = false;
         this.finishTapSession(cancelled);
       }
     }
@@ -5924,11 +5926,31 @@ export class App {
   private finishTapSession(cancelled: boolean): void {
     const s = this.tapSession;
     this.tapSession = null;
-    if (!s || cancelled || s.moved || performance.now() - s.start > 300) return;
+    if (!s || cancelled || s.moved || performance.now() - s.start > 300) { this.lastFingerTap = null; return; }
+    if (s.maxTouches === 1) { this.fingerTap(s.x ?? 0, s.y ?? 0); return; }
+    this.lastFingerTap = null;
     if (s.maxTouches === 2) this.undo();
     else if (s.maxTouches === 3) this.redo();
     else if (s.maxTouches === 4) this.toggleUI();
   }
+  /**
+   * A one-finger tap; the second of two close together opens the canvas menu there. Not while
+   * finger painting (a tap draws a dot), in Timing (a tap plays), or on a group in Motion (a
+   * double-tap goes inside it).
+   */
+  private fingerTap(x: number, y: number): void {
+    const now = performance.now(), last = this.lastFingerTap;
+    const double = !!last && now - last.at < DOUBLE_TAP_MS && Math.hypot(x - last.x, y - last.y) < DOUBLE_TAP_PX;
+    this.lastFingerTap = double ? null : { at: now, x, y };
+    if (!double || this.timingOnly || this.live || (this.fingerPaint && this.workspace !== 'motion')) return;
+    if (this.workspace === 'motion') {
+      const r = this.canvas.getBoundingClientRect(), doc = this.view.screenToDoc(x - r.left, y - r.top);
+      if (this.editor.hitLayer([doc.x, doc.y])?.kind === 'comp') return;
+    }
+    swallowNextClick();
+    this.openCanvasMenu(x, y);
+  }
+
 
   toggleUI(): void {
     this.uiHidden = !this.uiHidden;
@@ -5990,7 +6012,7 @@ export class App {
   }
 
   private startPinchIfNeeded(): void {
-    if (this.touches.size < 2 || this.pinch || this.scrub3 || this.touchGestureDone) return;
+    if (this.touches.size < 2 || this.pinch || this.scrub3) return;
     const ids = [...this.touches.keys()];
     const a = ids[0]!;
     const b = ids[1]!;

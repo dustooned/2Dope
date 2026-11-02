@@ -5,8 +5,8 @@ export const WORKSPACE_LAYOUT_KEY = '2dope.workspace.layouts';
 export const WORKSPACE_NAMES: Record<Workspace, string> = { board: 'Story', draw: 'Draw', animate: 'Animate', time: 'Timing', motion: 'Motion' };
 export const WORKSPACE_TOOLS = {
   // the animation actions (play, onion, step, new / duplicate / delete drawing, effects) can be pinned too
-  draw: ['brush', 'smudge', 'eraser', 'select', 'transform', 'pen', 'fill', 'adjust', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'],
-  animate: ['brush', 'smudge', 'eraser', 'select', 'transform', 'pen', 'fill', 'adjust', 'assets', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'],
+  draw: ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'pen', 'fill', 'adjust', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'],
+  animate: ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'pen', 'fill', 'adjust', 'assets', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'],
   board: ['panel', 'images', 'dup', 'del', 'play', 'export'],
   time: ['play', 'onion', 'insert', 'dup', 'del', 'layers'],
   motion: ['addlayer', 'camera', 'group', 'split', 'autokey', 'look', 'flipbook', 'fx'],
@@ -19,7 +19,7 @@ export const WORKSPACE_TOOL_NAMES: Record<WorkspaceTool, string> = {
   dup: 'Duplicate', del: 'Delete', play: 'Play', export: 'Export storyboard / animatic', onion: 'Onion skin',
   insert: 'New drawing', addlayer: 'New layer', camera: 'Camera', group: 'Group', split: 'Split',
   autokey: 'Auto-key', look: 'Camera view', flipbook: 'Edit flipbook', fx: 'Effects',
-  prevdraw: 'Previous drawing', nextdraw: 'Next drawing',
+  prevdraw: 'Previous drawing', nextdraw: 'Next drawing', eyedrop: 'Eyedropper',
 };
 export interface WorkspaceLayout {
   tools: WorkspaceTool[];
@@ -30,8 +30,8 @@ export interface WorkspaceLayout {
 }
 export type WorkspaceLayouts = Record<Workspace, WorkspaceLayout>;
 export function defaultWorkspaceLayout(ws: Workspace): WorkspaceLayout {
-  return { tools: ws === 'draw' ? ['brush', 'smudge', 'eraser', 'select', 'transform', 'layers', 'color']
-    : ws === 'animate' ? ['brush', 'eraser', 'select', 'assets', 'layers', 'color']
+  return { tools: ws === 'draw' ? ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'layers', 'color']
+    : ws === 'animate' ? ['brush', 'eraser', 'eyedrop', 'select', 'assets', 'layers', 'color']
     // Timing: Play, onion and frame actions already have homes (transport, X-sheet); they can be pinned
     : ws === 'time' ? ['layers'] : [...WORKSPACE_TOOLS[ws]],
   toolDock: 'top', brushEdge: 'left', labels: false, advancedTargets: false };
