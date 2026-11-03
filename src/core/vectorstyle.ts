@@ -24,7 +24,7 @@ export const MAX_STAMPS = 12000;
 export const MAX_STYLE_POINTS = 20000;
 export const VECTOR_RESOURCE_BUDGET = 64 * 1024 * 1024;
 export function vectorResourceCost(rec:StrokeRecord):number {
-  return (rec.style?.mask?.alpha.length ?? 0)+(rec.clips?.reduce((n,c)=>n+c.runs.length*8,0) ?? 0)+(rec.controls?.anchors.length ?? 0)*96;
+  return (rec.shape?.path.length ?? 0)*2+(rec.style?.mask?.alpha.length ?? 0)+(rec.clips?.reduce((n,c)=>n+c.runs.length*8,0) ?? 0)+(rec.controls?.anchors.length ?? 0)*96;
 }
 export function assertVectorBudget(strokes:Iterable<StrokeRecord>):void {
   let cost=0;for(const rec of strokes){cost+=vectorResourceCost(rec);if(cost>VECTOR_RESOURCE_BUDGET)throw new Error('The project has reached its editable vector material/clip limit (64 MB).');}
@@ -92,7 +92,8 @@ export function transformVector(rec: StrokeRecord, m: Mat, scale = 1): StrokeRec
   const c = rec.controls;
   const handles = c && Object.fromEntries(Object.entries(c.handles).map(([k,h]) => [k,{ inx:m[0]*h.inx+m[2]*h.iny, iny:m[1]*h.inx+m[3]*h.iny, outx:m[0]*h.outx+m[2]*h.outy, outy:m[1]*h.outx+m[3]*h.outy }]));
   return { ...rec, points:rec.points.map(p => {const [x,y]=applyPoint(m,p.x,p.y);return {...p,x,y};}),
-    brush: rec.style ? rec.brush : {...rec.brush,size:rec.brush.size*Math.abs(scale)},
+    brush: rec.style || rec.shape ? rec.brush : {...rec.brush,size:rec.brush.size*Math.abs(scale)},
+    ...(rec.shape ? {shape:{...rec.shape,matrix:multiply(m,rec.shape.matrix)}} : {}),
     ...(rec.style ? {style:{...rec.style,matrix:multiply(m,rec.style.matrix ?? UNIT)}} : {}),
     ...(c ? {controls:{...c,handles:handles!}} : {}),
     ...(rec.clips ? {clips:rec.clips.map(c => ({...c,matrix:multiply(m,c.matrix)}))} : {}) };

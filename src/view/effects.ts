@@ -72,15 +72,17 @@ export function drawEffected(
   fps = 24,
   /** Work at this fraction of the size (Fast preview); the result is that much smaller, so draw it scaled up. */
   scale = 1,
+  /** Adjustment and group inputs have already been flattened, so targets refer to one image. */
+  flattened = false,
 ): HTMLCanvasElement | null {
   // keyframed settings take their value at this frame (and, in Fast preview, pixel sizes shrink with the page)
-  const fx = activeEffects(l).map((e) => scaled(effectAt(e, frame), scale));
+  const fx = activeEffects(l).map((e) => scaled(effectAt(flattened ? { ...e, target: 'layer' } : e, frame), scale));
   if (!fx.length) return null;
   // shadows and glows reach past the art: work on a page grown by the pad
   const full = effectsPad(l), pad = full * scale;
   w = Math.max(1, Math.round((w + 2 * full) * scale));
   h = Math.max(1, Math.round((h + 2 * full) * scale));
-  const key = content ? `${l.id}|${content}|${planes}|${w}x${h}|${fps}|${effectsKey(l, frame)}` : '';
+  const key = content ? `${l.id}|${content}|${planes}|${w}x${h}|${fps}|${flattened}|${effectsKey(l, frame)}` : '';
   const hit = key ? cache.get(key) : undefined;
   if (hit) {
     cache.delete(key);

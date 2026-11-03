@@ -23,6 +23,7 @@ import {
 import { CAPTION_FIELDS } from '../core/timeline';
 import type { SoundClip } from '../core/audio';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
+import { readVectorShape } from '../core/vectorshape';
 import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_STYLE_POINTS, vectorResourceCost, VECTOR_RESOURCE_BUDGET } from '../core/vectorstyle';
 
 /**
@@ -35,7 +36,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 4;
+export const SCHEMA = 5;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -167,6 +168,12 @@ export interface DrawingFile {
   role?: 'key' | 'breakdown' | 'inbetween' | null;
 }
 
+/** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
+export function minimumDrawingSchema(drawings: Record<string, DrawingFile>): number {
+  const vectors = Object.values(drawings).flatMap((d) => d.vectors);
+  return vectors.some((v) => v.shape) ? 5 : vectors.some((v) => v.style || v.brush.vectorStyle || v.clips || v.controls) ? 4 : 3;
+}
+
 export interface ProjectFile {
   sounds?: Record<string, { name: string; path: string; duration: number }>;
   format: typeof FORMAT;
@@ -287,6 +294,7 @@ function stroke(v: unknown): StrokeRecord {
   }
   if(v.clips !== undefined) out.clips=readVectorClips(v.clips);
   if(v.controls !== undefined) out.controls=readVectorControls(v.controls,out.points.length);
+  if(v.shape !== undefined) out.shape=readVectorShape(v.shape);
   return out;
 }
 
@@ -510,6 +518,8 @@ export function migrate(input: unknown): Record<string, unknown> {
   if ((raw.schema as number) < 3) raw = { ...raw, schema: 3 };
   // Schema 4 introduces versioned marks; older sampled geometry needs no refitting.
   if ((raw.schema as number) < 4) raw = { ...raw, schema: 4 };
+  // Imported path objects are additive to the runtime; only captures containing them need 5.
+  if ((raw.schema as number) < 5) raw = { ...raw, schema: 5 };
   return raw;
 }
 

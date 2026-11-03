@@ -32,6 +32,10 @@ const same = (f: Fit) => f.s === 1 && f.ox === 0 && f.oy === 0;
 export function fitStroke(r: StrokeRecord, f: Fit): StrokeRecord {
   if (same(f)) return r;
   const c = structuredClone(r);
+  if (c.shape) {
+    const [a, b, cc, d, e, g] = c.shape.matrix;
+    c.shape.matrix = [a * f.s, b * f.s, cc * f.s, d * f.s, e * f.s + f.ox, g * f.s + f.oy];
+  }
   for (const p of c.points) { p.x = p.x * f.s + f.ox; p.y = p.y * f.s + f.oy; }
   c.brush.size *= f.s;
   if (c.sym) { c.sym.cx = c.sym.cx * f.s + f.ox; c.sym.cy = c.sym.cy * f.s + f.oy; }

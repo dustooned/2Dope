@@ -1,8 +1,40 @@
-# The .2dope project format (schemas 3–4)
+# The .2dope project format (schemas 3–5)
+
+## Imported vector objects (2026-11-03)
+
+The reader accepts schemas 1–5 and normalizes loaded metadata to 5. New captures still write the
+minimum required reader: 3 for ordinary drawings, 4 for vector appearances/controls/clips, and 5
+only when a vector contains `shape`. Artwork packages retain the same minimum-version rule.
+
+`StrokeRecord.shape` holds `{path, matrix, fill, stroke, width, rule, cap, join, miter}`. `path` is
+SVG path geometry (curves remain curves), `matrix` is a finite invertible six-number affine
+transform, fill/stroke are null or six/eight-digit hexadecimal colours, and paint attributes match
+Canvas fill/stroke semantics. The record's brush opacity fades the object. Its sampled `points`
+are conservative transformed bounds for whole-object selection, not editable brush anchors.
+Selection transforms compose the shape matrix; persistent selection clips restrict the rendered
+object. Path editing/restyling and brush vector erasing deliberately exclude these objects.
+Rasterize imported vectors flattens the Ink vector stack in one undoable pixel command.
+
+Validation bounds each path string to 1,000,000 characters, checks paint and coordinate/matrix
+limits, and counts two bytes per path character in the existing 64 MiB vector-resource budget.
+Import additionally caps input at 8 MB, 2,000 painted paths and bounded group/reference recursion.
+Paths are rendered synchronously through cached Path2D objects; no source HTML, scripts, external
+images, stylesheet or network resource is inserted into the app. Basic shapes, transforms, solid
+paints, local references and inherited/inline paint styles are supported. Unsupported SVG text,
+gradients, masks, clipping, dashed strokes and special appearances are refused with a conversion
+message instead of silently discarded. EPS uses a bounded data parser for path/colour/transform
+operators, not a PostScript runtime. CMYK colours are approximated as RGB for screen artwork.
+
+Layers of kind `comp` may carry the existing effects stack. Their numeric settings use the same
+layer-time key schema as drawing effects, and frame-content keys include the instance's own effects
+so rendered-frame deduplication cannot freeze an animated group effect. Groups and adjustment
+layers process one flattened input: effect targets are treated as Composite at render time.
+Partial-opacity adjustments interpolate premultiplied original/processed pixels, including alpha.
+These effect changes add no fields to the existing layer format.
 
 ## Editable vector appearances (2026-10-30)
 
-The reader accepts schemas 1–4 and normalizes the in-memory file version to 4. Captures containing
+The appearance feature introduced a reader accepting schemas 1–4 (now superseded above). Captures containing
 only the earlier sampled outlines continue to write schema 3; any `style`, authored `controls`,
 or persistent `clips` requires schema 4 so older readers refuse rather than discard appearance.
 Older geometry is never refitted. The versionless outline renderer remains unchanged.

@@ -24,7 +24,25 @@ function thin(points: StrokePoint[], minDist: number): StrokePoint[] {
   return out;
 }
 
+const shapePaths = new WeakMap<NonNullable<StrokeRecord['shape']>, Path2D>();
+
 export function drawVectorStroke(ctx: CanvasRenderingContext2D, rec: StrokeRecord, totalLength = Infinity): void {
+  if (rec.shape) {
+    const s = rec.shape;
+    ctx.save();
+    if (rec.clips?.length) applyVectorClips(ctx, rec);
+    ctx.transform(...s.matrix);
+    ctx.globalAlpha *= rec.brush.opacity;
+    let path = shapePaths.get(s);
+    if (!path) { path = new Path2D(s.path); shapePaths.set(s, path); }
+    if (s.fill) { ctx.fillStyle = s.fill; ctx.fill(path, s.rule); }
+    if (s.stroke && s.width > 0) {
+      ctx.strokeStyle = s.stroke; ctx.lineWidth = s.width; ctx.lineCap = s.cap;
+      ctx.lineJoin = s.join; ctx.miterLimit = s.miter; ctx.stroke(path);
+    }
+    ctx.restore();
+    return;
+  }
   if (rec.style || rec.brush.vectorStyle) { drawStyledVector(ctx, prepareVectorStroke(rec)); return; }
   if(rec.clips?.length) {ctx.save();applyVectorClips(ctx,rec);drawLegacyVectorStroke(ctx,rec,totalLength);ctx.restore();}
   else drawLegacyVectorStroke(ctx, rec, totalLength);

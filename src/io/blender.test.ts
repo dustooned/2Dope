@@ -204,6 +204,18 @@ describe('Blender planes sized to their art', () => {
 describe('Blender: what an image plane cannot do', () => {
   const ball = (p: ReturnType<typeof project>) => p.shot.layers.find((l) => l.id === 'B')! as Extract<Comp['layers'][number], { kind: 'drawings' }>;
 
+  it('bakes group effects on the placement clock instead of exporting an unaffected instance', () => {
+    const p = project(), group = p.shot.layers.find((l) => l.id === 'P')!;
+    group.effects = [{ ...newEffect('blur', 'groupfx', 1), keys: { amount: setKey(setKey(staticProp(0), 0, 0), 3, 6) } }];
+    const plan = planBlender(p, 'test'), layer = plannedLayers(plan, 'c1').P!;
+    expect(layer.kind).toBe('baked');
+    const jobs = plan.renders.filter((r) => r.image.startsWith('r:c1:P:'));
+    expect(jobs).toHaveLength(4);
+    expect(jobs.map((r) => r.frame)).toEqual([0, 1, 2, 3]);
+    expect(jobs[0]!.comp.layers[0]!.effects).toEqual(group.effects);
+    expect(plan.notes.some((n) => n.includes('group effects'))).toBe(true);
+  });
+
   it('an adjustment layer stays in 2Dope, with a note', () => {
     const p = project();
     ball(p).adjust = true;

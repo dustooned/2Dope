@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
 import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
-import { canMerge, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
+import { canMerge, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { setKey } from '../core/anim';
 import { showContextMenu, type CtxItem } from './contextmenu';
@@ -41,6 +41,9 @@ export class EffectsPanel {
   private readonly opened = new Set<string>();
   /** The card swiped open to its actions. */
   private swiped = '';
+  private search = '';
+  private added = '';
+  private returnFocus: HTMLElement | null = null;
   /** Which list shows: this layer's effects, or the effects to add. */
   private tab: 'layer' | 'add' = (() => { try { return localStorage.getItem(TAB_KEY) === 'add' ? 'add' : 'layer'; } catch { return 'layer'; } })();
   /** Where the card was dragged to (null: its usual corner). */
@@ -65,7 +68,7 @@ export class EffectsPanel {
   /** The layer effects are for: Motion's selected layer, else the layer you draw on. */
   private target(): string | null {
     const a = this.app, sel = a.workspace === 'motion' ? a.editor.primary : undefined;
-    if (sel && sel.kind === 'drawings') return sel.id;
+    if (sel && (sel.kind === 'drawings' || sel.kind === 'comp')) return sel.id;
     return a.project.isPlaceholder ? null : a.project.layer.id;
   }
 
@@ -80,7 +83,7 @@ export class EffectsPanel {
     if (id === this.openedAt && picks === this.openedPicks) return;
     this.openedAt = id;
     this.openedPicks = picks;
-    if (id && id !== this.layerId && this.layer(id)?.kind === 'drawings') this.show(id);
+    if (id && id !== this.layerId && ['drawings', 'comp'].includes(this.layer(id)?.kind ?? '')) this.show(id);
   }
   /** What `target()` and the editor's pick count were when the card last opened or followed. */
   private openedAt: string | null = null;
@@ -89,6 +92,7 @@ export class EffectsPanel {
   /** Keep the card where it was dragged, inside the window. */
   private place(): void {
     const r = this.root;
+    if (matchMedia('(max-width: 760px), (max-width: 1024px) and (any-pointer: coarse)').matches) { r.style.left = r.style.top = r.style.right = ''; return; }
     if (!this.pos) { r.style.left = r.style.top = r.style.right = ''; return; }
     const w = r.offsetWidth || 340, h = r.offsetHeight || 200;
     const x = Math.min(Math.max(4, this.pos.x), window.innerWidth - Math.min(w, window.innerWidth) - 4), y = Math.min(Math.max(4, this.pos.y), window.innerHeight - 60);
@@ -99,6 +103,7 @@ export class EffectsPanel {
   /** Drag the card by its title bar (a tap on its buttons still works). */
   private dragBy(handle: HTMLElement): void {
     handle.addEventListener('pointerdown', (e) => {
+      if (matchMedia('(max-width: 760px), (max-width: 1024px) and (any-pointer: coarse)').matches) return;
       if ((e.target as HTMLElement).closest('button, input, select') || e.button > 0) return;
       const box = this.root.getBoundingClientRect(), dx = e.clientX - box.left, dy = e.clientY - box.top;
       try { handle.setPointerCapture(e.pointerId); } catch { /* a pointer that is already gone */ }
@@ -121,11 +126,12 @@ export class EffectsPanel {
 
   show(layerId: string): void {
     const l = this.layer(layerId);
-    if (!l || l.kind !== 'drawings') {
-      this.app.onNotice?.('Pick a drawing layer to give it effects.');
+    if (!l || (l.kind !== 'drawings' && l.kind !== 'comp')) {
+      this.app.onNotice?.('Pick artwork, a group or an adjustment layer to give it effects.');
       return;
     }
-    if (layerId !== this.layerId) { this.opened.clear(); this.swiped = ''; }
+    if (layerId !== this.layerId) { this.opened.clear(); this.swiped = ''; this.added = ''; }
+    if (this.root.hidden) this.returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.layerId = layerId;
     this.openedAt = this.target();
     this.openedPicks = this.app.editor.picks;
@@ -142,8 +148,10 @@ export class EffectsPanel {
   }
 
   close(): void {
+    const restore = this.root.contains(document.activeElement);
     this.root.hidden = true;
     effectPreview.delete(this.layerId);
+    if (restore) { if (this.returnFocus?.isConnected) this.returnFocus.focus({ preventScroll: true }); else this.app.focusCanvas(); }
   }
 
   private layer(id = this.layerId): Layer | undefined {
@@ -152,16 +160,17 @@ export class EffectsPanel {
 
   private effects(): LayerEffect[] {
     const l = this.layer();
-    return l && l.kind === 'drawings' ? (l.effects ?? []) : [];
+    return l && (l.kind === 'drawings' || l.kind === 'comp') ? (l.effects ?? []) : [];
   }
 
   /** One undo step: the layer's effects become `next`. */
   private commit(label: string, next: LayerEffect[]): void {
+    if (next.length > MAX_LAYER_EFFECTS) { this.app.onNotice?.(`A layer can hold ${MAX_LAYER_EFFECTS} effects. Remove one before adding another.`); return; }
     const id = this.layerId;
     effectPreview.delete(id);
     this.app.editor.edit(label, (c) => {
       const x = c.layers.find((y) => y.id === id);
-      if (!x || x.kind !== 'drawings') return;
+      if (!x || (x.kind !== 'drawings' && x.kind !== 'comp')) return;
       if (next.length) x.effects = structuredClone(next);
       else delete x.effects;
     });
@@ -206,7 +215,7 @@ export class EffectsPanel {
 
   private render(): void {
     const l = this.layer();
-    if (!l || l.kind !== 'drawings') { this.close(); return; }
+    if (!l || (l.kind !== 'drawings' && l.kind !== 'comp')) { this.close(); return; }
     const list = this.effects();
     const keepScroll = this.root.querySelector('.fx-list')?.scrollTop ?? 0;
     const r = this.root;
@@ -222,17 +231,19 @@ export class EffectsPanel {
       mode.append(b);
     }
     const title = el('strong', { class: 'fx-title', title: 'Drag to move the card; double-click to put it back' }, `Effects \u00b7 ${l.name}`);
-    head.append(title, mode, x);
+    const help = el('button', { type: 'button', class: 'panel-help', 'aria-label': 'Effects help', title: 'Open Effects in the manual' }, '?');
+    help.addEventListener('click', () => this.app.onOpenManual('effects'));
+    head.append(title, mode, help, x);
     this.dragBy(head);
-    // this layer's effects, or the effects to add: one tap between them (Tab key too)
-    const setTab = (t: 'layer' | 'add') => { this.tab = t; try { localStorage.setItem(TAB_KEY, t); } catch { /* optional */ } this.render(); };
+    // Arrow keys move between tabs; Tab retains normal keyboard navigation.
+    const setTab = (t: 'layer' | 'add') => { this.tab = t; try { localStorage.setItem(TAB_KEY, t); } catch { /* optional */ } this.render(); this.root.querySelector<HTMLButtonElement>('.fx-tabs [aria-selected="true"]')?.focus(); };
     const tabs = el('div', { class: 'fx-seg fx-tabs', role: 'tablist', 'aria-label': 'Effects lists' });
     for (const [t, label] of [['layer', `On this layer${list.length ? ` (${list.length})` : ''}`], ['add', '+ Add effect']] as const) {
-      const b = el('button', { type: 'button', role: 'tab', 'aria-selected': String(this.tab === t), 'aria-pressed': String(this.tab === t) }, label);
+      const b = el('button', { type: 'button', role: 'tab', tabindex: this.tab === t ? '0' : '-1', 'aria-selected': String(this.tab === t), 'aria-pressed': String(this.tab === t) }, label);
       b.addEventListener('click', () => setTab(t));
       tabs.append(b);
     }
-    tabs.addEventListener('keydown', (e) => { if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); setTab(this.tab === 'layer' ? 'add' : 'layer'); } });
+    tabs.addEventListener('keydown', (e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { e.preventDefault(); setTab(e.key === 'Home' ? 'layer' : e.key === 'End' ? 'add' : this.tab === 'layer' ? 'add' : 'layer'); } });
     // while you work effects can show faster (half size) or not at all; exports always use full quality
     const q = loadFxPreview();
     const quality = el('div', { class: 'fx-seg small fx-quality', role: 'group', 'aria-label': 'Preview quality' });
@@ -244,22 +255,44 @@ export class EffectsPanel {
     const qrow = el('div', { class: 'fx-row fx-preview' });
     qrow.append(el('span', {}, 'Preview'), quality);
     r.append(head, tabs, qrow);
+    if (this.added) r.append(el('p', { class: 'hint fx-added', role: 'status' }, this.added));
     if (this.tab === 'add') {
       const add = el('div', { class: 'fx-add', role: 'tabpanel' });
+      const search = el('input', { type: 'search', class: 'fx-search', placeholder: 'Find an effect…', 'aria-label': 'Find an effect' });
+      search.value = this.search;
+      const sections = new Map<string, HTMLElement>();
       for (const t of EFFECT_TYPES) {
-        const b = el('button', { type: 'button', title: t.hint }, plainName(t));
-        decorate(b, 'plus');
+        const category = ['blur', 'dirblur', 'radialblur', 'shadow', 'glow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'offset', 'wave'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv'].includes(t.id) ? 'Texture and retro' : 'Colour and style';
+        let section = sections.get(category);
+        if (!section) { section = el('section', { class: 'fx-category' }); section.append(el('strong', {}, category)); sections.set(category, section); add.append(section); }
+        const b = el('button', { type: 'button', title: t.hint, 'aria-label': `Add ${plainName(t)}`, 'data-effect': t.id });
+        b.disabled = list.length >= MAX_LAYER_EFFECTS;
+        b.append(el('strong', {}, plainName(t)), el('span', { class: 'fx-add-hint' }, t.hint));
+        b.dataset.search = `${plainName(t)} ${t.hint} ${category}`.toLowerCase();
         b.addEventListener('click', () => {
           const id = this.newId();
           this.opened.add(id);
-          // added: back to this layer's list with the new card open
-          this.tab = 'layer'; try { localStorage.setItem(TAB_KEY, 'layer'); } catch { /* optional */ }
-          this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, newEffect(t.id, id, newSeed())]);
-          requestAnimationFrame(() => { const lb = this.root.querySelector('.fx-list'); if (lb) lb.scrollTop = lb.scrollHeight; });
+          // Keep Add open for a stack of effects. Each addition is its own undoable edit.
+          this.added = `Added ${plainName(t)} to ${l.name}.`;
+          this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, { ...newEffect(t.id, id, newSeed()), ...((l.kind === 'comp' || l.adjust) ? { target: 'layer' as const } : {}) }]);
+          this.root.querySelector<HTMLButtonElement>(`[data-effect="${t.id}"]`)?.focus({ preventScroll: true });
         });
-        add.append(b);
+        section.append(b);
       }
-      r.append(add);
+      const empty = el('p', { class: 'hint', hidden: '' }, 'No matching effects. Try blur, glow, colour or warp.');
+      const filter = () => {
+        const query = this.search.trim().toLowerCase(); let count = 0;
+        for (const section of sections.values()) {
+          let visible = 0;
+          for (const b of section.querySelectorAll<HTMLButtonElement>('button')) { b.hidden = !b.dataset.search!.includes(query); if (!b.hidden) visible++; }
+          section.hidden = !visible; count += visible;
+        }
+        empty.hidden = count > 0;
+      };
+      search.addEventListener('input', () => { this.search = search.value; filter(); });
+      filter();
+      if (list.length >= MAX_LAYER_EFFECTS) r.append(el('p', { class: 'hint', role: 'status' }, `This layer has ${MAX_LAYER_EFFECTS} effects. Remove one from On this layer to add another.`));
+      r.append(search, add, empty);
       this.place();
       return;
     }
@@ -283,7 +316,7 @@ export class EffectsPanel {
     const top = el('div', { class: 'fx-top' });
     const grip = el('button', { type: 'button', class: 'fx-grip', title: 'Drag to reorder', 'aria-label': `Reorder ${name}` }, '☰');
     const title = el('button', { type: 'button', class: 'fx-title', 'aria-expanded': String(open), title: open ? 'Fold this effect' : 'Show its settings' });
-    title.append(el('span', { class: 'fx-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), el('span', { class: 'fx-name' }, name), el('span', { class: 'fx-badge' }, TARGET_NAMES[e.target]));
+    title.append(el('span', { class: 'fx-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), el('span', { class: 'fx-name' }, name), el('span', { class: 'fx-badge' }, (this.layer()?.kind === 'comp' || this.layer()?.adjust ? 'Composite' : TARGET_NAMES[e.target])));
     title.addEventListener('click', () => { if (this.swiped) { this.swiped = ''; this.render(); return; } if (open) this.opened.delete(e.id); else this.opened.add(e.id); this.render(); });
     const sw = el('button', { type: 'button', class: `fx-switch${e.on ? ' on' : ''}`, role: 'switch', 'aria-checked': String(e.on), title: e.on ? 'Turn this effect off' : 'Turn this effect on', 'aria-label': `${name} on` });
     sw.append(el('span', { class: 'lc-switch-knob', 'aria-hidden': 'true' }));
@@ -317,7 +350,7 @@ export class EffectsPanel {
     const name = plainName(def);
     const adv = this.advanced;
     const body = el('div', { class: 'fx-body' });
-    if (adv) {
+    if (adv && this.layer()?.kind === 'drawings' && !this.layer()?.adjust) {
       const seg = el('div', { class: 'fx-seg', role: 'group', 'aria-label': 'Works on' });
       for (const t of ['line', 'fill', 'layer'] as EffectTarget[]) {
         const b = el('button', { type: 'button', 'aria-pressed': String(e.target === t) }, TARGET_NAMES[t]);

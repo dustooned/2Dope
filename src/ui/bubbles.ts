@@ -41,7 +41,7 @@ export interface BubbleHooks {
   /** Layer cards with thumbnails (Draw); without it, Layers shows the linked layers as chips. */
   layerCards?: (anchor: HTMLElement) => void;
   /** Story (Board) actions the bubbles reach. */
-  story?: { view(): BoardView; setView(v: BoardView): void; images(): void; exportBoard(): void };
+  story?: { view(): BoardView; setView(v: BoardView): void; images(): void; exportBoard(): void; controlsInPanel?: boolean };
   /** Motion actions the bubbles reach. */
   motion?: { group(): void; split(): void };
   /** Draw's bottom view: the flipbook (on) or the timeline. */
@@ -241,7 +241,7 @@ export class Bubbles {
     // the page is kept clear of the context row too (Timing's and Fill's rows reach the middle)
     const clear = Math.round(painting ? Math.max(bottomOf(this.modes), bottomOf(this.stage.querySelector<HTMLElement>('.painting-header')!),
       this.app.workspaceLayouts[this.app.workspace].toolDock === 'top' ? bottomOf(this.tools) : 0) + 8
-      : narrow ? tools + 58 : Math.max(tools + 8, bottomOf(this.ctx) + 6));
+      : Math.max(tools + 8, bottomOf(this.ctx) + 6));
     const label = 0; // the layer label is kept clear by the fit itself
     this.stage.style.setProperty('--tools-bottom', `${painting ? clear : Math.round(tools + 6)}px`);
     this.stage.style.setProperty('--chrome-bottom', `${clear}px`);
@@ -397,7 +397,7 @@ export class Bubbles {
       shown: () => [...a.workspaceLayouts[ws].tools],
       apply: save,
       reset: () => save(defaultWorkspaceLayout(ws).tools),
-      keep: isPaintingWorkspace(ws) ? { brush: 'Brush stays on the bar, so there is always a way to draw.' } : undefined,
+      keep: isPaintingWorkspace(ws) || ws === 'board' ? { brush: 'Brush stays on the bar, so there is always a way to draw.' } : undefined,
       notice: (t) => a.onNotice?.(t),
       onClose: () => { this.editingTools = false; this.sig = ''; this.update(); },
     });
@@ -499,7 +499,7 @@ export class Bubbles {
     }
     // Timing is for timing and review: no brushes; the canvas scrubs (drag) and plays (tap)
     if (ws === 'time') return [['play', 'Play', 'play'], ['onion', 'Onion', 'onion'], ['insert', 'New drawing after this one', 'plus'], ['dup', 'Duplicate the drawing', 'copy'], ['del', 'Delete the drawing', 'trash'], ['layers', 'Layers: whose timing you edit', 'layers']];
-    if (ws === 'board') return [['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Export the storyboard or an animatic', 'export']];
+    if (ws === 'board') return [['brush', 'Brush', 'brush'], ['eraser', 'Eraser', 'eraser'], ['color', 'Colour', ''], ['panel', 'New panel', 'plus'], ['images', 'Import images as panels', 'gallery'], ['dup', 'Duplicate panels', 'copy'], ['del', 'Delete panels', 'trash'], ['play', 'Play the animatic', 'play'], ['export', 'Share the storyboard or an animatic', 'export']];
     if (ws === 'motion') return [['addlayer', 'New drawing layer', 'plus'], ['camera', 'Add a camera', 'camera'], ['group', 'Group the selected layers', 'layers'], ['split', 'Split at the playhead', 'scissors'], ['autokey', 'Auto-key: every change writes a keyframe', 'key'], ['look', 'Look through the camera', 'viewfinder'], ['flipbook', 'Edit the selected drawing layer as a flipbook (Flip)', 'flipbook'], ['fx', 'Effects of the selected layer (line boil...)', 'fx'], ...VIEW_TOOLS];
     return [];
   }
@@ -567,7 +567,7 @@ export class Bubbles {
       case 'nextdraw': a.nextDrawing(); break;
       case 'fx': {
         if (isPaintingWorkspace(a.workspace) && !a.project.isPlaceholder) { a.openEffects?.(a.project.layer.id); break; }
-        const id = a.editor.selected.find((s) => a.editor.comp.layers.some((l) => l.id === s && l.kind === 'drawings')) ?? a.editor.comp.layers.find((l) => l.kind === 'drawings')?.id;
+        const id = a.editor.selected.find((s) => a.editor.comp.layers.some((l) => l.id === s && (l.kind === 'drawings' || l.kind === 'comp'))) ?? a.editor.comp.layers.find((l) => l.kind === 'drawings')?.id;
         if (id) a.openEffects?.(id);
         else a.onNotice?.('Add a drawing layer first, then give it effects.');
         break;
@@ -718,6 +718,7 @@ export class Bubbles {
       const visibleLabel = b.querySelector('.lbl');
       if (visibleLabel) visibleLabel.textContent = pause ? label : WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label;
       b.dataset.toolKey = k;
+      if (ws === 'board' && !a.board && (k === 'brush' || k === 'eraser' || k === 'color')) b.disabled = true;
       if (k === 'onion') onionHold(a, b);
       if (k === 'more') { b.setAttribute('aria-expanded', String(this.moreTools)); b.setAttribute('aria-controls', 'workspace-extra-tools'); }
       if (k === 'color') {
@@ -817,7 +818,7 @@ export class Bubbles {
       if (a.studentUI.controls.planes) add(this.chip('Ink target', 'Paint on Ink: your lines', a.plane === 'line', () => a.setPlane('line')), this.chip('Colour target', 'Paint on Colour: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
-      add(...this.cmd('paint.editpoints'), this.customizeChip('paint'));
+      add(...this.cmd('paint.editpoints'), ...this.cmd('paint.svg'), ...this.cmd('paint.rasterize'), this.customizeChip('paint'));
     } else if (row === 'fill') {
       add(...this.gradChips());
       add(
@@ -858,11 +859,13 @@ export class Bubbles {
       add(...this.commandChips('select'));
     } else if (row === 'board') {
       const st = this.hooks.story;
-      if (st) {
+      if (st && !st.controlsInPanel) {
         for (const [v, label, show] of [['grid', 'Grid', 'Grid'], ['panels', 'Panels', 'Panels'], ['timeline', 'Timeline', 'Timeline'], ['split', 'Split', 'Both']] as const) add(this.chip(show, `Board view: ${label}`, st.view() === v, () => { st.setView(v); this.sig = ''; this.update(); }));
       }
-      add(this.chip('\u25c0 Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later \u25b6', 'Move the selected panels later', false, () => a.moveSelection(1)));
-      add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));
+      if (!st?.controlsInPanel) {
+        add(this.chip('\u25c0 Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later \u25b6', 'Move the selected panels later', false, () => a.moveSelection(1)));
+        add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));
+      }
     } else if (row === 'motion') {
       // easing, reverse and delete only when keys are selected; otherwise just how new keys start
       if (a.editor.keys.size) {

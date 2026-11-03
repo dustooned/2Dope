@@ -1,6 +1,138 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-10-31) — read this first
+## Current state (2026-11-03) — read this first
+
+### Release checkpoint (2026-11-03)
+
+The user requested committing and pushing the completed November 3 Story, vector/media import,
+adjustment/group effects and focused Motion/Effects UI work below. Those sections record the
+pre-commit checks and limitations; their “uncommitted” labels describe their original checkpoint.
+This commit excludes the pre-existing untracked research and railperf experiments. A deeper asset
+creation and Motion workflow cleanup is the next requested implementation pass, not part of this
+release checkpoint. Pushing `main` triggers the existing GitHub Pages workflow.
+
+### Story interface consistency and editing ownership (2026-11-03, uncommitted follow-up)
+
+Owner: "Interface has a lot of inconsistencies esp with story mode…let's fix."
+- `src/ui/board.ts`: one persistent Story header at Simple/Full levels with Play/Pause,
+  Previous/Next panel, shared-clock readout, Grid/Panels/Timeline/Split, New panel, Story tools,
+  Share and contextual help. Story tools makes Script, image import, Present, Animate and selected
+  panel actions reachable at Simple level. The empty state disables playback/share without hiding
+  recovery actions. Each card has an explicit menu and keyboard-accessible picture button.
+- Panel cards leave Dialogue and Action outside a session-remembered Panel details disclosure;
+  shot/camera/stickers/timing/notes remain inside it. Keyboard Return opens the next card's Details
+  when required. Compact previews and styled Duration fields make room for dialogue. No caption
+  schema or timing calculations changed. `Both` is consistently labeled `Split` (stored value unchanged).
+- `src/core/workspacelayout.ts`, `src/ui/bubbles.ts`: Story's new default bar is Brush/Eraser/Colour;
+  only the untouched former default migrates. Custom bars retain their actions and receive new
+  sketch tools through existing seen-tool migration; Brush stays recoverable. Panel actions can
+  still be pinned. Main opts into the panel-owned view controls to remove their duplicate floating
+  row (`src/main.ts`). Non-painting mode buttons show names and keep 44 px targets, scrolling
+  inside the viewport; short landscape uses icons to keep the canvas usable.
+- `src/style.css`: scoped Story header/card styling, 44 px actions, semantic field/focus states,
+  reduced-motion handling, and bounded Story height so cards and canvas retain scrollable space.
+- A browser regression exposed a real focus bug: Undo Start storyboard allowed the fallback real
+  drawing layer to become active, and Redo did not return to the guide. `src/app.ts` restores
+  Story ownership after history steps and when loading a project while Story is open. This is
+  runtime selection only, without an extra history edit. The sketch regression proves strokes and
+  captions target the guide and leave the animation drawing track alone.
+- Manual/UPDATES updated (`src/ui/manualtext.ts`); existing story export fixture follows the
+  renamed Share entry and Story tools import action (`src/ui/storyexport.browser.ts`).
+
+Checks for this follow-up: `npm test` **660 passed + 1 skipped**, 80 files; production build passes
+(existing chunk-size warning). Browser: new `storyui` **13/13** and phone wrapper **13/13**;
+`storyexport` **41/41**, `commandrow` **44/44**, `workspacelayout` **20/20** and its four-size wrapper
+**80/80**. Earlier in this follow-up `toolbars` **37/37**, `workspacefixes` **23/23** and phone
+**23/23** also passed. New tests cover Start/Undo/Redo, actual sketch pixels + Undo, caption/details
+state, view-only history, playback/panel stepping, menu duplication, help/share routing and load
+ownership. Unit coverage checks untouched/default migration versus customized bars.
+
+Visual review: desktop 1280×900, phone 375×812, coarse-pointer tablet 768×1024, short landscape
+812×375; no body overflow, header stays reachable and both canvas/card areas retain space. Review
+screenshots live outside the repo in this chat's visualization directory as `2dope-story-*.png`.
+The screenshots use disposable in-memory sample panels, not a user's saved project. Physical
+iPad/Pencil/Safari/onscreen keyboard remains unverified. No commit, push or deployment performed.
+
+### Vector/media import, adjustment/group effects, focused Motion UI, and release specification (2026-11-03, uncommitted)
+
+Owner: expand the current app; import SVG/EPS/vector items, investigate PNG transparency, clean up
+the touched UI/Motion tools, fix adjustment effects doubling and missing group effects. Follow-up:
+the pasted 15-item slate requests verdicts, cross-cutting decisions, build cards and milestones;
+it does **not** request implementing the whole slate or another general layout rewrite.
+
+**Implemented locally:**
+- `src/io/vectorimport.ts`, `src/io/eps.ts`, `src/core/vectorshape.ts`: bounded SVG path-object
+  import and a simple path-based EPS data parser. Curves, solid fills/strokes, fill rules,
+  opacity, basic shapes, group transforms, local uses and paint styles are retained. Unsupported
+  text/gradients/patterns/masks/clipping/dashes/special appearances are refused with a plain-SVG
+  conversion message; this is not an arbitrary EPS/PostScript, AI or PDF interpreter.
+- Portable `StrokeRecord.shape`, synchronous cached Path2D rendering (`src/brush/vector.ts`),
+  whole-object transforms/selection clips, SVG re-export and cross-project fit. Imported paths
+  are excluded from brush point editing/restyling/vector erasing. The Vector row now actually
+  exposes Export SVG and Rasterize imported vectors; rasterizing the Ink vector stack is one
+  undoable pixel command. Source changes in `app.ts`, `vectorstyle.ts`, `vectorclip.ts`,
+  `vectorcut.ts`, `sendto.ts`, `svg.ts`, `commands.ts`, `bubbles.ts`.
+- Format 5 is required only for imported path objects (`schema.ts`, `projectio.ts`, `artwork.ts`).
+  Older projects load; ordinary captures/artwork archives still use minimum formats 3/4.
+  Validation counts path data in the existing 64 MiB vector budget; imports cap input at 8 MB,
+  2,000 painted paths, one million characters/path and bounded recursion. See `docs/project-format.md`.
+- `src/ui/media.ts`: SVG/EPS routed before image decode; PNG alpha survives import. Bitmap
+  failure falls back to the browser Image decoder, with resource cleanup and a changed-timeline
+  guard. The reported original PNG was not supplied, so its exact failure is not established.
+  White paper can conceal transparency: View → Transparency grid (also Motion View) adds a
+  screen-only checkerboard (`canvasview.ts`, `ui/canvasview.ts`, `app.ts`). No matte is removed
+  from pictures that actually contain opaque white pixels.
+- `src/view/composite.ts`: adjustments interpolate premultiplied original/effected pixels
+  rather than source-over double translucent art; the comp background is included in the adjusted
+  page exactly once. Comp-instance effects run after nested composition rendering and before
+  the placement transform. Flat groups/adjustments treat targets as one Composite input,
+  including slider previews (`src/view/effects.ts`). `compedit.ts` supports keyed group effects;
+  `core/comp.ts` frame-content keys include group effects so export dedup cannot freeze them.
+- `src/io/blender.ts`: group effects force per-placement baking on the placement clock;
+  transforms/opacity remain plane channels. Check explicitly notes that output is group-page-sized
+  and effects beyond that page crop. Adjustment layers remain omitted with the existing note.
+- `src/ui/motion.ts`: + Layer and Layer actions group existing actions; Motion tools exposes
+  existing Wiggle/Smooth/Loop/Stagger/audio/easing commands, not new algorithms. Layer search
+  clears on project/comp change; Animated reveals keyed property rows. Effects opens a selected
+  group as well as a drawing. Existing advanced controls remain in the disclosure.
+- `src/ui/effectspanel.ts`, `src/style.css`: searchable effect families with visible hints;
+  Add stays open for repeated additions, updates count/status and restores button focus. A 16-effect
+  limit matches persistence and also guards duplication. The same panel docks at widths ≤760 px,
+  or ≤1024 px on a coarse pointer; desktop remains draggable. Header, search styling, keyboard
+  tabs, focus recovery, reduced motion and touched semantic tokens refined. Effects/Motion/Share
+  help buttons route section ids through the shell (`main.ts`, `app.ts`, `share.ts`). Manual/UPDATES updated.
+
+**Specification only:** `docs/ADDITIONS-REFINEMENT-2026-11-03.md` covers all 15 requested verdicts,
+cross-cutting text/temporal/preset/symbol/export/row decisions, cards for surviving work, UI rules,
+three milestones and five remaining risks. Titles, saved effect styles, new camera-move presets,
+hand-in bundles, Tint/Tritone and the layer-row presentation migration are **not implemented** here.
+It identifies the already-present twelve easing curves and time remapping rather than proposing
+duplicate implementations. Motion blur/Echo and other renderer-heavy slate items are deferred.
+
+**Checks:** `npm test`: 80 files, **659 passed + 1 skipped** (opt-in brush corpus). Production build
+passes strict TypeScript and Vite; existing large-chunk warning remains. Nineteen unique affected
+browser fixtures passed across runs: importeffects, importeffects-responsive, effects, rendering,
+canvasview, toolbars, commandrow, workspacefixes(+responsive), shareexport, storyexport,
+vectornext, vectorbrushes(+responsive), selectionedit, selectionpaint,
+artworklibrary(+responsive), sendto. The last renderer/archive changes were rechecked with
+importeffects 22/22, phone 22/22, effects 25/25, shareexport 4/4, vectorbrushes 46/46,
+and sendto 6/6. Updated older assertions deliberately account for Export SVG appearing in the
+Vector row, the new view option/focus order, Add staying open and runtime format normalization.
+The fixture runner first could not reach the sandboxed Vite server; verification succeeded with
+both isolated test server and temporary-profile Chrome outside the sandbox, at 127.0.0.1:5217.
+
+Visual review at 1280×900, 375×812 and coarse-pointer 768×1024: no body overflow, Effects list
+scrolls, all help buttons 44 px on touch; bottom sheet fits phone/tablet. Screenshots are outside
+the repo in this chat's visualization directory (`2dope-effects-{desktop,phone,tablet}.png`).
+
+**Not checked:** physical iPad/Pencil/Safari/virtual-keyboard feel; full fixture suite/railperf;
+native Blender import/render of these new group bakes; the user's original PNG/EPS/SVG files.
+Blender group bakes crop outside the group page, and adjustment layers are still intentionally
+not exported. No source files from sibling reference projects were changed. Existing untracked
+research/railperf files were preserved. No commit, push or deployment was performed.
+
+The November 2 sections below were committed before this session (HEAD `5ef54cc`), despite their
+historical “uncommitted” headings. Consult Git rather than treating those old labels as current status.
 
 ### Blender: masks, effects, parts and clipping rendered; adjustment layers left out (2026-11-02, uncommitted)
 

@@ -6,7 +6,7 @@ describe('canvas view options', () => {
     expect(readCanvasView(null)).toEqual(DEFAULT_CANVAS_VIEW);
     expect(readCanvasView('yes')).toEqual(DEFAULT_CANVAS_VIEW);
     expect(readCanvasView({ overscan: true, safeAreas: 'on', centre: 1, overview: true, extra: true }))
-      .toEqual({ overscan: true, safeAreas: false, centre: false, overview: true });
+      .toEqual({ transparency: false, overscan: true, safeAreas: false, centre: false, overview: true });
   });
 
   it('places action-safe (90%) and title-safe (80%) frames in the middle', () => {

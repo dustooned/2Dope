@@ -36,5 +36,15 @@ describe('workspace layout preferences', () => {
     expect(later.motion.tools).toEqual(['camera']);
     expect(later.draw.tools).toEqual(['brush', 'eraser', 'eyedrop']);
   });
+
+  it('moves only the untouched Story bar to sketch tools and keeps custom actions', () => {
+    const legacy = ['panel', 'images', 'dup', 'del', 'play', 'export'];
+    expect(readWorkspaceLayouts({ board: { tools: legacy } }).board.tools).toEqual(['brush', 'eraser', 'color']);
+    expect(readWorkspaceLayouts({ board: { tools: ['play', 'panel'], seen: legacy } }).board.tools).toEqual(['play', 'panel', 'brush', 'eraser', 'color']);
+    const customized = readWorkspaceLayouts({ board: { tools: legacy, labels: true } }).board;
+    expect(customized.tools.slice(0, 6)).toEqual(legacy);
+    const later = readWorkspaceLayouts({ board: { tools: ['brush', 'play'], seen: [...WORKSPACE_TOOLS.board] } }).board;
+    expect(later.tools).toEqual(['brush', 'play']);
+  });
 });
 

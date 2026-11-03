@@ -131,6 +131,8 @@ export class ShareView {
     decorate(back, 'close');
     back.addEventListener('click', () => this.close());
     head.append(back, el('span', { class: 'share-title' }, 'Share'), el('span', { class: 'share-sub' }, 'Watch it, check it, then make your movie'));
+    const help = el('button', { type: 'button', class: 'panel-help', 'aria-label': 'Share help', title: 'Open Share in the manual' }, '?');
+    help.addEventListener('click', () => this.app.onOpenManual('export')); head.append(help);
     if (hooks.timelapse) {
       const tl = el('button', { type: 'button', class: 'share-timelapse', title: 'Watch how this project was made, and save it as a GIF' }, '⏱ Time-lapse');
       tl.addEventListener('click', () => this.hooks.timelapse?.());

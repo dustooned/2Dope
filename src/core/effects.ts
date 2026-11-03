@@ -13,6 +13,7 @@ import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
 export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette';
 export type EffectTarget = 'line' | 'fill' | 'layer';
+export const MAX_LAYER_EFFECTS = 16;
 export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
 
 export interface LayerEffect {
@@ -299,7 +300,7 @@ const clamp = (x: number, [lo, hi]: readonly [number, number]) => Math.min(hi, M
 export function readEffects(v: unknown): LayerEffect[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out: LayerEffect[] = [];
-  for (const raw of v.slice(0, 16)) {
+  for (const raw of v.slice(0, MAX_LAYER_EFFECTS)) {
     if (!raw || typeof raw !== 'object') continue;
     const r = raw as Record<string, unknown>;
     if (!EFFECT_TYPES.some((t) => t.id === r.type)) continue;

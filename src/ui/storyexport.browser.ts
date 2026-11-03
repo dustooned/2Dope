@@ -91,10 +91,13 @@ try {
   const old = rows(1).map((r) => [r.querySelector<HTMLInputElement>('.bspeaker')!.value, r.querySelector<HTMLTextAreaElement>('.bsay')!.value]);
   check('Older free-text dialogue shows as lines', JSON.stringify(old) === JSON.stringify([['MOM', 'Dinner!'], ['', 'wind howls']]), old);
   check('Card header names the unit and the start', card(0).querySelector('.bunit')?.textContent === 'fr' && /^@ /.test(card(0).querySelector('.bwhen')?.textContent ?? ''));
-  check('Images button no longer uses the export icon', !!document.querySelector('.board-bar button[aria-label="Images"]') && document.querySelector('.board-bar button[aria-label="Images"] use, .board-bar button[aria-label="Images"] svg')?.outerHTML !== document.querySelector('.board-bar button[aria-label="Export"] svg')?.outerHTML);
+  document.querySelector<HTMLButtonElement>('.board-bar button[aria-label="Story tools"]')!.click();
+  check('Image import is clearly named in Story tools, separate from Share', [...document.querySelectorAll('.ctxmenu button')].some((b) => b.textContent?.includes('Import panel images')) && !!document.querySelector('.board-bar button[aria-label="Share storyboard"] svg'));
+  document.querySelector<HTMLButtonElement>('.board-bar button[aria-label="Story tools"]')!.focus();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
   // --- Story's Export opens Share on the storyboard formats
-  document.querySelector<HTMLButtonElement>('.board-bar button[aria-label="Export"]')!.click();
+  document.querySelector<HTMLButtonElement>('.board-bar button[aria-label="Share storyboard"]')!.click();
   await settle(300);
   check('Story Export opens Share on Storyboard', share.open && exportCalls === 1 && checked() === 'Storyboard');
   check('Animatic and Storyboard are both formats in Share', !!kindBtn('Animatic') && !!kindBtn('Storyboard'));
@@ -159,7 +162,7 @@ try {
   share.close(); await settle();
   check('Closing Share returns to Story', app.workspace === 'board');
   // the choice carries across: Story opens on Animatic now, Share from anywhere keeps it
-  document.querySelector<HTMLButtonElement>('.board-bar button[aria-label="Export"]')!.click(); await settle(200);
+  document.querySelector<HTMLButtonElement>('.board-bar button[aria-label="Share storyboard"]')!.click(); await settle(200);
   check('Story Export reopens on the last story format (Animatic)', checked() === 'Animatic');
   share.close(); app.setWorkspace('motion'); share.show(); await settle(200);
   check('Share from Motion keeps the same pick', checked() === 'Animatic');

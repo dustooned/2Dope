@@ -5128,6 +5128,100 @@ body.ui-full.ws-motion:not(.ui-hidden):not(.quick) .bub-ctx, body.ui-full.ws-tim
 .mleft-resizable, .mleft-resizable .mleft, .mleft-resizing, .mleft-resizing * { cursor: col-resize !important; }
 .mleft-resizing { user-select: none; }
 
+/* Motion assistants stay together; filters never compete with the transport for room. */
+.motion-workspace-tools { gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); }
+.motion-search { min-width: 120px; width: clamp(120px, 22vw, 240px); min-height: 36px; }
+.motion-tools { font-weight: 650; }
+.fx-search { flex: 0 0 auto; min-height: 40px; width: 100%; box-sizing: border-box; }
+.motion-search, .fx-search { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); color: var(--text); font: inherit; font-size: 12px; padding: 8px 10px; }
+.motion-search::placeholder, .fx-search::placeholder { color: var(--muted); }
+.fx-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.fx-head > .fx-title { grid-column: 1; grid-row: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-head > .panel-help { grid-column: 2; grid-row: 1; }
+.fx-head > .fx-x { grid-column: 3; grid-row: 1; }
+.fx-head > .fx-mode { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+.fx-add { display: block; overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+.fx-category { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+.fx-category > strong { grid-column: 1 / -1; padding: 4px 0; font-size: 12px; color: var(--muted); }
+.fx-category > button { text-align: left; min-height: 44px; white-space: normal; }
+.fx-category > button { display: flex; flex-direction: column; align-items: flex-start; padding: 8px; gap: 4px; }
+.fx-add-hint { color: var(--muted); font-size: 11px; line-height: 1.35; font-weight: normal; }
+.fx-added { margin: 0; }
+.panel-help { flex: 0 0 auto; min-width: 36px; min-height: 36px; font-weight: 700; }
+.panel-help:focus-visible, .motion-search:focus-visible, .fx-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fx-category[hidden], .fx-category button[hidden] { display: none; }
+@media (max-width: 600px) {
+  .mbar { padding: 4px 6px; }
+  .motion-workspace-tools { gap: 6px; }
+  .motion-search { width: 130px; }
+}
+@media (max-width: 760px), (max-width: 1024px) and (any-pointer: coarse) {
+  .fxpanel { top: auto; right: 0; bottom: 0; left: 0; width: auto; max-height: min(68dvh, 600px); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .fx-head { flex-wrap: wrap; touch-action: auto; }
+  .fx-head > .fx-title { flex: 1 1 130px; cursor: default; }
+  .panel-help { min-width: 44px; min-height: 44px; }
+  .fx-category > button { min-height: 64px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fxpanel *, .motion-workspace-tools *, .panel-help { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* Story uses one control header at Simple and Full levels, like the other timelines. */
+.board .board-bar { display: flex; flex-direction: column; align-items: stretch; gap: 6px; overflow: visible; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+body.ui-simple .board .board-bar, body.ui-clean .board .board-bar { display: flex; }
+.story-heading, .story-controls, .story-transport { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.story-heading .board-info { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.story-transport { flex: 0 0 auto; }
+.story-readout { min-width: 80px; text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; }
+.board-bar button { min-height: 44px; flex-shrink: 0; }
+.story-transport button, .story-panel-more { width: 44px; min-width: 44px; min-height: 44px; padding: 0; }
+.story-controls { flex-wrap: wrap; }
+.story-controls .board-views { flex: 1 1 300px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; min-width: 0; }
+.board-views button { padding: 0 8px; min-width: 0; font-size: 12px; }
+.board-views button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.board-cards .bcard { flex-basis: clamp(260px, 30vw, 330px); max-width: calc(100vw - 24px); }
+.board-cards .bhead { display: grid; grid-template-columns: 24px auto 64px 20px 44px; gap: 4px; }
+.bhead .bwhen { grid-column: 1 / -1; grid-row: 2; font-size: 11px; }
+.bhead .story-panel-more { grid-column: 5; grid-row: 1; }
+.story-duration-label { font-size: 11px; color: var(--muted); }
+.board-cards .bdur, .board-cards .bfield.bline { min-height: 44px; }
+.board-cards .bdur { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--text); font: inherit; padding: 0 8px; }
+.board-cards .bthumb { max-height: 84px; }
+.story-panel-details { border-top: 1px solid var(--line); margin-top: 6px; }
+.story-panel-details > summary { min-height: 44px; align-content: center; cursor: pointer; font-weight: 600; }
+.story-panel-details .bsticker, .story-panel-details .bscene-new { min-height: 44px; }
+.story-panel-picture { width: 100%; padding: 0; border: 0; background: transparent; border-radius: var(--radius); flex-shrink: 0; }
+.story-panel-picture .bthumb { display: block; }
+.board { max-height: min(62dvh, calc(100dvh - 130px)); }
+.board > .board-bar { flex-shrink: 0; }
+.board > :is(.board-cards, .bgrid-wrap, .btl) { min-height: 0; flex-shrink: 1; }
+.board :is(button, input, textarea, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Navigation and tools on non-painting screens keep their touch size and scroll within the stage. */
+body:not(.painting-workspace) .bub-modes { max-width: calc(100% - 120px); overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+body:not(.painting-workspace) .bub-modes .bub { width: auto; min-width: 44px; height: 44px; min-height: 44px; padding: 0 8px; gap: 5px; border-radius: var(--radius-md); font-size: 12px; }
+body:not(.painting-workspace) .bub-modes .lbl { display: inline; }
+body:not(.painting-workspace) .bub-name { display: none; }
+body:not(.painting-workspace) .bub-tools { max-width: calc(100% - 120px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+body:not(.painting-workspace) .bub-tools .bub { min-width: 44px; min-height: 44px; width: 44px; height: 44px; }
+@media (max-width: 700px) {
+  body:not(.painting-workspace) .bub-tools { max-width: calc(100% - 16px); }
+  .board .board-bar { padding: 4px 8px; gap: 4px; }
+  .story-heading { gap: 4px; }
+  .story-heading .board-title { display: none; }
+  .story-heading .board-info { max-width: 75px; font-size: 11px; }
+  .story-transport { margin-left: auto; gap: 2px; }
+  .story-readout { min-width: 68px; font-size: 11px; }
+  .story-controls .board-views { flex-basis: 100%; }
+  .story-controls > button:last-child { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board *, body.ws-board .bub-modes, body.ws-board .bub-tools { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+@media (max-height: 500px) {
+  body:not(.painting-workspace) .bub-modes .lbl { display: none; }
+  body:not(.painting-workspace) .bub-modes .bub { width: 44px; padding: 0; }
+}
+
 /* Touch and hold: the eyedropper's loupe (the new colour round the colour you had) */
 .hold-loupe { position: fixed; z-index: 500; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; pointer-events: none;
   background: conic-gradient(var(--now, #000) 0 50%, var(--was, #000) 50% 100%); box-shadow: 0 0 0 3px #fff, 0 0 0 4px #0006, 0 6px 16px #0008; }

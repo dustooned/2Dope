@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vector and Effects phone/tablet checks</title><body><strong id="summary">Running…</strong><ol id="results"></ol><div id="viewport"></div><script type="module">
+const size = new URLSearchParams(location.search).get('size') ?? 'phone';
+const [width,height] = size === 'tablet' ? [768,1024] : size === 'landscape' ? [812,375] : [375,812];
+const frame = document.createElement('iframe'); frame.width=String(width); frame.height=String(height); frame.title='Vector import and Effects responsive test'; frame.src='./importeffects.html'; document.querySelector('#viewport').append(frame);
+const deadline=performance.now()+60000, poll=setInterval(()=>{const doc=frame.contentDocument, summary=doc?.querySelector('#summary')?.textContent??'';if(/\d+ passed, \d+ failed/.test(summary)){clearInterval(poll);document.querySelector('#summary').textContent=`${summary} · ${width}×${height}`;for(const li of doc.querySelectorAll('#results li'))if(li.textContent?.startsWith('FAIL'))document.querySelector('#results').append(li.cloneNode(true));}else if(performance.now()>deadline){clearInterval(poll);document.querySelector('#summary').textContent='Timed out';}},200);
+</script></body></html>

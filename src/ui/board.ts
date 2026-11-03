@@ -7,7 +7,7 @@ import { BoardGrid } from './boardgrid';
 import { parseScript, SCRIPT_MAX_PANELS } from '../core/script';
 import { MOVE_STICKERS, SHOT_STICKERS, sceneColour, scenesOf, stickersOf, toggleMove, toggleShot } from '../core/scenes';
 import { askLongText } from './dialogs';
-import { attachContextMenu, type CtxItem } from './contextmenu';
+import { attachContextMenu, showContextMenu, type CtxItem } from './contextmenu';
 import { frameMenu } from './framemenu';
 import { autoIcon, decorate, setLabel } from './icons';
 
@@ -40,6 +40,14 @@ export class BoardPanel {
   private readonly cards = el('div', { class: 'board-cards', role: 'list', 'aria-label': 'Panels' });
   private readonly info = el('span', { class: 'hint board-info' });
   private readonly playBtn: HTMLButtonElement;
+  private readonly readout = el('span', { class: 'story-readout', 'aria-live': 'off' });
+  private readonly addBtn: HTMLButtonElement;
+  private readonly storyTools: HTMLButtonElement;
+  private readonly shareBtn: HTMLButtonElement;
+  private readonly prevBtn: HTMLButtonElement;
+  private readonly nextBtn: HTMLButtonElement;
+  private readonly openDetails = new Set<string>();
+  private detailProject: App['project'] | null = null;
   private readonly fileIn = el('input', { type: 'file', accept: 'image/*', multiple: '', hidden: '' });
   private sig = '';
   private thumbs = new Map<string, number>();
@@ -71,12 +79,12 @@ export class BoardPanel {
     } catch {
       // default view
     }
-    const views = el('div', { class: 'seg board-views', role: 'group', 'aria-label': 'Board view' });
+    const views = el('div', { class: 'seg board-views', role: 'group', 'aria-label': 'Story view' });
     for (const [v, label, hint] of [
-      ['grid', '⊞ Grid', 'A wall of pictures: the panels in order, small enough to see the whole board'],
-      ['panels', '▦ Panels', 'Cards: picture, timing and captions for each panel'],
-      ['timeline', '▭ Timeline', 'Panels on the clock, as long as they last, with the audio underneath'],
-      ['split', '◫ Both', 'Timeline and cards together (timeline on top)'],
+      ['grid', 'Grid', 'A wall of panel pictures in story order'],
+      ['panels', 'Panels', 'Write dialogue and action on panel cards'],
+      ['timeline', 'Timeline', 'Panel timing with audio underneath'],
+      ['split', 'Split', 'Timeline and panel cards together'],
     ] as const) {
       const b = el('button', { type: 'button', title: hint }, label);
       b.addEventListener('click', () => this.setView(v));
@@ -85,6 +93,9 @@ export class BoardPanel {
     }
     this.playBtn = btn('Play', 'Play the animatic (dialogue lines show as subtitles)', () => app.togglePlay());
     this.playBtn.classList.add('icon-only');
+    this.prevBtn = btn('Previous panel', 'Go to the previous story panel', () => this.stepPanel(-1), 'prev');
+    this.nextBtn = btn('Next panel', 'Go to the next story panel', () => this.stepPanel(1), 'next');
+    this.prevBtn.classList.add('icon-only'); this.nextBtn.classList.add('icon-only');
     this.fileIn.addEventListener('change', async () => {
       const files = [...(this.fileIn.files ?? [])];
       this.fileIn.value = '';
@@ -92,23 +103,34 @@ export class BoardPanel {
       const n = await app.importPanels(files);
       if (n) app.onNotice?.(`${n} panel${n > 1 ? 's' : ''} imported.`);
     });
-    this.bar.append(
-      el('span', { class: 'board-title' }, 'Storyboard'),
-      this.info,
-      views,
-      btn('Panel', 'New panel after this one', () => app.addPanel(), 'plus'),
-      btn('Duplicate', 'Duplicate the selected panels', () => app.duplicateSelection()),
-      btn('Delete', 'Delete the selected panels', () => app.deleteFrame()),
-      btn('Earlier', 'Move the selected panels earlier', () => app.moveSelection(-1), 'prev'),
-      btn('Later', 'Move the selected panels later', () => app.moveSelection(1), 'next'),
-      btn('Images', 'Import images as panels (board sketches, photos)', () => this.fileIn.click(), 'gallery'),
-      btn('Script', 'Paste a script: each action and line of dialogue becomes a panel with its caption', () => this.pasteScript(), 'paste'),
-      this.playBtn,
-      btn('Present', 'Present: the board full screen, playing on its timing with dialogue and action (tap to pause, swipe for the next panel, Escape to stop)', () => this.present(), 'board'),
-      btn('Export', 'Export the storyboard (PDF sheets, panel images) or an animatic video', () => this.exportStory(), 'export'),
-      btn('Animate this shot', 'Draw the animation on top of the board', () => app.animateShot(), 'draw'),
-    );
-    for (const b of this.bar.querySelectorAll<HTMLButtonElement>('button')) if (['Duplicate', 'Delete', 'Earlier', 'Later'].includes(b.getAttribute('aria-label') ?? '')) b.classList.add('icon-only');
+    this.addBtn = btn('New panel', 'Add a panel after this one', () => app.board ? app.addPanel() : app.createBoard(), 'plus');
+    this.storyTools = btn('Story tools', 'Import, edit, present or animate your storyboard', () => {
+      const box = this.storyTools.getBoundingClientRect(), hasBoard = !!app.board, selected = hasBoard && !!app.targets.length;
+      showContextMenu(box.left, box.bottom, [
+        { title: 'Bring in a story' },
+        { label: 'Import panel images…', run: () => this.pickImages() },
+        { label: 'Paste a script…', run: () => void this.pasteScript() },
+        { sep: true }, { title: 'Selected panels' },
+        { label: 'Duplicate panels', disabled: !selected || app.playing, run: () => app.duplicateSelection() },
+        { label: 'Move earlier', disabled: !selected || app.playing, run: () => app.moveSelection(-1) },
+        { label: 'Move later', disabled: !selected || app.playing, run: () => app.moveSelection(1) },
+        { label: 'Delete panels', disabled: !selected || app.playing, danger: true, run: () => app.deleteFrame() },
+        { sep: true }, { title: 'Use this story' },
+        { label: 'Present storyboard', disabled: !hasBoard, run: () => this.present() },
+        { label: 'Animate this shot', disabled: !hasBoard || app.playing, run: () => app.animateShot() },
+      ]);
+    }, 'more');
+    this.storyTools.setAttribute('aria-haspopup', 'menu');
+    this.shareBtn = btn('Share', 'Share storyboard sheets, panel images or an animatic video', () => this.exportStory(), 'export');
+    this.shareBtn.setAttribute('aria-label', 'Share storyboard');
+    const help = btn('?', 'Story help', () => app.onOpenManual('board')); help.classList.add('panel-help'); help.setAttribute('aria-label', 'Story help');
+    const transport = el('div', { class: 'story-transport', role: 'group', 'aria-label': 'Story playback' });
+    transport.append(this.playBtn, this.prevBtn, this.readout, this.nextBtn);
+    const heading = el('div', { class: 'story-heading' });
+    heading.append(el('strong', { class: 'board-title' }, 'Story'), this.info, transport, help);
+    const controls = el('div', { class: 'story-controls' });
+    controls.append(views, this.addBtn, this.storyTools, this.shareBtn);
+    this.bar.append(heading, controls);
     this.grid = new BoardGrid(app, (c, id) => this.paintThumb(c, id), (i) => this.writeOn(i));
     root.append(this.bar, this.timeline.root, this.grid.root, this.cards, this.fileIn);
     this.applyView();
@@ -143,6 +165,13 @@ export class BoardPanel {
     this.fileIn.click();
   }
 
+  private stepPanel(delta: number): void {
+    const board = this.app.board; if (!board) return;
+    let at = 0, index = board.exposures.length - 1;
+    for (let i = 0; i < board.exposures.length; i++) { at += board.exposures[i]!.length; if (this.app.lf < at) { index = i; break; } }
+    this.app.goPanel(Math.max(0, Math.min(board.exposures.length - 1, index + delta)));
+  }
+
   setView(v: BoardView): void {
     this.view = v;
     try {
@@ -170,10 +199,21 @@ export class BoardPanel {
   update(): void {
     const app = this.app;
     const b = app.board;
+    if (this.detailProject !== app.project) { this.detailProject = app.project; this.openDetails.clear(); this.sig = ''; }
     this.applyView();
     this.timeline.update();
     this.grid.update();
     setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
+    this.playBtn.setAttribute('aria-pressed', String(app.playing));
+    this.playBtn.disabled = !b;
+    this.shareBtn.disabled = !b;
+    this.addBtn.disabled = app.playing;
+    for (const button of this.viewBtns) button.disabled = !b;
+    this.prevBtn.disabled = !b || app.playing || app.lf <= 0;
+    const end = b?.exposures.reduce((n, e) => n + e.length, 0) ?? 0;
+    const lastStart = end - (b?.exposures.at(-1)?.length ?? 0);
+    this.nextBtn.disabled = !b || app.playing || app.lf >= lastStart;
+    this.readout.textContent = b ? `${app.fmt(app.frame)} / ${app.fmtDur(end)}` : 'No storyboard';
     if (!b) {
       if (this.sig !== 'empty') {
         this.sig = 'empty';
@@ -194,15 +234,14 @@ export class BoardPanel {
         );
         this.cards.replaceChildren(empty);
       }
-      this.bar.classList.add('none');
       return;
     }
-    this.bar.classList.remove('none');
     const p = app.project;
     const ex = b.exposures;
     const fps = p.comp.fps;
     const total = ex.reduce((n, e) => n + e.length, 0);
     this.info.textContent = `${ex.length} panel${ex.length === 1 ? '' : 's'} · ${app.fmtDur(total)}`;
+    this.info.title = this.info.textContent;
     const typing = this.cards.contains(document.activeElement) && (document.activeElement as HTMLElement).matches('textarea, input');
     const sig =
       `${b.id}|${fps}|${app.timeFormat}|` +
@@ -236,6 +275,7 @@ export class BoardPanel {
       if (scenes[i]) { card.style.setProperty('--scene', sceneColour(scenes[i]!)); card.classList.add('in-scene'); }
       const head = el('div', { class: 'bhead' });
       head.append(el('span', { class: 'bnum', title: `Panel ${i + 1}` }, String(i + 1)));
+      head.append(el('span', { class: 'story-duration-label' }, 'Duration'));
       const dur = el('input', {
         type: 'number',
         min: '1',
@@ -249,14 +289,35 @@ export class BoardPanel {
       dur.addEventListener('change', () => app.setPanelDuration(i, Number(dur.value)));
       dur.addEventListener('keydown', (k) => k.stopPropagation());
       head.append(dur, el('span', { class: 'bunit', 'aria-hidden': 'true' }, 'fr'), el('span', { class: 'hint bwhen', title: 'Starts at · lasts' }, `@ ${app.fmt(startAt)} · ${app.fmtDur(e.length)}`));
+      const more = el('button', { type: 'button', class: 'story-panel-more icon-only', 'aria-label': `Panel ${i + 1} actions`, 'aria-haspopup': 'menu', title: 'Panel actions' }, 'More');
+      decorate(more, 'more');
+      more.addEventListener('click', () => {
+        if (!app.selection.includes(i)) app.goPanel(i);
+        const box = more.getBoundingClientRect(); showContextMenu(box.left, box.bottom, [
+          { title: app.targets.length > 1 ? `${app.targets.length} panels` : `Panel ${i + 1}` },
+          { label: 'New panel after', run: () => app.addPanel() },
+          { label: 'Duplicate panels', run: () => app.duplicateSelection() },
+          { label: 'Move earlier', run: () => app.moveSelection(-1) },
+          { label: 'Move later', run: () => app.moveSelection(1) },
+          { sep: true }, { label: 'Delete panels', danger: true, run: () => app.deleteFrame() },
+        ]);
+      });
+      head.append(more);
       card.append(head);
       // the picture: tap to go to this panel (the canvas above draws on it)
       const thumb = el('canvas', { class: 'bthumb', width: '192', height: String(Math.round((192 * p.height) / p.width)), role: 'img', 'aria-label': `Panel ${i + 1} picture`, title: 'Go to this panel (draw on it above)' });
       this.paintThumb(thumb, e.drawing);
-      thumb.addEventListener('click', () => app.goPanel(i));
-      card.append(thumb);
+      const picture = el('button', { type: 'button', class: 'story-panel-picture', 'aria-label': `Draw on panel ${i + 1}`, title: 'Select this panel to draw on the canvas' });
+      picture.append(thumb); picture.addEventListener('click', () => app.goPanel(i));
+      picture.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); });
+      card.append(picture);
       // the dialogue lines first (what the animatic subtitles), then the other captions
       card.append(this.dialogueBlock(i, e.dialogue, e.length));
+      const details = el('details', { class: 'story-panel-details' });
+      const detailKey = `${p.activeComp}:${e.drawing}`;
+      details.open = this.openDetails.has(detailKey);
+      details.append(el('summary', {}, 'Panel details'));
+      details.addEventListener('toggle', () => { if (!details.isConnected) return; if (details.open) this.openDetails.add(detailKey); else this.openDetails.delete(detailKey); });
       for (const f of CAPTION_FIELDS) {
         if (f.key === 'dialogue') continue;
         // shot and camera are one line (camera offers quick picks); the rest are small text boxes
@@ -281,7 +342,7 @@ export class BoardPanel {
             k.preventDefault();
             commit();
             const next = this.cards.querySelector<HTMLTextAreaElement | HTMLInputElement>(`.bcard[data-i="${i + 1}"] [data-field="${f.key}"]`);
-            if (next) next.focus();
+            if (next) { const folded = next.closest('details'); if (folded) folded.open = true; next.focus(); }
             else t.blur();
           } else if (k.key === 'Escape') {
             t.value = app.board?.exposures[i]?.[f.key] ?? '';
@@ -291,14 +352,16 @@ export class BoardPanel {
         t.addEventListener('blur', () => setTimeout(() => this.update(), 0));
         const field = el('label', { class: 'board-writing-field' });
         field.append(el('span', {}, WRITING_LABEL[f.key]), t);
-        card.append(field);
-        if (f.key === 'camera') card.append(this.stickers(i, e.camera));
+        const into = f.key === 'action' ? card : details;
+        into.append(field);
+        if (f.key === 'camera') details.append(this.stickers(i, e.camera));
         if (f.key === 'shot') {
           const scene = el('button', { type: 'button', class: 'bscene-new', title: 'This panel starts a new scene; every Shot / scene is renumbered (one Undo)', 'aria-label': `Panel ${i + 1}: new scene here` }, 'New scene here');
           scene.addEventListener('click', () => app.newSceneAt(i));
-          card.append(scene);
+          details.append(scene);
         }
       }
+      card.append(details);
       frag.append(card);
     });
     // the camera quick picks (one list for every panel)

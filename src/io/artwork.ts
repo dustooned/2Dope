@@ -3,7 +3,7 @@ import { Project } from '../core/project';
 import type { AssetSource } from '../core/residency';
 import { assetsOf } from './persist';
 import { captureProject } from './projectio';
-import { parseProjectFile, stringifyProjectFile, validateProjectFile, type ProjectFile } from './schema';
+import { minimumDrawingSchema, parseProjectFile, stringifyProjectFile, validateProjectFile, type ProjectFile } from './schema';
 import { readZip, writeZip } from './zip';
 import type { ArtworkEntry } from './artworkstore';
 
@@ -46,6 +46,7 @@ export function captureArtwork(project: Project, root: string, source: AssetSour
   } });
   return pending.settle().then(({ file, assets }) => {
     const clean = validateProjectFile(file);
+    clean.schema = file.schema; // validation normalizes; keep the capture's minimum reader version
     requireAssets(clean, assets);
     return { file: clean, assets };
   });
@@ -58,6 +59,7 @@ function requireAssets(file: ProjectFile, assets: Map<string, Uint8Array>): void
 
 export function packArtwork(bundle: ArtworkPackage): Uint8Array {
   const file = validateProjectFile(bundle.file);
+  file.schema = minimumDrawingSchema(file.drawings);
   if (!file.comps[file.main]?.asset) throw new Error('This file does not contain a saved artwork source.');
   requireAssets(file, bundle.assets);
   return writeZip([{ name: 'project.json', data: new TextEncoder().encode(stringifyProjectFile(file)) },

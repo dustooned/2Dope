@@ -89,6 +89,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'paint.editpoints', label: 'Edit points', title: 'Drag the corners and bends of a vector line; set its thickness', contexts: ['paint'], order: 20, run: (a) => { a.enterPointEdit(); }, isEnabled: (a) => a.tool === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen') },
 
   { id: 'paint.svg', label: 'Export SVG', title: "Save this drawing's vector lines as an SVG file", contexts: ['paint'], order: 30, run: (a) => a.exportVectorSvg(), isEnabled: (a) => a.tool === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen') },
+  { id: 'paint.rasterize', label: 'Rasterize imported vectors', title: 'Turn this drawing’s Ink vectors into pixels for painting and erasing; Undo restores the paths', contexts: ['paint'], order: 31, run: (a) => { a.rasterizeImportedVectors(); }, isEnabled: (a) => a.drawing.vectors.some((v) => !!v.shape) },
 
   // Editing a vector line's points
   { id: 'points.toggle', label: 'Curved point', name: 'Straight / curved point', title: 'Tap a point first; hold a point to switch it', icon: 'curvept', contexts: ['points'], order: 10, run: (a) => a.togglePoint(), isOn: (a) => a.pointSelMode === 'straight',

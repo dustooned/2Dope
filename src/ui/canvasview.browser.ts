@@ -32,7 +32,7 @@ const sw=(k:string)=>document.querySelector<HTMLButtonElement>(`.canvas-view-pop
 const pop=()=>document.querySelector<HTMLElement>('.canvas-view-pop')!;
 try{
   app.fit();await settle(250);
-  check('Canvas view starts with every option off',JSON.stringify(app.canvasView)===JSON.stringify({overscan:false,safeAreas:false,centre:false,overview:false}));
+  check('Canvas view starts with every option off',Object.values(app.canvasView).every(v=>v===false));
   check('View sits in the painting footer before Workspace',view.button.parentElement?.classList.contains('painting-views')===true && view.button.nextElementSibling?.getAttribute('aria-label')==='Edit workspace');
   app.setTool('pen');stroke(line(40,64,200,64));await settle();
   const d=app.drawing,undoLabel=app.history.peekUndo()?.label;
@@ -40,7 +40,7 @@ try{
   check('Without Overscan the pasteboard hides art past the edge',reddish(colorAt(64,64)) && !reddish(colorAt(170,64)),[colorAt(64,64),colorAt(170,64)]);
   const exportBefore=exportHash();
   view.button.click();await settle();
-  check('View opens the canvas view switches',!pop().hidden && view.button.getAttribute('aria-expanded')==='true' && document.activeElement===sw('overscan'));
+  check('View opens the canvas view switches',!pop().hidden && view.button.getAttribute('aria-expanded')==='true' && document.activeElement===sw('transparency'));
   sw('overscan').click();await settle();
   check('Overscan switch turns on and is remembered on this device',app.canvasView.overscan && sw('overscan').getAttribute('aria-checked')==='true' && readCanvasView(JSON.parse(localStorage.getItem(CANVAS_VIEW_KEY)??'null')).overscan);
   const outside=colorAt(170,64),inside=colorAt(64,64);

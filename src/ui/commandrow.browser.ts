@@ -114,7 +114,7 @@ async function otherRows() {
   check('Vector row without a line: no Edit points', !chip('Edit points'), labels());
   pointer('pointerdown', 30, 60); for (let x = 32; x <= 100; x += 4) pointer('pointermove', x, 60 + (x % 8)); pointer('pointerup', 100, 60);
   await settle(300);
-  check('Vector row with a line: Edit points before Customize', labels().slice(-2).join() === 'Edit points,Customize', labels());
+  check('Vector row with a line: Edit points and Export SVG before Customize', labels().slice(-3).join() === 'Edit points,Export SVG,Customize', labels());
 
   // Points: the registry chips around the width meter
   chip('Edit points')!.click(); await settle();

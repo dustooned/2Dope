@@ -17,7 +17,7 @@ describe('schema 4 vector appearances',()=>{
   it('round-trips portable tips, channels, authored controls and selection restrictions',()=>{
     const file=styled(),copy=parseProjectFile(stringifyProjectFile(file));
     expect(copy.drawings.d2!.vectors).toEqual(file.drawings.d2!.vectors);
-    expect(copy.schema).toBe(4);
+    expect(copy.schema).toBe(SCHEMA);
   });
   it('rejects unknown renderers and excessive rendering work rather than changing their appearance',()=>{
     const file=styled();file.drawings.d2!.vectors[0]!.style!.v=7 as 1;expect(()=>validateProjectFile(file)).toThrow(/Unsupported vector/);

@@ -585,7 +585,7 @@ function showManual(at = 'overview'): void {
   // a tab left open across an update cannot fetch the old manual file any more
   manual().then((m) => m.openManual(at, syncNews), () => app.onNotice?.('The manual could not load. Reload 2Dope to open it.'));
 }
-app.onOpenManual = () => showManual();
+app.onOpenManual = (section) => showManual(section);
 setTimeout(syncNews, 1000);
 try {
   // first time on this device: point at the manual once
@@ -658,6 +658,7 @@ let editWorkspace = (_anchor: HTMLElement): void => {};
 const bubbles = new Bubbles(app, $('#stage'), {
   layerCards: (anchor) => layerCards.toggle(anchor),
   story: {
+    controlsInPanel: true,
     view: () => board.currentView,
     setView: (v) => board.setView(v),
     images: () => { if (!app.board) app.createBoard(); board.pickImages(); },

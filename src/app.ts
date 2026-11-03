@@ -348,7 +348,7 @@ export class App {
   /** Keyboard hooks owned by the layout: Quick Animate (Tab) and the X-sheet (Shift+X). */
   onToggleQuick: () => void = () => {};
   /** ? opens the manual. */
-  onOpenManual: () => void = () => {};
+  onOpenManual: (section?: string) => void = () => {};
   onToggleXSheet: () => void = () => {};
   /** Fires after a different project replaced the current one. */
   onProjectLoaded: () => void = () => {};
@@ -980,6 +980,10 @@ export class App {
     const rec = (strokeId ? pens.find((v) => v.id === strokeId) : null) ?? pens[pens.length - 1];
     if (!rec) {
       this.onNotice?.('Draw a line with the Vector pen first, then edit its points.');
+      return false;
+    }
+    if (rec.shape) {
+      this.onNotice?.('Imported vector objects keep their original curves. Arrange them in Motion, or choose Rasterize imported vectors for pixel editing.');
       return false;
     }
     this.ve = { d, id: rec.id, sel: null, drag: null, sections: new Set(), hdrag: null };
@@ -2931,7 +2935,7 @@ export class App {
     if(!this.residency.isReady(d)) {this.onNotice?.('This drawing is still loading.');return null;}
     const mask=this.spatialSelection?.mask;
     const id=this.pointStroke?.id;
-    const chosen=d.vectors.filter(v=>v.tool==='pen' && (id?v.id===id:!!mask && vectorSelected(v,mask,this.docW,this.docH)));
+    const chosen=d.vectors.filter(v=>v.tool==='pen' && !v.shape && (id?v.id===id:!!mask && vectorSelected(v,mask,this.docW,this.docH)));
     if(!chosen.length) {this.onNotice?.('Edit a vector line’s points, or select complete vector lines on the canvas, then apply a brush.');return null;}
     const before=d.vectors, project=this.project, comp=project.activeComp, layer=project.activeLayer, frame=this.frame;
     const selected=new Set(chosen);
@@ -3030,6 +3034,11 @@ export class App {
       if (need.length) await Promise.all(need.map((d) => this.residency.ensure(d)));
       if (dir === 'undo') this.history.undo();
       else this.history.redo();
+      // A restored storyboard guide may have lost focus while it was absent on Undo.
+      // Story's panel commands must edit that guide, never the fallback drawing layer.
+      if (this.workspace === 'board' && this.board && this.project.activeLayer !== this.board.id) {
+        this.enterBoard(); this.onFrameChange();
+      }
       this.requestRender();
     });
   }
@@ -3206,6 +3215,7 @@ export class App {
     this.editor.reset();
     if (this.workspace === 'motion') this.fit();
     this.residency.setProject(p);
+    if (this.workspace === 'board' && this.board) this.enterBoard();
     this.history.clear();
     this.requestRender();
     this.onFrameChange();
@@ -3619,6 +3629,33 @@ export class App {
     const d = this.project.newDrawing();
     this.paintMedia(d, src, w, h);
     this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), [d], true);
+  }
+
+  /** Imported curves remain portable paths when placed or transformed. */
+  importVectors(name: string, doc: import('./io/vectorimport').ImportedVectors): void {
+    if (this.strokeActive || !(doc.width > 0 && doc.height > 0)) return;
+    const k = Math.min(this.docW / doc.width, this.docH / doc.height);
+    const vectors = doc.strokes.map((v) => transformVector(v, [k, 0, 0, k, (this.docW - doc.width * k) / 2, (this.docH - doc.height * k) / 2], k));
+    assertVectorBudget([...this.project.drawings.values()].flatMap((d) => d.vectors).concat(vectors));
+    const d = this.project.newDrawing();
+    d.vectors = vectors; d.rev++;
+    this.residency.touch(d); this.residency.updateThumb(d);
+    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), [d], true, undefined, 'Import vectors');
+  }
+
+  /** One undoable conversion for brushes and pixel erasing, preserving the Ink stack order. */
+  rasterizeImportedVectors(): boolean {
+    if (this.strokeActive || this.playing || this.project.layer.locked || !this.residency.isReady(this.drawing)) return false;
+    const d = this.drawing;
+    if (!d.vectors.some((v) => v.shape)) { this.onNotice?.('This drawing has no imported vector objects.'); return false; }
+    const g = d.line.getContext('2d')!, before = g.getImageData(0, 0, d.line.width, d.line.height), vectors = d.vectors;
+    for (const v of vectors) drawVectorStroke(g, v);
+    const after = g.getImageData(0, 0, d.line.width, d.line.height);
+    const apply = (pixels: ImageData, lines: StrokeRecord[]) => { d.line.getContext('2d')!.putImageData(pixels, 0, 0); d.vectors = lines; this.touch(d); };
+    d.vectors = []; this.touch(d);
+    this.history.push({ label: 'Rasterize imported vectors', drawings: [d], do: () => apply(after, []), undo: () => apply(before, vectors) });
+    this.onDocChanged(); this.requestRender(); this.onToolChange();
+    return true;
   }
 
   /**
@@ -6401,6 +6438,8 @@ export class App {
     this.requestRender();
   }
 
+  private transparencyTile: HTMLCanvasElement | null = null;
+
   private render(): void {
     this.needsRender = false;
     // the Brush size cursor follows zoom, brush size and tool (a no-op when nothing changed)
@@ -6425,6 +6464,15 @@ export class App {
     else g.fillRect(0, 0, this.docW, this.docH);
     g.shadowBlur = 0;
     g.shadowColor = 'transparent';
+    if (this.canvasView.transparency) {
+      if (!this.transparencyTile) {
+        const tile = this.transparencyTile = makeCanvas(24, 24), tg = tile.getContext('2d')!;
+        tg.fillStyle = '#eeeeee'; tg.fillRect(0, 0, 24, 24);
+        tg.fillStyle = '#c8c8ce'; tg.fillRect(0, 0, 12, 12); tg.fillRect(12, 12, 12, 12);
+      }
+      g.fillStyle = g.createPattern(this.transparencyTile, 'repeat')!;
+      g.fillRect(0, 0, this.docW, this.docH);
+    }
 
     g.imageSmoothingEnabled = this.view.zoom < 2;
     this.residency.use(this.workingSet());

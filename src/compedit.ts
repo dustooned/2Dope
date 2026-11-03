@@ -241,7 +241,7 @@ export class CompEditor {
   /** A property of a layer, including pinned properties of a precomp (this instance's value). */
   getProp(l: Layer, n: PropKey): Prop {
     if (isFx(n)) {
-      const { id, key } = fxParts(n), e = l.kind === 'drawings' ? l.effects?.find((x) => x.id === id) : undefined;
+      const { id, key } = fxParts(n), e = l.kind === 'drawings' || l.kind === 'comp' ? l.effects?.find((x) => x.id === id) : undefined;
       return e ? (e.keys?.[key] ?? staticProp(stillSetting(e, key))) : staticProp(0);
     }
     if (isPin(n)) {
@@ -259,7 +259,7 @@ export class CompEditor {
 
   private setProp(l: Layer, n: PropKey, p: Prop): void {
     if (isFx(n)) {
-      const { id, key } = fxParts(n), e = l.kind === 'drawings' ? l.effects?.find((x) => x.id === id) : undefined;
+      const { id, key } = fxParts(n), e = l.kind === 'drawings' || l.kind === 'comp' ? l.effects?.find((x) => x.id === id) : undefined;
       if (!e) return;
       const q = p as Prop<number>, keys = { ...e.keys };
       // keys animate the setting; without keys it keeps a still value (readable by older builds)
@@ -281,7 +281,7 @@ export class CompEditor {
   rowsOf(l: Layer): PropKey[] {
     const rows: PropKey[] = [...propsOf(l)];
     // effect settings show once they have keys (a ◆ on the Effects card starts them)
-    if (l.kind === 'drawings') for (const e of l.effects ?? []) for (const k of Object.keys(e.keys ?? {})) rows.push(`fx:${e.id}:${k}`);
+    if (l.kind === 'drawings' || l.kind === 'comp') for (const e of l.effects ?? []) for (const k of Object.keys(e.keys ?? {})) rows.push(`fx:${e.id}:${k}`);
     if (l.kind === 'comp') {
       const nested = this.app.project.comps.get(l.comp);
       for (const p of nested?.pins ?? []) if (nested?.layers.some((x) => x.id === p.layer)) rows.push(`pin:${p.layer}:${p.prop}`);
@@ -292,7 +292,7 @@ export class CompEditor {
   /** "★ Ball Position" for a pin row, "Position" otherwise. */
   rowLabel(l: Layer, n: PropKey): string {
     if (isFx(n)) {
-      const { id, key } = fxParts(n), e = l.kind === 'drawings' ? l.effects?.find((x) => x.id === id) : undefined;
+      const { id, key } = fxParts(n), e = l.kind === 'drawings' || l.kind === 'comp' ? l.effects?.find((x) => x.id === id) : undefined;
       return e ? `\u2728 ${plainName(effectDef(e.type))} ${keyableSettings(e.type).find((s) => s.key === key)?.label ?? key}` : '\u2728 ?';
     }
     if (!isPin(n)) return PROP_LABEL[n];

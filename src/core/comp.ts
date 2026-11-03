@@ -656,7 +656,8 @@ export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | 
       if (!n || nf === null) continue;
       const inner = frameContent(comps, instanceComp(n, l), nf, depth + 1);
       for (const d of inner.drawings) drawings.add(d);
-      parts.push(`${l.id}:[${inner.key}]@${look}`);
+      const fx = effectsKey(l, frame - l.start);
+      parts.push(`${l.id}:[${inner.key}]${fx ? `{${fx}}` : ''}@${look}`);
     }
   }
   return { key: parts.join(';'), drawings };

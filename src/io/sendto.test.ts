@@ -31,6 +31,15 @@ describe('send to project: fitting a page into another', () => {
     expect(fitStroke(same, fitPage(200, 100, 200, 100))).toBe(same);
   });
 
+  it('fits imported path matrices without rewriting their curves', () => {
+    const source = stroke();
+    source.shape = { path: 'M0 0C10 0 10 20 20 20Z', matrix: [1, 0, 0, 1, 8, 4], fill: '#ff0000', stroke: null, width: 0, rule: 'nonzero', cap: 'butt', join: 'miter', miter: 4 };
+    const result = fitStroke(source, { s: 2, ox: 10, oy: 100 });
+    expect(result.shape!.path).toBe(source.shape.path);
+    expect(result.shape!.matrix).toEqual([2, 0, 0, 2, 26, 108]);
+    expect(source.shape.matrix).toEqual([1, 0, 0, 1, 8, 4]);
+  });
+
   it('moves a comp’s layer positions (and their keys), anchors and part offsets', () => {
     const c = newComp('c', 'Head', 200, 100, 12);
     const l = drawingsLayer('L', 'Head', [{ drawing: 'd1', length: 1 }], 200, 100);

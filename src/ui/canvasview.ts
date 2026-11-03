@@ -11,6 +11,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 };
 
 const OPTIONS: [keyof CanvasView, string, string][] = [
+  ['transparency', 'Transparency grid', 'Show transparent page pixels as a checkerboard. Screen only; imported PNG alpha and exports stay unchanged.'],
   ['overscan', 'Overscan', 'Show art past the page edge (dimmed). Vector lines can be drawn, kept and erased there; Brush paint stops at the edge. Exports keep the page frame.'],
   ['safeAreas', 'Title and action safe', 'Action safe (90%) and title safe (80%) frames. Never exported.'],
   ['centre', 'Centre cross', 'Mark the middle of the page. Never exported.'],
@@ -83,7 +84,7 @@ export class CanvasViewUI {
     if (!active) this.close(false);
     const on = active && a.canvasView.overview && !a.arrangingAssets;
     const v = a.canvasView;
-    this.button.classList.toggle('on', v.overscan || v.safeAreas || v.centre || v.overview);
+    this.button.classList.toggle('on', v.transparency || v.overscan || v.safeAreas || v.centre || v.overview);
     if (!this.pop.hidden) this.render();
     if (!on) { this.strip.hidden = true; this.sig = ''; return; }
     const entries = overviewEntries(a.project.exposures, a.layerFrame);

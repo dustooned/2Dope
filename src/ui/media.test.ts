@@ -4,6 +4,9 @@ import { mediaKind } from './media';
 describe('mediaKind', () => {
   it('sorts files into pictures, movies and sounds by type or extension', () => {
     expect(mediaKind('a.png', 'image/png')).toBe('picture');
+    expect(mediaKind('art.SVG', '')).toBe('vector');
+    expect(mediaKind('art', 'image/svg+xml')).toBe('vector');
+    expect(mediaKind('art.eps', 'application/postscript')).toBe('vector');
     expect(mediaKind('IMG_1.HEIC.jpg', '')).toBe('picture');
     expect(mediaKind('clip.mov', 'video/quicktime')).toBe('movie');
     expect(mediaKind('clip.MP4', '')).toBe('movie');

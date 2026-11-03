@@ -290,10 +290,6 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
   if (!c || depth > MAX_DEPTH) return;
   const planes = opt.planes ?? 'all';
   const base = g.getTransform();
-  if (c.background && opt.backgrounds !== false) {
-    g.fillStyle = c.background;
-    g.fillRect(0, 0, c.width, c.height);
-  }
   const view = depth === 0 && opt.camera === false ? ([1, 0, 0, 1, 0, 0] as Mat) : viewMatrix(c, frame, comps);
   const groups = clipGroups(c.layers);
   const shows = (l: Layer) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps) || (depth === 0 && opt.skip === l.id) || (depth === 0 && opt.onlyGuide && l.id !== opt.guide) || (opt.export && skippedInExport(l) && !(depth === 0 && l.id === opt.guide)));
@@ -308,6 +304,10 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
     g.clearRect(0, 0, c.width, c.height);
+  }
+  if (c.background && opt.backgrounds !== false) {
+    g.fillStyle = c.background;
+    g.fillRect(0, 0, c.width, c.height);
   }
   const matOf = (l: Layer) => (page ? new DOMMatrix() : base).multiply(toDom(mul(view, worldMatrix(c, l, frame))));
   for (let i = c.layers.length - 1; i >= 0; i--) {
@@ -355,15 +355,22 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
 function applyAdjustment(page: HTMLCanvasElement, l: DrawingsLayer, frame: number, alpha: number, depth: number, fps: number, scale = 1): void {
   if (alpha <= 0) return;
   const pad = effectsPad(l);
-  const fx = drawEffected(l, layerFrame(l, frame), page.width, page.height, 'all', depth + 1, (t, part) => { if (part !== 'fill') t.drawImage(page, 0, 0); }, undefined, fps, scale);
+  // A flattened composite has no separate Ink/Colour planes. Run every effect once, in order.
+  const fx = drawEffected(l, layerFrame(l, frame), page.width, page.height, 'all', depth, (t) => t.drawImage(page, 0, 0), undefined, fps, scale, true);
   if (!fx) return;
   const g = page.getContext('2d')!;
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalCompositeOperation = 'source-over';
-  if (alpha >= 1) { g.globalAlpha = 1; g.clearRect(0, 0, page.width, page.height); }
-  else g.globalAlpha = alpha;
+  // Interpolate premultiplied pixels, including alpha; source-over would double translucent art
+  // and leave the original behind a shifted/blurred result at partial adjustment opacity.
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'destination-in';
+  g.fillStyle = `rgba(0,0,0,${1 - alpha})`;
+  g.fillRect(0, 0, page.width, page.height);
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = alpha;
   g.drawImage(fx, -pad, -pad, page.width + 2 * pad, page.height + 2 * pad);
   g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
 }
 
 function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, m: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number, editingDrawing?: Drawing): void {
@@ -412,6 +419,16 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     const sg = source.getContext('2d')!;
     sg.setTransform(1, 0, 0, 1, 0, 0);
     drawComp(sg, project, instanceComp(n, l), nf, opt, depth + 1);
+    if (activeEffects(l).length && (opt.export || fxPreview !== 'off')) {
+      const fx = drawEffected(l, layerFrame(l, frame), n.width, n.height, planes, depth,
+        (t) => t.drawImage(source!, 0, 0), undefined, c.fps, opt.export ? 1 : fxPreviewScale(), true);
+      if (fx) {
+        pad = effectsPad(l);
+        const scaled = scratchFor(`cf${depth}`, n.width + 2 * pad, n.height + 2 * pad);
+        scaled.getContext('2d')!.drawImage(fx, 0, 0, scaled.width, scaled.height);
+        source = scaled;
+      }
+    }
   }
   g.setTransform(m);
   g.globalAlpha = alpha;

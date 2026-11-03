@@ -22,7 +22,7 @@ function selected(mask: Uint8Array, width: number, height: number, x: number, y:
 export function clipStrokeToMask(rec: StrokeRecord, mask: Uint8Array, width: number, height: number, keep: 'inside' | 'outside' = 'inside', compiled?: VectorClip): StrokeRecord[] {
   const P = rec.points;
   if (!P.length) return [];
-  if(rec.style || rec.clips) {
+  if(rec.style || rec.shape || rec.clips) {
     // Clip the visible mark, including tip overhang and scatter. Geometry is retained so a
     // future point edit cannot expose paint beyond the saved restriction.
     const clip=compiled ?? selectionClip(mask,width,height,keep==='outside');

@@ -5,6 +5,7 @@ import { compLayer, drawingsLayer, newComp } from '../core/comp';
 import { captureArtwork, packArtwork, readArtwork, libraryArtwork } from './artwork';
 import { MemoryArtworkStore, type ArtworkEntry } from './artworkstore';
 import { readZip, writeZip } from './zip';
+import { validateProjectFile } from './schema';
 
 function source() {
   const p = new Project(64, 64), c = newComp('c2', 'Landscape', 64, 64, 12), child = newComp('c3', 'Clouds', 64, 64, 6);
@@ -31,7 +32,9 @@ describe('portable artwork snapshots', () => {
     expect(saved.file.comps.c3!.layers[0]!.exposures?.map(e => e.length)).toEqual([2, 3]);
     expect(saved.file.comps.c2!.layers.map(l => l.comp)).toEqual(['c3', 'c3']);
     expect(saved.file.sounds?.s1?.name).toBe('Wind'); expect(saved.assets.size).toBe(3);
-    const restored = await readArtwork(packArtwork(saved)); expect(restored.file).toEqual(saved.file);
+    const restored = await readArtwork(packArtwork(saved)); expect(restored.file).toEqual(validateProjectFile(saved.file));
+    const packed = await readZip(packArtwork(saved));
+    expect(JSON.parse(new TextDecoder().decode(packed.get('project.json')!)).schema).toBe(saved.file.schema);
     for (const [path, bytes] of saved.assets) expect(restored.assets.get(path)).toEqual(bytes);
     expect(p.comp.name).toBe('Shot'); expect(p.drawings.get('d2')!.saved).toBeNull();
   });

@@ -28,6 +28,7 @@ export type Tool = 'brush' | 'eraser' | 'pen' | 'fill';
  * deterministic export and re-rendering at any resolution later.
  */
 export interface StrokeRecord {
+  shape?: import('./vectorshape').VectorShape;
   style?: VectorStyle;
   clips?: VectorClip[];
   controls?: VectorControls;

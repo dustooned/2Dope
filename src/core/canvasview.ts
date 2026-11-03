@@ -10,6 +10,8 @@ import type { Exposure } from './timeline';
  * the page, so with Overscan on they are drawn, kept and erased past the edge. See HANDOFF.md.
  */
 export interface CanvasView {
+  /** Screen-only checkerboard for transparent page pixels. */
+  transparency: boolean;
   /** Show artwork past the page edge, dimmed, and let vector lines land there. */
   overscan: boolean;
   /** Action-safe and title-safe frames. */
@@ -21,7 +23,7 @@ export interface CanvasView {
 }
 
 export const CANVAS_VIEW_KEY = '2dope.canvas.view';
-export const DEFAULT_CANVAS_VIEW: CanvasView = { overscan: false, safeAreas: false, centre: false, overview: false };
+export const DEFAULT_CANVAS_VIEW: CanvasView = { transparency: false, overscan: false, safeAreas: false, centre: false, overview: false };
 
 /** Broadcast convention: action safe keeps 90% of the frame, title safe 80%. */
 export const ACTION_SAFE = 0.9;

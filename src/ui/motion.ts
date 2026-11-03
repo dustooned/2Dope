@@ -11,7 +11,7 @@ import { isFx, isPartProp, isPin, keyId, PROP_LABEL, type KeyRef, type PropKey, 
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
 import { reactToAudio } from './audioreactdialog';
 import type { SoundBank } from '../io/sound';
-import { attachContextMenu, type CtxItem } from './contextmenu';
+import { attachContextMenu, showContextMenu, type CtxItem } from './contextmenu';
 import { rulerStep } from '../core/timecode';
 
 const ZOOM_KEY = '2dope.m3.mcell';
@@ -111,6 +111,10 @@ export class MotionPanel {
   private readonly groupBtn: HTMLButtonElement;
   private readonly multiBtn: HTMLButtonElement;
   private readonly crumbsEl = el('nav', { class: 'mcrumbs', 'aria-label': 'Where you are' });
+  private filter = '';
+  private filterProject: App['project'] | null = null;
+  private filterComp = '';
+  private animatedOnly = false;
 
   constructor(
     private readonly app: App,
@@ -155,6 +159,16 @@ export class MotionPanel {
     this.groupBtn = btn('Group', 'Put the selected layers into a new comp (a precomp)', () => void this.groupSelected());
     // the Motion bubbles already offer these: the simple screen hides them here
     const dup = (b: HTMLElement) => { b.dataset.dup = ''; return b; };
+    const addLayer = btn('+ Layer', 'Add drawing, adjustment, anchor or camera', () => {
+      const box = addLayer.getBoundingClientRect();
+      showContextMenu(box.left, box.bottom, [
+        { title: 'New layer' },
+        ...([['drawings', 'Drawing'], ['adjustment', 'Adjustment'], ['null', 'Anchor'], ['camera', 'Camera']] as const).map(([kind, label]) => ({ label, run: () => ed.addLayer(kind, ed.primary?.id) })),
+      ]);
+    });
+    const actions = btn('Layer actions', 'Group, split, reorder or delete the selected layers', () => {
+      const box = actions.getBoundingClientRect(); showContextMenu(box.left, box.bottom, ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
+    });
     const rowA = row(
       this.crumbsEl,
       group(
@@ -166,26 +180,54 @@ export class MotionPanel {
         this.fpsSel,
       ),
       group(
-        dup(btn('+ Drawing', 'A new drawings layer at the playhead', () => ed.addLayer('drawings'))),
-        btn('+ Media', 'Bring in a picture, movie or sound: each becomes its own track from frame 1', () => app.pickMedia?.()),
-        btn('+ Anchor', 'An invisible anchor other layers can follow (a \u201cnull\u201d): move it and they move with it', () => ed.addLayer('null')),
-        dup(btn('+ Camera', 'A camera: pan, rotate and zoom the whole shot', () => ed.addLayer('camera'))),
+        addLayer,
+        btn('+ Media', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()),
       ),
       group(
         btn('Flipbook', 'Edit the selected drawing layer frame by frame in Draw’s flipbook', () => app.openFlipbook?.(ed.primary?.kind === 'drawings' ? ed.primary.id : undefined)),
         dup(btn('Effects', 'Effects of the selected drawing layer (line boil, ripple, grain...)', () => {
-          const id = ed.primary?.kind === 'drawings' ? ed.primary.id : ed.comp.layers.find((l) => l.kind === 'drawings')?.id;
+          const id = ed.primary && (ed.primary.kind === 'drawings' || ed.primary.kind === 'comp') ? ed.primary.id : ed.comp.layers.find((l) => l.kind === 'drawings')?.id;
           if (id) app.openEffects?.(id);
           else app.onNotice?.('Add a drawing layer first, then give it effects.');
         })),
-        btn('↑ Up', 'Move the selected layer up (in front)', () => ed.primary && ed.reorder(ed.primary.id, -1)),
-        btn('↓ Down', 'Move the selected layer down (behind)', () => ed.primary && ed.reorder(ed.primary.id, 1)),
         this.multiBtn,
-        dup(this.groupBtn),
-        dup(this.splitBtn),
-        this.delBtn,
+        actions,
       ),
     );
+
+    // Keep assistants together and reachable, rather than adding another row of tool buttons.
+    const tools = btn('Motion tools', 'Keyframe assistants: Wiggle, Smooth, Loop, Stagger and audio reaction', () => {
+      const ref = ed.selectedKeys()[0], box = tools.getBoundingClientRect();
+      showContextMenu(box.left, box.bottom, [
+        { title: 'Keyframe assistants' },
+        { label: 'Wiggle…', disabled: !ref, run: () => ref && void this.askWiggle(ref) },
+        { label: 'Smooth keys…', disabled: !ref, run: () => void this.askSmooth() },
+        { label: 'Loop keys…', disabled: !ref, run: () => void this.askLoop() },
+        { label: 'Stagger layers…', disabled: ed.selected.length < 2, run: () => void this.askStagger() },
+        { label: 'React to audio…', disabled: !ed.selected.length, run: () => reactToAudio(app, this.sounds) },
+        { sep: true },
+        { label: 'Copy easing', disabled: !ref, run: () => ed.copyEasing() },
+        { label: 'Paste easing', disabled: !ref || !ed.easeClipboard, run: () => ed.pasteEasing() },
+        { label: 'Reverse keys', disabled: !ref, run: () => ed.reverse() },
+        { sep: true },
+        { label: 'New adjustment layer', run: () => ed.addLayer('adjustment', ed.primary?.id) },
+      ]);
+    }, 'motion-tools');
+    const view = btn('View', 'Canvas guides and transparency', () => {
+      const box = view.getBoundingClientRect();
+      showContextMenu(box.left, box.bottom, [
+        { title: 'Canvas view' },
+        ...([['transparency', 'Transparency grid'], ['safeAreas', 'Title and action safe'], ['centre', 'Centre cross'], ['overscan', 'Overscan']] as const).map(([key, label]) => ({ label, checked: app.canvasView[key], run: () => app.setCanvasView({ [key]: !app.canvasView[key] }) })),
+        { label: 'Fit canvas', run: () => app.fit() },
+      ]);
+    });
+    const filter = el('input', { type: 'search', class: 'motion-search', placeholder: 'Find a layer…', 'aria-label': 'Find Motion layers' });
+    filter.addEventListener('input', () => { this.filter = filter.value.trim().toLowerCase(); this.signature = ''; this.update(); });
+    const animated = btn('Animated', 'Show only properties that have keyframes', () => { this.animatedOnly = !this.animatedOnly; animated.setAttribute('aria-pressed', String(this.animatedOnly)); this.signature = ''; this.update(); });
+    animated.setAttribute('aria-pressed', 'false');
+    const help = btn('?', 'Motion help', () => app.onOpenManual('motion'), 'panel-help'); help.setAttribute('aria-label', 'Motion help');
+    const workspace = row(tools, view, filter, animated, help);
+    workspace.classList.add('motion-workspace-tools');
 
     this.autoBtn = btn('● Auto-key', 'Every change you make writes a keyframe at the playhead', () => {
       ed.autoKey = !ed.autoKey;
@@ -234,6 +276,7 @@ export class MotionPanel {
         btn('Reverse', 'Play the selected keys backwards (mirror them in time)', () => ed.reverse()),
         btn('Delete key', 'Delete the selected keys', () => ed.deleteKeys()),
       ),
+      group(this.groupBtn, this.splitBtn, this.delBtn),
       group(
         this.slider('Zoom', 'Time zoom', 8, 80, this.cell, (n) => this.setCell(n)),
         this.slider('Rows', 'Row height', 32, 72, this.rowH, (n) => this.setRowH(n)),
@@ -246,7 +289,7 @@ export class MotionPanel {
     extra.addEventListener('toggle', () => {
       try { localStorage.setItem('2dope.motion.extra', extra.open ? '1' : '0'); } catch { /* optional */ }
     });
-    this.bar.append(rowA, extra);
+    this.bar.append(rowA, workspace, extra);
     this.scroll.append(this.grid);
     root.append(this.bar, this.scroll);
     this.scroll.style.setProperty('--mleft-w', `${this.leftW}px`);
@@ -302,6 +345,11 @@ export class MotionPanel {
     const app = this.app;
     const ed = this.ed;
     const c = ed.comp;
+    if (this.filterProject !== app.project || this.filterComp !== c.id) {
+      this.filterProject = app.project; this.filterComp = c.id; this.filter = '';
+      const input = this.bar.querySelector<HTMLInputElement>('.motion-search'); if (input) input.value = '';
+      this.signature = '';
+    }
     ed.tidy();
     // cheap signature: a counter for edits, plus what else changes how rows look
     let content = 0;
@@ -524,12 +572,12 @@ export class MotionPanel {
     const keep = (l: (typeof c.layers)[number]) => picked.has(l.id) || l.kind === 'camera' || (l.kind === 'drawings' && !!l.cel && cels.has(l.cel));
     const folding = simple && c.layers.length > 4 && picked.size > 0;
     const hidden = folding ? c.layers.filter((l) => !keep(l)).length : 0;
-    const shown = folding && !this.allRows ? c.layers.filter(keep) : c.layers;
+    const shown = this.filter ? c.layers.filter((l) => l.name.toLowerCase().includes(this.filter)) : folding && !this.allRows ? c.layers.filter(keep) : c.layers;
     for (const l of shown) {
       this.grid.append(this.layerRow(l, end));
-      if (ed.open.has(l.id)) {
-        for (const n of ed.rowsOf(l)) this.grid.append(this.propRow(l, n, end));
-        if (l.kind === 'drawings') {
+      if (ed.open.has(l.id) || this.animatedOnly) {
+        for (const n of ed.rowsOf(l)) if (!this.animatedOnly || ed.getProp(l, n).keys.length) this.grid.append(this.propRow(l, n, end));
+        if (l.kind === 'drawings' && !l.adjust && !this.animatedOnly) {
           for (const part of PART_NAMES.slice().reverse()) {
             this.grid.append(this.partRow(l, part, end));
             if (ed.open.has(`${l.id}#${part}`)) for (const n of [`${part}.opacity`, `${part}.offset`] as PropKey[]) this.grid.append(this.propRow(l, n, end));
@@ -537,7 +585,7 @@ export class MotionPanel {
         }
       }
     }
-    if (hidden) {
+    if (hidden && !this.filter) {
       const more = el('div', { class: 'mrow mmore' });
       const b = el('button', { type: 'button', class: 'mmore-btn', title: this.allRows ? 'Show only the selected layers, their linked layers and cameras' : 'Show every layer' }, this.allRows ? '\u25be Fewer layers' : `\u25b8 ${hidden} more layer${hidden === 1 ? '' : 's'}`);
       b.addEventListener('click', () => {
@@ -548,6 +596,10 @@ export class MotionPanel {
       });
       more.append(b);
       this.grid.append(more);
+    }
+    if (this.filter && !shown.length) {
+      const empty = el('div', { class: 'mempty' }, 'No matching layers. Clear Find a layer to show the stack.');
+      this.grid.append(empty);
     }
     // sounds: rows on the same clock, drag to move or trim (the top comp's sounds)
     if (this.audio && c === app.project.comp) for (const r of this.audio.rows(this.cell, end)) this.grid.append(r);
@@ -1171,7 +1223,7 @@ export class MotionPanel {
       { label: 'Colour…', value: 'colour' },
     );
     if (l.kind === 'drawings' || l.kind === 'comp') items.push({ label: 'Playback (once, loop, ping-pong, hold a frame, speed)…', value: 'play' });
-    if (l.kind === 'drawings') items.push({ label: `Effects…${l.effects?.length ? ` (${l.effects.length})` : ''}`, value: 'effects' });
+    if (l.kind === 'drawings' || l.kind === 'comp') items.push({ label: `Effects…${l.effects?.length ? ` (${l.effects.length})` : ''}`, value: 'effects' });
     // blending and masking, the same as a layer's options in Draw (one undo step each)
     if (l.kind !== 'camera' && l.kind !== 'null') items.push({ label: `Blend mode… (${blendName(l.blend)})`, value: 'blend' });
     if (l.kind === 'drawings' && !l.guide && !l.adjust) {

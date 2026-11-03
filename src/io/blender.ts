@@ -311,12 +311,19 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
       } else {
         const n = comps.get(l.comp);
         if (!n) continue;
-        if (instanceable(l, c, comps)) {
+        const effected = activeEffects(l).length > 0;
+        if (!effected && instanceable(l, c, comps)) {
           bc.layers.push({ ...base, kind: 'instance', size: [n.width, n.height], comp: n.id });
           todo.push(n.id);
         } else {
           // render this instance's frames in 2Dope; identical frames share one image
-          const shown = instanceComp(n, l);
+          // A group effect belongs to this placement. Render that placement on its own page,
+          // keeping timing/overrides while leaving placement transform/opacity to Blender.
+          const shown = effected ? {
+            ...c, width: n.width, height: n.height, background: null,
+            layers: [{ ...l, parent: null, blend: 'normal' as const, guide: false,
+              transform: { anchor: staticProp<Vec2>([n.width / 2, n.height / 2]), position: staticProp<Vec2>([n.width / 2, n.height / 2]), scale: staticProp<Vec2>([100, 100]), rotation: staticProp(0), opacity: staticProp(100) } }], pins: [],
+          } : instanceComp(n, l);
           const keys = new Map<string, string>();
           const per: (string | null)[] = [];
           for (let f = 0; f < length; f++) {
@@ -325,18 +332,19 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
               per.push(null);
               continue;
             }
-            const fc = frameContent(comps, shown, nf);
+            const sample = effected ? f : nf;
+            const fc = frameContent(comps, shown, sample);
             let image = keys.get(fc.key);
             if (!image) {
               image = `r:${id}:${l.id}:${keys.size + 1}`;
               keys.set(fc.key, image);
-              renders.push({ image, comp: shown, frame: nf });
+              renders.push({ image, comp: shown, frame: sample });
               for (const d of fc.drawings) drawings.add(d);
             }
             per.push(image);
           }
           bc.layers.push({ ...base, kind: 'baked', size: [n.width, n.height], frames: runs(per) });
-          notes.add(`“${l.name}” is offset, retimed, looping or customised, so Blender gets it as rendered frames (a collection instance cannot run on its own clock).`);
+          notes.add(effected ? `“${l.name}” has group effects, so Blender gets rendered frames on the group page, still moving as a plane. Effects past the group page edge are cropped.` : `“${l.name}” is offset, retimed, looping or customised, so Blender gets it as rendered frames (a collection instance cannot run on its own clock).`);
         }
       }
     }

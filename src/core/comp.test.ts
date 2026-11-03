@@ -204,6 +204,21 @@ describe('line and fill parts', () => {
 });
 
 describe('frame content', () => {
+  it('does not deduplicate held group art when its own effect is animated', async () => {
+    const { frameContent } = await import('./comp');
+    const { newEffect } = await import('./effects');
+    const inner = newComp('inside', 'Still', 64, 64, 12);
+    const art = drawingsLayer('art', 'Art', [{ drawing: 'd', length: 4 }], 64, 64);
+    inner.layers = [art];
+    const outer = newComp('outside', 'Shot', 64, 64, 12), l = compLayer('group', 'Group', inner, outer);
+    outer.layers = [l];
+    const comps = new Map([[inner.id, inner], [outer.id, outer]]);
+    const before = frameContent(comps, outer, 0).key;
+    expect(frameContent(comps, outer, 1).key).toBe(before);
+    l.effects = [{ ...newEffect('blur', 'fx', 1), keys: { amount: setKey(setKey(staticProp(0), 0, 0), 3, 6) } }];
+    expect(frameContent(comps, outer, 0).key).not.toBe(frameContent(comps, outer, 1).key);
+    expect(frameContent(comps, outer, 0).key).not.toBe(before);
+  });
   it('held frames share a key; motion or another drawing changes it; precomp drawings are found', async () => {
     const { frameContent } = await import('./comp');
     const { c, comps } = shot();

@@ -2,7 +2,7 @@ import { Project, type Drawing, type PlaneRef } from '../core/project';
 import { recordSaved, type AssetSource } from '../core/residency';
 import { encodePng, isBlank } from './codec';
 import { hashBytes } from './hash';
-import { compFile, compsFromFile, foldersOf, FORMAT, SCHEMA, type CompFile, type DrawingFile, type ProjectFile } from './schema';
+import { compFile, compsFromFile, foldersOf, FORMAT, minimumDrawingSchema, type CompFile, type DrawingFile, type ProjectFile } from './schema';
 
 export const APP_VERSION = '2Dope 0.0.2';
 
@@ -116,7 +116,7 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
       }
       const file: ProjectFile = {
         format: FORMAT,
-        schema: Object.values(drawings).some(d=>d.vectors.some(v=>v.style || v.brush.vectorStyle || v.clips || v.controls)) ? SCHEMA : 3,
+        schema: minimumDrawingSchema(drawings),
         savedBy: APP_VERSION,
         name: base.name,
         created: base.created,

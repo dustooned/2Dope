@@ -10,7 +10,10 @@ import { drawEffected } from './effects';
 /** The effects you can add: they sit on the card's "+ Add effect" tab. */
 function addButtons(root: HTMLElement): HTMLButtonElement[] {
   [...root.querySelectorAll<HTMLButtonElement>('.fx-tabs button')].find((b) => b.textContent?.includes('Add effect'))?.click();
-  return [...root.querySelectorAll<HTMLButtonElement>('.fx-add button')];
+  const buttons = [...root.querySelectorAll<HTMLButtonElement>('.fx-add button')];
+  // This fixture inspects the stack after each addition; the Add tab now deliberately stays open.
+  for (const b of buttons) b.addEventListener('click', () => { [...root.querySelectorAll<HTMLButtonElement>('.fx-tabs button')].find((t) => t.textContent?.startsWith('On this layer'))?.click(); }, { once: true });
+  return buttons;
 }
 
 const W = 64, H = 64;
@@ -271,7 +274,7 @@ const effects = () => { const l = app.project.layer; return l.kind === 'drawings
 check('Adding an effect, moving its slider and New pattern are one undo step each', () => {
   panel.show(app.project.layer.id);
   const root = document.querySelector<HTMLElement>('.fxpanel')!;
-  const add = addButtons(root).find((b) => b.textContent?.trim() === 'Roughen edges');
+  const add = addButtons(root).find((b) => b.querySelector('strong')?.textContent === 'Roughen edges');
   if (!add) return 'no Roughen edges button';
   const start = app.history.peekUndo(), changes = docChanges;
   add.click();
@@ -311,7 +314,7 @@ check('Adding an effect, moving its slider and New pattern are one undo step eac
 check('A further setting (Shadow only, Direction) is one undo step each', () => {
   panel.show(app.project.layer.id);
   const root = document.querySelector<HTMLElement>('.fxpanel')!;
-  addButtons(root).find((b) => b.textContent?.trim() === 'Drop shadow')?.click();
+  addButtons(root).find((b) => b.querySelector('strong')?.textContent === 'Drop shadow')?.click();
   if (effects().at(-1)?.type !== 'shadow') return 'no shadow added';
   const mode = localStorage.getItem('2dope.fx.mode');
   [...root.querySelectorAll<HTMLButtonElement>('.fx-mode button')].find((b) => b.textContent === 'Advanced')?.click();
@@ -340,7 +343,7 @@ check('An effect setting can be keyframed (◆), animates in the export, shows i
   const g = d.line.getContext('2d')!; g.fillStyle = '#ffffff'; g.fillRect(d.line.width / 2 - 20, d.line.height / 2 - 20, 40, 40); d.rev++;
   panel.show(l.id);
   const root = document.querySelector<HTMLElement>('.fxpanel')!;
-  addButtons(root).find((b) => b.textContent?.trim() === 'Glow')!.click();
+  addButtons(root).find((b) => b.querySelector('strong')?.textContent === 'Glow')!.click();
   const glow = () => effects().find((e) => e.type === 'glow')!;
   app.setFrame(0);
   const before = app.history.peekUndo();
@@ -394,13 +397,13 @@ check('Effects added after + Adjustment go on the adjustment layer, not the laye
   // what happens around a new layer: the selection and tool notifications fire again
   app.editor.onChange(); app.onToolChange?.();
   const root = document.querySelector<HTMLElement>('.fxpanel')!;
-  addButtons(root).find((b) => b.textContent?.trim() === 'Vignette')?.click();
+  addButtons(root).find((b) => b.querySelector('strong')?.textContent === 'Vignette')?.click();
   const fxOf = (id: string) => { const l = app.project.comp.layers.find((x) => x.id === id); return l?.kind === 'drawings' ? (l.effects ?? []).map((e) => e.type) : []; };
   if (!fxOf(adj.id).includes('vignette')) return `the adjustment layer has ${JSON.stringify(fxOf(adj.id))}`;
   if (fxOf(mine).includes('vignette')) return 'the effect went on the layer you draw on';
   // picking another layer still moves the card along
   app.setWorkspace('motion'); app.editor.select(mine);
-  addButtons(root).find((b) => b.textContent?.trim() === 'Vignette')?.click();
+  addButtons(root).find((b) => b.querySelector('strong')?.textContent === 'Vignette')?.click();
   const followed = fxOf(mine).includes('vignette');
   app.history.undo(); app.history.undo(); app.history.undo();
   app.setWorkspace('draw');

@@ -170,6 +170,8 @@ export function eraseVectors(strokes: StrokeRecord[], path: Pt[], radius: number
   const out: StrokeRecord[] = [];
   let changed = false;
   for (const rec of strokes) {
+    // Imported closed objects cannot be fragmented as brush centrelines. Rasterize explicitly.
+    if (rec.shape) { out.push(rec); continue; }
     if(rec.clips?.length) {
       let visible=false;
       for(let i=0;i<path.length && !visible;i++) {

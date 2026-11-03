@@ -4,13 +4,15 @@ import { decodeGif, gifHolds } from '../io/gifdecode';
 import { readOra } from '../io/ora';
 import { readPsd } from '../io/psd';
 import type { AudioTracks } from './audiotracks';
+import { importVectorDocument } from '../io/vectorimport';
 
 /** What the media picker offers: pictures (also animated GIFs and layered PSD / OpenRaster), movies and sounds. */
-export const MEDIA_ACCEPT = 'image/*,video/*,audio/*,.psd,.ora,.gif,.mov,.mp4,.m4v,.webm,.wav,.mp3,.m4a,.aac,.ogg,.flac';
+export const MEDIA_ACCEPT = 'image/*,video/*,audio/*,.svg,.eps,.psd,.ora,.gif,.mov,.mp4,.m4v,.webm,.wav,.mp3,.m4a,.aac,.ogg,.flac';
 
-type Kind = 'picture' | 'gif' | 'layered' | 'movie' | 'sound';
+type Kind = 'picture' | 'vector' | 'gif' | 'layered' | 'movie' | 'sound';
 
 export function mediaKind(name: string, type: string): Kind | null {
+  if (/\.(svg|eps)$/i.test(name) || type === 'image/svg+xml' || type === 'application/postscript') return 'vector';
   if (/\.(psd|ora)$/i.test(name) || type === 'image/vnd.adobe.photoshop' || type === 'image/openraster') return 'layered';
   if (type === 'image/gif' || /\.gif$/i.test(name)) return 'gif';
   if (type.startsWith('image/') || /\.(png|jpe?g|webp|bmp)$/i.test(name)) return 'picture';
@@ -32,6 +34,16 @@ export function mediaPicker(app: App, audio: AudioTracks): () => void {
     try {
       for (const f of files) {
         const kind = mediaKind(f.name, f.type);
+        if (kind === 'vector') {
+          try {
+            const project = app.project, comp = project.activeComp;
+            const doc = importVectorDocument(await f.text(), /\.eps$/i.test(f.name) || f.type === 'application/postscript');
+            if (app.project !== project || project.activeComp !== comp) throw new Error('The timeline changed while this vector file was loading; import it again');
+            app.importVectors(f.name, doc);
+            app.onNotice?.(`${f.name}: ${doc.strokes.length} scalable vector paths. Arrange in Motion; Rasterize imported vectors in the Vector tools enables pixel painting.`);
+          } catch (e) { app.onNotice?.(`${f.name}: ${e instanceof Error ? e.message : 'could not be read'}.`); }
+          continue;
+        }
         if (kind === 'gif') {
           // an animated GIF comes in frame by frame (its holds kept); one frame is a picture
           try {
@@ -57,10 +69,13 @@ export function mediaPicker(app: App, audio: AudioTracks): () => void {
         }
         if (kind === 'picture' || kind === 'gif') {
           try {
-            const bmp = await createImageBitmap(f);
-            app.importPicture(f.name, bmp, bmp.width, bmp.height);
-            bmp.close();
-            app.onNotice?.(`${f.name} is an object layer for the whole shot. Move or scale it with Select. To remove it, hold its track (or Layers → Delete).`);
+            const project = app.project, comp = project.activeComp;
+            const picture = await decodePicture(f);
+            try {
+              if (app.project !== project || project.activeComp !== comp) throw new Error('The timeline changed');
+              app.importPicture(f.name, picture.source, picture.width, picture.height);
+            } finally { picture.close(); }
+            app.onNotice?.(`${f.name} is an object layer for the whole shot; transparent pixels stay transparent. View → Transparency grid shows them. Move or scale it in Motion.`);
           } catch {
             app.onNotice?.(`${f.name}: this picture could not be read.`);
           }
@@ -98,6 +113,20 @@ export function mediaPicker(app: App, audio: AudioTracks): () => void {
     }
     input.click();
   };
+}
+
+/** Bitmap decoding can reject an otherwise readable PNG on a device. Both paths preserve alpha. */
+export async function decodePicture(file: Blob): Promise<{ source: CanvasImageSource; width: number; height: number; close(): void }> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    return { source: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() };
+  } catch {
+    const url = URL.createObjectURL(file), image = new Image();
+    try {
+      image.src = url; await image.decode();
+      return { source: image, width: image.naturalWidth, height: image.naturalHeight, close: () => URL.revokeObjectURL(url) };
+    } catch { URL.revokeObjectURL(url); throw new Error('This picture could not be decoded'); }
+  }
 }
 
 /** Raw RGBA as something a canvas can draw. */

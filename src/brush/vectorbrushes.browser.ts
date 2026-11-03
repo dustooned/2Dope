@@ -6,7 +6,7 @@ import { prepareVectorStroke, transformVector } from '../core/vectorstyle';
 import { clipStrokeToMask } from '../core/vectorclip';
 import { drawVectorStroke, drawLegacyVectorStroke } from './vector';
 import { captureProject, loadProjectFile } from '../io/projectio';
-import { parseProjectFile, stringifyProjectFile } from '../io/schema';
+import { parseProjectFile, stringifyProjectFile, SCHEMA } from '../io/schema';
 import { saveBrushes, loadBrushes } from '../io/brushstore';
 import { exportSequence } from '../io/exportseq';
 import { readZip } from '../io/zip';
@@ -157,7 +157,7 @@ try {
   const nestedImage=make();drawComp(nestedImage.getContext('2d')!,nested,parent,0,{export:true});
   check('Nested artwork and styled vector layer masks share the expected coverage and opacity',same(nestedImage,expected));
   const artwork=await readArtwork(packArtwork(await captureArtwork(nested,sourceComp.id,async()=>null)));
-  check('My Assets packages custom tips and styled vector masks in a standalone archive',artwork.file.schema===4 && Object.values(artwork.file.drawings).flatMap(d=>d.vectors).some(v=>v.style?.tip==='custom'));
+  check('My Assets packages custom tips and styled vector masks in a standalone archive',artwork.file.schema===SCHEMA && Object.values(artwork.file.drawings).flatMap(d=>d.vectors).some(v=>v.style?.tip==='custom'));
   const nestedExport=await exportSequence(nested,{name:'nested',scale:1,background:'transparent',passes:['combined'],range:'all',start:1},[],()=>{});
   const nestedPng=[...(await readZip(nestedExport.zip)).entries()].find(([name])=>name.endsWith('.png'))?.[1];
   if(nestedPng){const bm=await createImageBitmap(new Blob([nestedPng as BlobPart],{type:'image/png'})),out=make();out.getContext('2d')!.drawImage(bm,0,0);bm.close();check('Nested PNG export agrees with playback including the styled vector mask',same(out,nestedImage));}
