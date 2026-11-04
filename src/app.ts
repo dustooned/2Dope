@@ -294,6 +294,7 @@ export class App {
     if (this.gradEdit) this.applyGradEdit();
     if (w === this.workspace || this.live) return;
     this.settleTemporaryEdits();
+    if (this.editor.pathEditing) this.editor.setPathEditing(false);
     if (this.playing) this.togglePlay();
     if (w === 'motion') this.leaveBlankPage();
     this.editor.gestureEnd(true);
@@ -984,8 +985,8 @@ export class App {
       return false;
     }
     if (rec.shape) {
-      this.onNotice?.('Imported vector objects keep their original curves. Arrange them in Motion, or choose Rasterize imported vectors for pixel editing.');
-      return false;
+      this.openVectorObjects?.(rec.id);
+      return !!this.openVectorObjects;
     }
     this.ve = { d, id: rec.id, sel: null, drag: null, sections: new Set(), hdrag: null };
     this.requestRender();
@@ -1018,10 +1019,17 @@ export class App {
     this.requestRender();
   }
 
+  commitVectorObjects(d: Drawing, rev: number, expected: string, next: StrokeRecord[]): boolean {
+    if (this.drawing !== d || d.rev !== rev || JSON.stringify(d.vectors) !== expected || this.project.layer.locked || this.live || this.xf || this.playing) throw new Error('The drawing changed. Reopen Vector objects.');
+    if (JSON.stringify(next) === expected) return true;
+    const before = d.vectors; d.vectors = structuredClone(next); this.touch(d); this.requestRender();
+    return this.pushVectors('Edit vector objects', d, before);
+  }
+
   private pushVectors(label: string, d: Drawing, before: StrokeRecord[]): boolean {
     if (d.vectors === before) return false;
     const after = d.vectors.map(v=>{
-      if(before.includes(v))return v;
+      if(before.includes(v) || v.shape)return v;
       const anchors=this.anchorsFor(v);
       return {...v,controls:{anchors:[...anchors],modes:Object.fromEntries(anchors.map(i=>[i,this.modeOf(v.id,i)])),handles:Object.fromEntries(anchors.map((i,k)=>[i,{...this.handlesOf(v,anchors,k)}]))}};
     });
@@ -3018,6 +3026,8 @@ export class App {
   onNotice: ((message: string, action?: { label: string; run: () => void }) => void) | null = null;
   editTitle: ((id?: string) => void) | null = null;
   openSymbol: ((id: string) => void) | null = null;
+  openVectorObjects: ((id?: string) => void) | null = null;
+  openLayout: (() => void) | null = null;
   convertTitle: ((id: string) => void) | null = null;
   /** Pixel edits require deliberate conversion; mask and layer transforms remain editable. */
   private titlePaintBlocked(allowMask = false): boolean {
@@ -6285,6 +6295,7 @@ export class App {
       return;
     }
     if (this.workspace === 'motion') {
+      if (e.key === 'Escape' && this.editor.pathEditing) { e.preventDefault(); this.editor.setPathEditing(false); return; }
       if (e.code === 'Delete' || e.code === 'Backspace') {
         e.preventDefault();
         if (this.editor.keys.size) this.editor.deleteKeys();

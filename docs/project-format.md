@@ -1,4 +1,28 @@
-# The .2dope project format (schemas 3–6)
+# The .2dope project format (schemas 3–7)
+
+## Spatial key handles and selection groups (2026-11-04)
+
+Vector-valued keys may carry `spatial:{in:[x,y],out:[x,y]}` offsets relative to their key value.
+The shared timing curve supplies cubic path progress. An absent side uses the straight segment's
+one-third offset. Hold timing still holds. Reverse swaps incoming/outgoing offsets without
+negating them. Schema 7 validates both finite two-component offsets; scalar spatial handles and
+unknown handle fields are refused. Captures with spatial handles anywhere in the comp graph
+(including pins/overrides/effect snapshots) require reader 7. Earlier readers refuse those files;
+ordinary captures retain minimum 3/4/5/6. Loading migrates any supported file to runtime schema 7.
+Project/asset archives retain the geometry. Curved motion presets use portable version 2;
+position handle offsets normalize by source width/height and adapt to the target canvas.
+Straight presets remain version 1; the device database version and independent snapshot behavior
+are unchanged. Blender handoff bakes spatial vector channels at every integer composition frame,
+with layer offsets applied. It does not claim identical subframe interpolation in Blender.
+
+`VectorShape.group?:string` is optional selection metadata (1–80 alphanumeric/underscore/hyphen
+characters). It does not change paint, matrices or stacking order and does not raise the minimum
+reader version. SVG export writes `data-2dope-group`; import namespaces each document's groups
+and assigns flat groups to imported `<g>` paths. Nested groups flatten to their nearest selection
+group. The editor normalizes relative/shorthand path commands only when a node changes; cubic,
+quadratic and elliptical arc commands retain their geometry. It rebuilds conservative painted
+bounds from native SVG measurements and the shape matrix on Apply. No source markup is mounted.
+
 
 ## Editable title snapshots and portable presets (2026-11-03)
 

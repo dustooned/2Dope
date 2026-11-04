@@ -106,6 +106,10 @@ await check('Loading a project while Story is open restores storyboard editing o
   project.activeLayer = project.comp.layers.find((l) => l.kind === 'drawings' && !l.guide)!.id;
   app.loadProject(project); await wait(); expect(project.activeLayer === id && app.drawing.id === app.board!.exposures[0]!.drawing, 'loaded project stayed on its animation drawing');
 });
+await check('Story exposes the selected panel count and restores its saved view', () => {
+  board.update(); expect(document.querySelector('.board-info')!.getAttribute('aria-label')?.includes('selected'), 'Story selection context missing');
+  board.setView('grid'); const host = document.createElement('div'); document.body.append(host); const reopened = new BoardPanel(app, host); expect(reopened.currentView === 'grid', 'Story did not restore its saved view'); host.remove(); board.setView('panels');
+});
 await check('No uncaught browser errors', () => expect(!errors.length, errors.join('; ')));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;
 export { app, board, bubbles };

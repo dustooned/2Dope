@@ -1,3 +1,5 @@
+import { spatialHandle, smoothPath, straightPath, validateProperty } from './core/precision';
+import { alignment, distribution, unionBoxes, snapBox, readSnap, type Alignment, type Distribution, type LayoutBox, type SnapPrefs, type SnapGuide } from './core/layout';
 import { syncCelGroups } from './core/cellink';
 import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
 import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
@@ -127,6 +129,9 @@ interface Gesture {
   zoom: number;
   simple: boolean;
   autoKey: boolean;
+  moveIds: string[];
+  box: LayoutBox | null;
+  targets: LayoutBox[];
 }
 
 const HANDLE_PX = 22;
@@ -160,6 +165,13 @@ export class CompEditor {
   /** Counts every edit to layers and keys (views redraw rows when it moves). */
   rev = 0;
 
+  snap: SnapPrefs = (() => { try { return readSnap(JSON.parse(localStorage.getItem('2dope.motion.snap.v1') ?? 'null')); } catch { return readSnap(null); } })();
+  snapGuides: SnapGuide[] = [];
+  pathEditing = false;
+  pathLinked = false;
+  pathFrame: number | null = null;
+  private pathView: boolean | null = null;
+  private pathDrag: { layer: string; before: Layer[]; index: number; side: 'point' | 'in' | 'out'; start: Vec2; original: Prop<Vec2>; moved: boolean } | null = null;
   private gesture: Gesture | null = null;
   private clipGesture: {project: App['project']; comp: Comp; before: Layer[]; frame: number; id: string; kind: AssetClipGesture} | null = null;
 
@@ -369,6 +381,8 @@ export class CompEditor {
   }
 
   reset(): void {
+    this.gesture = null; this.clipGesture = null; this.pathDrag = null;
+    if (this.pathEditing) { this.pathEditing = false; if (this.pathView !== null) this.throughCamera = this.pathView; this.pathView = null; this.pathFrame = null; }
     this.selected = [];
     this.keys.clear();
     this.open.clear();
@@ -580,7 +594,7 @@ export class CompEditor {
     const nested = p.comps.get(l.comp);
     if (!nested) return false;
     const nf = nestedFrame(l, this.app.frame, c.fps, nested, p.comps) ?? 0;
-    this.gestureEnd(true);
+    this.setPathEditing(false);
     this.trail.push({ comp: c.id, layer: l.id });
     this.switchTo(nested.id, nf);
     return true;
@@ -590,6 +604,7 @@ export class CompEditor {
   exit(depth = this.crumbs().length - 2): boolean {
     const crumbs = this.crumbs();
     if (crumbs.length < 2 || depth < 0 || depth >= crumbs.length - 1) return false;
+    this.setPathEditing(false);
     const p = this.app.project;
     // map the playhead out through every level we leave
     let frame = this.app.frame;
@@ -729,6 +744,7 @@ export class CompEditor {
   picks = 0;
 
   select(id: string | null, add = false): void {
+    if (this.pathEditing) this.setPathEditing(false);
     this.picks++;
     if (id === null) this.selected = [];
     else if (add) this.selected = this.selected.includes(id) ? this.selected.filter((x) => x !== id) : [...this.selected, id];
@@ -1351,6 +1367,53 @@ export class CompEditor {
   // -------------------------------------------------------------------------------------------
   // Canvas gestures: drag a layer, its corner (scale) or the top handle (rotate)
 
+  replaceProperty(id: string, n: PropKey, expected: string, next: Prop, label: string): boolean {
+    const layer = this.layer(id); if (!layer || layer.locked) throw new Error('Choose an unlocked layer.');
+    if (this.app.strokeActive || this.app.playing || this.dragging || JSON.stringify(this.getProp(layer, n)) !== expected) throw new Error('The property changed. Close and reopen the editor.');
+    validateProperty(next); if (n === 'zoom' && [next.value, ...next.keys.map(k => k.v)].some(v => Number(v) <= 0)) throw new Error('Camera zoom must stay above zero.');
+    return this.edit(label, c => { const live = c.layers.find(l => l.id === id); if (live) this.setProp(live, n, structuredClone(next)); });
+  }
+  setPathEditing(on: boolean): void {
+    this.gestureEnd(true);
+    if (!on) { this.pathEditing = false; this.pathFrame = null; if (this.pathView !== null) this.throughCamera = this.pathView; this.pathView = null; this.onChange(); this.app.requestRender(); return; }
+    const layer = this.primary;
+    if (!layer || layer.locked || layer.transform.position.keys.length < 2 || layer.transform.position.keys.length > 1000) { this.app.onNotice?.('Choose an unlocked layer with 2–1,000 position keys.'); return; }
+    this.pathEditing = true; this.pathFrame = layer.transform.position.keys.reduce((a, b) => Math.abs(b.f - this.frameOf(layer)) < Math.abs(a.f - this.frameOf(layer)) ? b : a).f;
+    if (layer.kind === 'camera') { this.pathView = this.throughCamera; this.throughCamera = false; }
+    this.onChange(); this.app.requestRender();
+  }
+  changePath(smooth: boolean): void {
+    const l = this.primary; if (!l || l.locked || l.transform.position.keys.length < 2) { this.app.onNotice?.('Select artwork with at least two position keys.'); return; }
+    const p = l.transform.position; this.replaceProperty(l.id, 'position', JSON.stringify(p), smooth ? smoothPath(p) : straightPath(p), smooth ? 'Smooth motion path' : 'Straight motion path');
+  }
+  pathMatrix(layer: Layer): Mat { return mul(this.view(), this.parentMatrix(layer)); }
+  private pathStart(pt: Vec2, zoom: number): boolean {
+    const layer = this.primary; if (!layer || layer.locked || layer.transform.position.keys.length < 2 || layer.transform.position.keys.length > 1000) return false;
+    const matrix = this.pathMatrix(layer); if (Math.abs(matrix[0] * matrix[3] - matrix[1] * matrix[2]) < 1e-10) { this.app.onNotice?.('Restore the parent scale before editing its path.'); return false; }
+    const p = layer.transform.position; let hit: { index: number; side: 'point' | 'in' | 'out' } | null = null, distance = 17 / zoom;
+    const pick = (v: Vec2, index: number, side: 'point' | 'in' | 'out') => { const q = apply(matrix, v), d = Math.hypot(q[0] - pt[0], q[1] - pt[1]); if (d < distance) { distance = d; hit = { index, side }; } };
+    const selected = p.keys.findIndex(k => k.f === this.pathFrame);
+    if (selected >= 0) for (const side of ['in', 'out'] as const) { if (side === 'in' && selected === 0 || side === 'out' && selected === p.keys.length - 1) continue; const k = p.keys[selected]!, handle = spatialHandle(p, selected, side); pick([k.v[0] + handle[0], k.v[1] + handle[1]], selected, side); }
+    p.keys.forEach((k, i) => pick(k.v, i, 'point'));
+    if (!hit) return false; const chosen = hit as { index: number; side: 'point' | 'in' | 'out' };
+    this.pathFrame = p.keys[chosen.index]!.f; this.keys = new Set([keyId({ layer: layer.id, prop: 'position', f: this.pathFrame })]);
+    this.pathDrag = { layer: layer.id, before: structuredClone(this.comp.layers), ...chosen, start: pt, original: structuredClone(p), moved: false }; this.onChange(); this.app.requestRender(); return true;
+  }
+  private pathMove(pt: Vec2): void {
+    const d = this.pathDrag, layer = d ? this.layer(d.layer) : null; if (!d || !layer) return;
+    const matrix = this.pathMatrix(layer), local = apply(invert(matrix), pt), prop = structuredClone(d.original), key = prop.keys[d.index]!;
+    if (d.side === 'point') key.v = local;
+    else { key.spatial = { in: spatialHandle(d.original, d.index, 'in'), out: spatialHandle(d.original, d.index, 'out') }; const offset: Vec2 = [local[0] - key.v[0], local[1] - key.v[1]]; key.spatial[d.side] = offset; if (this.pathLinked) key.spatial[d.side === 'in' ? 'out' : 'in'] = [-offset[0], -offset[1]]; }
+    prop.value = [...prop.keys[0]!.v];
+    try { validateProperty(prop); } catch { return; }
+    layer.transform.position = prop; d.moved = JSON.stringify(prop) !== JSON.stringify(d.original); this.changedLive();
+  }
+  private pathEnd(cancel: boolean): void {
+    const d = this.pathDrag; this.pathDrag = null; if (!d) return;
+    if (cancel || !d.moved) { this.comp.layers = d.before; this.changedLive(); return; }
+    this.push(d.side === 'point' ? 'Move motion path point' : 'Curve motion path', this.comp.id, d.before, structuredClone(this.comp.layers)); this.changed();
+  }
+
   /** Stage space (what the canvas shows) → comp space, undoing the camera. */
   toComp(p: Vec2): Vec2 {
     return apply(invert(this.view()), p);
@@ -1459,6 +1522,7 @@ export class CompEditor {
    * scales; anywhere else on a layer moves it (selecting it first).
    */
   gestureStart(pt: Vec2, zoom: number, add = false, options: GestureOptions = {}): boolean {
+    if (this.pathEditing && this.app.workspace === 'motion') return this.pathStart(pt, zoom);
     const near = (a: Vec2, b: Vec2) => Math.hypot(a[0] - b[0], a[1] - b[1]) * zoom <= HANDLE_PX;
     const sel = this.primary;
     let kind: GestureKind = 'move';
@@ -1469,6 +1533,7 @@ export class CompEditor {
     }
     // looking through the selected camera: any drag moves the camera (the picture follows the finger)
     if (!target && sel && sel.kind === 'camera' && this.throughCamera && sel.visible && !sel.locked && !add && (!options.accept || options.accept(sel))) target = sel;
+    if (!target && this.selected.length > 1) target = this.hitLayer(pt, { ...options, accept: l => this.selected.includes(l.id) && (!options.accept || options.accept(l)) });
     if (!target) {
       target = this.hitLayer(pt, options);
       if (!target) {
@@ -1480,6 +1545,15 @@ export class CompEditor {
     const before = structuredClone(this.comp.layers);
     if (kind !== 'move') this.pivotOnContent(target);
     const anchor = this.anchorStage(target);
+    const movable = kind === 'move' && target.kind !== 'camera' ? this.selected.map(id => this.layer(id)).filter((l): l is Layer => !!l && l.visible && (!l.locked || !!options.allowLocked) && l.kind !== 'camera' && (!options.accept || options.accept(l))) : [target];
+    if (!movable.length) return false;
+    const moving = new Set(movable.map(l => l.id));
+    const movesWithSelection = (l: Layer) => { const seen = new Set<string>(); let id: string | null = l.id; while (id && !seen.has(id)) { if (moving.has(id)) return true; seen.add(id); id = this.layer(id)?.parent ?? null; } return false; };
+    const box = this.snap.on && target.kind !== 'camera' ? unionBoxes(movable.map(l => this.layoutBox(l))) : null;
+    const targets: LayoutBox[] = [];
+    if (this.snap.on && this.snap.canvas) targets.push({ x: 0, y: 0, w: this.comp.width, h: this.comp.height });
+    if (this.snap.on && this.snap.layers) for (const l of this.comp.layers) if (!movesWithSelection(l) && l.visible && !l.guide && !l.adjust && l.kind !== 'camera' && this.app.frame >= l.in && this.app.frame < layerEnd(l, this.app.project.comps)) targets.push(this.layoutBox(l));
+    this.snapGuides = [];
     this.gesture = {
       kind,
       layer: target.id,
@@ -1489,16 +1563,17 @@ export class CompEditor {
       startDist: Math.max(1e-6, Math.hypot(pt[0] - anchor[0], pt[1] - anchor[1])),
       startAngle: Math.atan2(pt[1] - anchor[1], pt[0] - anchor[0]),
       moved: false,
-      zoom, simple: options.simple ?? false, autoKey: options.autoKey ?? this.autoKey,
+      zoom, simple: options.simple ?? false, autoKey: options.autoKey ?? this.autoKey, moveIds: movable.map(l => l.id), box, targets,
     };
     return true;
   }
 
   get dragging(): boolean {
-    return this.gesture !== null || this.clipGesture !== null;
+    return this.gesture !== null || this.clipGesture !== null || this.pathDrag !== null;
   }
 
   gestureMove(pt: Vec2): void {
+    if (this.pathDrag) { this.pathMove(pt); return; }
     const g = this.gesture;
     if (!g) return;
     const c = this.comp;
@@ -1534,10 +1609,14 @@ export class CompEditor {
       return;
     }
     if (g.kind === 'move') {
-      // the anchor follows the pointer; position is in the parent's space
-      const parentWorld = this.parentMatrix(original);
-      const target = this.fromStage([g.anchorComp[0] + dx, g.anchorComp[1] + dy]);
-      set('position', apply(invert(parentWorld), target));
+      const from = this.fromStage(g.startPt), to = this.fromStage(pt); let delta: Vec2 = [to[0] - from[0], to[1] - from[1]];
+      if (this.snap.on && g.box) {
+        const v = this.view(), scale = Math.max(Math.hypot(v[0], v[1]), Math.hypot(v[2], v[3]), 1e-6);
+        const snapped = snapBox({ ...g.box, x: g.box.x + delta[0], y: g.box.y + delta[1] }, g.targets, 7 / (g.zoom * scale), this.snap.grid ? this.snap.size : 0);
+        delta = [delta[0] + snapped.delta[0], delta[1] + snapped.delta[1]]; this.snapGuides = snapped.guides;
+      }
+      try { const next = this.translatedLayers(g.before, new Map(g.moveIds.map(id => [id, delta])), g.autoKey); for (const layer of c.layers) { const changed = next.find(x => x.id === layer.id); if (changed) layer.transform.position = changed.transform.position; } }
+      catch (e) { this.app.onNotice?.((e as Error).message); this.gestureEnd(true); return; }
     } else if (g.kind === 'scale') {
       const ratio = Math.hypot(pt[0] - g.anchorComp[0], pt[1] - g.anchorComp[1]) / g.startDist;
       const k = g.simple ? Math.max(0.01, ratio) : ratio;
@@ -1548,6 +1627,62 @@ export class CompEditor {
       set('rotation', valueAt(original.transform.rotation, f) + (ang * 180) / Math.PI);
     }
     this.changedLive();
+  }
+
+  setSnap(patch: Partial<SnapPrefs>): void {
+    this.snap = readSnap({ ...this.snap, ...patch }); this.snapGuides = [];
+    try { localStorage.setItem('2dope.motion.snap.v1', JSON.stringify(this.snap)); } catch { /* session only */ }
+    this.app.requestRender(); this.onChange();
+  }
+  /** Visible bounds in composition coordinates, excluding the selection-handle padding. */
+  layoutBox(l: Layer, c = this.comp): LayoutBox {
+    const b = l.kind === 'null' ? null : layerContentBox(this.app.project, c, l, this.app.frame);
+    const local = l.kind === 'null' ? (() => { const a = valueAt(l.transform.anchor, layerFrame(l, this.app.frame)); return { x: a[0], y: a[1], w: 0, h: 0 }; })() : b === undefined ? this.page(l) : b ?? this.page(l);
+    const m = worldMatrix(c, l, this.app.frame), pts = [[local.x, local.y], [local.x + local.w, local.y], [local.x + local.w, local.y + local.h], [local.x, local.y + local.h]].map(p => apply(m, p as Vec2));
+    const x = Math.min(...pts.map(p => p[0])), y = Math.min(...pts.map(p => p[1])); return { x, y, w: Math.max(...pts.map(p => p[0])) - x, h: Math.max(...pts.map(p => p[1])) - y };
+  }
+  private layoutSelection(): Layer[] {
+    if (this.app.strokeActive || this.app.playing || this.dragging) throw new Error('Finish the current edit first.');
+    const layers = this.selected.map(id => this.layer(id)).filter((l): l is Layer => !!l);
+    if (!layers.length) throw new Error('Select layers first.');
+    if (layers.some(l => l.kind === 'camera' || l.adjust || l.guide || !l.visible || this.app.frame < l.in || this.app.frame >= layerEnd(l, this.app.project.comps))) throw new Error('Select visible artwork or anchors at the playhead.');
+    if (layers.some(l => l.locked) && !this.app.arrangingAssets) throw new Error('Unlock the selected layers first.');
+    return layers;
+  }
+  /** World translations are solved against moved parents, so parent/child selections never double-move. */
+  private translatedLayers(source: Layer[], deltas: Map<string, Vec2>, autoKey = this.autoKey): Layer[] {
+    const c = { ...this.comp, layers: source }, result = structuredClone(source);
+    for (const l of source) {
+      const delta = deltas.get(l.id); if (!delta) continue;
+      const parent = l.parent ? source.find(x => x.id === l.parent) : null, matrix = parent ? worldMatrix(c, parent, this.app.frame) : [1, 0, 0, 1, 0, 0] as Mat;
+      const seen = new Set<string>(); let ancestor = parent;
+      while (ancestor && !seen.has(ancestor.id)) { seen.add(ancestor.id); const d = deltas.get(ancestor.id); if (d) { matrix[4] += d[0]; matrix[5] += d[1]; break; } ancestor = ancestor.parent ? source.find(x => x.id === ancestor!.parent) : null; }
+      if (Math.abs(matrix[0] * matrix[3] - matrix[1] * matrix[2]) < 1e-10) throw new Error('A parent has zero scale. Restore its scale before positioning this layer.');
+      const f = layerFrame(l, this.app.frame), anchor = apply(worldMatrix(c, l, this.app.frame), valueAt(l.transform.anchor, f));
+      const value = apply(invert(matrix), [anchor[0] + delta[0], anchor[1] + delta[1]]), next = result.find(x => x.id === l.id)!;
+      const oldPosition = valueAt(l.transform.position, f); if (Math.hypot(value[0] - oldPosition[0], value[1] - oldPosition[1]) < 1e-8) continue;
+      next.transform.position = isAnimated(l.transform.position) || autoKey ? setKey(l.transform.position, f, value, this.lastEase, this.keyAtStart && !isAnimated(l.transform.position) ? 0 : undefined) : { ...l.transform.position, value };
+    } return result;
+  }
+  arrange(mode: Alignment | Distribution, target: 'canvas' | 'selection' = 'canvas'): boolean {
+    try {
+      const layers = this.layoutSelection(), items = layers.map(l => ({ id: l.id, box: this.layoutBox(l) }));
+      const deltas = mode === 'horizontal' || mode === 'vertical' ? distribution(items, mode) : alignment(items, target === 'canvas' ? { x: 0, y: 0, w: this.comp.width, h: this.comp.height } : unionBoxes(items.map(i => i.box)), mode);
+      const next = this.translatedLayers(this.comp.layers, deltas); return this.edit(mode === 'horizontal' || mode === 'vertical' ? 'Distribute layers' : 'Align layers', c => { c.layers = next; });
+    } catch (e) { this.app.onNotice?.((e as Error).message); return false; }
+  }
+  centerAnchor(): boolean {
+    try {
+      const layers = this.layoutSelection();
+      return this.edit('Center anchors on artwork', c => {
+        for (const original of layers) {
+          const l = c.layers.find(x => x.id === original.id)!; const b = this.bounds(original), anchor: Vec2 = [b.x + b.w / 2, b.y + b.h / 2], f = this.frameOf(original), old = valueAt(original.transform.anchor, f), pos = valueAt(original.transform.position, f);
+          const scale = valueAt(original.transform.scale, f), angle = valueAt(original.transform.rotation, f) * Math.PI / 180, dx = (anchor[0] - old[0]) * scale[0] / 100, dy = (anchor[1] - old[1]) * scale[1] / 100;
+          this.setProp(l, 'position', this.withValue(original, 'position', [pos[0] + dx * Math.cos(angle) - dy * Math.sin(angle), pos[1] + dx * Math.sin(angle) + dy * Math.cos(angle)]));
+          this.setProp(l, 'anchor', this.withValue(original, 'anchor', anchor));
+        }
+      });
+    } catch (e) { this.app.onNotice?.((e as Error).message); return false; }
   }
 
   /** Stage point → comp point (undo the camera) for a layer-space computation. */
@@ -1569,7 +1704,9 @@ export class CompEditor {
 
   /** Finish (or cancel) a drag: one undo step if anything moved. */
   gestureEnd(cancel = false): void {
+    this.pathEnd(cancel);
     this.assetClipEnd(cancel);
+    this.snapGuides = [];
     const g = this.gesture;
     this.gesture = null;
     if (!g) return;

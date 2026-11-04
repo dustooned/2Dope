@@ -5407,3 +5407,24 @@ body.ws-board .sidebar { top: var(--chrome-bottom, 118px); transform: none; max-
 
 @media(max-height:480px) and (max-width:760px),(max-height:480px) and (max-width:1024px) and (any-pointer:coarse){.fxpanel{max-height:calc(var(--fx-viewport-height,100dvh) - 64px)}}
 @media(min-width:600px) and (max-height:480px) and (max-width:1024px) and (any-pointer:coarse){.fx-head{grid-template-columns:minmax(120px,1fr) auto auto auto}.fx-head>.fx-title{grid-column:1;grid-row:1}.fx-head>.fx-mode{grid-column:2;grid-row:1}.fx-head>.panel-help{grid-column:3}.fx-head>.fx-x{grid-column:4}}
+
+.layout-dialog{width:min(650px,calc(100vw - 24px))}.layout-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.layout-actions button{min-height:44px;white-space:normal}.layout-dialog fieldset{display:flex;flex-wrap:wrap;gap:12px}.layout-dialog fieldset label{display:flex;align-items:center;gap:6px;min-height:44px}.layout-dialog input[type=number]{width:80px;min-height:44px}.layout-dialog select{min-height:44px;max-width:100%}@media(max-width:500px){.layout-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Precision editors share the creation dialog's bounded scrolling and reachable footer. */
+.graph-dialog,.vector-dialog { width: min(720px, calc(100vw - 24px)); }
+.precision-canvas { display: block; width: 100%; height: auto; background: #181b23; border: 1px solid var(--line); border-radius: 8px; touch-action: none; }
+.precision-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.precision-controls select { flex: 1 1 130px; min-width: 0; }
+.precision-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.precision-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.precision-fields input,.vector-dialog select { width: 100%; min-width: 0; box-sizing: border-box; }
+.precision-controls label { display: flex; align-items: center; gap: 6px; }
+
+
+.precision-fields input,.precision-controls select,.vector-dialog select,.precision-controls button { min-height: 44px; }
+.graph-dialog>select { width: 100%; }
+
+.precision-fields input { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); color: var(--text); font: inherit; }
+.graph-dialog>p,.vector-dialog>p { color: var(--muted); }
+.precision-controls,.precision-fields,.precision-canvas { margin-block: 10px; }
+.precision-fields .precision-fields { margin: 0; }

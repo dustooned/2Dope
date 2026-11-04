@@ -38,7 +38,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 6;
+export const SCHEMA = 7;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -63,6 +63,7 @@ export interface SideFile {
 }
 
 export interface KeyFile<T extends Value = Value> {
+  spatial?: { in: Vec2; out: Vec2 };
   f: number;
   v: T;
   in: SideFile;
@@ -174,6 +175,8 @@ export interface DrawingFile {
 
 /** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
 export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comps?: Record<string, CompFile>): number {
+  const spatial = (v: unknown): boolean => !!v && typeof v === 'object' && (Array.isArray(v) ? v.some(spatial) : Object.entries(v).some(([key, value]) => key === 'spatial' && value !== undefined || spatial(value)));
+  if (comps && spatial(comps)) return 7;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.title))) return 6;
   const vectors = Object.values(drawings).flatMap((d) => d.vectors);
   return vectors.some((v) => v.shape) ? 5 : vectors.some((v) => v.style || v.brush.vectorStyle || v.clips || v.controls) ? 4 : 3;
@@ -381,7 +384,9 @@ function prop<T extends Value>(v: unknown, what: string, dims: 1 | 2): PropFile<
     if (!Array.isArray(v.keys) || v.keys.length > MAX_KEYS) throw new SchemaError(`${what} has too many keys`);
     const keys = v.keys.map((k: unknown, i: number) => {
       if (!isObj(k)) throw new SchemaError(`${what} key ${i + 1} is not an object`);
-      return { f: int(k.f, `${what} key frame`, -MAX_FRAMES, MAX_FRAMES), v: val(k.v, `${what} key value`, dims) as T, in: side(k.in, `${what} key in`), out: side(k.out, `${what} key out`) };
+      const spatial = k.spatial;
+      if (spatial !== undefined && (dims !== 2 || !isObj(spatial) || Object.keys(spatial).some(key => key !== 'in' && key !== 'out'))) throw new SchemaError(`${what}: invalid spatial handles`);
+      return { f: int(k.f, `${what} key frame`, -MAX_FRAMES, MAX_FRAMES), v: val(k.v, `${what} key value`, dims) as T, in: side(k.in, `${what} key in`), out: side(k.out, `${what} key out`), ...(spatial !== undefined ? { spatial: { in: val((spatial as Record<string, unknown>).in, `${what} spatial in`, 2) as Vec2, out: val((spatial as Record<string, unknown>).out, `${what} spatial out`, 2) as Vec2 } } : {}) };
     });
     keys.sort((a: KeyFile<T>, b: KeyFile<T>) => a.f - b.f);
     for (let i = 1; i < keys.length; i++) if (keys[i]!.f === keys[i - 1]!.f) throw new SchemaError(`${what} has two keys on frame ${keys[i]!.f}`);
@@ -535,6 +540,7 @@ export function migrate(input: unknown): Record<string, unknown> {
   // Imported path objects are additive to the runtime; only captures containing them need 5.
   if ((raw.schema as number) < 5) raw = { ...raw, schema: 5 };
   if ((raw.schema as number) < 6) raw = { ...raw, schema: 6 };
+  if ((raw.schema as number) < 7) raw = { ...raw, schema: 7 };
   return raw;
 }
 
@@ -720,7 +726,7 @@ function sideOf(f: SideFile): Side {
 }
 
 function propOf<T extends Value>(f: PropFile<T>): Prop<T> {
-  return { value: f.value, keys: (f.keys ?? []).map((k): Key<T> => ({ f: k.f, v: k.v, in: sideOf(k.in), out: sideOf(k.out) })) };
+  return { value: f.value, keys: (f.keys ?? []).map((k): Key<T> => ({ f: k.f, v: k.v, in: sideOf(k.in), out: sideOf(k.out), ...(k.spatial ? { spatial: structuredClone(k.spatial) } : {}) })) };
 }
 
 function sideFile(s: Side): SideFile {
@@ -729,7 +735,7 @@ function sideFile(s: Side): SideFile {
 
 export function propFile<T extends Value>(p: Prop<T>): PropFile<T> {
   const out: PropFile<T> = { value: p.value };
-  if (p.keys.length) out.keys = p.keys.map((k) => ({ f: k.f, v: k.v, in: sideFile(k.in), out: sideFile(k.out) }));
+  if (p.keys.length) out.keys = p.keys.map((k) => ({ f: k.f, v: k.v, in: sideFile(k.in), out: sideFile(k.out), ...(k.spatial ? { spatial: structuredClone(k.spatial) } : {}) }));
   return out;
 }
 

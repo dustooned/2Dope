@@ -1,6 +1,58 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-03) — read this first
+## Current state (2026-11-04) — read this first
+
+### Precision tools and workspace consistency (2026-11-04)
+
+User approved the recommended graph/path/layout/SVG/workspace/recovery phase. Published baseline
+was `d7aaf2f` (camera moves, symbols and hand-in bundles). Existing untracked research/railperf
+work remains excluded. No new audio feature was added.
+
+Implemented:
+- `core/layout.ts`, `ui/layout.ts`, `compedit.ts`: Motion Layout and Animate placement Align & snap;
+  canvas/selection edge/centre alignment, equal-gap distribution, current-frame anchor centering,
+  device canvas/layer/grid snapping with blue guides, multi-layer movement and transformed-parent
+  solving. Selected children do not double-move. Bounds actions pin content and guard stale targets;
+  singular parents refuse. Each action/drag has one Undo. Snap target work is skipped when off.
+- `core/precision.ts`, `ui/graph.ts`: segment timing handles, numeric frames/values/handle time and
+  progress, presets, Value X/Y and speed inspection. Draft remains detached until one Apply command;
+  Cancel, invalid key order and stale properties preserve the source. UI caps at 1,000 keys.
+- `core/anim.ts`, `compedit.ts`, `view/overlay.ts`: spatial cubic key offsets, canvas points/handles,
+  Smooth/Straight and linked handles. Parent/camera mappings and camera view restoration, cancellation,
+  selection/workspace exit and one-command drags. Sample caching bounds repeated overlay work.
+  Blender's old overlapping timing influences now normalize as playback does.
+- `io/schema.ts`, `core/presets.ts`, `io/blender.ts`: schema 7 only for captures containing spatial
+  keys; normal projects retain earlier minimum versions. Preset 2 only for curved captures, normalized
+  position offsets adapt to canvas size. Curved Blender channels bake integer composition frames;
+  actual Blender import and subframe equivalence are not verified.
+- `core/pathgeometry.ts`, `core/vectorshape.ts`, `ui/vectorobjects.ts`, `app.ts`, SVG IO: exact
+  relative/shorthand cubic/quadratic/arc node editing (including compact arc flags), fill/stroke/alpha,
+  width, object movement, multi-selection and flat selection groups. Detached pinned preview, bounds
+  measurement, stale guard and one Drawing history step. Import namespaces groups; export preserves
+  selection groups. Complex paths retain paint/move/group controls; node UI caps at 2,000 segments.
+- Main/commands/Motion wire the tools; shared dialog styling keeps footers reachable across sizes.
+  Draw/Animate settings identify placement vs painting targets; Story exposes selected-panel context
+  and recognizes all persisted views. Existing title browser checks now assert minimum capture version
+  separately from the newest validated runtime schema. Manual, UPDATES and format/architecture updated.
+
+Checks: 744 unit tests passed + 1 skipped (87 files), strict TypeScript and production build pass
+(existing chunk-size warning). Fifteen unique affected browser fixtures pass: precision 17 +
+three-size wrapper 51; motionfinish 22; creationtools 23; motionassets 13 + wrapper 39; assetlayers 9;
+artworkworkflow 31; storyui 14 + phone 14; workspacefixes 23; projectpreview 7; paintingworkflow 21;
+storyexport 41; importeffects 22. Includes project/asset schema roundtrips, alpha pixels,
+Undo/Redo, stale/cancel paths and a 250-layer/500-key/200-path scene captured, validated, loaded and
+undone. One disposable desktop run measured the large capture/recovery sequence at 179 ms; this
+is a sample, not a device performance guarantee.
+
+Visual review: Layout, Graph and Vector objects at 1280×900, 375×812, coarse-pointer 768×1024 and
+812×375, no dialog horizontal overflow and reachable footers. Real CDP mouse drags changed timing
+handles and imported nodes. Screenshots: `2dope-{layout,graph,vectors}-precision-*.png` outside
+Git in this chat's visualization directory. Physical iPad/Pencil, Safari memory and onscreen keyboard
+remain unverified. Spatial paths are cubic by time progress, not constant-distance path travel;
+graph view is one property/segment, not a multichannel dock. SVG groups are selection groups, not
+an editable nested hierarchy. Arc endpoints can move; dedicated arc radius/rotation handles are
+not present. More advanced node insertion/deletion, nested object stacks and subframe Blender
+reproduction remain future work.
 
 ### Camera / Effects / Symbols / Hand-in finishing phase (2026-11-03)
 

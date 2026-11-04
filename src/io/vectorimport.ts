@@ -71,8 +71,9 @@ export function importVectorDocument(text: string, eps = false): ImportedVectors
   host.style.cssText = 'position:fixed;left:-10000px;top:-10000px;visibility:hidden;pointer-events:none';
   document.body.append(host);
   const strokes: StrokeRecord[] = [];
-  let visited = 0;
-  const walk = (node: Element, parent: Record<string, string>, matrix: Mat, opacity: number, depth: number) => {
+  let visited = 0; const groupPrefix = newStrokeId(); const groups = new Map<string, string>();
+  const groupName = (key: string) => { let name = groups.get(key); if (!name) { name = `${groupPrefix}_${groups.size}`; groups.set(key, name); } return name; };
+  const walk = (node: Element, parent: Record<string, string>, matrix: Mat, opacity: number, depth: number, group?: string) => {
     if (++visited > 8000 || depth > 32) throw new Error('This SVG has too many objects or nested groups');
     const tag = node.localName, p = css(node, parent);
     if (['defs', 'style', 'title', 'desc', 'metadata', 'namedview'].includes(tag)) return;
@@ -85,14 +86,15 @@ export function importVectorDocument(text: string, eps = false): ImportedVectors
     opacity *= localOpacity;
     if (tag === 'svg' && node === root || tag === 'g' || tag === 'a') {
       if (localOpacity < 1 && node.children.length > 1) fail('SVG group opacity needs expanding');
-      for (const child of node.children) walk(child, p, matrix, opacity, depth + 1);
+      if (tag === 'g') group = groupName(`g${visited}`);
+      for (const child of node.children) walk(child, p, matrix, opacity, depth + 1, group);
       return;
     }
     if (tag === 'use') {
       const ref = node.getAttribute('href') ?? node.getAttribute('xlink:href') ?? '';
       const target = ref.startsWith('#') ? doc.getElementById(ref.slice(1)) : null;
       if (!target) fail('SVG linked objects must refer to a local path or group');
-      walk(target!, p, multiply(matrix, [1, 0, 0, 1, number(node.getAttribute('x')), number(node.getAttribute('y'))]), opacity, depth + 1);
+      walk(target!, p, multiply(matrix, [1, 0, 0, 1, number(node.getAttribute('x')), number(node.getAttribute('y'))]), opacity, depth + 1, group);
       return;
     }
     const n = (k: string, def = 0) => number(node.getAttribute(k), def);
@@ -114,7 +116,7 @@ export function importVectorDocument(text: string, eps = false): ImportedVectors
       path = values.map((v, i) => `${i % 2 ? ' ' : i ? 'L' : 'M'}${v}`).join('') + (tag === 'polygon' ? 'Z' : '');
     } else fail(`SVG ${tag === 'text' ? 'text must be converted to paths' : `object “${tag}” is unsupported`}`);
     if (!path.trim()) return;
-    const shape: VectorShape = readVectorShape({ path: path.trim(), matrix, fill: color(p.fill!, p['fill-opacity']!, p.color!), stroke: color(p.stroke!, p['stroke-opacity']!, p.color!), width: number(p['stroke-width']!, 1), rule: p['fill-rule'], cap: p['stroke-linecap'], join: p['stroke-linejoin'], miter: number(p['stroke-miterlimit']!, 4) });
+    const shape: VectorShape = readVectorShape({ ...(node.getAttribute('data-2dope-group') || group ? { group: node.getAttribute('data-2dope-group') ? groupName(node.getAttribute('data-2dope-group')!) : group } : {}), path: path.trim(), matrix, fill: color(p.fill!, p['fill-opacity']!, p.color!), stroke: color(p.stroke!, p['stroke-opacity']!, p.color!), width: number(p['stroke-width']!, 1), rule: p['fill-rule'], cap: p['stroke-linecap'], join: p['stroke-linejoin'], miter: number(p['stroke-miterlimit']!, 4) });
     if (!shape.fill && !shape.stroke) return;
     const measure = document.createElementNS(NS, 'path'); measure.setAttribute('d', path); host.append(measure);
     const b = measure.getBBox(); measure.remove();

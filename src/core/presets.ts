@@ -5,7 +5,7 @@ import { DITHER_METHODS, PALETTES } from './dither';
 
 export const PRESET_FORMAT = '2dope-preset', PRESET_VERSION = 1, MAX_PRESET_BYTES = 1024 * 1024;
 export type MotionProperty = 'position' | 'scale' | 'rotation' | 'opacity' | 'zoom';
-export type Preset = { format: typeof PRESET_FORMAT; version: 1; id: string; name: string } &
+export type Preset = { format: typeof PRESET_FORMAT; version: 1 | 2; id: string; name: string } &
   ({ kind: 'effects'; effects: LayerEffect[] } | { kind: 'motion'; fps: number; duration: number; camera: boolean; props: Partial<Record<MotionProperty, Prop>> });
 const properties: MotionProperty[] = ['position', 'scale', 'rotation', 'opacity', 'zoom'];
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -41,10 +41,10 @@ function effect(v: unknown): LayerEffect {
 }
 /** Strict whole-record validation; nothing unknown is silently dropped or clamped. */
 export function readPreset(v: unknown): Preset {
-  if (!object(v) || v.format !== PRESET_FORMAT || v.version !== 1) return fail('unsupported file or version.');
+  if (!object(v) || v.format !== PRESET_FORMAT || (v.version !== 1 && v.version !== 2)) return fail('unsupported file or version.');
   if (JSON.stringify(v).length > MAX_PRESET_BYTES) fail('file is too large.');
   if (typeof v.id !== 'string' || !/^[\w-]{1,64}$/.test(v.id)) fail('invalid id.');
-  const base = { format: PRESET_FORMAT as typeof PRESET_FORMAT, version: 1 as const, id: v.id as string, name: presetName(v.name) };
+  const base = { format: PRESET_FORMAT as typeof PRESET_FORMAT, version: v.version as 1 | 2, id: v.id as string, name: presetName(v.name) };
   if (v.kind === 'effects') {
     fields(v, ['format', 'version', 'id', 'name', 'kind', 'effects']);
     if (!Array.isArray(v.effects) || !v.effects.length || v.effects.length > MAX_LAYER_EFFECTS) return fail('choose 1–16 effects.');
@@ -63,9 +63,12 @@ export function readPreset(v: unknown): Preset {
     const value = (x: unknown): Value => vector ? Array.isArray(x) && x.length === 2 ? [number(x[0], -1e5, 1e5), number(x[1], -1e5, 1e5)] : fail('invalid point.') : number(x, n === 'opacity' ? 0 : -1e5, n === 'opacity' ? 100 : 1e5);
     let previous = -1;
     const keys = raw.keys.map((k): Key => {
-      if (!object(k)) return fail('invalid key.'); fields(k, ['f', 'v', 'in', 'out']);
+      if (!object(k)) return fail('invalid key.'); fields(k, ['f', 'v', 'in', 'out', 'spatial']);
       const f = number(k.f, 0, duration); if (!Number.isInteger(f) || f <= previous) return fail('keys must be sorted at unique frames.'); previous = f;
-      if (++count > 5000) fail('too many keys.'); return { f, v: value(k.v), in: side(k.in), out: side(k.out) };
+      if (++count > 5000) fail('too many keys.');
+      let spatial: { in: Vec2; out: Vec2 } | undefined;
+      if (k.spatial !== undefined) { if (v.version !== 2 || !vector || !object(k.spatial)) return fail('curved vector moves require preset version 2.'); fields(k.spatial, ['in', 'out']); spatial = { in: value(k.spatial.in) as Vec2, out: value(k.spatial.out) as Vec2 }; }
+      return { f, v: value(k.v), in: side(k.in), out: side(k.out), ...(spatial ? { spatial } : {}) };
     });
     props[n] = { value: value(raw.value), keys };
   }
@@ -86,9 +89,10 @@ export function captureMotion(layer: Layer, comp: Comp, id: string, name: string
     const origin = valueAt(prop as Prop, start);
     const relative = (v: Value): Value => n === 'position' ? [((v as Vec2)[0] - (origin as Vec2)[0]) / comp.width, ((v as Vec2)[1] - (origin as Vec2)[1]) / comp.height]
       : n === 'scale' ? [(v as Vec2)[0] - (origin as Vec2)[0], (v as Vec2)[1] - (origin as Vec2)[1]] : n === 'opacity' ? v : (v as number) - (origin as number);
-    props[n] = { value: relative(origin), keys: prop.keys.map(k => ({ ...structuredClone(k), f: k.f - start, v: relative(k.v) })) };
+    const offset = (v: Vec2): Vec2 => n === 'position' ? [v[0] / comp.width, v[1] / comp.height] : [...v];
+    props[n] = { value: relative(origin), keys: prop.keys.map(k => ({ ...structuredClone(k), f: k.f - start, v: relative(k.v), ...(k.spatial ? { spatial: { in: offset(k.spatial.in), out: offset(k.spatial.out) } } : {}) })) };
   }
-  return readPreset({ ...base(id, name), kind: 'motion', camera: layer.kind === 'camera', fps: comp.fps, duration: end - start, props });
+  return readPreset({ ...base(id, name), version: Object.values(props).some(p => p.keys.some(k => k.spatial)) ? 2 : 1, kind: 'motion', camera: layer.kind === 'camera', fps: comp.fps, duration: end - start, props });
 }
 export interface PresetOptions { frame: number; duration: number; append: boolean }
 /** Builds a detached candidate. Applying is the caller's one History command. */
@@ -112,7 +116,8 @@ export function presetLayer(preset: Preset, target: Layer, comp: Comp, options: 
     const current = valueAt(existing as Prop, start);
     const offset = (v: Value): Value => n === 'position' ? [(current as Vec2)[0] + (v as Vec2)[0] * comp.width, (current as Vec2)[1] + (v as Vec2)[1] * comp.height]
       : n === 'scale' ? [(current as Vec2)[0] + (v as Vec2)[0], (current as Vec2)[1] + (v as Vec2)[1]] : n === 'opacity' ? v : (current as number) + (v as number);
-    const keys = source.keys.map(k => ({ ...structuredClone(k), f: start + Math.round(k.f * duration / p.duration), v: offset(k.v) }));
+    const handle = (v: Vec2): Vec2 => n === 'position' ? [v[0] * comp.width, v[1] * comp.height] : [...v];
+    const keys = source.keys.map(k => ({ ...structuredClone(k), f: start + Math.round(k.f * duration / p.duration), v: offset(k.v), ...(k.spatial ? { spatial: { in: handle(k.spatial.in), out: handle(k.spatial.out) } } : {}) }));
     for (const key of keys) for (const v of Array.isArray(key.v) ? key.v : [key.v]) number(v, -1e9, 1e9);
     if (new Set(keys.map(k => k.f)).size !== keys.length) return fail('use a longer duration to keep every key at a unique frame.');
     if (n === 'zoom' && keys.some(k => Number(k.v) <= 0)) return fail('camera zoom must stay above zero.');

@@ -1,3 +1,6 @@
+import { VectorObjectsUI } from './ui/vectorobjects';
+import { GraphUI } from './ui/graph';
+import { LayoutUI } from './ui/layout';
 import { BundleUI } from './ui/bundle';
 import { SymbolUI } from './ui/symbols';
 import { CameraMoveUI } from './ui/cameramove';
@@ -695,6 +698,12 @@ const symbols = new SymbolUI(app, artworkUI.assets, source => artworkUI.openSour
 app.openSymbol = id => symbols.show(id); motion.openSymbol = id => symbols.show(id);
 const bundleUI = new BundleUI(app, () => share.show('video'));
 share.onBundle = comp => bundleUI.show(comp);
+const vectorObjects = new VectorObjectsUI(app);
+app.openVectorObjects = id => { void vectorObjects.show(id).catch(e => app.onNotice?.((e as Error).message)); };
+const graphUI = new GraphUI(app);
+motion.openGraph = () => graphUI.show();
+const layoutUI = new LayoutUI(app);
+app.openLayout = () => layoutUI.show();
 const presetLibrary = new PresetLibraryUI(app);
 const cameraMoves = new CameraMoveUI(app);
 motion.openCameraMove = () => { effectsPanel.close(); cameraMoves.show(); };

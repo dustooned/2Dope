@@ -1,3 +1,4 @@
+import { valueAt } from '../core/anim';
 import { blenderHandles, staticProp, type Prop, type Value, type Vec2 } from '../core/anim';
 import { activeEffects } from '../core/effects';
 import { compLength, exportComp, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type DrawingsLayer, type Layer, partsActive, skippedInExport } from '../core/comp';
@@ -167,8 +168,13 @@ export function soloComp(c: Comp, l: DrawingsLayer, anchor: Vec2, width: number,
 }
 
 /** Turn a property into channels in comp time, with Blender Bezier handles per segment. */
-export function channels(p: Prop<Value>, names: [ChannelName] | [ChannelName, ChannelName], start: number): Partial<Record<ChannelName, Channel>> {
+export function channels(p: Prop<Value>, names: [ChannelName] | [ChannelName, ChannelName], start: number, frames?: number): Partial<Record<ChannelName, Channel>> {
   const out: Partial<Record<ChannelName, Channel>> = {};
+  if (p.keys.some(k => k.spatial)) {
+    const first = frames === undefined ? p.keys[0]!.f + start : 0, last = frames === undefined ? p.keys.at(-1)!.f + start : frames - 1;
+    if (last - first > 100000) throw new Error('Curved motion exceeds the Blender bake limit. Shorten this composition.');
+    names.forEach((name, dim) => { const pick = (v: Value) => Array.isArray(v) ? v[dim]! : v; const keys: ChannelKey[] = []; for (let f = first; f <= last; f++) keys.push({ frame: f, value: pick(valueAt(p, f - start)), interp: 'LINEAR', left: null, right: null }); out[name] = { value: pick(p.value), keys }; }); return out;
+  }
   names.forEach((name, dim) => {
     const pick = (v: Value) => (Array.isArray(v) ? v[dim]! : (v as number));
     const ch: Channel = { value: pick(p.value) };
@@ -237,11 +243,12 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
       if (l.kind === 'drawings' && l.title) notes.add(`“${l.name}”: Title exported as an image.`);
       const t = l.transform;
       const anchorValue = t.anchor.keys.length ? t.anchor.keys[0]!.v : t.anchor.value;
+      if (t.position.keys.some(k => k.spatial) || t.scale.keys.some(k => k.spatial)) notes.add(`“${l.name}”: curved motion is baked to per-frame transform keys.`);
       if (t.anchor.keys.length > 1) notes.add(`“${l.name}”: an animated anchor point is exported as its first value.`);
       if (l.blend !== 'normal') notes.add(`“${l.name}”: the ${l.blend} blend mode is exported as normal.`);
       const ch = {
-        ...channels(t.position, ['position.x', 'position.y'], l.start),
-        ...channels(t.scale, ['scale.x', 'scale.y'], l.start),
+        ...channels(t.position, ['position.x', 'position.y'], l.start, length),
+        ...channels(t.scale, ['scale.x', 'scale.y'], l.start, length),
         ...channels(t.rotation, ['rotation'], l.start),
         ...channels(t.opacity, ['opacity'], l.start),
       };

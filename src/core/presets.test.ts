@@ -40,7 +40,7 @@ describe('independent motion and effect presets', () => {
     const l = layer(); l.locked = true; expect(() => presetLayer(BUILTIN_PRESETS[0]!, l, comp(), options, () => '')).toThrow('unlock');
     const p = BUILTIN_PRESETS.find(p => p.id === 'camera-push')!; expect(() => presetLayer(p, layer(), comp(), options, () => '')).toThrow('camera'); const cam = cameraLayer('cam', comp()); cam.zoom = staticProp(-1); expect(() => presetLayer(p, cam, comp(), options, () => '')).toThrow('above zero');
   });
-  it.each([ { version: 2 }, { props: { unknown: {} } }, { extra: true }, { fps: 0 } ])('rejects the whole motion record: %j', patch => expect(() => readPreset({ ...BUILTIN_PRESETS[0], ...patch })).toThrow());
+  it.each([ { version: 3 }, { props: { unknown: {} } }, { extra: true }, { fps: 0 } ])('rejects the whole motion record: %j', patch => expect(() => readPreset({ ...BUILTIN_PRESETS[0], ...patch })).toThrow());
   it('rejects unknown effects and settings instead of shortening a stack', () => {
     const l = layer(); l.effects = [newEffect('glow', 'g', 1)]; const p = captureEffects(l, 0, 'look', 'Look');
     if (p.kind !== 'effects') return; expect(() => readPreset({ ...p, effects: [...p.effects, { ...p.effects[0], type: 'future' }] })).toThrow('unknown effect'); expect(() => readPreset({ ...p, effects: [{ ...p.effects[0], params: { future: 1 } }] })).toThrow('unknown effect setting');

@@ -6,7 +6,7 @@
  * - Each side of a key has an interpolation: linear, bezier or hold. A bezier side has an
  *   `influence` (0..1, fraction of the segment) and a normalised `slope` (speed × duration ÷
  *   change; 0 = eased to a stop, 1 = linear speed). Every dimension of a value moves with the same
- *   progress curve, so a position follows a straight line between keys (motion paths come later).
+ *   progress curve. Optional vector spatial handles curve the trajectory independently of timing.
  * - The four friendly easings (Linear, Ease in, Ease out, Ease in-out) and Hold are presets over
  *   this one model, and the numbers map directly to Blender F-curve handles.
  */
@@ -24,7 +24,10 @@ export interface Side {
   influence: number;
 }
 
+export interface SpatialHandles { in: Vec2; out: Vec2 }
 export interface Key<T extends Value = Value> {
+  /** Vector offsets from this key’s value; absent = a straight path. */
+  spatial?: SpatialHandles;
   /** Frame in layer time (integer). */
   f: number;
   v: T;
@@ -197,7 +200,12 @@ export function valueAt<T extends Value>(p: Prop<T>, f: number): T {
   const a = k[lo]!;
   const b = k[hi]!;
   const x = (f - a.f) / (b.f - a.f);
-  return mix(a.v, b.v, progress(a.out, b.in, x)) as T;
+  const t = progress(a.out, b.in, x);
+  if (Array.isArray(a.v) && Array.isArray(b.v) && (a.spatial || b.spatial)) {
+    const av = a.v as Vec2, bv = b.v as Vec2, out = a.spatial?.out ?? [(bv[0] - av[0]) / 3, (bv[1] - av[1]) / 3], inn = b.spatial?.in ?? [(av[0] - bv[0]) / 3, (av[1] - bv[1]) / 3];
+    return [bez(av[0], av[0] + out[0], bv[0] + inn[0], bv[0], t), bez(av[1], av[1] + out[1], bv[1] + inn[1], bv[1], t)] as T;
+  }
+  return mix(a.v, b.v, t) as T;
 }
 
 /** Is the property animated (has at least one key)? */
@@ -297,7 +305,7 @@ export function reverseKeys<T extends Value>(p: Prop<T>, a: number, b: number): 
   if (inside.length < 2) return p;
   const lo = inside[0]!.f;
   const hi = inside[inside.length - 1]!.f;
-  const flipped = inside.map((k) => ({ ...k, f: lo + hi - k.f, in: k.out, out: k.in }));
+  const flipped = inside.map((k) => ({ ...k, f: lo + hi - k.f, in: k.out, out: k.in, ...(k.spatial ? { spatial: { in: [...k.spatial.out] as Vec2, out: [...k.spatial.in] as Vec2 } } : {}) }));
   const keys = p.keys.filter((k) => k.f < lo || k.f > hi).concat(flipped);
   keys.sort((x, y) => x.f - y.f);
   return { ...p, keys };
@@ -334,6 +342,7 @@ export function blenderHandles(a: { f: number; v: number; out: Side }, b: { f: n
   const side = (s: Side) => (s.interp === 'bezier' ? { slope: s.slope, inf: s.influence } : { slope: 1, inf: 1 / 3 });
   const o = side(a.out);
   const i = side(b.in);
+  if (o.inf + i.inf > 1) { const sum = o.inf + i.inf; o.inf /= sum; i.inf /= sum; }
   return [
     [a.f + o.inf * dt, a.v + o.slope * o.inf * dv],
     [b.f - i.inf * dt, b.v - i.slope * i.inf * dv],

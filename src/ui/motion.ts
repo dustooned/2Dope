@@ -118,6 +118,7 @@ export class MotionPanel {
   openAssets: ((opener: HTMLElement) => void) | null = null;
   createAsset: (() => void) | null = null;
   openPresets: (() => void) | null = null;
+  openGraph: (() => void) | null = null;
   openCameraMove: (() => void) | null = null;
   openSymbol: ((id: string) => void) | null = null;
   private readonly selectionInfo = el('span', { class: 'motion-selection', role: 'status' });
@@ -188,7 +189,7 @@ export class MotionPanel {
     transport.classList.add('motion-transport');
     const heading = row(this.compName, this.crumbsEl, transport, help); heading.classList.add('motion-heading');
     const presets = btn('Presets', 'Motion and Effects presets', () => this.openPresets?.()); presets.setAttribute('aria-label', 'Motion presets');
-    const menus = row(addLayer, btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()), assets, layer, tools, presets, this.effectsBtn, view);
+    const menus = row(addLayer, btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()), assets, layer, btn('Layout', 'Align and snap selected layers', () => app.openLayout?.()), tools, presets, this.effectsBtn, view);
     menus.classList.add('motion-menus'); menus.setAttribute('role', 'toolbar'); menus.setAttribute('aria-label', 'Motion commands');
     const filter = el('input', { type: 'search', class: 'motion-search', placeholder: 'Find a layer…', 'aria-label': 'Find Motion layers', 'data-own-keys': '' });
     filter.addEventListener('input', () => { this.filter = filter.value.trim().toLowerCase(); this.signature = ''; this.update(); });
@@ -203,7 +204,7 @@ export class MotionPanel {
       this.update();
     });
     this.camBtn = btn('Through camera', 'Look through the camera (off: see the whole comp and the camera frame)', () => {
-      ed.throughCamera = !ed.throughCamera;
+      if (ed.pathEditing) ed.setPathEditing(false); ed.throughCamera = !ed.throughCamera;
       app.requestRender();
       this.update();
     });
@@ -342,7 +343,7 @@ export class MotionPanel {
     this.compName.hidden = ed.crumbs().length > 1;
     this.compName.title = `${c.name} · ${c.width}×${c.height} · ${c.fps} fps`;
     const nk = ed.selectedKeys().length;
-    this.selectionInfo.textContent = `${ed.selected.length} layer${ed.selected.length === 1 ? '' : 's'} · ${nk} key${nk === 1 ? '' : 's'}`;
+    this.selectionInfo.textContent = ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : `${ed.selected.length} layer${ed.selected.length === 1 ? '' : 's'} · ${nk} key${nk === 1 ? '' : 's'}`;
     this.renderCrumbs();
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));
@@ -1151,6 +1152,12 @@ export class MotionPanel {
   private animationItems(): CtxItem[] {
     const ed = this.ed, ref = ed.selectedKeys()[0];
     return [
+      { title: 'Curves and paths' },
+      { label: 'Graph editor…', run: () => this.openGraph?.() },
+      { label: ed.pathEditing ? 'Done editing motion path' : 'Edit motion path on canvas', checked: ed.pathEditing, run: () => ed.setPathEditing(!ed.pathEditing) },
+      { label: 'Smooth motion path', run: () => ed.changePath(true) },
+      { label: 'Straight motion path', run: () => ed.changePath(false) },
+      { label: 'Link motion path handles', checked: ed.pathLinked, run: () => { ed.pathLinked = !ed.pathLinked; } },
       { title: 'Camera' },
       { label: 'Camera move…', disabled: !this.openCameraMove, run: () => this.openCameraMove?.() },
       { title: 'Keyframe assistants' },
@@ -1177,9 +1184,10 @@ export class MotionPanel {
     const a = this.app, ed = this.ed;
     return [
       { title: 'Canvas' },
+      { label: 'Snapping', checked: a.editor.snap.on, run: () => a.editor.setSnap({ on: !a.editor.snap.on }) },
       ...([['transparency', 'Transparency grid'], ['safeAreas', 'Title and action safe'], ['centre', 'Centre cross'], ['overscan', 'Overscan']] as const).map(([key, label]) => ({ label, checked: a.canvasView[key], run: () => a.setCanvasView({ [key]: !a.canvasView[key] }) })),
       { label: 'Fit canvas', run: () => a.fit() },
-      ...(ed.hasCamera() ? [{ label: 'Through camera', checked: ed.throughCamera, run: () => { ed.throughCamera = !ed.throughCamera; a.requestRender(); this.update(); } }] : []),
+      ...(ed.hasCamera() ? [{ label: 'Through camera', checked: ed.throughCamera, run: () => { if (ed.pathEditing) ed.setPathEditing(false); ed.throughCamera = !ed.throughCamera; a.requestRender(); this.update(); } }] : []),
       { title: 'Timeline' },
       { label: 'Show all layers in Simple mode', checked: this.allRows, run: () => {
         this.allRows = !this.allRows; try { localStorage.setItem('2dope.motion.allRows', this.allRows ? '1' : '0'); } catch { /* session only */ }

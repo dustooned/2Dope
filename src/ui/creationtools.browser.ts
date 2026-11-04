@@ -6,7 +6,7 @@ import { newEffect } from '../core/effects';
 import { BUILTIN_PRESETS, readPreset } from '../core/presets';
 import { DevicePresetStore } from '../io/presetstore';
 import { captureProject, loadProjectFile } from '../io/projectio';
-import { validateProjectFile, minimumDrawingSchema } from '../io/schema';
+import { SCHEMA, validateProjectFile, minimumDrawingSchema } from '../io/schema';
 import { captureArtwork, packArtwork, readArtwork } from '../io/artwork';
 import { planBlender } from '../io/blender';
 import { drawComp } from '../view/composite';
@@ -62,7 +62,7 @@ await check('Convert to paint keeps pixels, enables painting and reverses with o
   app.undo(); await wait(150); expect(!!(app.project.comp.layers.find(l => l.id === titleId) as DrawingsLayer).title && !app.history.canUndo, 'conversion undo failed'); app.editor.select(titleId); app.setWorkspace('motion');
 });
 await check('Title archives require reader 6, ordinary archives retain their older minimum', async () => {
-  const capture = await captureProject(app.project, { mode: 'archive' }).settle(); expect(capture.file.schema === 6 && validateProjectFile(capture.file).schema === 6, 'title not version gated');
+  const capture = await captureProject(app.project, { mode: 'archive' }).settle(); expect(capture.file.schema === 6 && validateProjectFile(capture.file).schema === SCHEMA, 'title not version gated');
   const loaded = loadProjectFile(validateProjectFile(capture.file)).project;
   for (const d of loaded.drawings.values()) for (const ref of [d.parked?.line, d.parked?.fill]) if (ref?.key) ref.bytes = capture.assets.get(ref.key) ?? null;
   const before = pixels(); app.loadProject(loaded); app.setWorkspace('motion'); app.editor.select(titleId); for (const d of loaded.drawings.values()) { await app.residency.pin(d); app.residency.unpin(d); }
@@ -73,7 +73,7 @@ await check('Title archives require reader 6, ordinary archives retain their old
 });
 await check('Portable assets retain title intent and Blender receives the saved image with a clear note', async () => {
   const saved = await captureProject(app.project, { mode: 'archive' }).settle(); app.project.comp.asset = true; const source = await captureArtwork(app.project, app.project.comp.id, async k => saved.assets.get(k) ?? null); delete app.project.comp.asset; const reopened = await readArtwork(packArtwork(source));
-  expect(reopened.file.schema === 6 && reopened.file.comps[reopened.file.main]!.layers.some(l => l.title), 'asset dropped title metadata'); const plan = planBlender(app.project, 'fixture'); expect(plan.notes.some(n => n.includes('Title exported as an image')) && plan.drawings.size > 0, 'Blender lost title snapshot');
+  expect(reopened.file.schema === SCHEMA && reopened.file.comps[reopened.file.main]!.layers.some(l => l.title), 'asset dropped title metadata'); const plan = planBlender(app.project, 'fixture'); expect(plan.notes.some(n => n.includes('Title exported as an image')) && plan.drawings.size > 0, 'Blender lost title snapshot');
 });
 await check('Draw cards, layer popover and Motion agree on Title identity and expose editing', async () => {
   const anchor = document.querySelector<HTMLButtonElement>('.dock')!; app.setWorkspace('draw'); cards.toggle(anchor); await wait(); expect(!!document.querySelector('.lc-card[aria-label*="Title"]'), 'Draw card missing title identity'); click('Close layers'); popover.toggle(anchor); expect(!!document.querySelector('.lp-name[aria-label*="Title"]') && !!button(`Edit title ${app.editor.primary!.name}`), 'popover inconsistent'); popover.close();

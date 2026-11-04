@@ -21,7 +21,7 @@ export function vectorsToSvg(strokes: StrokeRecord[], width: number, height: num
     if (rec.tool === 'eraser' || !rec.points.length) continue;
     if (rec.shape) {
       const s = rec.shape;
-      paths.push(`  <path d="${esc(s.path)}" transform="matrix(${s.matrix.join(' ')})" fill="${s.fill ?? 'none'}" stroke="${s.stroke ?? 'none'}" stroke-width="${s.width}" fill-rule="${s.rule}" stroke-linecap="${s.cap}" stroke-linejoin="${s.join}" stroke-miterlimit="${s.miter}" opacity="${rec.brush.opacity}"/>`);
+      paths.push(`  <path d="${esc(s.path)}"${s.group ? ` data-2dope-group="${esc(s.group)}"` : ''} transform="matrix(${s.matrix.join(' ')})" fill="${s.fill ?? 'none'}" stroke="${s.stroke ?? 'none'}" stroke-width="${s.width}" fill-rule="${s.rule}" stroke-linecap="${s.cap}" stroke-linejoin="${s.join}" stroke-miterlimit="${s.miter}" opacity="${rec.brush.opacity}"/>`);
       continue;
     }
     const half = vectorWidths(rec, strokeLength(rec.points));

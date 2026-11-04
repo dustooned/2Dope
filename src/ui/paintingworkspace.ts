@@ -125,7 +125,7 @@ export class PaintingWorkspaceUI {
     }
     const a = this.app;
     const tool = a.arrangingAssets ? 'Move placement' : a.transforming ? 'Transform' : a.adjusting ? 'Adjust artwork' : a.tool === 'pen' ? 'Vector' : a.tool === 'fill' ? a.fillMode === 'lasso' ? 'Select area' : 'Bucket fill' : a.smudging ? 'Smudge' : a.tool === 'eraser' ? 'Eraser' : 'Brush';
-    const target = a.editingMask ? 'Mask' : a.project.isPlaceholder ? 'New paint layer' : `${a.project.layer.name} · ${a.plane === 'line' ? 'Ink' : 'Colour'}`;
+    const target = a.arrangingAssets ? `${a.placedAsset?.name ?? 'Select placed artwork'} · placement` : a.editingMask ? 'Mask' : a.project.isPlaceholder ? 'New paint layer' : `${a.project.layer.name} · ${a.plane === 'line' ? 'Ink' : 'Colour'}`;
     const hint = this.footer.querySelector<HTMLElement>('.painting-purpose')!;
     hint.textContent = `${tool} on ${target}`; hint.title = `${a.project.comp.name} · ${hint.textContent}`;
   }

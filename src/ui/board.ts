@@ -75,7 +75,7 @@ export class BoardPanel {
     this.timeline = new BoardTimeline(app);
     try {
       const v = localStorage.getItem('2dope.board.view');
-      if (v === 'grid' || v === 'timeline' || v === 'split') this.view = v;
+      if (v === 'panels' || v === 'grid' || v === 'timeline' || v === 'split') this.view = v;
     } catch {
       // default view
     }
@@ -241,7 +241,10 @@ export class BoardPanel {
     const fps = p.comp.fps;
     const total = ex.reduce((n, e) => n + e.length, 0);
     this.info.textContent = `${ex.length} panel${ex.length === 1 ? '' : 's'} · ${app.fmtDur(total)}`;
-    this.info.title = this.info.textContent;
+    const picked = app.targets.length;
+    this.info.title = `${this.info.textContent} · ${picked} selected`;
+    this.info.setAttribute('aria-label', this.info.title);
+    this.cards.setAttribute('aria-label', `Story panels · ${picked} selected`);
     const typing = this.cards.contains(document.activeElement) && (document.activeElement as HTMLElement).matches('textarea, input');
     const sig =
       `${b.id}|${fps}|${app.timeFormat}|` +

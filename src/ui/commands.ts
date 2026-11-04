@@ -37,6 +37,7 @@ const xp = (a: App) => a.transformParams!;
 const ROLE_TITLES = { key: 'A key drawing: the main poses of the move', breakdown: 'A breakdown: the drawing that shapes the move between two keys', inbetween: 'An in-between: fills the gaps so the move is smooth' } as const;
 
 export const COMMANDS: readonly Command[] = [
+  { id:'assets.layout',label:'Align & snap',title:'Align or distribute selected placements and control canvas snapping',contexts:['assets'],order:40,run:a=>a.openLayout?.(),isEnabled:a=>a.arrangingAssets },
   { id:'paint.restyle',label:'Apply brush to lines',title:'Preview the current brush on complete selected vector lines',contexts:['paint'],order:115,run:a=>a.openVectorRestyle(),isEnabled:a=>a.tool==='pen' },
   { id:'points.restyle',label:'Apply brush to line',title:'Preview the current brush on this editable vector line',contexts:['points'],order:115,run:a=>a.openVectorRestyle() },
   // with something selected
@@ -88,6 +89,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'paint.inkpaint', label: 'Ink & Paint', title: 'Ink & Paint: fill newly closed areas after inking. Existing paint stays.', icon: 'inkpaint', contexts: ['paint'], order: 10, run: (a) => a.setInkPaint(!a.inkPaint.enabled), isOn: (a) => a.inkPaint.enabled, isEnabled: (a) => a.studentUI.controls.inkPaint, face: (a) => (a.autoPaintSupported ? {} : { title: 'Ink & Paint: this page exceeds the automatic paint limit for this device.' }) },
   { id: 'paint.editpoints', label: 'Edit points', title: 'Drag the corners and bends of a vector line; set its thickness', contexts: ['paint'], order: 20, run: (a) => { a.enterPointEdit(); }, isEnabled: (a) => a.tool === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen') },
 
+  { id: 'paint.objects', label: 'Vector objects', title: 'Edit imported path nodes, fills, strokes and selection groups', contexts: ['paint'], order: 29, run: a => a.openVectorObjects?.(), isEnabled: a => a.drawing.vectors.some(v => !!v.shape) },
   { id: 'paint.svg', label: 'Export SVG', title: "Save this drawing's vector lines as an SVG file", contexts: ['paint'], order: 30, run: (a) => a.exportVectorSvg(), isEnabled: (a) => a.tool === 'pen' && a.drawing.vectors.some((v) => v.tool === 'pen') },
   { id: 'paint.rasterize', label: 'Rasterize imported vectors', title: 'Turn this drawing’s Ink vectors into pixels for painting and erasing; Undo restores the paths', contexts: ['paint'], order: 31, run: (a) => { a.rasterizeImportedVectors(); }, isEnabled: (a) => a.drawing.vectors.some((v) => !!v.shape) },
 

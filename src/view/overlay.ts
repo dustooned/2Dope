@@ -1,6 +1,15 @@
+import { valueAt, type Prop, type Vec2 } from '../core/anim';
+import { spatialHandle } from '../core/precision';
+import { apply } from '../core/comp';
 import type { CompEditor } from '../compedit';
 import type { Viewport } from './viewport';
 
+const pathCache = new WeakMap<Prop<Vec2>, Vec2[]>();
+function pathSamples(prop: Prop<Vec2>): Vec2[] {
+  let points = pathCache.get(prop); if (points) return points; points = [];
+  for (let i = 0; i < prop.keys.length - 1; i++) { const a = prop.keys[i]!, b = prop.keys[i + 1]!, steps = Math.max(2, Math.min(24, Math.floor(2000 / prop.keys.length))); for (let j = 0; j <= steps; j++) points.push(valueAt(prop, a.f + (b.f - a.f) * j / steps)); }
+  pathCache.set(prop, points); return points;
+}
 const ACCENT = '#ff5a8a';
 
 /**
@@ -34,6 +43,8 @@ export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, v
   g.closePath();
   g.stroke();
   g.lineWidth = 1.5;
+  g.strokeStyle = '#60caff';
+  for (const guide of ed.snapGuides) { const a = scr(apply(ed.view(), guide.axis === 'x' ? [guide.value, 0] : [0, guide.value])), b = scr(apply(ed.view(), guide.axis === 'x' ? [guide.value, h] : [w, guide.value])); g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke(); }
   g.strokeStyle = ACCENT;
   g.fillStyle = '#ffffff';
   for (const id of ed.selected) {
@@ -80,6 +91,14 @@ export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, v
     g.moveTo(a[0], a[1] - 8);
     g.lineTo(a[0], a[1] + 8);
     g.stroke();
+  }
+  if (ed.pathEditing && !simple) {
+    const layer = ed.primary, prop = layer?.transform.position;
+    if (layer && prop && prop.keys.length >= 2 && prop.keys.length <= 1000) {
+      const m = ed.pathMatrix(layer), point = (v: Vec2) => scr(apply(m, v)); g.strokeStyle = '#60caff'; g.lineWidth = 2; g.beginPath();
+      pathSamples(prop).forEach((v, i) => { const p = point(v); if (i) g.lineTo(...p); else g.moveTo(...p); }); g.stroke();
+      for (const [i, key] of prop.keys.entries()) { const p = point(key.v), selected = key.f === ed.pathFrame; if (selected) for (const side of ['in', 'out'] as const) { if (side === 'in' && i === 0 || side === 'out' && i === prop.keys.length - 1) continue; const h = spatialHandle(prop, i, side), q = point([key.v[0] + h[0], key.v[1] + h[1]]); g.beginPath(); g.moveTo(...p); g.lineTo(...q); g.stroke(); g.beginPath(); g.arc(q[0], q[1], 7, 0, Math.PI * 2); g.fillStyle = '#1d1d22'; g.fill(); g.stroke(); } g.beginPath(); g.rect(p[0] - 6, p[1] - 6, 12, 12); g.fillStyle = selected ? '#60caff' : '#fff'; g.fill(); g.stroke(); }
+    }
   }
   g.restore();
 }

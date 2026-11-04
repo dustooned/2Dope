@@ -3,6 +3,8 @@ import { readMatrix } from './vectorstyle';
 
 /** Portable imported paths. Curves remain paths, never rasterized during import or placement. */
 export interface VectorShape {
+  /** Optional selection group; geometry remains in its existing drawing order. */
+  group?: string;
   path: string;
   matrix: Mat;
   fill: string | null;
@@ -21,5 +23,6 @@ export function readVectorShape(value: unknown): VectorShape {
   const nums = s.path.match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi) ?? [];
   if (nums.some((n) => !Number.isFinite(Number(n)) || Math.abs(Number(n)) > 1e7)) throw new Error('Imported vector coordinates are too large');
   if (!color(s.fill) || !color(s.stroke) || !Number.isFinite(s.width) || s.width < 0 || s.width > 1e5 || !Number.isFinite(s.miter) || s.miter < 1 || s.miter > 1000 || !['nonzero', 'evenodd'].includes(s.rule) || !['butt', 'round', 'square'].includes(s.cap) || !['miter', 'round', 'bevel'].includes(s.join)) throw new Error('Invalid imported vector paint');
-  return { path: s.path, matrix: [...readMatrix(s.matrix)], fill: s.fill, stroke: s.stroke, width: s.width, rule: s.rule, cap: s.cap, join: s.join, miter: s.miter };
+  if (s.group !== undefined && (typeof s.group !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(s.group))) throw new Error('Invalid vector group');
+  return { ...(s.group ? { group: s.group } : {}), path: s.path, matrix: [...readMatrix(s.matrix)], fill: s.fill, stroke: s.stroke, width: s.width, rule: s.rule, cap: s.cap, join: s.join, miter: s.miter };
 }

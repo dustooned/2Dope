@@ -766,11 +766,12 @@ export class Bubbles {
     this.ctx.dataset.row = row;
     const add = (...c: HTMLElement[]) => this.ctx.append(...c);
     // the row starts with whose settings these are, so they are never mistaken for tools
-    const rowTitle = drawWs ? ({ paint: `${a.tool === 'pen' ? 'Vector' : a.tool === 'eraser' ? 'Eraser' : 'Brush'} settings`, fill: 'Bucket fill settings', smudge: 'Smudge settings', select: 'Select', assets: 'Move assets' } as Partial<Record<string, string>>)[row] : undefined;
+    const rowTitle = drawWs ? ({ paint: `${a.tool === 'pen' ? 'Vector' : a.tool === 'eraser' ? 'Eraser' : 'Brush'} settings`, fill: 'Bucket fill settings', smudge: 'Smudge settings', select: 'Selection settings', assets: 'Placement settings', points: 'Vector point settings', transform: 'Transform selection', adjust: 'Artwork adjustment' } as Partial<Record<string, string>>)[row] : undefined;
     if (rowTitle) add(el('span', { class: 'bub-hint bub-row-title' }, rowTitle));
     // right after a snap: change the shape from here (no floating button on the simple screen)
     if (shape) add(this.chip('Edit shape', 'Change what the stroke snapped to, or keep your own stroke', false, (b) => this.hooks.editShape!(b), 'editpoints'));
     if (row === 'assets') {
+      add(...this.cmd('assets.layout'));
       add(el('span', { class: 'bub-hint' }, 'Tap artwork · drag to move · corners resize · Done or Move assets again to draw'));
     } else if (row === 'points') {
       add(...this.widthControls());
@@ -818,7 +819,7 @@ export class Bubbles {
       if (a.studentUI.controls.planes) add(this.chip('Ink target', 'Paint on Ink: your lines', a.plane === 'line', () => a.setPlane('line')), this.chip('Colour target', 'Paint on Colour: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
-      add(...this.cmd('paint.editpoints'), ...this.cmd('paint.svg'), ...this.cmd('paint.rasterize'), this.customizeChip('paint'));
+      add(...this.cmd('paint.editpoints'), ...this.cmd('paint.objects'), ...this.cmd('paint.svg'), ...this.cmd('paint.rasterize'), this.customizeChip('paint'));
     } else if (row === 'fill') {
       add(...this.gradChips());
       add(

@@ -1,5 +1,26 @@
 # Architecture
 
+Precision tools (2026-11-04): `core/layout.ts` supplies pure alignment, equal-gap distribution
+and snapping. `CompEditor` translates in composition space through transformed/moved parents,
+keeps children from double-moving, centers anchors and commits one command per action/drag.
+`ui/layout.ts` pins current content while measuring and guards async staleness; Motion Layout
+and Animate's placement settings share it. Snapping is device-only localStorage metadata.
+`core/precision.ts`, `ui/graph.ts` provide detached per-segment timing/key editing and value/speed
+inspection. Graph controls bound time handles monotonically and leave spatial geometry intact.
+`core/anim.ts` evaluates optional vector spatial handles through shared timing; `compedit.ts`
+implements path drags and view restoration. `view/overlay.ts` caches bounded samples by property
+identity, then maps them through parent/camera/viewport matrices. Canvas path/graph UI limits are
+1,000 keys; persistence retains the existing larger limits. `io/schema.ts` gates curved captures
+at 7, `core/presets.ts` gates curved portable presets at 2, `io/blender.ts` bakes integer frames.
+`core/pathgeometry.ts` normalizes SVG shorthand/relative nodes without flattening curves or arcs;
+`ui/vectorobjects.ts` holds a detached drawing draft under a residency pin, validates stale targets,
+measures updated painted bounds and delegates one retained Drawing history command to App.
+Flat selection groups survive schema/SVG roundtrips. Node editing is capped at 2,000 segments.
+`precision.html` and its three-size wrapper cover editing, alpha, version gates, cancel/staleness,
+Undo, assets, camera restoration and 250-layer/500-key/200-path capture/reload. Real pointer drags
+were also checked using disposable Chromium. No physical Pencil/Safari verification is implied.
+
+
 Shot finishing (2026-11-03): `core/cameramove.ts` builds detached concrete camera keys with strict
 range/lock/replace preflight. `ui/cameramove.ts` owns a separate preview clock and commits camera
 creation plus keys through one CompEditor edit. `view/compdraft.ts` is the serial/coalesced borrowed

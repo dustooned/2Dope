@@ -49,6 +49,29 @@ const close = (a: Vec2, b: Vec2) => {
   expect(a[1]).toBeCloseTo(b[1], 4);
 };
 
+describe('precision placement and path gestures', () => {
+  it('moves selected parents and children once in world space and undoes as one command', () => {
+    const { app, ed, comp } = rig(), parent = nullLayer('P', 'Parent', comp), child = nullLayer('C', 'Child', comp);
+    parent.transform.scale.value = [200, 150]; parent.transform.rotation.value = 30; child.parent = parent.id; child.transform.position.value = [30, 40]; comp.layers.push(parent, child);
+    ed.select(parent.id); ed.select(child.id, true); const original = apply(worldMatrix(comp, child, 0), child.transform.anchor.value), start = apply(ed.matrixOf(child), child.transform.anchor.value), local = [...child.transform.position.value] as Vec2;
+    expect(ed.gestureStart(start, 1)).toBe(true); ed.gestureMove([start[0] + 50, start[1] + 20]); ed.gestureEnd();
+    close(apply(worldMatrix(comp, ed.layer(child.id)!, 0), child.transform.anchor.value), [original[0] + 50, original[1] + 20]); close(ed.layer(child.id)!.transform.position.value, local);
+    app.history.undo(); close(apply(worldMatrix(comp, ed.layer(child.id)!, 0), child.transform.anchor.value), original); expect(app.history.canUndo).toBe(false);
+  });
+  it('aligns anchors through a rotated/scaled parent, refuses singular positioning and preserves the document', () => {
+    const { ed, comp } = rig(), parent = nullLayer('P', 'Parent', comp), child = nullLayer('C', 'Child', comp); comp.layers.push(parent, child); child.parent = parent.id; parent.transform.rotation.value = 35; parent.transform.scale.value = [200, 50]; ed.select(child.id);
+    expect(ed.arrange('centerX')).toBe(true); expect(ed.layoutBox(ed.layer(child.id)!).x).toBeCloseTo(200, 8);
+    ed.layer(parent.id)!.transform.scale.value = [0, 100]; const before = structuredClone(comp.layers); expect(ed.arrange('left')).toBe(false); expect(comp.layers).toEqual(before);
+  });
+  it('edits a parented path point with one Undo, cancels handles and exits on layer selection', () => {
+    const { app, ed, comp } = rig(), parent = nullLayer('P', 'Parent', comp), child = nullLayer('C', 'Child', comp); comp.layers.push(parent, child); child.parent = parent.id; parent.transform.rotation.value = 20; parent.transform.scale.value = [150, 70];
+    Object.assign(app, { workspace: 'motion' }); child.transform.position = setKey(setKey(staticProp<Vec2>([0, 0]), 0, [0, 0]), 10, [100, 100]); ed.select(child.id); ed.setPathEditing(true);
+    const p = apply(ed.pathMatrix(child), [0, 0]); expect(ed.gestureStart(p, 1)).toBe(true); ed.gestureMove([p[0] + 40, p[1] + 10]); ed.gestureEnd(); expect(ed.layer(child.id)!.transform.position.keys[0]!.v).not.toEqual([0, 0]);
+    app.history.undo(); expect(ed.layer(child.id)!.transform.position.keys[0]!.v).toEqual([0, 0]); expect(app.history.canUndo).toBe(false);
+    const before = structuredClone(comp.layers); ed.gestureStart(p, 1); ed.gestureMove([p[0] + 30, p[1]]); ed.gestureEnd(true); expect(comp.layers).toEqual(before); ed.select(parent.id); expect(ed.pathEditing).toBe(false);
+  });
+});
+
 describe('Animate asset gestures', () => {
   function assetRig() {
     const r = rig();
