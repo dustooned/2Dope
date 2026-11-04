@@ -141,7 +141,7 @@ await check('Pen input offers conversion on title artwork and paints its mask wi
   app.setMaskEditing(true); const mask = app.maskDrawing!, rev = mask.rev; stroke(); await wait(120); expect(mask.rev > rev && !!(app.editor.primary as DrawingsLayer).title && drawing.fill!.getContext('2d')!.getImageData(0, 0, 320, 180).data.every((v, i) => v === before[i]), 'pen did not edit only the mask'); app.setMaskEditing(false); app.setWorkspace('motion');
 });
 await check('Advanced effect controls visibly disable Ink for an editable title', async () => {
-  effects.show(titleId); click('Advanced'); await wait(); const root = document.querySelector('.fxpanel') ?? document;
+  effects.show(titleId); document.querySelector<HTMLButtonElement>('.fx-tabs button')!.click(); click('Advanced'); await wait(); const root = document.querySelector('.fxpanel') ?? document;
   const ink = [...root.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Ink'); expect(ink?.disabled && ink.title.includes('Colour'), 'Ink control not explained'); effects.close();
 });
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

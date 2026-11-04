@@ -100,7 +100,8 @@ export function presetLayer(preset: Preset, target: Layer, comp: Comp, options: 
     if (target.kind === 'drawings' && target.title && p.effects.some(e => e.target === 'line')) return fail('titles use Colour pixels; choose Colour or Whole layer effects.');
     const effects = p.effects.map(e => ({ ...structuredClone(e), id: id(), ...((target.kind === 'comp' || target.adjust) ? { target: 'layer' as const } : {}) }));
     if (options.append && (target.effects?.length ?? 0) + effects.length > MAX_LAYER_EFFECTS) return fail('appending would exceed 16 effects.');
-    out.effects = options.append ? [...(out.effects ?? []), ...effects] : effects; return out;
+    out.effects = options.append ? [...(out.effects ?? []), ...effects] : effects;
+    out.styleOrigin = { v: 1, name: p.name, effects: structuredClone(out.effects) }; return out;
   }
   if (p.camera !== (target.kind === 'camera')) return fail(p.camera ? 'select a camera layer for this move.' : 'select an artwork, group or anchor layer.');
   const start = options.frame - target.start, duration = number(options.duration, 1, 36000);

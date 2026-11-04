@@ -15,6 +15,7 @@ export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'tu
 export type EffectTarget = 'line' | 'fill' | 'layer';
 export const MAX_LAYER_EFFECTS = 16;
 export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
+export interface EffectStyleOrigin { v: 1; name: string; effects: LayerEffect[] }
 
 export interface LayerEffect {
   id: string;
@@ -330,6 +331,15 @@ export function readEffects(v: unknown): LayerEffect[] | undefined {
     if (keys) out[out.length - 1]!.keys = keys;
   }
   return out.length ? out : undefined;
+}
+
+/** Optional project snapshot, independent of the device library; includes pre-existing Append keys. */
+export function readEffectStyleOrigin(raw: unknown): EffectStyleOrigin {
+  const r = raw as Partial<EffectStyleOrigin> | null;
+  if (!r || typeof r !== 'object' || r.v !== 1 || typeof r.name !== 'string' || !r.name.trim() || r.name.trim().length > 40 || !Array.isArray(r.effects) || !r.effects.length || r.effects.length > MAX_LAYER_EFFECTS) throw new Error('Invalid applied effect preset snapshot.');
+  const effects = readEffects(r.effects);
+  if (!effects || effects.length !== r.effects.length) throw new Error('Unsupported effect in the applied preset snapshot.');
+  return { v: 1, name: r.name.trim(), effects };
 }
 
 /**

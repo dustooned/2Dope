@@ -691,6 +691,7 @@ export class LayerCards {
       tile(grid, 'Edit title', 'draw', 'Edit text and appearance', () => app.editTitle?.(l.id));
       tile(grid, 'Convert to paint', 'draw', 'Keep pixels and allow painting', () => app.convertTitle?.(l.id));
     }
+    if (l.kind === 'comp' && app.project.comps.get(l.comp)?.asset) tile(grid, 'Symbol options', 'layers', 'Shared source, exposed pins, swapping and independent copies', () => app.openSymbol?.(l.id));
     tile(grid, 'Rename', 'draw', 'Rename this layer', async () => {
       const n = await askText('Layer name', l.name, 'Rename');
       if (n !== null) app.editor.rename(l.id, n);

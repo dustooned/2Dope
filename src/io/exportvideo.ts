@@ -12,6 +12,8 @@ export interface VideoProgress { done: number; total: number; label: string }
 export interface VideoResult { blob: Blob; extension: 'mp4' | 'webm'; frames: number; duration: number }
 /** Another picture on the same clock and encoder (the animatic): its length, its drawings and how a frame paints. */
 export interface VideoPicture {
+  /** Absolute comp frame for audio when exporting an excerpt. Output timestamps still start at zero. */
+  start?: number;
   frames: number;
   drawings(frame: number): Iterable<string>;
   /** Paint frame `frame` into the output canvas (identity transform, output pixels, background already filled). */
@@ -67,6 +69,8 @@ export async function exportVideo(
   const check = () => { if (signal.aborted) throw new DOMException('Video export cancelled', 'AbortError'); };
   check();
   const plan = planVideo(project, rawOptions, maxBytes, picture?.frames);
+  const audioStart = picture?.start ?? 0;
+  if (!Number.isInteger(audioStart) || audioStart < 0 || audioStart + plan.frames > 1_000_000) throw new Error('Invalid video excerpt range.');
   onProgress({ done: 0, total: plan.frames, label: 'Checking video support…' });
   const support = await videoSupport(plan);
   check();
@@ -140,8 +144,8 @@ export async function exportVideo(
         await source.add(frame / plan.fps, 1 / plan.fps);
         if (audio && sounds) {
           check();
-          const first = Math.round(frame * SOUND_RATE / plan.fps);
-          const last = Math.round((frame + 1) * SOUND_RATE / plan.fps);
+          const first = Math.round((frame + audioStart) * SOUND_RATE / plan.fps);
+          const last = Math.round((frame + audioStart + 1) * SOUND_RATE / plan.fps);
           const data = mixSound(voices, sounds, first / SOUND_RATE, last - first, SOUND_RATE);
           const buffer = new AudioBuffer({ length: last - first, numberOfChannels: 2, sampleRate: SOUND_RATE });
           buffer.copyToChannel(data[0], 0); buffer.copyToChannel(data[1], 1);

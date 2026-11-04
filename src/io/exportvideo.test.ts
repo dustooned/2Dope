@@ -133,6 +133,12 @@ describe('offline video export', () => {
     await expect(exportVideo(p, DEFAULT_VIDEO, () => {}, new AbortController().signal, residency(), undefined, bank)).rejects.toThrow(/cannot encode audio/);
     expect(rig.canvases).toHaveLength(0); expect(rig.encoded).toHaveLength(0);
   });
+  it('mixes an excerpt at its absolute comp time while output timestamps start at zero', async () => {
+    const { p } = withAudio(), pcm = new Float32Array(12000); pcm.fill(.5, 3675);
+    const bank = { load: async () => {}, get: () => ({ sampleRate: 44100, numberOfChannels: 1, getChannelData: () => pcm }) } as unknown as SoundBank;
+    await exportVideo(p, DEFAULT_VIDEO, () => {}, new AbortController().signal, residency(), undefined, bank, { start: 1, frames: 1, drawings: () => ['d1'], paint() {} });
+    expect(rig.encoded).toEqual([[0, 1 / 12]]); expect(rig.audioChunks).toEqual([{ length: 3675, first: .25 }]);
+  });
   it('keeps muted audio out of the mux and includes active audio in the export budget', async () => {
     const { p, bank } = withAudio(); const audible = planVideo(p, DEFAULT_VIDEO).estimatedBytes;
     p.comps.get(p.main)!.audio![0]!.muted = true;

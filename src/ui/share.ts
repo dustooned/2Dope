@@ -90,6 +90,7 @@ export interface ShareHooks {
  * at the result, then save it or send it (the system share sheet on iPad).
  */
 export class ShareView {
+  onBundle: ((comp: string) => void) | null = null;
   private readonly root = el('div', { class: 'share', role: 'dialog', 'aria-label': 'Share', hidden: '', 'data-own-keys': '' });
   private readonly canvas = el('canvas', { class: 'share-canvas', 'aria-label': 'Preview of the shot' });
   private readonly side = el('div', { class: 'share-side' });
@@ -133,6 +134,7 @@ export class ShareView {
     head.append(back, el('span', { class: 'share-title' }, 'Share'), el('span', { class: 'share-sub' }, 'Watch it, check it, then make your movie'));
     const help = el('button', { type: 'button', class: 'panel-help', 'aria-label': 'Share help', title: 'Open Share in the manual' }, '?');
     help.addEventListener('click', () => this.app.onOpenManual('export')); head.append(help);
+    const bundle = el('button', { type: 'button', class: 'share-bundle' }, 'Hand-in bundle'); bundle.onclick = () => { if (this.abort) return; const comp = (exportComp(this.app.project) ?? this.app.project.comp).id; this.close(); this.onBundle?.(comp); }; head.append(bundle);
     if (hooks.timelapse) {
       const tl = el('button', { type: 'button', class: 'share-timelapse', title: 'Watch how this project was made, and save it as a GIF' }, '⏱ Time-lapse');
       tl.addEventListener('click', () => this.hooks.timelapse?.());

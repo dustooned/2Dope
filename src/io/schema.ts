@@ -1,3 +1,4 @@
+import { readEffectStyleOrigin, type EffectStyleOrigin } from '../core/effects';
 import { readTitle, type TitleSpec } from '../core/title';
 import { readEffects, type LayerEffect } from '../core/effects';
 import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
@@ -129,6 +130,7 @@ export interface LayerFile {
   reference?: boolean;
   mask?: string;
   effects?: LayerEffect[];
+  styleOrigin?: EffectStyleOrigin;
   /** Written by early schema-2 files; read as play "loop". */
   loop?: boolean;
   /** drawings: Line / Fill part settings that differ from the defaults (additive, no version bump). */
@@ -466,6 +468,10 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   if (typeof v.mask === 'string' && Object.prototype.hasOwnProperty.call(drawings, v.mask)) out.mask = v.mask;
   const fx = readEffects(v.effects);
   if (fx) out.effects = fx;
+  if (v.styleOrigin !== undefined) {
+    if (kind !== 'drawings' && kind !== 'comp') throw new SchemaError(`${what}: effect presets need artwork`);
+    try { out.styleOrigin = readEffectStyleOrigin(v.styleOrigin); } catch (e) { throw new SchemaError(`${what}: ${String(e)}`); }
+  }
   if (v.title !== undefined && kind !== 'drawings') throw new SchemaError(`${what}: titles must be drawing layers`);
   if (kind === 'drawings') {
     out.exposures = exposureList(v.exposures, what, drawings);
@@ -763,6 +769,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
         ...(l.reference ? { reference: true } : {}),
         ...(l.mask ? { mask: l.mask } : {}),
         ...(l.effects?.length ? { effects: structuredClone(l.effects) } : {}),
+        ...(l.styleOrigin ? { styleOrigin: structuredClone(l.styleOrigin) } : {}),
       };
       const timed = { play: l.play ?? (l.loop ? 'loop' : 'once'), speed: l.speed ?? 1, single: l.single ?? 0, timeRemap: l.timeRemap ? propOf(l.timeRemap) : null } as const;
       if (l.kind === 'drawings') {
@@ -843,6 +850,7 @@ export function compFile(c: Comp): CompFile {
       if (l.reference) base.reference = true;
       if (l.mask) base.mask = l.mask;
       if (l.effects?.length) base.effects = readEffects(l.effects);
+      if (l.styleOrigin) base.styleOrigin = readEffectStyleOrigin(l.styleOrigin);
       const timed: Partial<LayerFile> = {};
       if (l.kind === 'drawings' || l.kind === 'comp') {
         if (l.play !== 'once') timed.play = l.play;

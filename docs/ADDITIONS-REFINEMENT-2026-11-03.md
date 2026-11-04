@@ -313,3 +313,17 @@ named saves, rename/remove, portable import/export, detached preview and one-ste
 Camera starters target an existing selected camera. Applied-style Reset/origin metadata, dedicated
 new-camera/range/strength assistants, the hand-in bundle and temporal rendering remain proposals.
 Layer row gesture controllers and thumbnail caches remain separate; labels/state facts are shared.
+
+
+## Shot-finishing implementation checkpoint — 2026-11-03
+
+The next authorized build adds the dedicated camera move builder, applied-look Reset, refined
+Effects scrolling/viewport behavior, Motion Symbol options with previewed swapping, and the hand-in
+bundle. The bundle reuses the existing GIF writer’s Fit 480 px normal / 320 px Lite limit rather
+than expanding its pixel/memory limits to the proposed 640 px. MP4 is full-range, GIF is explicitly
+up to six seconds, and the optional editable archive is a full project backup. Output jobs use
+one immutable capture, conservative shared memory accounting and explicit complete/partial saves.
+Unsupported MP4/audio is reported without format or silent-audio substitution. Physical keyboard/
+Pencil/Safari memory testing remains outstanding; these proposals do not establish device safety.
+Temporal blur/Echo, rich typography, compatible-pin mapping and streaming ZIP output remain future
+work. See the current HANDOFF and format/architecture notes for implemented contracts and checks.

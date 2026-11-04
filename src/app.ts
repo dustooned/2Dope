@@ -3017,6 +3017,7 @@ export class App {
   /** Shows a short message to the person (the file UI sets it to a toast), with an optional fix button. */
   onNotice: ((message: string, action?: { label: string; run: () => void }) => void) | null = null;
   editTitle: ((id?: string) => void) | null = null;
+  openSymbol: ((id: string) => void) | null = null;
   convertTitle: ((id: string) => void) | null = null;
   /** Pixel edits require deliberate conversion; mask and layer transforms remain editable. */
   private titlePaintBlocked(allowMask = false): boolean {

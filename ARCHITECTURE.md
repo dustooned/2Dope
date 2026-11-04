@@ -1,5 +1,31 @@
 # Architecture
 
+Shot finishing (2026-11-03): `core/cameramove.ts` builds detached concrete camera keys with strict
+range/lock/replace preflight. `ui/cameramove.ts` owns a separate preview clock and commits camera
+creation plus keys through one CompEditor edit. `view/compdraft.ts` is the serial/coalesced borrowed
+preview renderer shared with source swapping; it pins from the working Residency and never
+installs the borrowed graph there. Motion exposes both camera and Symbol entry points.
+`ui/symbols.ts` presents source usage, existing exposed-pin/reset controls and source actions;
+Swap previews a detached placement and delegates the existing `ArtworkAssets.replaceSource`.
+Make independent retains the existing complete editable graph copy and Undo behavior.
+Effects Apply now embeds `styleOrigin`; `core/effects.ts`/`io/schema.ts` read that optional project
+snapshot and the panel restores it independently of device library changes. Existing Add families,
+search and touch sheet are retained. `.fx-content` is the single scrolling region, with per-tab
+scroll retention; visualViewport updates the dock without rebuilding inputs. Desktop dragging is
+clamped to the window, and short landscape compacts the fixed header for usable list height.
+`io/bundle.ts` owns pure range/memory planning, immutable archive capture, private snapshot
+Residency/SoundBank and serial `BundleQueue`. CaptureProject loads archive source planes lazily
+and enforces an optional incremental maxAssetBytes cap before retaining further images. Completed binary members survive failure for Retry;
+cancellation clears them. Final/explicit incomplete ZIPs include a versioned manifest. The same
+video/GIF writers handle excerpt clocks: VideoPicture.start offsets audio mixing, optional GIF
+range offsets frame sampling. The original project archive remains unchanged. Each snapshot frame
+is decoded under a pin budget and released afterward; padded per-depth scratch and ZIP copies
+are budgeted, and global effect-cache allowance is restored after each writer. `ui/bundle.ts`
+provides support checks, progress/recovery, explicit Save and close cancellation; Share passes its
+selected scope before returning to another workspace. `motionfinish.html` (+three sizes) covers
+real AVC/AAC encoding/MP4 decoding, GIF/PNG/zip pixels, safe failure/retry, source graph sharing,
+undo, preset Reset, target staleness, controls and scope handoff.
+
 Presets / editable titles / layer facts (2026-11-03): `core/presets.ts` strictly validates portable
 version-1 motion/effect snapshots, captures concrete values and builds detached layer candidates.
 `io/presetstore.ts` provides atomic IndexedDB name/identity/cap checks; `ui/presets.ts` owns named

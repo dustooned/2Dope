@@ -2,6 +2,68 @@
 
 ## Current state (2026-11-03) — read this first
 
+### Camera / Effects / Symbols / Hand-in finishing phase (2026-11-03)
+
+Owner: user approved the four recommended follow-ups after verifying `c61572b` was pushed.
+That checkpoint’s presets/titles release is the baseline; all pre-existing untracked research
+and railperf experiments remain excluded from this phase.
+
+Implemented:
+- `core/cameramove.ts`, `ui/cameramove.ts`: Motion → Animation → Camera move, with New/existing
+  camera, Push/Pull/Pan, inclusive frame range, strength 0–30%, direction and easing. Preview has
+  an independent play/scrub clock. Apply bakes normal keys (one command including a new camera),
+  refuses locked/hidden/trimmed/stale targets and requires explicit replacement of affected keys.
+  Other channels/outside keys remain. Topmost-camera precedence is shown in preview status.
+- `core/comp.ts`, `core/effects.ts`, `core/presets.ts`, `io/schema.ts`, `ui/effectspanel.ts`:
+  applying an Effects preset embeds optional `styleOrigin` with the complete resulting stack,
+  including earlier animated effects retained by Append. Reset to preset restores that snapshot
+  with fresh ids in one Undo and survives project/asset roundtrips independently of the library.
+  Ordinary effects/rendered appearance keep the same minimum schema. Existing searchable effect
+  families and bottom sheet were already built; this pass adds one interior scrolling region,
+  per-tab scroll/focus preservation, visualViewport/keyboard clamping, full-window desktop drag
+  clamping and a compact landscape header. One panel tree and preview quality behavior remain.
+- `view/compdraft.ts`, `ui/symbols.ts`: shared detached serial preview for camera/source changes.
+  Motion Layer → Symbol options shows source usage, pins/current values and Reset override, routes
+  to existing Motion pin editing, shared-source editing and Make independent. Swap previews the
+  replacement before applying the existing command, preserves custom name/placement/parent/timing,
+  resets only that instance’s pins and undoes once. Existing graph-copy/cycle/deletion guards remain.
+- `io/bundle.ts`, `ui/bundle.ts`, `ui/share.ts`: Share → Hand-in bundle makes full-range MP4 with
+  sound, transparent PNG poster, explicit first-six-seconds-or-shorter GIF and optional editable
+  project ZIP. Share passes export scope before restoring another workspace. A single archive
+  capture supplies independent snapshot Residency/SoundBank; the working project/clock/history
+  stays unchanged. New video/GIF excerpt offsets preserve picture/audio clock alignment. GIF keeps
+  existing 480 px normal / 320 px Lite limits. Native MP4 is required; unsupported audio is reported
+  rather than replaced by silence. Complete output is available only after every required member.
+  Retry keeps completed files; explicit partial ZIP marks its manifest/filename incomplete.
+  Cancellation produces no automatic download; every Save is explicit. Settings changes discard
+  the old job. Rendering/staging share the device allowance: owner pixels, snapshot assets/audio,
+  padded per-depth scratch, pinned frames and four staged-file/ZIP copies are conservatively
+  budgeted. Archive source images load sequentially under an incremental asset-byte cap.
+  Missing referenced archive images are refused instead of captured as blank. Snapshot pixels release after each frame; writer effect caching disables temporarily
+  and restores the prior allowance. Large jobs refuse with recovery rather than reducing quality.
+- Manual/UPDATES, project-format, architecture and proposal checkpoints updated. Existing title
+  fixture now explicitly opens its stack tab instead of assuming another fixture’s saved tab.
+
+Checks: **722 unit tests passed + 1 skipped**, 86 files; strict TypeScript/production build pass
+(existing chunk-size warning). **15 unique affected browser fixtures** passed across final runs:
+`motionfinish` **22** + three-size wrapper **66**, `creationtools` **23** + wrapper **69**,
+`motionassets` **13** + wrapper **39**, `assetlayers` **9**, `artworkworkflow` **31**, `storyui`
+**13**, `workspacefixes` **23**, `projectpreview` **7**, `assetcatalog-responsive` **24**,
+`artworklibrary` **34**, `paintingworkflow` **21**, `storyexport` **41**. The new fixture exercises
+actual App/History/PNG capture and storage-independent exports, real AVC MP4 encoding/decoding,
+real AAC audio muxing, GIF/PNG alpha and frozen red pixels despite later working-art changes,
+editable archive members, failure/retry/cancel/explicit-save UI, unsupported-MP4 recovery, source
+scope handoff, source sharing/independence and camera/Reset Undo. Unit checks cover audio sample
+range offsets, GIF frame offsets, nested/padded budget estimates and ZIP-copy caps.
+
+Visual review: camera, Effects, Symbol options, source swap and bundle at 1280×900, 375×812,
+coarse-pointer 768×1024 and 812×375. Screenshots outside the repo in this chat’s visualization
+directory: `2dope-{camera,effects,symbol,swap,bundle}-finishing-*.png`. Landscape keeps Apply/Close
+reachable and Effects retains a usable scrolling content area. Samples are disposable test art.
+Physical iPad/Pencil/Safari, a real onscreen keyboard and hardware memory stress remain unverified.
+Budget checks are conservative estimates, not a promise of free RAM. No temporal blur/Echo,
+rich text, live linked styles, compatible-pin remapping or streaming ZIP implementation was added.
+
 ### Presets, editable titles and shared layer descriptions (2026-11-03)
 
 The preceding asset/layout/gallery work was committed and pushed as `501c9d7`; its Pages run

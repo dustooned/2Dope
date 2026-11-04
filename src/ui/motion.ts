@@ -118,6 +118,8 @@ export class MotionPanel {
   openAssets: ((opener: HTMLElement) => void) | null = null;
   createAsset: (() => void) | null = null;
   openPresets: (() => void) | null = null;
+  openCameraMove: (() => void) | null = null;
+  openSymbol: ((id: string) => void) | null = null;
   private readonly selectionInfo = el('span', { class: 'motion-selection', role: 'status' });
   private readonly compName = el('span', { class: 'motion-comp-name' });
 
@@ -1149,6 +1151,8 @@ export class MotionPanel {
   private animationItems(): CtxItem[] {
     const ed = this.ed, ref = ed.selectedKeys()[0];
     return [
+      { title: 'Camera' },
+      { label: 'Camera move…', disabled: !this.openCameraMove, run: () => this.openCameraMove?.() },
       { title: 'Keyframe assistants' },
       { label: 'Wiggle…', disabled: !ref, run: () => ref && void this.askWiggle(ref) },
       { label: 'Smooth keys…', disabled: !ref, run: () => void this.askSmooth() },
@@ -1202,6 +1206,7 @@ export class MotionPanel {
     };
     return [
       { title: l.name },
+      ...(l.kind === 'comp' && this.app.project.comps.get(l.comp)?.asset ? [{ label: 'Symbol options…', disabled: !this.openSymbol, run: () => this.openSymbol?.(l.id) }] : []),
       ...(l.kind === 'drawings' && l.title ? [{ label: 'Edit title…', run: () => this.app.editTitle?.(l.id) }, { label: 'Convert to paint…', run: () => this.app.convertTitle?.(l.id) }] : []),
       { label: 'Create asset from selection…', disabled: !this.createAsset || this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() },
       ...(l.kind === 'drawings' && !l.adjust && !l.guide ? [{ label: 'Edit in Flipbook', run: () => this.app.openFlipbook?.(l.id) }] : []),

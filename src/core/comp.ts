@@ -1,5 +1,5 @@
 import type { TitleSpec } from './title';
-import { effectsKey, type LayerEffect } from './effects';
+import { effectsKey, type EffectStyleOrigin, type LayerEffect } from './effects';
 import { staticProp, valueAt, type Prop, type Vec2 } from './anim';
 import { drawingAt, totalFrames, type Exposure } from './timeline';
 import { soundStart, type SoundClip } from './audio';
@@ -72,6 +72,7 @@ interface LayerBase {
   mask?: string;
   /** Effects (line boil...), in order; see core/effects.ts. */
   effects?: LayerEffect[];
+  styleOrigin?: EffectStyleOrigin;
 }
 
 /** Is this layer left out of a final render? */

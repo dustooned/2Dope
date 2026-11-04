@@ -53,6 +53,10 @@ describe('GIF render lifecycle', () => {
 });
 
 describe('GIF options in the export', () => {
+  it('renders excerpt frames on the original composition clock', async () => {
+    await exportGif(project(), false, new AbortController().signal, hold(), () => {}, false, GIF_DEFAULTS, { start: 1, end: 3 });
+    expect(rig.frames.length).toBeGreaterThan(0); expect(rig.frames[0]).toBe(1); expect(rig.frames.every(f => f >= 1 && f < 3)).toBe(true);
+  });
   it('better colours reads every picture twice (palette pass, then the GIF) and still releases residency', async () => {
     const h = hold(), progress = vi.fn();
     const blob = await exportGif(project(), false, new AbortController().signal, h, progress, false, { ...GIF_DEFAULTS, colors: 16, better: true, loop: 'once' });

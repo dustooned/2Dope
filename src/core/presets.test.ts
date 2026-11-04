@@ -18,6 +18,11 @@ describe('independent motion and effect presets', () => {
     const replaced = presetLayer(p, l, comp(), options, () => 'new'); expect(replaced.effects?.map(e => e.id)).toEqual(['new']); expect(l.effects[0]?.id).toBe('old');
     expect(presetLayer(p, l, comp(), { ...options, append: true }, () => 'copy').effects?.map(e => e.id)).toEqual(['old', 'copy']);
   });
+  it('stores an independent full result for Reset, including pre-existing animated effects on Append', () => {
+    const l = layer(), e = newEffect('glow', 'old', 12); e.keys = { amount: { value: 10, keys: [{ f: 0, v: 10, in: LINEAR, out: LINEAR }, { f: 12, v: 20, in: LINEAR, out: LINEAR }] } }; l.effects = [e];
+    const result = presetLayer(BUILTIN_PRESETS.find(p => p.id === 'sticker-shadow')!, l, comp(), { ...options, append: true }, () => 'fresh');
+    expect(result.styleOrigin?.name).toBe('Sticker shadow'); expect(result.styleOrigin?.effects).toEqual(result.effects); result.effects![0]!.amount = 0; expect(result.styleOrigin?.effects[0]?.amount).toBe(e.amount); expect(result.styleOrigin?.effects[0]?.keys).toEqual(e.keys);
+  });
   it('normalizes flat-composite group and adjustment targets', () => {
     const l = layer(); l.effects = [newEffect('glow', 'old', 1)]; l.effects[0]!.target = 'line'; const p = captureEffects(l, 0, 'look', 'Ink glow'); l.adjust = true;
     expect(presetLayer(p, l, comp(), options, () => 'new').effects?.[0]?.target).toBe('layer');

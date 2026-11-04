@@ -20,7 +20,7 @@ export interface Capture {
 
 interface PlaneJob {
   /** null = blank plane, string = already stored, promise = bytes to store. */
-  value: string | null | Promise<Uint8Array | null>;
+  value: string | null | Promise<Uint8Array | null> | (() => Promise<Uint8Array | null>);
 }
 
 export interface CaptureOptions {
@@ -31,6 +31,8 @@ export interface CaptureOptions {
   mode: 'library' | 'archive';
   /** Reads stored assets (archive mode needs the bytes of parked drawings). */
   source?: AssetSource;
+  /** Optional bound for a coordinating export; stop before retaining further archive assets. */
+  maxAssetBytes?: number;
 }
 
 /**
@@ -40,6 +42,7 @@ export interface CaptureOptions {
  * encode completes. Parked drawings are not decoded: their stored keys or bytes are used as is.
  */
 export function captureProject(project: Project, opt: CaptureOptions = { mode: 'library' }): Capture {
+  if (opt.maxAssetBytes !== undefined && (!Number.isFinite(opt.maxAssetBytes) || opt.maxAssetBytes < 1)) throw new Error('Invalid snapshot asset budget.');
   // comps are plain data: serialising them now snapshots this exact moment
   const comps: Record<string, CompFile> = {};
   for (const c of project.comps.values()) comps[c.id] = compFile(c);
@@ -65,8 +68,8 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
     if (!ref) return { value: null };
     if (ref.bytes) return { value: Promise.resolve(ref.bytes) };
     if (opt.mode === 'library') return { value: ref.key };
-    const src = opt.source;
-    return { value: ref.key && src ? src(ref.key) : Promise.resolve(null) };
+    const src = opt.source, key = ref.key;
+    return { value: async () => { const bytes = key && src ? await src(key) : null; if (!bytes) throw new Error('A drawing image asset is missing. The project was not exported.'); return bytes; } };
   };
 
   const planes = used.map((id) => {
@@ -86,25 +89,30 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
 
   return {
     async settle(): Promise<Settled> {
-      const assets = new Map<string, Uint8Array>();
+      const assets = new Map<string, Uint8Array>(); let assetBytes = 0;
+      const putAsset = (key: string, bytes: Uint8Array) => {
+        const total = assetBytes - (assets.get(key)?.byteLength ?? 0) + bytes.byteLength;
+        if (opt.maxAssetBytes !== undefined && total > opt.maxAssetBytes) throw new Error('The project snapshot exceeds this device’s bundle memory limit. Use separate Share exports.');
+        assetBytes = total; assets.set(key, bytes);
+      };
       const keyOf = async (job: PlaneJob): Promise<string | null> => {
         const v = job.value;
         if (v === null || typeof v === 'string') return v;
-        const bytes = await v;
+        const bytes = await (typeof v === 'function' ? v() : v);
         if (!bytes) return null;
         const key = `assets/${hashBytes(bytes)}.png`;
-        assets.set(key, bytes);
+        putAsset(key, bytes);
         return key;
       };
       const drawings: Record<string, DrawingFile> = {};
       const sounds: NonNullable<ProjectFile['sounds']> = {};
       for (const sound of soundJobs) {
         sounds[sound.id] = { name: sound.name, path: sound.path, duration: sound.duration };
-        if (sound.bytes) assets.set(sound.path, sound.bytes);
+        if (sound.bytes) putAsset(sound.path, sound.bytes);
         else if (opt.mode === 'archive') {
           const bytes = await opt.source?.(sound.path);
           if (!bytes) throw new Error(`Audio asset ${sound.name} is missing. The project was not exported.`);
-          assets.set(sound.path, bytes);
+          putAsset(sound.path, bytes);
         }
       }
       const keys: { d: Drawing; rev: number; line: string | null; fill: string | null }[] = [];

@@ -1,3 +1,6 @@
+import { BundleUI } from './ui/bundle';
+import { SymbolUI } from './ui/symbols';
+import { CameraMoveUI } from './ui/cameramove';
 import { TitlesUI } from './ui/titles';
 import { setEffectCacheBudget } from './view/effects';
 import { PaintingWorkspaceUI } from './ui/paintingworkspace';
@@ -688,7 +691,13 @@ const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
 paintingUI.editWorkspace = anchor => editWorkspace(anchor);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
+const symbols = new SymbolUI(app, artworkUI.assets, source => artworkUI.openSource(source));
+app.openSymbol = id => symbols.show(id); motion.openSymbol = id => symbols.show(id);
+const bundleUI = new BundleUI(app, () => share.show('video'));
+share.onBundle = comp => bundleUI.show(comp);
 const presetLibrary = new PresetLibraryUI(app);
+const cameraMoves = new CameraMoveUI(app);
+motion.openCameraMove = () => { effectsPanel.close(); cameraMoves.show(); };
 const titles = new TitlesUI(app);
 app.editTitle = id => titles.show(id);
 app.convertTitle = id => void titles.convert(id);

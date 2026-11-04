@@ -21,7 +21,43 @@ compatibility and animated transform/zoom properties with existing key/Side data
 are normalized by source comp size, scale/rotation/zoom are deltas and opacity is absolute.
 Applying bakes ordinary project props/effects with fresh effect identities, independent of later
 library edits. Whole-record preflight refuses unknown fields/types/settings. There are no URLs,
-images, expressions, project-to-library links or applied-style Reset metadata in this version.
+images, expressions or project-to-library links in the portable preset format.
+
+## Applied look snapshots, camera moves and bundles (2026-11-03)
+
+Layers may additionally store `styleOrigin:{v:1,name,effects}` after applying an Effects preset.
+This is the complete concrete stack immediately after Apply, including previous effects and
+animation retained by Append. Reset uses this embedded snapshot with fresh effect ids and one
+History command; it never re-reads the device library. The optional metadata round-trips on
+normal layers, adjustments, groups, assets and titles. Unsupported origin versions/effect types
+are refused. It does not change rendered appearance or raise the minimum schema: older readers
+keep ordinary `effects` and may omit this optional Reset facility. Editable title files still
+require 6; all other minimum-version rules remain 3/4/5.
+
+Camera Move stores ordinary existing position/zoom props and Side easing on a normal camera.
+There are no camera-generator fields or live dependencies. Keys use layer time, the selected
+inclusive range is converted from the UI’s one-based shot frames, and new-camera creation plus
+keys is one command. Other channels and keys outside the affected interval are preserved.
+
+Hand-in bundles are STORE ZIPs with `*-video.mp4`, `*-poster.png`, `*-gif.gif`, optional
+`*-project.2dope`, and `manifest.json`. The manifest is `{format:'2dope-hand-in',version:1,...}`
+with `complete`, one-based inclusive range, FPS/duration, poster frame, video dimensions, explicit
+GIF excerpt range/duration/dimensions/loop/audio flag, filenames and missing steps. Partial saves
+have `complete:false`, a missing-files list and an `incomplete` filename. They are never advertised
+as complete. The optional project is a full standalone archive captured with all referenced assets;
+its original main-comp identity is retained even when an asset is the chosen export shot.
+
+One immutable archive capture supplies every member. Video timestamps start at zero while its
+picture and sound use the selected absolute comp range; GIF samples the same original clock.
+Poster removes composition background colours but retains artwork/alpha, masks and effects.
+Output limits are 64 MiB Lite / 256 MiB normal or a smaller allowance from the device’s remaining
+render budget. The estimate includes owner canvases, snapshot assets, decoded audio, padded nested
+scratch surfaces and four copies of staged output for Blob/byte/ZIP allocations. Frame pins have
+a separate remaining allowance and immutable snapshot pixels are released after each frame.
+Effect caching is temporarily disabled for each serial writer and its prior budget restored.
+These checks are conservative estimates, not a guarantee of available hardware RAM. Large jobs
+are refused with recovery choices; there is no automatic quality downgrade or persistent output
+cache. None of these exports modify project history, active timeline, playhead or autosaved art.
 
 ## Device library metadata (2026-11-03)
 

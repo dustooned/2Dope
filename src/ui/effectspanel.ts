@@ -43,6 +43,7 @@ export class EffectsPanel {
   private swiped = '';
   private search = '';
   private added = '';
+  private scrolls = { layer: 0, add: 0 };
   private returnFocus: HTMLElement | null = null;
   /** Which list shows: this layer's effects, or the effects to add. */
   private tab: 'layer' | 'add' = (() => { try { return localStorage.getItem(TAB_KEY) === 'add' ? 'add' : 'layer'; } catch { return 'layer'; } })();
@@ -64,6 +65,9 @@ export class EffectsPanel {
       }
     }, true);
     window.addEventListener('resize', () => this.place());
+    window.visualViewport?.addEventListener('resize', () => this.place());
+    window.visualViewport?.addEventListener('scroll', () => this.place());
+    matchMedia('(max-width: 760px), (max-width: 1024px) and (any-pointer: coarse)').addEventListener('change', () => this.place());
   }
 
   /** The layer effects are for: Motion's selected layer, else the layer you draw on. */
@@ -93,12 +97,15 @@ export class EffectsPanel {
   /** Keep the card where it was dragged, inside the window. */
   private place(): void {
     const r = this.root;
+    const viewport = window.visualViewport;
+    r.classList.toggle('fx-keyboard', !!viewport && viewport.height < innerHeight * .8);
+    r.style.setProperty('--fx-viewport-height', `${viewport?.height ?? innerHeight}px`);
+    r.style.setProperty('--fx-keyboard-inset', `${Math.max(0, innerHeight - (viewport?.height ?? innerHeight) - (viewport?.offsetTop ?? 0))}px`);
     if (matchMedia('(max-width: 760px), (max-width: 1024px) and (any-pointer: coarse)').matches) { r.style.left = r.style.top = r.style.right = ''; return; }
     if (!this.pos) { r.style.left = r.style.top = r.style.right = ''; return; }
     const w = r.offsetWidth || 340, h = r.offsetHeight || 200;
-    const x = Math.min(Math.max(4, this.pos.x), window.innerWidth - Math.min(w, window.innerWidth) - 4), y = Math.min(Math.max(4, this.pos.y), window.innerHeight - 60);
+    const x = Math.min(Math.max(4, this.pos.x), window.innerWidth - Math.min(w, window.innerWidth) - 4), y = Math.min(Math.max(4, this.pos.y), Math.max(4, window.innerHeight - Math.min(h, window.innerHeight - 8) - 4));
     r.style.left = `${x}px`; r.style.top = `${y}px`; r.style.right = 'auto';
-    void h;
   }
 
   /** Drag the card by its title bar (a tap on its buttons still works). */
@@ -219,6 +226,9 @@ export class EffectsPanel {
     if (!l || (l.kind !== 'drawings' && l.kind !== 'comp')) { this.close(); return; }
     const list = this.effects();
     const keepScroll = this.root.querySelector('.fx-list')?.scrollTop ?? 0;
+    const oldTab = this.root.dataset.tab as 'layer' | 'add' | undefined;
+    if (oldTab) this.scrolls[oldTab] = this.root.querySelector('.fx-content')?.scrollTop ?? 0;
+    this.root.dataset.tab = this.tab;
     const r = this.root;
     r.replaceChildren();
     const head = el('div', { class: 'fx-head' });
@@ -257,6 +267,16 @@ export class EffectsPanel {
     const qrow = el('div', { class: 'fx-row fx-preview' });
     qrow.append(el('span', {}, 'Preview'), quality);
     r.append(head, tabs, qrow);
+    const finish = () => { const content = el('div', { class: 'fx-content' }); for (const child of [...r.children]) if (child !== head && child !== tabs && child !== qrow) content.append(child); r.append(content); content.scrollTop = this.scrolls[this.tab]; this.place(); };
+    const origin = l.styleOrigin;
+    if (origin) {
+      const row = el('div', { class: 'fx-origin' }); row.append(el('span', {}, `Applied preset: ${origin.name}`));
+      const reset = el('button', { type: 'button', 'aria-label': 'Reset to applied preset', title: 'Restore the entire stack as it was when this preset was applied. One Undo restores your changes.' }, 'Reset to preset');
+      const comparable = (effects: LayerEffect[]) => JSON.stringify(effects.map(({ id: _id, ...e }) => e));
+      reset.disabled = comparable(list) === comparable(origin.effects);
+      reset.onclick = () => { const next = structuredClone(origin.effects).map(e => ({ ...e, id: this.newId(), ...((l.kind === 'comp' || l.adjust) ? { target: 'layer' as const } : {}) })); this.commit(`Reset to ${origin.name}`, next); };
+      row.append(reset); r.append(row);
+    }
     if (this.added) r.append(el('p', { class: 'hint fx-added', role: 'status' }, this.added));
     if (this.tab === 'add') {
       const add = el('div', { class: 'fx-add', role: 'tabpanel' });
@@ -295,7 +315,7 @@ export class EffectsPanel {
       filter();
       if (list.length >= MAX_LAYER_EFFECTS) r.append(el('p', { class: 'hint', role: 'status' }, `This layer has ${MAX_LAYER_EFFECTS} effects. Remove one from On this layer to add another.`));
       r.append(search, add, empty);
-      this.place();
+      finish();
       return;
     }
     if (!list.length) {
@@ -307,7 +327,7 @@ export class EffectsPanel {
     list.forEach((e, i) => box.append(this.card(e, i, list)));
     r.append(box);
     box.scrollTop = keepScroll;
-    this.place();
+    finish();
   }
 
   private card(e: LayerEffect, i: number, list: LayerEffect[]): HTMLElement {
