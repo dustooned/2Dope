@@ -22,7 +22,8 @@ Implemented:
   checks and close cancellation. Main hooks Motion and Effects to the same library.
 - `core/title.ts`, `ui/titles.ts`, `core/comp.ts`, `app.ts`, `compedit.ts`: editable system-font
   titles (280 code points, four lines, size/weight/alignment/fill/outline) with bounded detached
-  preview. Create/edit allocates a new transparent Fill snapshot in one command; Undo retains exact
+  preview. Applying leaves the blank flipbook page and clears stale spatial/mask editing state.
+  Create/edit allocates a new transparent Fill snapshot in one command; Undo retains exact
   old/new drawings. Saved pixels are authoritative on reopen, including asset packages. Editing
   explicitly redraws with the current device font. Normal layer transforms/masks/effects remain;
   Ink-only effects are disabled/explained for editable titles. Paint/exposure commands offer

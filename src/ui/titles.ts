@@ -76,7 +76,7 @@ export class TitlesUI {
           else { const at = c.layers.findIndex(l => l.id === app.editor.primary?.id); c.layers.splice(Math.max(0, at), 0, made); }
         });
         const command = app.history.peekUndo(); if (command) command.drawings = [drawing, ...old]; committed = true;
-        app.editor.select(target?.id ?? made.id); app.setPlane('fill'); this.close(); app.focusCanvas();
+        app.editor.select(target?.id ?? made.id); app.clearSpatialSelection(); app.setMaskEditing(false); app.setFrame(frame); app.setPlane('fill'); this.close(); app.focusCanvas();
       } catch (e) { if (this.dialog === d) status.textContent = (e as Error).message; }
       finally { if (drawing) { app.residency.unpin(drawing); if (!committed) { project.drawings.delete(drawing.id); drawing.line.width = 0; if (drawing.fill) drawing.fill.width = 0; } } busy = false; if (this.dialog === d) apply.disabled = false; }
     })();

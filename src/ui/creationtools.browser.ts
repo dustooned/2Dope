@@ -43,7 +43,8 @@ await check('Title draft and Escape/Cancel do not allocate project drawings or H
   expect(JSON.stringify([...app.project.comps]) === before && app.project.drawings.size === drawings && !app.history.canUndo, 'draft edited project');
 });
 await check('Title creation stores editable metadata plus transparent Colour pixels in one Undo', async () => {
-  titles.show(); input('Text', 'Opening\nCredits'); input('Size (pixels)', '32'); await wait(); click('Create title', document.querySelector('.title-editor')!); await until(() => !document.querySelector('.title-editor'));
+  app.setWorkspace('draw'); app.blankPage = true; titles.show(); input('Text', 'Opening\nCredits'); input('Size (pixels)', '32'); await wait(); click('Create title', document.querySelector('.title-editor')!); await until(() => !document.querySelector('.title-editor'));
+  expect(!app.blankPage, 'creating a title left Draw on its empty flipbook page'); app.setWorkspace('motion');
   const l = app.editor.primary as DrawingsLayer; titleId = l.id; const d = app.project.drawing(l.exposures[0]!.drawing);
   expect(l.title?.text === 'Opening\nCredits' && l.still && l.play === 'loop' && !!d.fill, 'title not editable'); const p = d.fill!.getContext('2d')!.getImageData(0, 0, 320, 180).data; expect(p.some((v, i) => i % 4 === 3 && v > 0) && p[3] === 0, 'snapshot is empty or opaque');
   const saved = JSON.stringify(l); app.undo(); await wait(150); expect(!app.project.comp.layers.some(l => l.id === titleId) && !app.history.canUndo, 'create took multiple Undo'); app.redo(); await wait(150); expect(JSON.stringify(app.project.comp.layers.find(l => l.id === titleId)) === saved, 'redo changed title'); app.editor.select(titleId);
