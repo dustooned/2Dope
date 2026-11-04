@@ -1,3 +1,4 @@
+import { readTitle, type TitleSpec } from '../core/title';
 import { readEffects, type LayerEffect } from '../core/effects';
 import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
 import { PRESETS, sanitizeBrushExtras, type BrushSettings } from '../core/brush';
@@ -36,7 +37,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 5;
+export const SCHEMA = 6;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -92,6 +93,7 @@ export interface PartFile {
 }
 
 export interface LayerFile {
+  title?: TitleSpec;
   id: string;
   name: string;
   kind: 'drawings' | 'comp' | 'camera' | 'null';
@@ -169,7 +171,8 @@ export interface DrawingFile {
 }
 
 /** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
-export function minimumDrawingSchema(drawings: Record<string, DrawingFile>): number {
+export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comps?: Record<string, CompFile>): number {
+  if (comps && Object.values(comps).some(c => c.layers.some(l => l.title))) return 6;
   const vectors = Object.values(drawings).flatMap((d) => d.vectors);
   return vectors.some((v) => v.shape) ? 5 : vectors.some((v) => v.style || v.brush.vectorStyle || v.clips || v.controls) ? 4 : 3;
 }
@@ -463,10 +466,15 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   if (typeof v.mask === 'string' && Object.prototype.hasOwnProperty.call(drawings, v.mask)) out.mask = v.mask;
   const fx = readEffects(v.effects);
   if (fx) out.effects = fx;
+  if (v.title !== undefined && kind !== 'drawings') throw new SchemaError(`${what}: titles must be drawing layers`);
   if (kind === 'drawings') {
     out.exposures = exposureList(v.exposures, what, drawings);
     if (!out.exposures.length) throw new SchemaError(`${what} has no frames`);
     timing(v, out, what);
+    if (v.title !== undefined) {
+      try { out.title = readTitle(v.title); } catch (e) { throw new SchemaError(`${what}: ${String(e)}`); }
+      if (out.exposures.length !== 1 || !out.still || out.adjust || out.guide || out.cel) throw new SchemaError(`${what}: title must be an independent still drawing`);
+    }
     if (isObj(v.parts)) {
       const parts: Partial<Record<PartName, PartFile>> = {};
       for (const n of PART_NAMES) {
@@ -520,6 +528,7 @@ export function migrate(input: unknown): Record<string, unknown> {
   if ((raw.schema as number) < 4) raw = { ...raw, schema: 4 };
   // Imported path objects are additive to the runtime; only captures containing them need 5.
   if ((raw.schema as number) < 5) raw = { ...raw, schema: 5 };
+  if ((raw.schema as number) < 6) raw = { ...raw, schema: 6 };
   return raw;
 }
 
@@ -757,7 +766,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
       };
       const timed = { play: l.play ?? (l.loop ? 'loop' : 'once'), speed: l.speed ?? 1, single: l.single ?? 0, timeRemap: l.timeRemap ? propOf(l.timeRemap) : null } as const;
       if (l.kind === 'drawings') {
-        const layer: DrawingsLayer = { ...base, kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
+        const layer: DrawingsLayer = { ...base, ...(l.title ? { title: structuredClone(l.title) } : {}), kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
         if (l.parts) {
           layer.parts = {};
           for (const n of PART_NAMES) {
@@ -842,7 +851,7 @@ export function compFile(c: Comp): CompFile {
         if (l.timeRemap?.keys.length) timed.timeRemap = propFile(l.timeRemap);
       }
       if (l.kind === 'drawings') {
-        const out: LayerFile = { ...base, exposures: l.exposures.map((e) => ({ ...e })), ...timed };
+        const out: LayerFile = { ...base, ...(l.title ? { title: readTitle(l.title) } : {}), exposures: l.exposures.map((e) => ({ ...e })), ...timed };
         const parts: Partial<Record<PartName, PartFile>> = {};
         for (const n of PART_NAMES) {
           const pt = l.parts?.[n];

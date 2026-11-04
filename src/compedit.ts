@@ -786,6 +786,8 @@ export class CompEditor {
 
   /** Turn a drawings layer into an adjustment layer or back: one undo step. */
   setAdjust(id: string, on: boolean): void {
+    const target = this.layer(id);
+    if (on && target?.kind === 'drawings' && target.title) { this.app.onNotice?.('Convert this title to paint before making it an adjustment layer.'); return; }
     this.edit(on ? 'Adjustment layer' : 'Adjustment layer off', (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (l && l.kind === 'drawings') { if (on) l.adjust = true; else delete l.adjust; }

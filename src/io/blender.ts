@@ -234,6 +234,7 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
     const bc: BlenderComp = { name: c.name, width: c.width, height: c.height, fps: c.fps, length, background: c.background, layers: [] };
     for (const l of c.layers) {
       if (skippedInExport(l)) continue; // the storyboard / guides stay in 2Dope
+      if (l.kind === 'drawings' && l.title) notes.add(`“${l.name}”: Title exported as an image.`);
       const t = l.transform;
       const anchorValue = t.anchor.keys.length ? t.anchor.keys[0]!.v : t.anchor.value;
       if (t.anchor.keys.length > 1) notes.add(`“${l.name}”: an animated anchor point is exported as its first value.`);

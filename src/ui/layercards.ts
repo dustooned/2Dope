@@ -1,3 +1,4 @@
+import { layerPresentation } from '../core/layerpresentation';
 import type { App } from '../app';
 import { BLEND_MODES, partOf, PART_LABEL, type BlendMode, type DrawingsLayer, type Layer, type PartName } from '../core/comp';
 import type { PropKey } from '../compedit';
@@ -243,7 +244,8 @@ export class LayerCards {
       const id = this.shownDrawing(l);
       return `${id}:${id ? app.project.drawings.get(id)?.thumbRev ?? '' : ''}`;
     });
-    const sig = `${app.project.comp.layers.map((x) => `${x.id}:${x.name}:${x.visible}`).join(',')}|${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${[...this.foldedStacks].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
+    const factsSignature = layers.map(l => layerPresentation(l, app.project.comps, app.frame, Number(app.editor.valueNow(l, 'opacity'))).label).join('|');
+    const sig = `${factsSignature}|${app.project.comp.layers.map((x) => `${x.id}:${x.name}:${x.visible}`).join(',')}|${app.editor.crumbs().length}|${parts}|${groupSig}|${app.project.comp.id}|${active}|${app.plane}|${this.menuFor}|${this.addOpen}|${this.swiped}|${[...this.picked].join('+')}|${[...this.foldedStacks].join('+')}|${app.showLayers}|${app.otherAlpha}|${layers.map((l, i) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.blend}:${this.app.editor.valueNow(l, 'opacity')}:${l.kind === 'drawings' ? `${l.cel ?? ''}${l.still ? 's' : ''}${l.clip ? 'c' : ''}${l.alphaLock ? 'a' : ''}${l.reference ? 'r' : ''}${l.mask ? `m${app.editingMask ? 'e' : ''}` : ''}` : ''}:${thumbs[i]}`).join(',')}`;
     const scopedSig=`${app.workspace}|${app.project.comp.name}|${sig}`;
     if (scopedSig === this.sig) return;
     this.sig = scopedSig;
@@ -272,7 +274,9 @@ export class LayerCards {
     const close = el('button', { type: 'button', class: 'lc-icon', title: 'Close layers and return to drawing', 'aria-label': 'Close layers' }, 'Close');
     decorate(close, 'close');
     close.addEventListener('click', () => { this.close(); app.focusCanvas(); });
-    head.append(others, add, close);
+    const title = el('button', { type: 'button', class: 'lc-icon', 'aria-label': 'Create title' }, 'Title');
+    title.addEventListener('click', () => app.editTitle?.());
+    head.append(others, title, add, close);
     this.root.append(head);
     const placedNow = app.placedAsset;
     if (placedNow) {
@@ -323,22 +327,11 @@ export class LayerCards {
       const linked = l.kind === 'drawings' && !!l.cel;
       const info = el('div', { class: 'lc-info' });
       info.append(el('span', { class: 'lc-name' }, l.name));
-      const tags: string[] = [];
-      if (l.kind === 'comp') tags.push(`group \u00b7 ${app.project.comps.get(l.comp)?.layers.length ?? 0} layers`);
-      if (l.kind === 'drawings' && l.notes) tags.push('notes \u00b7 not exported');
-      else if (l.kind === 'drawings' && l.guide) tags.push('board');
-      if (linked && !inStack && !paint) tags.push('linked');
-      if (l.kind === 'drawings' && l.still) tags.push('still');
-      if (l.kind === 'drawings' && l.adjust) tags.push('adjustment · changes the layers below');
-      if (l.kind === 'drawings' && l.alphaLock) tags.push('alpha lock');
-      if (l.kind === 'drawings' && l.reference) tags.push('reference');
-      if (l.kind === 'drawings' && l.mask) tags.push(on && app.editingMask ? 'editing mask' : 'mask');
-      if (l.kind === 'drawings' && l.effects?.length) tags.push('effects');
-      if (l.blend !== 'normal') tags.push(l.blend);
-      const op = Math.round(Number(this.app.editor.valueNow(l, 'opacity')));
-      if (op < 100) tags.push(`${op}%`);
-      if (l.locked) tags.push('locked');
-      if (on && l.kind === 'drawings') tags.push(`on ${PART_LABEL[app.plane]}`);
+      const presentation = layerPresentation(l, app.project.comps, app.frame, Number(app.editor.valueNow(l, 'opacity')));
+      const tags = [...presentation.badges]; card.setAttribute('aria-label', presentation.label);
+      if (l.kind === 'drawings' && l.alphaLock) tags.push('Alpha lock');
+      if (l.kind === 'drawings' && l.reference) tags.push('Reference');
+      if (on && l.kind === 'drawings') tags.push(app.editingMask ? 'Editing mask' : `On ${PART_LABEL[app.plane]}`);
       if (tags.length) info.append(el('span', { class: 'lc-tags' }, tags.join(' · ')));
       const eye = el('button', { type: 'button', class: 'lc-eye', 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'aria-label': l.visible ? `Hide ${l.name}` : `Show ${l.name}` }, l.visible ? 'Hide' : 'Show');
       decorate(eye, 'eye');
@@ -694,6 +687,10 @@ export class LayerCards {
       b.addEventListener('click', () => void (async () => { await fn(); if (close) this.menuFor = null; this.sig = ''; this.update(); })());
       to.append(b);
     };
+    if (l.kind === 'drawings' && l.title) {
+      tile(grid, 'Edit title', 'draw', 'Edit text and appearance', () => app.editTitle?.(l.id));
+      tile(grid, 'Convert to paint', 'draw', 'Keep pixels and allow painting', () => app.convertTitle?.(l.id));
+    }
     tile(grid, 'Rename', 'draw', 'Rename this layer', async () => {
       const n = await askText('Layer name', l.name, 'Rename');
       if (n !== null) app.editor.rename(l.id, n);

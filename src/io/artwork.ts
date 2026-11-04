@@ -59,7 +59,7 @@ function requireAssets(file: ProjectFile, assets: Map<string, Uint8Array>): void
 
 export function packArtwork(bundle: ArtworkPackage): Uint8Array {
   const file = validateProjectFile(bundle.file);
-  file.schema = minimumDrawingSchema(file.drawings);
+  file.schema = minimumDrawingSchema(file.drawings, file.comps);
   if (!file.comps[file.main]?.asset) throw new Error('This file does not contain a saved artwork source.');
   requireAssets(file, bundle.assets);
   return writeZip([{ name: 'project.json', data: new TextEncoder().encode(stringifyProjectFile(file)) },

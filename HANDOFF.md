@@ -2,20 +2,74 @@
 
 ## Current state (2026-11-03) — read this first
 
+### Presets, editable titles and shared layer descriptions (2026-11-03)
+
+The preceding asset/layout/gallery work was committed and pushed as `501c9d7`; its Pages run
+completed successfully. This next phase implements the user-authorized reusable preset library,
+editable titles and layer presentation consistency. Pre-existing untracked research and railperf
+experiments remain excluded.
+
+Implemented:
+- `core/presets.ts`, `io/presetstore.ts`, `ui/presets.ts`: one strict portable version-1 format;
+  eight starter moves/looks, named save, collision Replace/Save copy, rename/remove, JSON download/
+  import and at most 40 device records per kind. Effects capture concrete values at the playhead
+  without effect keys; Apply replaces by default or explicitly appends with fresh ids, normalizing
+  groups/adjustments to a composite target. Motion saves easing and relative position/scale/
+  rotation/zoom, absolute opacity; durations adapt to FPS and cannot collapse keys or leave the
+  layer/shot. Existing keys in affected channels require explicit Replace range. Other keys remain.
+  Apply is one History command; projects embed concrete values independently of library records.
+  Preview uses a detached comp graph, own clock, serialized/coalesced drawing pins, stale-target
+  checks and close cancellation. Main hooks Motion and Effects to the same library.
+- `core/title.ts`, `ui/titles.ts`, `core/comp.ts`, `app.ts`, `compedit.ts`: editable system-font
+  titles (280 code points, four lines, size/weight/alignment/fill/outline) with bounded detached
+  preview. Create/edit allocates a new transparent Fill snapshot in one command; Undo retains exact
+  old/new drawings. Saved pixels are authoritative on reopen, including asset packages. Editing
+  explicitly redraws with the current device font. Normal layer transforms/masks/effects remain;
+  Ink-only effects are disabled/explained for editable titles. Paint/exposure commands offer
+  deliberate Convert to paint; actual pen input on masks preserves title pixels/metadata. Clear,
+  Fill and selection commands in mask mode still target artwork and therefore require conversion.
+  Selection fragments drop title metadata. Merge requires conversion; adding paint above a title
+  creates an independent drawing rather than linking its metadata into a cel group.
+- `io/schema.ts`, `projectio.ts`, `artwork.ts`: reader 6; only title-containing archives require 6.
+  Ordinary projects retain their minimum 3/4/5. Strict title metadata is round-tripped without text
+  layout during load. Blender Check explains “Title exported as an image” and uses saved pixels.
+- `core/layerpresentation.ts` and the three layer UIs: shared kind/source/mask/effects/opacity/
+  hidden/lock descriptions and accessible full names. Existing gesture, reorder, timing and
+  thumbnail controllers stay separate. Title creation/edit actions are available in Layers/Motion.
+- Manual, updates, architecture and format notes describe actual behavior. Refined proposals keep
+  a checkpoint distinguishing this build from the remaining camera/bundle/temporal work.
+
+Checks: **698 unit tests passed + 1 skipped**, 83 files; strict TypeScript/production build pass
+(existing >500 kB chunk warning). **12 affected browser fixtures** passed: creationtools **23**,
+three-size wrapper **69**, motionassets **13** + wrapper **39**, assetlayers **9**, artworklibrary
+**34**, artworkworkflow **31**, workspacelayout **22**, storyui **13**, paintingworkflow **21**,
+workspacefixes **23**, projectpreview **7**. Creation checks use disposable IndexedDB databases and
+actual App/History/rendering. They cover exact PNG roundtrip pixels, alpha, title undo/edit/convert,
+pen/mask input, group/effect parity, strict import failure, stale apply rejection, cap/collision/
+removed-target atomicity, failed-save draft retention and compatible camera preview.
+
+Visual review: title editor and preset dialog at 1280×900, 375×812, coarse-pointer 768×1024 and
+812×375. Screenshots in this chat’s visualization directory: `2dope-title-editor-*.png` and
+`2dope-presets-*.png`. Scrollable forms keep Apply/Cancel reachable in short landscape. Physical
+iPad/Pencil/Safari, on-screen keyboard behavior and an actual Blender import remain unverified.
+System font appearance can change on an explicit edit on another OS; saved shots do not reflow.
+No rich text/custom fonts/per-character animation, live linked presets, style-origin Reset,
+dedicated new-camera assistant or hand-in bundle was added in this phase.
+
 ### Release checkpoint: assets, creation layouts and gallery pictures (2026-11-03)
 
 The user authorized publishing the completed local asset/Motion and creation-layout/gallery
 follow-ups, then building reusable presets followed by editable titles and consistent layer
 controls. The local headings below record their pre-release checkpoints and checks. This release
 excludes pre-existing untracked research and railperf experiments. Pushing main invokes Pages.
-Presets/titles/layer controls are the next implementation work, not part of this checkpoint.
+That checkpoint excludes the presets/titles/layer controls implemented in the newer section above.
 
 ### My Assets four-feature build, creation layouts and last-shot project pictures (2026-11-03, local)
 
 Owner: build all four recommended My Assets improvements; improve Draw/Animate/Story tool layouts;
 make project-gallery thumbnails show the last shot/frame being previewed. This extends the local
-Motion/asset pass below. **Neither local follow-up has been committed or pushed**; published
-checkpoint remains `276d63a`.
+Motion/asset pass below. Both follow-ups were subsequently committed and pushed as `501c9d7`; the heading records their
+original local checkpoint.
 
 Implemented:
 - `src/core/artworkcatalog.ts`, `src/io/artworkstore.ts`, `src/ui/artworklibrary.ts`: optional

@@ -1,7 +1,9 @@
+import { TitlesUI } from './ui/titles';
 import { setEffectCacheBudget } from './view/effects';
 import { PaintingWorkspaceUI } from './ui/paintingworkspace';
 import { CanvasViewUI } from './ui/canvasview';
 import { ArtworkAssetsUI } from './ui/artworkassets';
+import { PresetLibraryUI } from './ui/presets';
 import { EffectsPanel, loadFxPreview } from './ui/effectspanel';
 import { setFxPreview } from './view/effects';
 import { scrollArrows } from './ui/scrollarrows';
@@ -686,6 +688,12 @@ const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
 paintingUI.editWorkspace = anchor => editWorkspace(anchor);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
+const presetLibrary = new PresetLibraryUI(app);
+const titles = new TitlesUI(app);
+app.editTitle = id => titles.show(id);
+app.convertTitle = id => void titles.convert(id);
+motion.openPresets = () => presetLibrary.show('motion');
+effectsPanel.onPresets = layer => { effectsPanel.close(); presetLibrary.show('effects', layer); };
 motion.openAssets = opener => artworkUI.showAssets(opener);
 motion.createAsset = () => void artworkUI.createFromSelection();
 paintingUI.onReset = () => artworkUI.resetLayout();

@@ -1,11 +1,9 @@
+import { layerPresentation } from '../core/layerpresentation';
 import type { App } from '../app';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
 import { drawRailState } from './rails';
-import { partOf, PART_LABEL, type Layer } from '../core/comp';
-
-/** What a track is, in words (Dreams labels its track types). */
-const TRACK_TYPE: Record<Layer['kind'], string> = { drawings: 'drawing', comp: 'group', camera: 'camera', null: 'anchor' };
+import { partOf, PART_LABEL } from '../core/comp';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -84,7 +82,8 @@ export class LayersPopover {
     const layers = (app.workspace==='draw' && !app.project.comp.asset ? app.celLayers : app.project.comp.layers).filter((l) => l.kind === 'drawings' || l.kind === 'comp');
     const active = app.project.isPlaceholder ? '' : app.project.activeLayer;
     // rebuild only when something it shows changed (keeps double-taps and focus intact)
-    const sig = `${app.project.comp.id}|${active}|${app.plane}|${app.partVisible('line')}|${app.partVisible('fill')}|${app.showLayers}|${app.otherAlpha}|${app.boardAlpha}|${app.board?.id ?? ''}|${[...drawRailState.open].join(',')}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.kind === 'drawings' ? `${JSON.stringify(l.parts ?? {})}:${l.effects?.length ?? 0}:${ed.valueNow(l, 'line.opacity')}:${ed.valueNow(l, 'fill.opacity')}` : ''}`).join(',')}`;
+    const factsSignature = layers.map(l => layerPresentation(l, app.project.comps, app.frame, Number(app.editor.valueNow(l, 'opacity'))).label).join('|');
+    const sig = `${factsSignature}|${app.project.comp.id}|${active}|${app.plane}|${app.partVisible('line')}|${app.partVisible('fill')}|${app.showLayers}|${app.otherAlpha}|${app.boardAlpha}|${app.board?.id ?? ''}|${[...drawRailState.open].join(',')}|${layers.map((l) => `${l.id}:${l.name}:${l.visible}:${l.locked}:${l.kind === 'drawings' ? `${JSON.stringify(l.parts ?? {})}:${l.effects?.length ?? 0}:${ed.valueNow(l, 'line.opacity')}:${ed.valueNow(l, 'fill.opacity')}` : ''}`).join(',')}`;
     const scopedSig=`${app.workspace}|${sig}`;
     if (scopedSig === this.sig) return;
     this.sig = scopedSig;
@@ -97,7 +96,8 @@ export class LayersPopover {
       if(app.workspace==='draw')app.addPaintLayer();else app.addDrawLayer();
       this.update();
     });
-    head.append(add);
+    const title = el('button', { type: 'button', class: 'lp-add' }, 'Title'); title.addEventListener('click', () => { this.close(); app.editTitle?.(); });
+    head.append(title, add);
     this.root.append(head);
 
     const list = el('div', { class: 'lp-list', role: 'listbox', 'aria-label': 'Layers' });
@@ -110,21 +110,21 @@ export class LayersPopover {
       fold.disabled = l.kind === 'drawings' && !!l.guide;
       fold.addEventListener('click', () => drawRailState.toggle(key));
       row.append(fold);
-      const eye = el('button', { type: 'button', class: 'lp-eye', 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer' }, l.visible ? 'Hide' : 'Show');
+      const eye = el('button', { type: 'button', class: 'lp-eye', 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}`, 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer' }, l.visible ? 'Hide' : 'Show');
       decorate(eye, 'eye');
       eye.classList.add('icon-only');
       eye.addEventListener('click', () => ed.setFlag(l.id, 'visible', !l.visible));
       const lock = el(
         'button',
-        { type: 'button', class: 'lp-lock', 'aria-pressed': String(l.locked), title: l.locked ? 'Unlock: allow drawing on it' : 'Lock: stop drawing on it' },
+        { type: 'button', class: 'lp-lock', 'aria-label': `${l.locked ? 'Unlock' : 'Lock'} ${l.name}`, 'aria-pressed': String(l.locked), title: l.locked ? 'Unlock: allow drawing on it' : 'Lock: stop drawing on it' },
         l.locked ? 'Unlock' : 'Lock',
       );
       decorate(lock, 'lock');
       lock.classList.add('icon-only');
       lock.addEventListener('click', () => ed.setFlag(l.id, 'locked', !l.locked));
-      const kind = l.kind === 'drawings' && l.guide ? 'board' : TRACK_TYPE[l.kind];
       const name = el('button', { type: 'button', class: 'lp-name', title: l.kind === 'comp' ? `Edit drawings inside ${l.name}` : 'Tap to draw on this layer. Double-tap to rename.' }, l.name);
-      if (kind !== 'drawing') name.append(el('span', { class: 'lp-type' }, ` \u00b7 ${kind}`));
+      const presentation = layerPresentation(l, app.project.comps, app.frame, Number(app.editor.valueNow(l, 'opacity'))); name.setAttribute('aria-label', presentation.label); name.title = presentation.label;
+      if (presentation.kind !== 'Drawing') name.append(el('span', { class: 'lp-type' }, ` · ${presentation.kind}`));
       name.addEventListener('click', async (e) => {
         if (app.strokeActive) return;
         if (l.kind === 'comp') {
@@ -145,6 +145,7 @@ export class LayersPopover {
       down.disabled = i === layers.length - 1;
       down.addEventListener('click', () => ed.reorder(l.id, 1));
       row.append(eye, lock, name, up, down);
+      if (l.kind === 'drawings' && l.title) { const edit = el('button', { type: 'button', class: 'lp-title-edit', 'aria-label': `Edit title ${l.name}` }, 'Edit title'); edit.onclick = () => { this.close(); app.editTitle?.(l.id); }; row.append(edit); }
       list.append(row);
       // the layer you draw on: its LINE and FILL, each shown or hidden, and which one brushes paint on
       if (l.kind === 'drawings' && !l.guide && open) {

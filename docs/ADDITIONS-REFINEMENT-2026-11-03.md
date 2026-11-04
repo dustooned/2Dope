@@ -302,3 +302,14 @@ Demo: apply a two-colour look to the title/symbol shot; make the four-file hand-
 5. **Release size:** three independently releasable milestones, not one accumulated branch waiting for all fifteen items. Cut Tint/Tritone first if Milestone 3 slips; preserve the reliable hand-in coordinator. No unlisted replacement feature is proposed.
 
 Build the effect-browser/help/touch refinement and named-stack reuse first, then titles and the existing-symbol controls, and finally the bounded hand-in bundle. Defer composition motion blur, Echo, handheld/whip generators, extra edge/bevel/tile effects, smart snapping, per-effect masks and Bend: each adds renderer/input risk or competing surface area before the selected workflows are coherent. If only one week were available, make the single change **a dependable Effects workflow for artwork, adjustment layers and grouped comps, with family hints and repeated additions in one reachable card**.
+
+
+## Implementation checkpoint — 2026-11-03
+
+The shipped subset now includes a common Motion/Effects preset library, editable title snapshots
+and shared layer presentation facts. Current contracts are documented in PROJECT-FORMAT.md and
+ARCHITECTURE.md. Presets use one `2dope-preset` envelope for both kinds. Eight starter moves/looks,
+named saves, rename/remove, portable import/export, detached preview and one-step Apply are built.
+Camera starters target an existing selected camera. Applied-style Reset/origin metadata, dedicated
+new-camera/range/strength assistants, the hand-in bundle and temporal rendering remain proposals.
+Layer row gesture controllers and thumbnail caches remain separate; labels/state facts are shared.

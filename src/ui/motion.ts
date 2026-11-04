@@ -1,3 +1,4 @@
+import { layerPresentation } from '../core/layerpresentation';
 import type { App } from '../app';
 import { PlaybackRangeControl } from './playbackrange';
 import { autoIcon, iconSvg, setLabel } from './icons';
@@ -116,6 +117,7 @@ export class MotionPanel {
   private animatedOnly = false;
   openAssets: ((opener: HTMLElement) => void) | null = null;
   createAsset: (() => void) | null = null;
+  openPresets: (() => void) | null = null;
   private readonly selectionInfo = el('span', { class: 'motion-selection', role: 'status' });
   private readonly compName = el('span', { class: 'motion-comp-name' });
 
@@ -164,6 +166,7 @@ export class MotionPanel {
     };
     const addLayer = menu('New layer', 'New Motion layer', () => [
       { title: 'New layer' },
+      { label: 'Title…', run: () => app.editTitle?.() },
       ...([['drawings', 'Drawing'], ['adjustment', 'Adjustment'], ['null', 'Anchor'], ['camera', 'Camera']] as const).map(([kind, label]) => ({ label, run: () => ed.addLayer(kind, ed.primary?.id) })),
     ]);
     const layer = menu('Layer', 'Layer actions', () => ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
@@ -182,7 +185,8 @@ export class MotionPanel {
     const transport = group(this.playBtn, btn('◀', 'Previous frame (←)', () => app.prevFrame()), this.frameLabel, btn('▶', 'Next frame (→)', () => app.nextFrame()), this.range.button);
     transport.classList.add('motion-transport');
     const heading = row(this.compName, this.crumbsEl, transport, help); heading.classList.add('motion-heading');
-    const menus = row(addLayer, btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()), assets, layer, tools, this.effectsBtn, view);
+    const presets = btn('Presets', 'Motion and Effects presets', () => this.openPresets?.()); presets.setAttribute('aria-label', 'Motion presets');
+    const menus = row(addLayer, btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()), assets, layer, tools, presets, this.effectsBtn, view);
     menus.classList.add('motion-menus'); menus.setAttribute('role', 'toolbar'); menus.setAttribute('aria-label', 'Motion commands');
     const filter = el('input', { type: 'search', class: 'motion-search', placeholder: 'Find a layer…', 'aria-label': 'Find Motion layers', 'data-own-keys': '' });
     filter.addEventListener('input', () => { this.filter = filter.value.trim().toLowerCase(); this.signature = ''; this.update(); });
@@ -317,6 +321,10 @@ export class MotionPanel {
     // toolbar
     this.frameLabel.textContent = `${app.fmt(app.frame)} / ${app.fmtDur(app.compEnd)}`;
     this.drawEditLine();
+    for (const name of this.grid.querySelectorAll<HTMLElement>('.lname[data-act=name]')) {
+      const id = name.closest<HTMLElement>('[data-layer]')?.dataset.layer, layer = id ? ed.layer(id) : null;
+      if (layer) { const facts = layerPresentation(layer, app.project.comps, app.frame, Number(ed.valueNow(layer, 'opacity'))); name.setAttribute('aria-label', facts.label); name.title = `${facts.label}. Tap to select. Double-tap to rename.`; }
+    }
     setLabel(this.playBtn, app.playing ? 'Pause' : 'Play', app.playing ? 'pause' : 'play');
     this.playBtn.setAttribute('aria-pressed', String(app.playing));
     this.range.update();
@@ -580,7 +588,8 @@ export class MotionPanel {
     const marks = `${l.kind === 'drawings' && l.clip ? ' ↳' : ''}${l.kind === 'drawings' && l.mask ? ' ◐' : ''}`;
     const how = [l.kind === 'drawings' && l.clip ? 'clipping mask' : '', l.kind === 'drawings' && l.mask ? 'has a mask' : '', l.blend !== 'normal' ? `${blendName(l.blend)} blend` : ''].filter(Boolean).join(', ');
     const name = el('button', { type: 'button', class: 'lname', 'data-act': 'name', title: `${how ? `${how[0]!.toUpperCase()}${how.slice(1)}. ` : ''}Tap to select. Double-tap to rename. ▸ shows its properties.` }, `${KIND_ICON[l.kind]} ${l.name}${marks}`);
-    const eye = el('button', { type: 'button', class: 'leye', 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'data-act': 'eye' }, l.visible ? '' : '–');
+    const presentation = layerPresentation(l, comps, this.app.frame, Number(ed.valueNow(l, 'opacity'))); name.setAttribute('aria-label', presentation.label); name.title = `${presentation.label}. Tap to select. Double-tap to rename.`; if (presentation.kind === 'Title') name.textContent = `T ${l.name}${marks}`;
+    const eye = el('button', { type: 'button', class: 'leye', 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}`, 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'data-act': 'eye' }, l.visible ? '' : '–');
     if (l.visible) eye.innerHTML = iconSvg('eye');
     const more = el('button', { type: 'button', class: 'lmore', 'aria-label': `More for ${l.name}`, 'data-act': 'more' }, '⋯');
     left.append(chev, dot, name);
@@ -1193,6 +1202,7 @@ export class MotionPanel {
     };
     return [
       { title: l.name },
+      ...(l.kind === 'drawings' && l.title ? [{ label: 'Edit title…', run: () => this.app.editTitle?.(l.id) }, { label: 'Convert to paint…', run: () => this.app.convertTitle?.(l.id) }] : []),
       { label: 'Create asset from selection…', disabled: !this.createAsset || this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() },
       ...(l.kind === 'drawings' && !l.adjust && !l.guide ? [{ label: 'Edit in Flipbook', run: () => this.app.openFlipbook?.(l.id) }] : []),
       ...actions.filter(a => ['enter', 'effects'].includes(a.value)).map(action),
@@ -1217,6 +1227,7 @@ export class MotionPanel {
     const add = (kind: 'drawings' | 'null' | 'camera' | 'adjustment', label: string) => ({ label, run: () => ed.addLayer(kind) });
     return [
       { title: 'Comp' },
+      { label: '+ Title…', run: () => this.app.editTitle?.() },
       { chips: [add('drawings', '+ Drawing'), add('null', '+ Anchor'), add('camera', '+ Camera'), add('adjustment', '+ Adjustment')] },
       { label: 'Auto-key', checked: ed.autoKey, run: () => ((ed.autoKey = !ed.autoKey), ed.onChange()) },
       ...(ed.hasCamera() ? [{ label: 'Look through camera', checked: ed.throughCamera, run: () => ((ed.throughCamera = !ed.throughCamera), this.app.requestRender(), ed.onChange()) }] : []),

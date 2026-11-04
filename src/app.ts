@@ -972,6 +972,7 @@ export class App {
 
   /** Edit the points of a vector line on this drawing (the given one, or the last drawn). */
   enterPointEdit(strokeId?: string): boolean {
+    if (this.titlePaintBlocked()) return false;
     if (this.live || this.xf || this.playing) return false;
     if (this.project.layer.locked) { this.onNotice?.(`“${this.project.layer.name}” is locked. Unlock it in Layers to edit its points.`); return false; }
     const d = this.drawing;
@@ -1343,6 +1344,7 @@ export class App {
    * this drawing's Fill (inside a selection, if there is one). One undo step.
    */
   colorDropAt(cx: number, cy: number): boolean {
+    if (this.titlePaintBlocked()) return false;
     if (this.strokeActive || this.playing || this.project.layer.locked || this.blankPage) return false;
     const d = this.drawing;
     if (!this.residency.isReady(d)) return false;
@@ -1416,6 +1418,7 @@ export class App {
 
   /** Start moving / scaling / rotating / flipping the selection. */
   beginTransform(): boolean {
+    if (this.titlePaintBlocked()) return false;
     const s = this.spatial;
     const area = this.spatialSelection;
     if (!s || !area || this.xf || this.strokeActive || this.playing) return false;
@@ -1800,6 +1803,7 @@ export class App {
 
   /** Delete what is selected (one undo step). The selection stays. */
   deleteSelectedArt(label = 'Delete selected'): void {
+    if (this.titlePaintBlocked()) return;
     const a = this.spatialSelection;
     const d = this.drawing;
     if (!a || this.strokeActive || this.project.layer.locked || !this.residency.isReady(d)) return;
@@ -1828,6 +1832,7 @@ export class App {
 
   /** Paste the copied art onto this drawing where it was, selected and ready to move. */
   pasteArt(): void {
+    if (this.titlePaintBlocked()) return;
     const clip = this.artClip;
     if (!clip) {
       this.onNotice?.('Copy a selection first.');
@@ -1884,6 +1889,7 @@ export class App {
    * wherever this layer shows this drawing. One undo step.
    */
   selectionToNewLayer(cut = false): void {
+    if (cut && this.titlePaintBlocked()) return;
     const a = this.spatialSelection;
     const d = this.drawing;
     const src = this.project.isPlaceholder ? null : this.project.layer;
@@ -1911,6 +1917,7 @@ export class App {
       copy.id = newId;
       copy.name = `${l.name} selection`;
       copy.locked = false;
+      delete copy.title; // a selected fragment is paint, not an editable text snapshot
       delete copy.cel; // its own layer, not linked
       copy.exposures = l.exposures.map((e) => ({ drawing: e.drawing === d.id ? nd.id : others!.id, length: e.length }));
       cc.layers.splice(at, 0, copy);
@@ -1948,6 +1955,7 @@ export class App {
 
   /** Direct fill uses the selection itself, never line detection or following drawings. */
   fillSelectedArea(): void {
+    if (this.titlePaintBlocked()) return;
     const area = this.spatialSelection;
     if (!area || this.strokeActive || this.playing) return;
     if (this.project.layer.locked) { this.onNotice?.(`“${this.project.layer.name}” is locked. Unlock it in Layers to fill it.`); return; }
@@ -2023,6 +2031,7 @@ export class App {
   static readonly BLUR_MAX = 40;
 
   beginAdjust(kind: 'hsb' | 'blur'): void {
+    if (this.titlePaintBlocked()) return;
     if (this.strokeActive) return;
     if (this.adjusting) {
       if (this.adjusting.kind === kind) return;
@@ -3007,6 +3016,17 @@ export class App {
 
   /** Shows a short message to the person (the file UI sets it to a toast), with an optional fix button. */
   onNotice: ((message: string, action?: { label: string; run: () => void }) => void) | null = null;
+  editTitle: ((id?: string) => void) | null = null;
+  convertTitle: ((id: string) => void) | null = null;
+  /** Pixel edits require deliberate conversion; mask and layer transforms remain editable. */
+  private titlePaintBlocked(allowMask = false): boolean {
+    if ((allowMask && this.editingMask) || this.project.isPlaceholder) return false;
+    const layer = this.project.layer;
+    if (!layer.title) return false;
+    this.onNotice?.('This is an editable title. Convert it to paint before changing its pixels.', { label: 'Convert to paint', run: () => this.convertTitle?.(layer.id) });
+    return true;
+  }
+
 
   /** Fires when the colour changes (the toolbar's colour circle follows). */
   onColorChange: () => void = () => {};
@@ -3045,6 +3065,7 @@ export class App {
 
   /** Clear the current drawing (undoable). */
   clearFrame(): void {
+    if (this.titlePaintBlocked()) return;
     if (this.live) return;
     const d = this.drawing;
     if (!this.residency.isReady(d)) return;
@@ -3130,6 +3151,7 @@ export class App {
 
   /** Fill layer (Procreate): the current drawing's FILL becomes the colour, everywhere. One undo step. */
   fillDrawing(): void {
+    if (this.titlePaintBlocked()) return;
     if (this.live || this.blankPage) return;
     const d = this.drawing;
     if (!this.residency.isReady(d)) return;
@@ -3151,6 +3173,7 @@ export class App {
 
   /** Mirror the current drawing (Line, Fill and vector lines). Mirroring twice puts it back. */
   flipDrawing(axis: 'h' | 'v'): void {
+    if (this.titlePaintBlocked()) return;
     if (this.live || this.blankPage) return;
     const d = this.drawing;
     if (!this.residency.isReady(d)) return;
@@ -3400,6 +3423,7 @@ export class App {
     const p = this.project;
     const src = p.layer;
     if (src.kind !== 'drawings' || src.guide) return;
+    if (src.title) { this.editor.addLayer('drawings', src.id); return; }
     const group = src.cel ?? src.id;
     const id = p.newId('L');
     const count = this.celLayers.length;
@@ -3729,6 +3753,7 @@ export class App {
       this.onNotice?.('There is no drawing layer below to merge into.');
       return false;
     }
+    if (up.title || down.title) { this.onNotice?.('Convert titles to paint before merging layers.'); return false; }
     const sameCels = up.exposures.length === down.exposures.length && up.exposures.every((e, k) => e.length === down.exposures[k]!.length) && up.start === down.start;
     if (!sameCels) {
       this.onNotice?.('Merge Down needs the two layers to have the same frames and timing (link them as art layers, or merge two still layers).');
@@ -4354,6 +4379,7 @@ export class App {
   }
 
   private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, keepSelection = false): void {
+    if (this.titlePaintBlocked(false)) return;
     if (this.live) return;
     const layer = this.project.editLayer();
     const compId = this.project.comp.id;
@@ -4484,12 +4510,14 @@ export class App {
   }
 
   addFrame(): void {
+    if (this.titlePaintBlocked(false)) return;
     const d = this.project.newDrawing();
     this.editTimeline('Add frame', (ex) => addAfter(ex, this.lf, d.id));
   }
 
   /** Flip's Add frame (Procreate Dreams style): ends a hold here, or with `toEnd` adds after the whole hold. */
   flipAddFrame(toEnd = false): void {
+    if (this.titlePaintBlocked(false)) return;
     if (this.live || this.strokeActive) return;
     this.leaveBlankPage();
     const d = this.project.newDrawing();
@@ -4517,6 +4545,7 @@ export class App {
   openFlipbook: ((layerId?: string) => void) | null = null;
 
   duplicateFrame(): void {
+    if (this.titlePaintBlocked(false)) return;
     if (!this.residency.isReady(this.drawing)) return;
     const d = this.project.cloneDrawing(this.drawing);
     this.editTimeline('Duplicate frame', (ex) => duplicateAt(ex, this.lf, d.id));
@@ -4530,6 +4559,7 @@ export class App {
 
   /** A blank drawing (one frame) before the first or after the last selected exposure. */
   insertBlank(where: 'before' | 'after'): void {
+    if (this.titlePaintBlocked(false)) return;
     const t = this.targets;
     if (!t.length) return this.addFrame();
     const d = this.project.newDrawing();
@@ -4539,6 +4569,7 @@ export class App {
 
   /** New drawings copied from the selected ones, placed right after them with the same holds. */
   async duplicateSelection(): Promise<void> {
+    if (this.titlePaintBlocked(false)) return;
     const t = this.targets;
     if (this.live || !t.length) return;
     const ex = this.project.exposures;
@@ -4563,6 +4594,7 @@ export class App {
    * the same drawings are shown again, the way an exposure sheet reuses a number (cycles, holds).
    */
   async paste(copies = false): Promise<void> {
+    if (this.titlePaintBlocked(false)) return;
     const items = this.clipboard.filter((e) => this.project.drawings.has(e.drawing));
     if (this.live || !items.length) return;
     const t = this.targets;
@@ -4636,6 +4668,7 @@ export class App {
   }
 
   deleteFrame(): void {
+    if (this.titlePaintBlocked(false)) return;
     if (!this.live) this.onRisky('Before delete drawing');
     const picked = this.selection.length ? [...this.selection] : null;
     this.editTimeline(picked ? 'Delete drawings' : 'Delete frame', (ex) => {
@@ -4651,6 +4684,7 @@ export class App {
    * no drawing yet creates a blank one with that number.
    */
   exposeDrawingAt(frame: number, num: number): void {
+    if (this.titlePaintBlocked(false)) return;
     if (this.live || !Number.isInteger(num) || num < 1 || num > 9999) return;
     const d = this.project.drawingByNum(num) ?? this.project.adopt(`d${num}x${Date.now().toString(36)}`, num, []);
     this.editTimeline(`Show drawing ${num}`, (ex) => ({ ex: exposeAt(ex, frame, d.id), frame }));
@@ -4735,6 +4769,7 @@ export class App {
 
   /** While dragging on the timeline: show the new order/holds without recording history yet. */
   previewExposures(ex: Exposure[]): void {
+    if (this.titlePaintBlocked(false)) return;
     this.blankPage = false;
     this.project.exposures = ex;
     this.frame = Math.min(this.frame, this.compEnd - 1);
@@ -4744,6 +4779,7 @@ export class App {
 
   /** At the end of a drag: record it as one undoable step (before = the exposures when the drag began). */
   commitExposures(label: string, before: Exposure[], after: Exposure[]): void {
+    if (this.titlePaintBlocked(false)) return;
     if (after === before) return;
     const compId = this.project.comp.id;
     const layerId = this.project.editLayer().id;
@@ -4929,6 +4965,7 @@ export class App {
   }
 
   private beginStroke(e: PointerEvent): void {
+    if (this.titlePaintBlocked(true)) return;
     if (this.gradEdit) this.applyGradEdit();
     if (this.playing) {
       this.playing = false;

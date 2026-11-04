@@ -50,6 +50,7 @@ export class EffectsPanel {
   private pos: { x: number; y: number } | null = (() => { try { const v = JSON.parse(localStorage.getItem(POS_KEY) ?? 'null'); return v && Number.isFinite(v.x) && Number.isFinite(v.y) ? v : null; } catch { return null; } })();
   /** Called when the preview quality changes (the app redraws with it). */
   onPreview: (q: FxPreview) => void = () => {};
+  onPresets: ((layer: string) => void) | null = null;
 
   constructor(private readonly app: App) {
     document.body.append(this.root);
@@ -230,6 +231,7 @@ export class EffectsPanel {
       b.addEventListener('click', () => { this.advanced = adv; try { localStorage.setItem(MODE_KEY, adv ? 'advanced' : 'simple'); } catch { /* optional */ } this.render(); });
       mode.append(b);
     }
+    if (this.onPresets) { const presets = el('button', { type: 'button', 'aria-label': 'Effect presets' }, 'Presets'); presets.addEventListener('click', () => this.onPresets?.(this.layerId)); mode.append(presets); }
     const title = el('strong', { class: 'fx-title', title: 'Drag to move the card; double-click to put it back' }, `Effects \u00b7 ${l.name}`);
     const help = el('button', { type: 'button', class: 'panel-help', 'aria-label': 'Effects help', title: 'Open Effects in the manual' }, '?');
     help.addEventListener('click', () => this.app.onOpenManual('effects'));
@@ -274,7 +276,7 @@ export class EffectsPanel {
           this.opened.add(id);
           // Keep Add open for a stack of effects. Each addition is its own undoable edit.
           this.added = `Added ${plainName(t)} to ${l.name}.`;
-          this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, { ...newEffect(t.id, id, newSeed()), ...((l.kind === 'comp' || l.adjust) ? { target: 'layer' as const } : {}) }]);
+          this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, { ...newEffect(t.id, id, newSeed()), ...((l.kind === 'comp' || l.adjust) ? { target: 'layer' as const } : l.title ? { target: 'fill' as const } : {}) }]);
           this.root.querySelector<HTMLButtonElement>(`[data-effect="${t.id}"]`)?.focus({ preventScroll: true });
         });
         section.append(b);
@@ -354,6 +356,7 @@ export class EffectsPanel {
       const seg = el('div', { class: 'fx-seg', role: 'group', 'aria-label': 'Works on' });
       for (const t of ['line', 'fill', 'layer'] as EffectTarget[]) {
         const b = el('button', { type: 'button', 'aria-pressed': String(e.target === t) }, TARGET_NAMES[t]);
+        if (t === 'line' && this.layer()?.kind === 'drawings' && (this.layer() as import('../core/comp').DrawingsLayer).title) { b.disabled = true; b.title = 'Titles use Colour pixels. Convert to paint for Ink effects.'; }
         b.addEventListener('click', () => { if (e.target !== t) this.patch(i, { target: t }, `${name} on ${TARGET_NAMES[t].toLowerCase()}`); });
         seg.append(b);
       }

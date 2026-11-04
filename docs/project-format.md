@@ -1,4 +1,27 @@
-# The .2dope project format (schemas 3–5)
+# The .2dope project format (schemas 3–6)
+
+## Editable title snapshots and portable presets (2026-11-03)
+
+`DrawingsLayer.title` is version 1 metadata: `{v:1,text,font:'system-ui',size,weight,align,fill,
+stroke,strokeWidth}`. Text has 1–280 Unicode code points and at most four lines; size 8–512 px,
+weight 400/700, alignment left/center/right, six-digit hex fill and optional stroke, width 0–16.
+Unknown fields/versions, blank text and invalid appearance are refused. A title is an independent
+still drawings layer with one exposure; guides, linked cels and adjustment layers cannot carry it.
+Its ordinary transparent Fill PNG is authoritative during playback/reopen/export. Load never
+re-rasterizes text. An explicit edit allocates a new drawing; Undo retains the exact old pixels.
+Conversion removes metadata only. Normal transforms, masks, blending and effects use existing
+rendering paths; Blender gets an image and a title-specific Check note. Title captures require
+schema 6, including titles nested in reusable sources. Ordinary captures still use 3/4/5.
+
+Presets do not add project fields or change project schemas. `2dope-presets` is a separate
+IndexedDB version-1 store with at most 40 records per kind. Portable JSON uses
+`{format:'2dope-preset',version:1,id,name,kind,...}` and is capped at 1 MiB. Effects embed 1–16
+validated concrete effect records without keyframes. Motion stores FPS, frame duration, camera
+compatibility and animated transform/zoom properties with existing key/Side data. Position deltas
+are normalized by source comp size, scale/rotation/zoom are deltas and opacity is absolute.
+Applying bakes ordinary project props/effects with fresh effect identities, independent of later
+library edits. Whole-record preflight refuses unknown fields/types/settings. There are no URLs,
+images, expressions, project-to-library links or applied-style Reset metadata in this version.
 
 ## Device library metadata (2026-11-03)
 
@@ -14,9 +37,9 @@ view-only thumbnail writes do not change head JSON, modified dates or restore po
 
 ## Imported vector objects (2026-11-03)
 
-The reader accepts schemas 1–5 and normalizes loaded metadata to 5. New captures still write the
+The reader accepts schemas 1–6 and normalizes loaded metadata to 6. New captures still write the
 minimum required reader: 3 for ordinary drawings, 4 for vector appearances/controls/clips, and 5
-only when a vector contains `shape`. Artwork packages retain the same minimum-version rule.
+when a vector contains `shape`, or 6 when any layer contains editable `title` metadata. Artwork packages retain the same minimum-version rule.
 
 `StrokeRecord.shape` holds `{path, matrix, fill, stroke, width, rule, cap, join, miter}`. `path` is
 SVG path geometry (curves remain curves), `matrix` is a finite invertible six-number affine

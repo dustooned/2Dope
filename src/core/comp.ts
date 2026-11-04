@@ -1,3 +1,4 @@
+import type { TitleSpec } from './title';
 import { effectsKey, type LayerEffect } from './effects';
 import { staticProp, valueAt, type Prop, type Vec2 } from './anim';
 import { drawingAt, totalFrames, type Exposure } from './timeline';
@@ -104,6 +105,7 @@ interface Timed {
 
 /** Frame-by-frame drawings, timed by exposures (what the strip and X-sheet edit). */
 export interface DrawingsLayer extends LayerBase, Timed {
+  title?: TitleSpec;
   kind: 'drawings';
   exposures: Exposure[];
   /**

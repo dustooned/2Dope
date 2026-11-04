@@ -1,5 +1,23 @@
 # Architecture
 
+Presets / editable titles / layer facts (2026-11-03): `core/presets.ts` strictly validates portable
+version-1 motion/effect snapshots, captures concrete values and builds detached layer candidates.
+`io/presetstore.ts` provides atomic IndexedDB name/identity/cap checks; `ui/presets.ts` owns named
+save/import/export, explicit replace choices and a separate serial/coalesced preview clock. Preview
+borrows drawing references only while pinned in the working Residency; it never installs that
+borrowed graph into Residency. Apply is one CompEditor edit. Main connects Motion and Effects.
+`core/title.ts` owns bounded metadata validation and edit-time layout; `ui/titles.ts` owns detached
+drafts and new Fill snapshots. A title remains a normal DrawingsLayer with `title` metadata, so
+there is no per-frame text layout or new compositor branch. App gates pixel/exposure edits behind
+explicit conversion; only Brush/Eraser’s actual mask target bypasses that gate. Mask-mode Clear,
+Fill and selection commands still act on artwork and therefore require conversion. Selection
+fragments become paint; merging titles requires deliberate conversion. History retains old/new
+snapshot drawings. Schema 6 is required only when editable title metadata exists, including nested
+asset graphs. `core/layerpresentation.ts` supplies ordered kind/source/state/accessibility facts
+for LayerCards, LayersPopover and Motion without replacing their existing input controllers or
+thumbnail caches. `creationtools.html` (+three-size wrapper) exercises storage, undo, alpha PNG
+roundtrips, actual pen input, masks, grouping, strict imports, stale targets and recovery.
+
 Asset catalog / creation layout / gallery pictures (2026-11-03): `core/artworkcatalog.ts` filters
 and sorts optional library-card metadata without opening packages. `ArtworkStore.move/replace`
 atomically edit collection assignments or replace existing card/package snapshots. `ArtworkLibraryUI`

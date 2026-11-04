@@ -116,7 +116,7 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
       }
       const file: ProjectFile = {
         format: FORMAT,
-        schema: minimumDrawingSchema(drawings),
+        schema: minimumDrawingSchema(drawings, comps),
         savedBy: APP_VERSION,
         name: base.name,
         created: base.created,
