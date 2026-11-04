@@ -18,7 +18,8 @@ export class ArtworkAssets {
 
   create(name: string): string | null {
     const a = this.app, p = a.project;
-    if (a.strokeActive || !name.trim()) return null;
+    if (a.strokeActive || a.playing || !name.trim()) return null;
+    if (p.comps.size >= MAX_COMPS) { a.onNotice?.('This project has reached its composition limit.'); return null; }
     const d = p.newDrawing(), id = p.newId('c');
     const c = newComp(id, name.trim().slice(0, 80), p.width, p.height, p.comps.get(p.main)!.fps);
     c.asset = true;
@@ -28,6 +29,18 @@ export class ArtworkAssets {
     const cmd = a.history.peekUndo(); if (cmd) cmd.drawings = [d];
     this.open(id);
     return id;
+  }
+
+  /** Convert the selected stack into a linked, reusable source through the precompose command. */
+  fromSelection(ids: string[], name: string): string | null {
+    const a = this.app, p = a.project;
+    if (a.strokeActive || a.playing || !name.trim() || !ids.length) return null;
+    if (p.comps.size >= MAX_COMPS) { a.onNotice?.('This project has reached its composition limit.'); return null; }
+    const picked = p.comp.layers.filter(l => ids.includes(l.id));
+    if (picked.length !== ids.length || picked.some(l => l.kind === 'camera' || l.kind === 'drawings' && l.guide)) return null;
+    const placement = a.editor.group(ids, name.trim().slice(0, 80), true);
+    const l = p.comp.layers.find(l => l.id === placement);
+    return l?.kind === 'comp' ? l.comp : null;
   }
 
   /** Draw in a source: on `layerId` when given, else where you last were in it. `stay` keeps Animate (else Draw). */
@@ -60,16 +73,17 @@ export class ArtworkAssets {
 
   place(id: string): boolean {
     const a = this.app, p = a.project, asset = p.comps.get(id);
-    if (a.strokeActive || !asset?.asset || id === p.main) return false;
-    if (this.editing) this.done(true);
+    if (a.strokeActive || a.playing || !asset?.asset || id === p.main) return false;
+    const motion = a.workspace === 'motion';
+    if (this.editing) { this.done(!motion); if (motion) a.setWorkspace('motion'); }
     const target = p.comp;
     if (target.id === id || target.asset) return false;
     const l = compLayer(p.newId('L'), asset.name, asset, target);
     l.play = 'loop'; // one-frame assets hold; optional flipbooks cycle on the shot clock
-    l.locked = true;
+    l.locked = !motion;
     a.editor.editProject('Place artwork asset', () => target.layers.push(l));
-    a.setWorkspace('animate');
-    a.setArrangeAssets(true, l.id);
+    if (motion) a.editor.select(l.id);
+    else { a.setWorkspace('animate'); a.setArrangeAssets(true, l.id); }
     a.requestRender(); a.onFrameChange();
     return true;
   }

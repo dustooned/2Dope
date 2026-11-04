@@ -1,5 +1,17 @@
 # The .2dope project format (schemas 3–5)
 
+## Device library metadata (2026-11-03)
+
+My Assets cards may add `kind` (`drawing`, `vector`, `clip`), `collection` (a bounded name) and
+`updated` (timestamp). These are optional IndexedDB card metadata in the existing `2dope-artwork`
+database; there is no database-version change, project schema change or new archive requirement.
+Older cards remain readable: multi-frame sources default to clip and unclassified stills to
+drawing until saved again. Collections are device-library organization, not document folders in
+portable artwork packages. Explicit replacement atomically updates the card and archive only if
+the chosen card still exists, preserving its id, saved name, original date and collection. Project
+copies remain independent. Project gallery pictures reuse the existing `ProjectMeta.thumb` field;
+view-only thumbnail writes do not change head JSON, modified dates or restore points.
+
 ## Imported vector objects (2026-11-03)
 
 The reader accepts schemas 1–5 and normalizes loaded metadata to 5. New captures still write the

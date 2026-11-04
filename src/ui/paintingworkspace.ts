@@ -56,7 +56,7 @@ export class PaintingWorkspaceUI {
     // show / hide handles sit together, each with its own icon (the words show on wide screens)
     const folds = document.createElement('span'); folds.className = 'painting-folds'; folds.setAttribute('role', 'group'); folds.setAttribute('aria-label', 'Show or hide');
     this.footer.append(folds);
-    for (const [key, label] of [['tools', 'Tools'], ['options', 'Options'], ['brush', 'Brush controls'], ['editor', 'Editor']] as [Fold, string][]) {
+    for (const [key, label] of [['options', 'Options'], ['tools', 'Tools'], ['brush', 'Brush controls'], ['editor', 'Editor']] as [Fold, string][]) {
       const b = button(label, () => {
         if (!isPaintingWorkspace(app.workspace)) return;
         this.prefs[app.workspace][key] = !this.prefs[app.workspace][key];

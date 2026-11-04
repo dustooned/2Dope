@@ -128,7 +128,7 @@ export class BoardPanel {
     transport.append(this.playBtn, this.prevBtn, this.readout, this.nextBtn);
     const heading = el('div', { class: 'story-heading' });
     heading.append(el('strong', { class: 'board-title' }, 'Story'), this.info, transport, help);
-    const controls = el('div', { class: 'story-controls' });
+    const controls = el('div', { class: 'story-controls', role: 'toolbar', 'aria-label': 'Story views and actions' });
     controls.append(views, this.addBtn, this.storyTools, this.shareBtn);
     this.bar.append(heading, controls);
     this.grid = new BoardGrid(app, (c, id) => this.paintThumb(c, id), (i) => this.writeOn(i));

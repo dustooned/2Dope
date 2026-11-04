@@ -39,6 +39,8 @@ try {
   refresh(); await settle();
   const project = app.project, frame = app.frame, history = app.history.peekUndo();
   check('Draw starts with compact painting tools and recoverable extras', !!tool('brush') && !!tool('smudge') && !!tool('transform') && !tool('pen') && !!tool('more'));
+  const sketchSlots = ['brush', 'eraser', 'color'].map(k => tool(k)!.getBoundingClientRect().left);
+  check('Navigation, tools and asset actions occupy separate reachable regions', !overlap(document.querySelector('.bub-modes')!, document.querySelector('.bub-tools')!) && !overlap(document.querySelector('.painting-header')!, document.querySelector('.bub-tools')!));
   check('Painting controls and source tools fit without crossing navigation', !overlap(document.querySelector('.bub-modes')!, document.querySelector('.bub-tools')!) && !overlap(document.querySelector('.painting-header')!, document.querySelector('.bub-tools')!));
   check('Settings and mode actions have reachable touch targets', hit(find('Edit workspace')) && hit(find('Toggle tool settings')) && hit(find('Animate', document.querySelector('.bub-modes')!)));
   check('More remains reachable when pinned tools exceed a narrow row', hit(tool('more')!));
@@ -54,6 +56,7 @@ try {
   const reloaded = new App(document.createElement('canvas'), document.createElement('div'));
   check('A fresh App reads the saved mode arrangement', JSON.stringify(reloaded.workspaceLayouts) === JSON.stringify(app.workspaceLayouts));
   app.setWorkspace('animate'); await settle(); check('Animate keeps its own tools and Flipbook', flip.on && stage.dataset.toolDock === 'top' && !tool('pen') && !!tool('assets'));
+  check('Animate keeps Brush, Eraser and Colour in the same slots as Draw', ['brush', 'eraser', 'color'].every((k, i) => Math.abs(tool(k)!.getBoundingClientRect().left - sketchSlots[i]!) < 2));
   const flipRect = flip.row.getBoundingClientRect(), stageRect = stage.getBoundingClientRect();
   const freeHeight = flipRect.top - stageRect.top - parseFloat(stage.style.getPropertyValue('--fit-top'));
   check(`Flipbook leaves a usable stage below navigation and tools (${Math.round(freeHeight)}px)`, freeHeight >= 70);

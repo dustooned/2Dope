@@ -2,6 +2,9 @@
 export interface ArtworkCard {
   id: string; name: string; created: number; width: number; height: number;
   fps: number; frames: number; layers: number; thumb: Uint8Array | null;
+  kind?: 'drawing' | 'vector' | 'clip';
+  collection?: string;
+  updated?: number;
 }
 export interface ArtworkEntry { card: ArtworkCard; archive: Uint8Array }
 export interface ArtworkStore {
@@ -10,12 +13,19 @@ export interface ArtworkStore {
   put(entry: ArtworkEntry): Promise<void>;
   rename(id: string, name: string): Promise<ArtworkCard | null>;
   remove(id: string): Promise<ArtworkEntry | null>;
+  move(id: string, collection: string): Promise<ArtworkCard | null>;
+  replace(id: string, entry: ArtworkEntry): Promise<ArtworkCard | null>;
 }
 
 export function artworkName(value: string): string {
   const name = value.trim().slice(0, 80);
   if (!name) throw new Error('Give this artwork a name.');
   return name;
+}
+
+function replacement(old: ArtworkCard, incoming: ArtworkEntry): ArtworkEntry {
+  return { archive: incoming.archive, card: { ...incoming.card, id: old.id, name: old.name,
+    created: old.created, collection: old.collection ?? '', updated: Date.now() } };
 }
 
 export class MemoryArtworkStore implements ArtworkStore {
@@ -31,6 +41,14 @@ export class MemoryArtworkStore implements ArtworkStore {
   async remove(id: string) {
     const entry = this.entries.get(id); this.entries.delete(id);
     return structuredClone(entry ?? null);
+  }
+  async move(id: string, collection: string) {
+    const entry = this.entries.get(id); if (!entry) return null;
+    entry.card.collection = collection.trim().slice(0, 80); return structuredClone(entry.card);
+  }
+  async replace(id: string, incoming: ArtworkEntry) {
+    const old = this.entries.get(id); if (!old) return null;
+    const entry = replacement(old.card, incoming); this.entries.set(id, structuredClone(entry)); return structuredClone(entry.card);
   }
 }
 
@@ -74,6 +92,28 @@ export class DeviceArtworkStore implements ArtworkStore {
       tx.onerror = () => reject(tx.error ?? new Error('Could not save this artwork.'));
       tx.onabort = () => reject(tx.error ?? new Error('Artwork storage is full or unavailable. Export the artwork instead.'));
     }); } finally { db.close(); }
+  }
+  /** Metadata and snapshot updates are atomic; a removed target is never recreated. */
+  private async change(id: string, edit: (card: ArtworkCard, tx: IDBTransaction) => ArtworkCard): Promise<ArtworkCard | null> {
+    const db = await this.open();
+    try { return await new Promise((resolve, reject) => {
+      const tx = db.transaction(['cards', 'packages'], 'readwrite'), cards = tx.objectStore('cards');
+      const request = cards.get(id); let result: ArtworkCard | null = null;
+      request.onsuccess = () => {
+        try { if (request.result) { result = edit(request.result, tx); cards.put(result); } }
+        catch (error) { tx.abort(); reject(error); }
+      };
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = tx.onabort = () => reject(tx.error ?? new Error('Could not update this artwork.'));
+    }); } finally { db.close(); }
+  }
+  async move(id: string, collection: string): Promise<ArtworkCard | null> {
+    return this.change(id, card => ({ ...card, collection: collection.trim().slice(0, 80) }));
+  }
+  async replace(id: string, incoming: ArtworkEntry): Promise<ArtworkCard | null> {
+    return this.change(id, (card, tx) => {
+      const entry = replacement(card, incoming); tx.objectStore('packages').put(entry.archive, id); return entry.card;
+    });
   }
   /** Rename only the card; portable/reused packages adopt this name when read. */
   async rename(id: string, value: string): Promise<ArtworkCard | null> {

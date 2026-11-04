@@ -69,8 +69,9 @@ try {
   check('Remove in the tray takes the picked item off', !tools().includes('eraser'), tools());
   tool('brush').focus(); tool('brush').dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })); await settle();
   check('Brush cannot leave the bar', tools().includes('brush'));
+  const smudgeIndex = tools().indexOf('smudge');
   tool('smudge').focus(); tool('smudge').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); await settle();
-  check('Arrow keys move the focused item', tools().indexOf('smudge') < tools().indexOf('brush') || tools()[0] === 'smudge', tools());
+  check('Arrow keys move the focused item', tools().indexOf('smudge') === Math.max(0, smudgeIndex - 1), tools());
   document.querySelector<HTMLButtonElement>('.bar-tray-reset')!.click(); await settle();
   check('Reset puts the built-in bar back', tools().join() === start.join(), tools());
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle();

@@ -11,7 +11,7 @@ import { isFx, isPartProp, isPin, keyId, PROP_LABEL, type KeyRef, type PropKey, 
 import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
 import { reactToAudio } from './audioreactdialog';
 import type { SoundBank } from '../io/sound';
-import { attachContextMenu, showContextMenu, type CtxItem } from './contextmenu';
+import { attachContextMenu, lastMenuPoint, showContextMenu, type CtxItem } from './contextmenu';
 import { rulerStep } from '../core/timecode';
 
 const ZOOM_KEY = '2dope.m3.mcell';
@@ -103,24 +103,28 @@ export class MotionPanel {
   private readonly autoBtn: HTMLButtonElement;
   private readonly startBtn: HTMLButtonElement;
   private readonly camBtn: HTMLButtonElement;
+  private readonly animatedBtn: HTMLButtonElement;
+  private readonly effectsBtn: HTMLButtonElement;
   private readonly easeBtns = new Map<Easing, HTMLButtonElement>();
   private readonly sideBtns: HTMLButtonElement[];
   private readonly curveSel: HTMLSelectElement;
-  private readonly delBtn: HTMLButtonElement;
-  private readonly splitBtn: HTMLButtonElement;
-  private readonly groupBtn: HTMLButtonElement;
   private readonly multiBtn: HTMLButtonElement;
   private readonly crumbsEl = el('nav', { class: 'mcrumbs', 'aria-label': 'Where you are' });
   private filter = '';
   private filterProject: App['project'] | null = null;
   private filterComp = '';
   private animatedOnly = false;
+  openAssets: ((opener: HTMLElement) => void) | null = null;
+  createAsset: (() => void) | null = null;
+  private readonly selectionInfo = el('span', { class: 'motion-selection', role: 'status' });
+  private readonly compName = el('span', { class: 'motion-comp-name' });
 
   constructor(
     private readonly app: App,
     private readonly root: HTMLElement,
   ) {
     const ed = app.editor;
+    root.classList.add('motion-workflow');
     app.motionMenu = (l) => (l ? this.layerItems(l) : this.layerListItems());
     const btn = (label: string, title: string, fn: () => void, cls = '') => {
       const b = el('button', { type: 'button', title, class: cls }, label);
@@ -149,86 +153,41 @@ export class MotionPanel {
     this.fpsSel = el('select', { 'aria-label': 'Frames per second', title: 'Frames per second' });
     for (const f of FPS_PRESETS) this.fpsSel.append(el('option', { value: String(f) }, `${f} fps`));
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
-    // Row 1: layers
-    this.delBtn = btn('Delete', 'Delete the selected layers (Delete)', () => ed.deleteLayers());
-    this.splitBtn = btn('Split', 'Split the selected layers at the playhead (Ctrl+Shift+D)', () => this.splitAt());
-    this.multiBtn = btn('Select', 'Tap layers to pick several (to group them into a comp)', () => {
-      this.ed.multiSelect = !this.ed.multiSelect;
-      this.update();
+    this.multiBtn = btn('Select', 'Tap layers to pick several (to group or stagger them)', () => {
+      this.ed.multiSelect = !this.ed.multiSelect; this.update();
     });
-    this.groupBtn = btn('Group', 'Put the selected layers into a new comp (a precomp)', () => void this.groupSelected());
-    // the Motion bubbles already offer these: the simple screen hides them here
-    const dup = (b: HTMLElement) => { b.dataset.dup = ''; return b; };
-    const addLayer = btn('+ Layer', 'Add drawing, adjustment, anchor or camera', () => {
-      const box = addLayer.getBoundingClientRect();
-      showContextMenu(box.left, box.bottom, [
-        { title: 'New layer' },
-        ...([['drawings', 'Drawing'], ['adjustment', 'Adjustment'], ['null', 'Anchor'], ['camera', 'Camera']] as const).map(([kind, label]) => ({ label, run: () => ed.addLayer(kind, ed.primary?.id) })),
-      ]);
+    const menu = (label: string, title: string, items: () => CtxItem[]) => {
+      const b = btn(label, title, () => {
+        const box = b.getBoundingClientRect(); showContextMenu(box.left, box.bottom, items());
+      });
+      b.setAttribute('aria-label', title); b.setAttribute('aria-haspopup', 'menu'); return b;
+    };
+    const addLayer = menu('New layer', 'New Motion layer', () => [
+      { title: 'New layer' },
+      ...([['drawings', 'Drawing'], ['adjustment', 'Adjustment'], ['null', 'Anchor'], ['camera', 'Camera']] as const).map(([kind, label]) => ({ label, run: () => ed.addLayer(kind, ed.primary?.id) })),
+    ]);
+    const layer = menu('Layer', 'Layer actions', () => ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
+    const tools = menu('Animation', 'Motion tools', () => this.animationItems());
+    const view = menu('View', 'Motion view options', () => this.viewItems());
+    const assets = btn('Assets', 'Project assets and reusable files', () => {
+      if (this.openAssets) this.openAssets(assets); else app.onNotice?.('The asset browser is unavailable.');
     });
-    const actions = btn('Layer actions', 'Group, split, reorder or delete the selected layers', () => {
-      const box = actions.getBoundingClientRect(); showContextMenu(box.left, box.bottom, ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
+    assets.setAttribute('aria-label', 'Motion assets'); assets.setAttribute('aria-haspopup', 'dialog');
+    this.effectsBtn = btn('Effects', 'Effects of the selected drawing, adjustment or group', () => {
+      const l = ed.primary;
+      if (l?.kind === 'drawings' || l?.kind === 'comp') app.openEffects?.(l.id);
+      else app.onNotice?.('Select a drawing, adjustment or group layer first.');
     });
-    const rowA = row(
-      this.crumbsEl,
-      group(
-        this.playBtn,
-        btn('◀', 'Previous frame (←)', () => app.prevFrame()),
-        this.frameLabel,
-        btn('▶', 'Next frame (→)', () => app.nextFrame()),
-        this.range.button,
-        this.fpsSel,
-      ),
-      group(
-        addLayer,
-        btn('+ Media', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()),
-      ),
-      group(
-        btn('Flipbook', 'Edit the selected drawing layer frame by frame in Draw’s flipbook', () => app.openFlipbook?.(ed.primary?.kind === 'drawings' ? ed.primary.id : undefined)),
-        dup(btn('Effects', 'Effects of the selected drawing layer (line boil, ripple, grain...)', () => {
-          const id = ed.primary && (ed.primary.kind === 'drawings' || ed.primary.kind === 'comp') ? ed.primary.id : ed.comp.layers.find((l) => l.kind === 'drawings')?.id;
-          if (id) app.openEffects?.(id);
-          else app.onNotice?.('Add a drawing layer first, then give it effects.');
-        })),
-        this.multiBtn,
-        actions,
-      ),
-    );
-
-    // Keep assistants together and reachable, rather than adding another row of tool buttons.
-    const tools = btn('Motion tools', 'Keyframe assistants: Wiggle, Smooth, Loop, Stagger and audio reaction', () => {
-      const ref = ed.selectedKeys()[0], box = tools.getBoundingClientRect();
-      showContextMenu(box.left, box.bottom, [
-        { title: 'Keyframe assistants' },
-        { label: 'Wiggle…', disabled: !ref, run: () => ref && void this.askWiggle(ref) },
-        { label: 'Smooth keys…', disabled: !ref, run: () => void this.askSmooth() },
-        { label: 'Loop keys…', disabled: !ref, run: () => void this.askLoop() },
-        { label: 'Stagger layers…', disabled: ed.selected.length < 2, run: () => void this.askStagger() },
-        { label: 'React to audio…', disabled: !ed.selected.length, run: () => reactToAudio(app, this.sounds) },
-        { sep: true },
-        { label: 'Copy easing', disabled: !ref, run: () => ed.copyEasing() },
-        { label: 'Paste easing', disabled: !ref || !ed.easeClipboard, run: () => ed.pasteEasing() },
-        { label: 'Reverse keys', disabled: !ref, run: () => ed.reverse() },
-        { sep: true },
-        { label: 'New adjustment layer', run: () => ed.addLayer('adjustment', ed.primary?.id) },
-      ]);
-    }, 'motion-tools');
-    const view = btn('View', 'Canvas guides and transparency', () => {
-      const box = view.getBoundingClientRect();
-      showContextMenu(box.left, box.bottom, [
-        { title: 'Canvas view' },
-        ...([['transparency', 'Transparency grid'], ['safeAreas', 'Title and action safe'], ['centre', 'Centre cross'], ['overscan', 'Overscan']] as const).map(([key, label]) => ({ label, checked: app.canvasView[key], run: () => app.setCanvasView({ [key]: !app.canvasView[key] }) })),
-        { label: 'Fit canvas', run: () => app.fit() },
-      ]);
-    });
-    const filter = el('input', { type: 'search', class: 'motion-search', placeholder: 'Find a layer…', 'aria-label': 'Find Motion layers' });
-    filter.addEventListener('input', () => { this.filter = filter.value.trim().toLowerCase(); this.signature = ''; this.update(); });
-    const animated = btn('Animated', 'Show only properties that have keyframes', () => { this.animatedOnly = !this.animatedOnly; animated.setAttribute('aria-pressed', String(this.animatedOnly)); this.signature = ''; this.update(); });
-    animated.setAttribute('aria-pressed', 'false');
     const help = btn('?', 'Motion help', () => app.onOpenManual('motion'), 'panel-help'); help.setAttribute('aria-label', 'Motion help');
-    const workspace = row(tools, view, filter, animated, help);
-    workspace.classList.add('motion-workspace-tools');
-
+    const transport = group(this.playBtn, btn('◀', 'Previous frame (←)', () => app.prevFrame()), this.frameLabel, btn('▶', 'Next frame (→)', () => app.nextFrame()), this.range.button);
+    transport.classList.add('motion-transport');
+    const heading = row(this.compName, this.crumbsEl, transport, help); heading.classList.add('motion-heading');
+    const menus = row(addLayer, btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()), assets, layer, tools, this.effectsBtn, view);
+    menus.classList.add('motion-menus'); menus.setAttribute('role', 'toolbar'); menus.setAttribute('aria-label', 'Motion commands');
+    const filter = el('input', { type: 'search', class: 'motion-search', placeholder: 'Find a layer…', 'aria-label': 'Find Motion layers', 'data-own-keys': '' });
+    filter.addEventListener('input', () => { this.filter = filter.value.trim().toLowerCase(); this.signature = ''; this.update(); });
+    this.animatedBtn = btn('Animated', 'Show only properties that have keyframes', () => { this.animatedOnly = !this.animatedOnly; this.signature = ''; this.update(); });
+    this.animatedBtn.setAttribute('aria-pressed', 'false');
     this.autoBtn = btn('● Auto-key', 'Every change you make writes a keyframe at the playhead', () => {
       ed.autoKey = !ed.autoKey;
       this.update();
@@ -269,27 +228,21 @@ export class MotionPanel {
       this.update();
     });
     ease.append(...this.sideBtns, this.curveSel);
+    const workspace = row(filter, this.animatedBtn, this.multiBtn, this.autoBtn, this.selectionInfo);
+    workspace.classList.add('motion-workspace-tools');
     const rowC = row(
-      group(this.autoBtn, this.startBtn, this.camBtn),
-      ease,
-      group(
-        btn('Reverse', 'Play the selected keys backwards (mirror them in time)', () => ed.reverse()),
-        btn('Delete key', 'Delete the selected keys', () => ed.deleteKeys()),
-      ),
-      group(this.groupBtn, this.splitBtn, this.delBtn),
-      group(
-        this.slider('Zoom', 'Time zoom', 8, 80, this.cell, (n) => this.setCell(n)),
-        this.slider('Rows', 'Row height', 32, 72, this.rowH, (n) => this.setRowH(n)),
-      ),
+      group(this.startBtn, this.camBtn, this.fpsSel), ease,
+      group(this.slider('Zoom', 'Time zoom', 8, 80, this.cell, (n) => this.setCell(n)),
+        this.slider('Rows', 'Row height', 32, 72, this.rowH, (n) => this.setRowH(n))),
     );
 
     const extra = el('details', { class: 'motion-extra' });
-    extra.append(el('summary', {}, 'Keyframes, easing and view options'), rowC);
+    extra.append(el('summary', {}, 'Easing and timeline settings'), rowC);
     try { extra.open = localStorage.getItem('2dope.motion.extra') === '1'; } catch { /* folded */ }
     extra.addEventListener('toggle', () => {
       try { localStorage.setItem('2dope.motion.extra', extra.open ? '1' : '0'); } catch { /* optional */ }
     });
-    this.bar.append(rowA, workspace, extra);
+    this.bar.append(heading, menus, workspace, extra);
     this.scroll.append(this.grid);
     root.append(this.bar, this.scroll);
     this.scroll.style.setProperty('--mleft-w', `${this.leftW}px`);
@@ -372,10 +325,14 @@ export class MotionPanel {
     this.startBtn.setAttribute('aria-pressed', String(ed.keyAtStart));
     this.camBtn.setAttribute('aria-pressed', String(ed.throughCamera));
     this.camBtn.hidden = !ed.hasCamera();
-    this.delBtn.disabled = !ed.selected.length;
-    this.splitBtn.disabled = !ed.selected.length;
-    this.groupBtn.disabled = !ed.selected.length;
     this.multiBtn.setAttribute('aria-pressed', String(this.ed.multiSelect));
+    this.animatedBtn.setAttribute('aria-pressed', String(this.animatedOnly));
+    this.effectsBtn.disabled = ed.primary?.kind !== 'drawings' && ed.primary?.kind !== 'comp';
+    this.compName.textContent = c.name;
+    this.compName.hidden = ed.crumbs().length > 1;
+    this.compName.title = `${c.name} · ${c.width}×${c.height} · ${c.fps} fps`;
+    const nk = ed.selectedKeys().length;
+    this.selectionInfo.textContent = `${ed.selected.length} layer${ed.selected.length === 1 ? '' : 's'} · ${nk} key${nk === 1 ? '' : 's'}`;
     this.renderCrumbs();
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));
@@ -1180,16 +1137,77 @@ export class MotionPanel {
   }
 
   /** Context menu entries for one layer (the canvas in Motion uses them too). */
+  private animationItems(): CtxItem[] {
+    const ed = this.ed, ref = ed.selectedKeys()[0];
+    return [
+      { title: 'Keyframe assistants' },
+      { label: 'Wiggle…', disabled: !ref, run: () => ref && void this.askWiggle(ref) },
+      { label: 'Smooth keys…', disabled: !ref, run: () => void this.askSmooth() },
+      { label: 'Loop keys…', disabled: !ref, run: () => void this.askLoop() },
+      { label: 'Stagger layers…', disabled: ed.selected.length < 2, run: () => void this.askStagger() },
+      { label: 'React to audio…', disabled: !ed.selected.length, run: () => reactToAudio(this.app, this.sounds) },
+      { title: 'Easing' },
+      ...EASINGS.map(e => ({ label: e.label, disabled: !ref, checked: ed.easingOfSelection() === e.id, run: () => ed.setEasing(e.id) })),
+      { label: 'More easing curves…', disabled: !ref, run: () => {
+        const box = this.bar.getBoundingClientRect();
+        showContextMenu(box.left, box.bottom, [{ title: 'Easing curves' }, ...CURVES.map(c => ({ label: c.label, run: () => ed.setCurve(c.id) }))]);
+      } },
+      { sep: true },
+      { label: 'Copy easing', disabled: !ref, run: () => ed.copyEasing() },
+      { label: 'Paste easing', disabled: !ref || !ed.easeClipboard, run: () => ed.pasteEasing() },
+      { label: 'Reverse keys', disabled: !ref, run: () => ed.reverse() },
+      { label: 'Delete selected keys', disabled: !ref, danger: true, run: () => ed.deleteKeys() },
+    ];
+  }
+
+  private viewItems(): CtxItem[] {
+    const a = this.app, ed = this.ed;
+    return [
+      { title: 'Canvas' },
+      ...([['transparency', 'Transparency grid'], ['safeAreas', 'Title and action safe'], ['centre', 'Centre cross'], ['overscan', 'Overscan']] as const).map(([key, label]) => ({ label, checked: a.canvasView[key], run: () => a.setCanvasView({ [key]: !a.canvasView[key] }) })),
+      { label: 'Fit canvas', run: () => a.fit() },
+      ...(ed.hasCamera() ? [{ label: 'Through camera', checked: ed.throughCamera, run: () => { ed.throughCamera = !ed.throughCamera; a.requestRender(); this.update(); } }] : []),
+      { title: 'Timeline' },
+      { label: 'Show all layers in Simple mode', checked: this.allRows, run: () => {
+        this.allRows = !this.allRows; try { localStorage.setItem('2dope.motion.allRows', this.allRows ? '1' : '0'); } catch { /* session only */ }
+        this.signature = ''; this.update();
+      } },
+      { label: 'Expand selected properties', disabled: !ed.selected.length, run: () => { for (const id of ed.selected) ed.open.add(id); this.update(); } },
+      { label: 'Collapse all properties', run: () => { ed.open.clear(); this.animatedOnly = false; this.signature = ''; this.update(); } },
+      { label: 'Reset timeline zoom', run: () => this.setCell(28) },
+    ];
+  }
+
   layerItems(l: Layer): CtxItem[] {
     const ed = this.ed;
+    const actions = this.layerActions(l);
+    const action = (a: { label: string; value: LayerAct }): CtxItem => ({ label: a.label, run: () => this.runLayerAction(l, a.value), danger: a.value === 'delete' || a.value === 'unmask' });
+    const family = (label: string, ids: LayerAct[]): CtxItem[] => {
+      const items = actions.filter(a => ids.includes(a.value));
+      if (!items.length) return [];
+      return [{ label, run: () => {
+        const point = lastMenuPoint();
+        showContextMenu(point.x, point.y, [{ title: `${l.name} · ${label.replace(/…$/, '')}` }, ...items.map(action), { sep: true },
+          { label: 'Back to layer actions', run: () => { const live = ed.layer(l.id); if (live) showContextMenu(point.x, point.y, this.layerItems(live)); } }]);
+      } }];
+    };
     return [
       { title: l.name },
+      { label: 'Create asset from selection…', disabled: !this.createAsset || this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() },
+      ...(l.kind === 'drawings' && !l.adjust && !l.guide ? [{ label: 'Edit in Flipbook', run: () => this.app.openFlipbook?.(l.id) }] : []),
+      ...actions.filter(a => ['enter', 'effects'].includes(a.value)).map(action),
+      { title: 'Organize' },
       { label: l.visible ? 'Hide' : 'Show', run: () => ed.setFlag(l.id, 'visible', !l.visible) },
+      ...actions.filter(a => ['rename', 'dup', 'lock'].includes(a.value)).map(action),
       ...(l.kind === 'drawings' || l.kind === 'comp' ? [{ label: 'Split at the playhead', hint: 'Ctrl+Shift+D', run: () => this.splitAt() }] : []),
-      ...(ed.selected.length > 1 || l.kind !== 'camera' ? [{ label: ed.selected.length > 1 ? `Group ${ed.selected.length} layers` : 'Group into a comp', run: () => void ed.group() }] : []),
+      ...(ed.selected.length > 1 || l.kind !== 'camera' ? [{ label: ed.selected.length > 1 ? `Group ${ed.selected.length} layers` : 'Group into a comp', run: () => void this.groupSelected() }] : []),
       ...(ed.selected.length > 1 ? [{ label: `Stagger ${ed.selected.length} layers…`, run: () => void this.askStagger() }] : []),
+      ...family('Arrange and parent…', ['up', 'down', 'parent', 'colour']),
+      ...family('Source and playback…', ['ungroup', 'unique', 'play']),
+      ...family('Blending and masks…', ['blend', 'clip', 'mask', 'editmask', 'unmask']),
+      { sep: true },
       ...(l.kind === 'drawings' && l.adjust ? [{ label: 'Make it a normal layer', run: () => ed.setAdjust(l.id, false) }] : [{ label: 'New adjustment layer above', run: () => ed.addLayer('adjustment', l.id) }]),
-      ...this.layerActions(l).map((a) => ({ label: a.label, run: () => this.runLayerAction(l, a.value), danger: a.value === 'delete' })),
+      ...actions.filter(a => a.value === 'delete').map(action),
     ];
   }
 
@@ -1235,9 +1253,10 @@ export class MotionPanel {
     return items;
   }
 
-  private async layerMenu(l: Layer): Promise<void> {
-    const pick = await pickBox<LayerAct>(l.name, this.layerActions(l));
-    if (pick) await this.runLayerAction(l, pick);
+  private layerMenu(l: Layer): void {
+    if (!this.ed.selected.includes(l.id)) this.ed.select(l.id);
+    const box = this.grid.querySelector(`[data-layer="${CSS.escape(l.id)}"] .lmore`)?.getBoundingClientRect() ?? this.bar.getBoundingClientRect();
+    showContextMenu(box.left, box.bottom, this.layerItems(l));
   }
 
   private async runLayerAction(l: Layer, pick: LayerAct): Promise<void> {

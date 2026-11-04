@@ -2,13 +2,12 @@ import type { App } from '../app';
 import { Project } from '../core/project';
 import { referencedKeys } from '../core/residency';
 import { Autosaver } from '../io/autosave';
-import { encodePng } from '../io/codec';
 import { assetsOf, hasContent, metaFromFile, newId, requestPersistence, storageEstimate, type FolderRecord, type ProjectMeta, type Store, type VersionRecord } from '../io/persist';
 import { captureProject, loadProjectFile } from '../io/projectio';
 import { sampleProject, type SampleId } from '../io/samples';
 import { parseProjectFile, SchemaError, stringifyProjectFile, type ProjectFile } from '../io/schema';
 import { readZip, writeZip, ZipError } from '../io/zip';
-import { THUMB_H, THUMB_W } from '../view/planeops';
+import { projectPreview } from '../view/projectpreview';
 
 const BACKUP_AFTER_MS = 30 * 60_000;
 const BACKUP_MIN_CHANGES = 15;
@@ -91,6 +90,7 @@ export class FileUI {
   private persisted = false;
   private tabs: BroadcastChannel | null = null;
   private readonly tabId = Math.random().toString(36).slice(2);
+  private previewProject: Project | null = null;
 
   constructor(
     private readonly app: App,
@@ -114,6 +114,7 @@ export class FileUI {
     };
     const prevLoaded = app.onProjectLoaded;
     app.onProjectLoaded = () => {
+      this.previewProject = null;
       prevLoaded();
       if (this.nameInput) this.nameInput.value = app.project.name === 'Untitled' ? '' : app.project.name;
     };
@@ -124,9 +125,9 @@ export class FileUI {
     setInterval(() => void this.refreshStorage(), 30_000);
     setInterval(() => this.maybeRemindBackup(), 60_000);
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') void this.autosaver.flush();
+      if (document.visibilityState === 'hidden') void this.savePreview(false);
     });
-    window.addEventListener('pagehide', () => void this.autosaver.flush());
+    window.addEventListener('pagehide', () => void this.savePreview(false));
     window.addEventListener('beforeunload', (e) => {
       if (this.autosaver.state === 'dirty' || this.autosaver.state === 'saving' || this.autosaver.state === 'error') e.preventDefault();
     });
@@ -211,18 +212,27 @@ export class FileUI {
     el.dataset.risk = this.durable && this.persisted ? 'ok' : 'warn';
   }
 
-  /** The gallery card picture: the current drawing on white. */
+  /** The gallery card picture: the current composed shot without editing controls. */
   private async makeThumb(): Promise<Uint8Array | null> {
-    const t = this.app.drawing.thumb;
-    if (!t) return null;
-    const c = el('canvas', { width: String(THUMB_W), height: String(THUMB_H) });
-    const g = c.getContext('2d');
-    if (!g) return null;
-    g.fillStyle = '#ffffff';
-    g.fillRect(0, 0, THUMB_W, THUMB_H);
-    const s = Math.min(THUMB_W / t.width, THUMB_H / t.height);
-    g.drawImage(t, (THUMB_W - t.width * s) / 2, (THUMB_H - t.height * s) / 2, t.width * s, t.height * s);
-    return encodePng(c);
+    return projectPreview(this.app);
+  }
+
+  /** Preview navigation is view-only: update the card without creating document changes/versions. */
+  async savePreview(pause = true): Promise<void> {
+    if (this.previewProject !== this.app.project) return;
+    if (pause && this.app.playing) this.app.togglePlay();
+    await this.autosaver.flush();
+    const project = this.app.project, meta = this.current;
+    if (!meta || this.app.strokeActive || this.app.playing) return;
+    try {
+      const thumb = await this.makeThumb(); if (!thumb) return;
+      await this.autosaver.then(async () => {
+        if (this.app.project !== project || this.current?.id !== meta.id) return;
+        const live = await this.store.getProject(meta.id); if (!live) return;
+        const card = { ...live, thumb }; await this.store.putProjectMeta(card);
+        if (this.current?.id === meta.id) this.autosaver.meta = card;
+      });
+    } catch { /* Preserve the previous picture if decoding or storage is unavailable. */ }
   }
 
   // -------------------------------------------------------------------------------------------
@@ -256,7 +266,7 @@ export class FileUI {
   /** Open a project from the library. Saves the current one first. False if it could not be read. */
   async openProject(id: string, quiet = false): Promise<boolean> {
     try {
-      await this.autosaver.flush();
+      await this.savePreview();
       const meta = await this.store.getProject(id);
       const head = await this.store.getHead(id);
       if (!meta || !head) throw new Error('it is not in the library any more');
@@ -266,6 +276,7 @@ export class FileUI {
       // load first, then tell the autosaver: loading counts as a change, opening must not
       this.app.loadProject(project);
       this.autosaver.open(card, true);
+      this.previewProject = project;
       await this.store.putProjectMeta(card);
       await this.store.putSetting(LAST_PROJECT, id);
       this.announceOpen();
@@ -288,7 +299,7 @@ export class FileUI {
   private async createProject(opts: NewProjectOptions): Promise<void> {
     const prev = this.current;
     const prevEmpty = prev ? !(await this.projectHasContent()) : false;
-    await this.autosaver.flush();
+    await this.savePreview();
     const p = new Project(opts.width ?? this.app.docW, opts.height ?? this.app.docH);
     p.name = opts.name?.trim() || 'Untitled';
     if (opts.fps) p.fps = opts.fps;
@@ -310,6 +321,7 @@ export class FileUI {
     };
     this.app.loadProject(p);
     this.autosaver.open(meta, false);
+    this.previewProject = p;
     await this.store.putSetting(LAST_PROJECT, meta.id);
     await this.autosaver.flush();
     if (prev && prevEmpty) await this.autosaver.then(() => this.store.deleteProject(prev.id));
@@ -545,6 +557,7 @@ export class FileUI {
       const { project, warnings } = loadProjectFile(parseProjectFile(v.json));
       await this.keepCurrent(`Before restoring "${v.name}"`);
       this.app.loadProject(project);
+      this.previewProject = project;
       this.autosaver.markDirty();
       this.dialog?.close();
       this.toast(`Restored "${v.name}". What you had before is saved as a version.`, [], 5000);

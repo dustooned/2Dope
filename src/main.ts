@@ -664,7 +664,7 @@ const bubbles = new Bubbles(app, $('#stage'), {
     images: () => { if (!app.board) app.createBoard(); board.pickImages(); },
     exportBoard: () => exportStory(),
   },
-  motion: { group: () => motion.group(), split: () => motion.split() },
+  motion: { group: () => motion.group(), split: () => motion.split(), controlsInPanel: true },
   editShape: (anchor) => openShapeMenu(anchor),
   flip: { on: () => flipMode.on, set: (on) => flipMode.set(on) },
   share: { open: () => share.open, show: () => share.show() },
@@ -686,6 +686,8 @@ const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
 paintingUI.editWorkspace = anchor => editWorkspace(anchor);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
+motion.openAssets = opener => artworkUI.showAssets(opener);
+motion.createAsset = () => void artworkUI.createFromSelection();
 paintingUI.onReset = () => artworkUI.resetLayout();
 // a layer tapped in Animate's Layers edits the artwork right there; Edit source goes to Draw
 app.editAssetSource = (comp, layer) => artworkUI.openSource(comp, layer, app.workspace === 'animate' && layer !== undefined);

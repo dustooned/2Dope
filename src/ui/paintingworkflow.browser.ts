@@ -27,7 +27,7 @@ const assets=new ArtworkAssetsUI(app,document.querySelector<HTMLElement>('.paint
 const picker=document.createElement('input');picker.type='color';picker.hidden=true;document.body.append(picker);
 const colours=new ColorPanel(app,picker),brushes=new BrushLibrary(app,()=>{});
 const bubbles=new Bubbles(app,stage,{brushLibrary:a=>brushes.toggle(a),colorPanel:a=>colours.toggle(a),layers:a=>cards.toggle(a),layerCards:a=>cards.toggle(a),fit:()=>app.refit(),editShape(){},flip:{on:()=>flip.on,set:on=>flip.set(on)}});bubbles.setLevel('simple',false);
-function refresh(){painting.update();sheet.update();strip.update();assets.update();bubbles.update();sidebar.update();cards.update();}
+function refresh(){painting.update();sheet.update();strip.update();assets.update();bubbles.update();sidebar.update();cards.update();const target=bubbles.level==='simple'&&sheet.active?sheet.bar:strip.stripBar;if(strip.navRow.parentElement!==target){if(target===sheet.bar)sheet.bar.insertBefore(strip.navRow,sheet.bar.querySelector('.spacer'));else strip.stripBar.prepend(strip.navRow);}sheet.bar.classList.toggle('has-nav',target===sheet.bar);}
 app.onFrameChange=()=>{flip.update();refresh();};app.onCompChange=refresh;app.onToolChange=refresh;app.onBrushChange=refresh;app.onShapeChange=refresh;app.editor.onChange=refresh;app.history.onChange=refresh;
 app.onColorChange=()=>{colours.sync();refresh();};app.onWorkspaceChange=()=>{sheet.restore();flip.update();refresh();};flip.onChange=refresh;
 const settle=()=>new Promise<void>(r=>setTimeout(r,140));
@@ -79,9 +79,12 @@ try{
   check('Both linked placements show source repainting through the shot compositor',pixel[0]!>230&&pixel[1]!<130&&pixel[2]!>100&&pixel[3]!>245&&app.project.comp.layers.filter(l=>l.kind==='comp'&&l.comp===source).length===2);
   click('Done arranging assets');click('Clips');sheet.set('half',false);refresh();await settle();
   check('Clips exposes source-linked rails while retaining canvas drawing tools',!flip.on&&document.querySelectorAll('[aria-label="Move clip Workflow landscape"]').length===2&&app.workspace==='animate'&&canvas.getBoundingClientRect().height>100);
+  const canvasMenu=stage.querySelector<HTMLElement>('.canvas-menu-btn'),menuRect=canvasMenu?.getBoundingClientRect(),stageBox=stage.getBoundingClientRect();
+  check('Leaving Flipbook releases its inset and keeps the canvas menu inside the stage',stage.style.getPropertyValue('--flip-h')==='0px'&&(!menuRect||(menuRect.top>=stageBox.top&&menuRect.bottom<=stageBox.bottom)));
   const historyBeforeShelf=app.history.peekUndo();click('Draw',document.querySelector('.bub-modes')!);await settle();click('Assets (1)');click('Edit Workflow landscape');await settle();
   check('Shelf Edit also resumes the last background/frame without adding document history',app.project.activeLayer===background&&app.frame===9&&app.workspace==='draw'&&app.history.peekUndo()===historyBeforeShelf);
   click('Done editing asset');check('The shelf return keeps the original Draw shot frame',app.workspace==='draw'&&app.project.activeComp===shot&&app.frame===7);
 }catch(e){check(String(e),false);}
 finally{colours.close();brushes.close();keys.forEach((k,i)=>{if(saved[i]===null)localStorage.removeItem(k);else localStorage.setItem(k,saved[i]!);});if(inkPaintPref===null)localStorage.removeItem('2dope.inkpaint');else localStorage.setItem('2dope.inkpaint',inkPaintPref);}
 document.querySelector('#summary')!.textContent=`${passed} passed, ${failed} failed · ${innerWidth}×${innerHeight}`;
+export { app, assets, painting, bubbles, flip, sidebar };

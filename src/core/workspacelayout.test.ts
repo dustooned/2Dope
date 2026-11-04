@@ -46,5 +46,21 @@ describe('workspace layout preferences', () => {
     const later = readWorkspaceLayouts({ board: { tools: ['brush', 'play'], seen: [...WORKSPACE_TOOLS.board] } }).board;
     expect(later.tools).toEqual(['brush', 'play']);
   });
+  it('moves only untouched Motion defaults to view tools while preserving custom pins and removals', () => {
+    const modern = [...WORKSPACE_TOOLS.motion], legacy = modern.slice(0, 8);
+    const expected = ['look', 'safeareas', 'centrecross', 'overscan'];
+    expect(readWorkspaceLayouts({ motion: { tools: modern, seen: modern } }).motion.tools).toEqual(expected);
+    expect(readWorkspaceLayouts({ motion: { tools: legacy } }).motion.tools).toEqual(expected);
+    expect(readWorkspaceLayouts({ motion: { tools: ['fx', 'autokey'], seen: modern } }).motion.tools).toEqual(['fx', 'autokey']);
+    expect(readWorkspaceLayouts({ motion: { tools: modern, seen: modern, labels: true } }).motion.tools).toEqual(modern);
+    expect(readWorkspaceLayouts({ motion: { tools: ['look'], seen: modern } }).motion.tools).toEqual(['look']);
+  });
+  it('shares the first sketch tools across Draw, Animate and Story without replacing customized bars', () => {
+    const old = ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'layers', 'color'];
+    expect(readWorkspaceLayouts({ draw: { tools: old, seen: [...WORKSPACE_TOOLS.draw] } }).draw.tools.slice(0, 3)).toEqual(defaultWorkspaceLayout('board').tools);
+    expect(defaultWorkspaceLayout('animate').tools.slice(0, 3)).toEqual(defaultWorkspaceLayout('board').tools);
+    expect(readWorkspaceLayouts({ draw: { tools: old, seen: [...WORKSPACE_TOOLS.draw], labels: true } }).draw.tools).toEqual(old);
+    expect(readWorkspaceLayouts({ draw: { tools: ['brush', 'color'], seen: [...WORKSPACE_TOOLS.draw] } }).draw.tools).toEqual(['brush', 'color']);
+  });
 });
 

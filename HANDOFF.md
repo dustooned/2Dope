@@ -2,6 +2,147 @@
 
 ## Current state (2026-11-03) — read this first
 
+### Release checkpoint: assets, creation layouts and gallery pictures (2026-11-03)
+
+The user authorized publishing the completed local asset/Motion and creation-layout/gallery
+follow-ups, then building reusable presets followed by editable titles and consistent layer
+controls. The local headings below record their pre-release checkpoints and checks. This release
+excludes pre-existing untracked research and railperf experiments. Pushing main invokes Pages.
+Presets/titles/layer controls are the next implementation work, not part of this checkpoint.
+
+### My Assets four-feature build, creation layouts and last-shot project pictures (2026-11-03, local)
+
+Owner: build all four recommended My Assets improvements; improve Draw/Animate/Story tool layouts;
+make project-gallery thumbnails show the last shot/frame being previewed. This extends the local
+Motion/asset pass below. **Neither local follow-up has been committed or pushed**; published
+checkpoint remains `276d63a`.
+
+Implemented:
+- `src/core/artworkcatalog.ts`, `src/io/artworkstore.ts`, `src/ui/artworklibrary.ts`: optional
+  library-card kind/collection/update metadata, one-level named collections, search by name or
+  collection, Drawings/Vectors/Animated clips filters, sorting by update/save/name/duration.
+  Manage → Collection moves into an existing collection, creates one with its first asset, or
+  returns to Unfiled. Existing IndexedDB version and portable project schema stay unchanged.
+  Old multi-frame cards classify as clips; unclassified older stills remain Drawings until resaved.
+- `src/view/artworkpreview.ts`, `src/ui/artworkpreview.ts`: saved thumbnails open a visual preview
+  with Play/Pause, frame seek, dimensions, layers, fps and duration. It has its own Project,
+  Residency and clock; seeks coalesce, frames decode sequentially and close cancels remaining
+  work/releases surfaces. Rapid seeking/closing and source decoding failures have recovery.
+  Preview does not change the working project, playhead or History. This is a visual preview,
+  not an audio-preview implementation.
+- `src/ui/artworkassets.ts`: explicit Save as new and Update existing. Updating chooses a saved
+  target, atomically replaces its card/package and preserves identity/name/collection/original
+  date. A deleted target is refused rather than recreated. Project copies remain independent.
+  `ArtworkStore` adds atomic `move`/`replace`; the test wrapper delegates both methods.
+- My Assets has **Add & place** as well as Add copy. Combined import/placement uses one History
+  step and preserves complete editable source graphs. Motion stays in Motion with the instance
+  selected; Animate retains its arrangement behavior. Library copies are independent; later
+  placements in the project can share that source. Same-canvas-size reuse is preserved, with
+  native-size Open as project for mismatches. Primary card actions are full-width; matching-size
+  Open as project, Download and management sit under Manage. Short landscape uses a wider,
+  compact library header so its scrolling cards retain usable space.
+- `src/ui/bubbles.ts`, `src/ui/paintingworkspace.ts`, `src/core/workspacelayout.ts`, `src/style.css`:
+  common navigation-first/tool-second geometry in Draw/Animate/Story; compact single-row HUD
+  in short landscape; tools left, asset actions right, common default Brush/Eraser/Colour slots.
+  Only untouched former Draw/Animate defaults migrate; custom bars/docks stay intact. More tools
+  groups drawing, animation/effects, view or Story actions. Footer stays one scrolling row with
+  Workspace anchored at the edge, and Story canvas fit accounts for the brush rail (`src/app.ts`).
+  `FlipMode.update` clears `--flip-h` when hidden, fixing stale sidebar/menu positioning in Clips.
+- `src/view/projectpreview.ts`, `src/ui/files.ts`, `src/ui/gallery.ts`: gallery pictures render the
+  current composed frame (192×108), pinning required pixels, honoring Motion camera view and
+  including the Story panel when previewing Story. Editing handles/guides stay out. Opening
+  Projects refreshes the last-viewed picture after view-only scrubbing/playback, before switching
+  projects and on best-effort paused hidden/pagehide flushes. The card-only update keeps document
+  JSON, modified dates, Undo and restore points unchanged. Stale/failed capture preserves the old
+  picture, and closing Projects while it loads cannot reopen it. This changes in-app project cards,
+  not operating-system `.2dope` file icons.
+- Manual/UPDATES, architecture and project-format notes refreshed. Existing keyboard toolbar test
+  now checks moving one slot rather than assuming Smudge's old position. Workspace checks compare
+  common tool positions/nonoverlap. Painting fixture uses the production transport-row placement
+  and tests releasing the Flipbook inset. New catalog/project-preview fixtures use disposable data.
+
+Checks: **668 unit tests passed + 1 skipped**, 81 files; strict TypeScript and production build
+pass (existing chunk-size warning). **20 unique affected browser fixtures passed** across final
+runs: assetcatalog **8**, its three-size wrapper **24**, projectpreview **7**, artworklibrary **34**
+and phone **34**, workspacelayout **22** and four-size wrapper **88**, toolbars **37**, storyui **13**
+and phone **13**, paintingworkflow **21**, motionassets **13** and wrapper **39**, flipbooksource
+**26**, workspacefixes **23** and phone **23**, assetlayers **9**, artworkworkflow **31**, storyexport
+**41**, canvasview **25**. PNG pixel checks cover composed foreground/background at the last
+frame, camera view, nested shots, Story guides and gallery cancellation. Catalog checks cover
+fresh IndexedDB reads, collection/type/duration sorting, independent animation preview, one-step
+reuse, snapshot updates preserving existing project pixels, and refusing removed update targets.
+
+Visual review: 1280×900, 375×812, coarse-pointer 768×1024, short 812×375, plus 320 px workspace
+coverage in the fixture wrapper. No body overflow; shared creation controls stay separate and
+asset dialogs fit. Screenshots outside the repo in this chat's visualization directory:
+`2dope-{draw,animate}-unified-*.png`, `2dope-story-unified-*.png`, `2dope-library-*.png` and
+`2dope-clip-preview-*.png`. Samples are disposable fixture artwork.
+
+Not checked: physical iPad/Pencil/Safari/onscreen keyboard, full browser/performance suite, or
+guaranteed async thumbnail completion after a forced browser termination. Collections are device
+library metadata and do not travel as portable project folders. Existing research/railperf files
+were preserved; no reference-project changes, commit, push or deployment in this follow-up.
+
+### Asset creation and Motion workflow cleanup (2026-11-03, local follow-up)
+
+Owner: deeper cleanup of asset files and a Motion menu closer to EffectCraft's flow; first commit
+and push the completed changes. The previous pass was committed and pushed as **276d63a**.
+GitHub Pages workflow **41721423953** completed successfully for that exact SHA
+(`https://github.com/dustooned/2Dope/actions/runs/41721423953`). The implementation below follows
+that published checkpoint and remains **uncommitted/unpushed**.
+
+- `src/ui/motion.ts`: stable transport and shared-clock readout, task menus for New layer, Import,
+  Assets, Layer, Animation, Effects and View at both Simple/Full levels. Auto-key, selection count,
+  search and Animated stay in a separate row. Easing/timeline settings remain available in one
+  disclosure. Animation exposes existing assistants, named easing, easing copy/paste, reverse and
+  deletion; View exposes canvas guides, expand/collapse, all-layer recovery and reset zoom.
+  Effects targets the selected drawing/adjustment/group and is disabled for other layer kinds.
+  Layer button, row ellipsis and hold/right-click share the same categorized menu, including
+  Arrange/parent, Source/playback and Blending/masks, each with Back recovery. No renderer/effect
+  algorithms were added or borrowed. EffectCraft's local Project panel and menu source informed
+  the task flow; this is not a full EffectCraft feature-parity claim.
+- `src/core/assets.ts`, `src/compedit.ts`: Create asset from selection precomposes selected layers
+  as a reusable source and linked placement in **one History command**. Captures the full shot
+  duration so held pictures with transform animation do not turn into one-frame clips. Existing
+  ordinary Group behavior is unchanged. Camera/story-guide selections are refused; composition
+  limits and busy states are checked. Group boundary behavior still applies to adjustment/clipping/
+  blend interactions and is explained before creating the source.
+- `src/ui/artworkassets.ts`, `src/ui/artworklibrary.ts`, `src/main.ts`: Motion uses the same asset
+  shelf/library as Draw/Animate. Project sources have name/type filters, focused Edit/Place actions
+  and a Save/files/manage disclosure with Save to My Assets, direct `.2dope` download, Rename and
+  Send to another project. Download captures all referenced editable data without saving a library
+  card or adding document History. Place from Motion stays in Motion with an unlocked linked
+  layer; source Edit/Done returns to the original shot/frame. Source/standalone views explain when
+  to return to a shot before placing. Move in a Motion shelf selects the layer instead of invoking
+  Animate-only arrangement. Save/library formats, matching-canvas reuse limits and schema unchanged.
+- `src/core/workspacelayout.ts`, `src/ui/bubbles.ts`: only untouched old Motion defaults migrate
+  from duplicated commands to camera/view tools. Customized bars retain pins/removals. Main opts
+  out of the duplicate floating Motion options row. Mode scrolling reveals the active workspace
+  after navigation/resize. `src/style.css` supplies 44px command targets, a compact short-landscape
+  header, bounded timeline/body scrolling and responsive asset controls.
+- Manual/UPDATES and architecture map refreshed. Existing library/name fixtures explicitly open
+  the new project-card disclosure before saving/renaming. New `src/ui/motionassets.browser.ts`,
+  `tests/motionassets.html` and its three-size wrapper use an in-memory store and disposable art.
+
+Checks: **663 unit tests passed + 1 skipped** in 80 files; production build passes strict TypeScript
+and Vite (existing chunk-size warning). New Motion/asset browser checks **13/13**, responsive
+**39/39** (375×812, 768×1024, 812×375): pixel-identical multi-frame precomposition, one-step Undo,
+alpha/vector preservation in complete downloadable archives, library reuse, source return, submenu
+blending/Undo, active-mode visibility, toolbar migration and 44px controls. **18 unique affected
+browser fixtures passed** across the final integration and toolbar/Story regression runs. Final
+integration run: artworklibrary 34, phone 34, artworkworkflow 31, paintingworkflow 20, assetreplace
+13, assetnames 10, assetlayers 9, flipbooksource 26, storyexport 41, commandrow 44 and importeffects
+22, plus the new checks above. Toolbar/Story run: toolbars 37, workspacelayout 20, its four-size
+wrapper 80, storyui 13 and phone 13. Normal `git diff --check`
+passes. Screenshots outside the repo: this chat's visualization directory,
+`2dope-motion-{desktop,phone,tablet,landscape}.png` and matching `2dope-assets-*.png`.
+
+Limits: no physical iPad/Pencil/Safari/onscreen-keyboard check. Standalone `.2dope` asset download
+is added; new PNG/SVG export formats, library folders/tags, saved animation/effect presets, a graph
+editor and temporal effects are outside this pass. The previous 15-item slate remains a spec,
+not a statement that those deferred features were built. Existing untracked research/railperf work
+is preserved. This follow-up has not been committed, pushed or deployed.
+
 ### Release checkpoint (2026-11-03)
 
 The user requested committing and pushing the completed November 3 Story, vector/media import,

@@ -166,7 +166,7 @@ export class FlipMode {
     }
     const active = shown && !app.uiHidden;
     this.row.hidden = !active;
-    if (!active) return;
+    if (!active) { this.row.parentElement?.style.setProperty('--flip-h', '0px'); return; }
     if (this.playing !== app.playing) {
       this.playing = app.playing;
       this.play.textContent = app.playing ? 'Pause' : 'Play';

@@ -410,18 +410,24 @@ export class CompEditor {
    * attributes"). The new comp has this comp's size and speed, so nothing moves or retimes.
    * Layers left outside that were parented to a grouped layer keep their place, unparented.
    */
-  group(ids: string[] = this.selected, name?: string): string | null {
+  group(ids: string[] = this.selected, name?: string, asset = false): string | null {
     const c = this.comp;
     const p = this.app.project;
     const picked = c.layers.filter((l) => ids.includes(l.id));
     if (!picked.length) return null;
     const nid = p.newId('c');
     let made: string | null = null;
-    this.editProject('Group into comp', () => {
+    this.editProject(asset ? 'Create asset from selection' : 'Group into comp', () => {
       const set = new Set(ids);
       for (const l of c.layers) if (!set.has(l.id) && l.parent && set.has(l.parent)) setParent(c, l, null, this.app.frame);
       const nested = newComp(nid, name?.trim() || `${picked[0]!.name} comp`, c.width, c.height, c.fps);
       nested.folder = c.folder;
+      if (asset) {
+        nested.asset = true;
+        // Held artwork can have transform keys beyond its one-frame drawing content.
+        // A reusable clip keeps the shot's full clock instead of ending after that drawing.
+        nested.duration = compLength(c, p.comps);
+      }
       nested.layers = picked.map((l) => ({ ...l, parent: l.parent && set.has(l.parent) ? l.parent : null }));
       p.comps.set(nid, nested);
       const at = c.layers.findIndex((l) => set.has(l.id));

@@ -1,5 +1,33 @@
 # Architecture
 
+Asset catalog / creation layout / gallery pictures (2026-11-03): `core/artworkcatalog.ts` filters
+and sorts optional library-card metadata without opening packages. `ArtworkStore.move/replace`
+atomically edit collection assignments or replace existing card/package snapshots. `ArtworkLibraryUI`
+owns explicit Save as new/Update existing, collections, preview and one-step Add & place using
+`History.combine`. `view/artworkpreview.ts:ArtworkPreviewSession` has a separate Project/Residency,
+coalesced seek queue and one-frame decoding; `ui/artworkpreview.ts` owns its isolated visual clock.
+The creation workspaces share navigation/tool geometry through Bubbles; only untouched old Draw/
+Animate defaults reorder their first tools. FlipMode clears its canvas inset when hidden.
+`view/projectpreview.ts` pins the current composition frame, composites it without editing overlays,
+and encodes the existing gallery thumbnail size. FileUI refreshes card metadata when Projects opens,
+before project changes and on best-effort hidden/pagehide flushes; Gallery waits for that update and
+has cancellation recovery. Thumbnail navigation does not dirty the document. Project formats and
+IndexedDB versions are unchanged. Regression pages: assetcatalog (+three-size wrapper),
+projectpreview, workspacelayout (+four sizes), paintingworkflow and storyui.
+
+Motion / asset creation (2026-11-03): `MotionPanel` owns its stable transport, task menus,
+selection/filter row and easing/settings disclosure at both interface levels. Its Layer menu,
+row menu and context menu share `layerItems`; task families reuse existing CompEditor commands.
+`main.ts` connects Motion to the same `ArtworkAssetsUI`/`ArtworkLibraryUI` as Draw/Animate.
+`ArtworkAssets.fromSelection` uses `CompEditor.group(..., asset=true)` to mark a reusable source
+inside the same History snapshot; its explicit duration keeps the source on the full shot clock,
+including held drawings with transform animation. Motion placement remains unlocked and in Motion;
+Animate retains its locked arrangement workflow. Project shelf search/type filters are view-only,
+and `ArtworkLibraryUI.downloadSource` captures the existing complete standalone `.2dope` package
+without a library write. Persistence/schema/storage formats are unchanged. `motionassets.html`
+checks rendered pixels, Undo/Redo, direct download/read-back, library reuse, source return, shared
+menus and responsive layout. Only untouched old Motion toolbar defaults migrate to view tools.
+
 Story export and subtitles (2026-10-30): `core/dialogue.ts` reads a panel's existing `dialogue`
 caption as subtitle lines ("Speaker: words", one per line; no schema change), shares a panel's
 frames between its lines (`splitPanel`/`boardCues`), and writes SRT/WebVTT. `ui/board.ts` edits

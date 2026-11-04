@@ -35,6 +35,7 @@ export class ArtworkAssetsUI {
   private editingStatus = element('small', 'asset-editing-status');
   private badge = element('span', 'asset-count');
   private dialog: HTMLDialogElement | null = null;
+  private opener: HTMLElement | null = null;
   private shelfProject: Project | null = null;
   private placement = element('div', 'asset-placement-tools');
   private details = element('div','asset-placement-details');
@@ -69,11 +70,12 @@ export class ArtworkAssetsUI {
     this.browse.setAttribute('aria-haspopup', 'dialog');
     this.browse.setAttribute('aria-expanded', 'false');
     this.browse.append(this.badge);
-    this.library = new ArtworkLibraryUI(app, this.assets, () => this.show(), id => {
+    this.library = new ArtworkLibraryUI(app, this.assets, () => this.show(), (id, placed) => {
+      if (placed) { this.update(); app.focusCanvas(); app.onNotice?.('Placed an independent copy from My Assets. Project placements can share this new source.'); return; }
       this.update(); this.show();
       const c = app.project.comps.get(id);
       if (c) this.dialog?.querySelector<HTMLButtonElement>(`button[aria-label=${CSS.escape(`Edit ${c.name}`)}]`)?.focus();
-    }, () => { this.browse.setAttribute('aria-expanded', 'false'); if (!this.browse.hidden) this.browse.focus(); }, store);
+    }, () => { this.browse.setAttribute('aria-expanded', 'false'); if (this.app.workspace === 'motion') this.opener?.focus(); else if (!this.browse.hidden) this.browse.focus(); }, store);
     this.done = button('Done', 'check', () => { this.assets.done(); this.update(); app.focusCanvas(); }, 'Done editing asset');
     this.done.title = 'Done editing source: return to your shot and frame';
     this.done.className += ' asset-done';
@@ -206,7 +208,7 @@ export class ArtworkAssetsUI {
     }
     this.syncTiming();
     // Close stale artwork when another project is opened or the workspace leaves painting.
-    if (this.dialog && (!isPaintingWorkspace(a.workspace) || this.shelfProject !== a.project)) this.close();
+    if (this.dialog && ((!isPaintingWorkspace(a.workspace) && a.workspace !== 'motion') || this.shelfProject !== a.project)) this.close();
     if (this.replacing && !this.replacementCurrent(this.replacing)) this.close();
   }
   private syncTiming(force = false): void {
@@ -236,15 +238,27 @@ export class ArtworkAssetsUI {
     this.browse.setAttribute('aria-expanded', 'false');
     this.replacePlaced.setAttribute('aria-expanded','false');
     if (replacement && this.replacementCurrent(replacement)) this.replacePlaced.focus();
+    else if (this.opener?.isConnected && this.opener.getClientRects().length) this.opener.focus();
     else if (!this.browse.hidden) this.browse.focus();
   }
   private async newAsset(): Promise<void> {
-    if (this.app.strokeActive) return;
+    if (this.app.strokeActive || this.app.playing) return;
     const project = this.app.project;
-    const name = await askText('New asset name', 'Background', 'Create asset');
-    if (name?.trim() && this.app.project === project && !this.app.strokeActive) {
+    const name = await askText('New asset name', 'Background', 'Create asset', `Editable artwork on a transparent ${project.width}×${project.height} canvas. Draw a still or add frames in Flipbook, then Done returns to your shot.`);
+    if (name?.trim() && this.app.project === project && !this.app.strokeActive && !this.app.playing) {
       this.assets.create(name); this.app.focusCanvas();
     }
+    this.update();
+  }
+  showAssets(opener?: HTMLElement): void { this.opener = opener ?? document.activeElement as HTMLElement; this.show(); }
+  async createFromSelection(): Promise<void> {
+    const a = this.app, project = a.project, comp = project.activeComp, ids = [...a.editor.selected];
+    if (!ids.length || a.strokeActive || a.playing) return;
+    const name = await askText('Create asset from selection', a.editor.primary?.name ?? 'Artwork', 'Create asset',
+      'Move the selected layers into one reusable source. The shot keeps a linked placement with the same timing. Adjustments, clipping and blending will use the layers inside this source. One Undo restores the stack.');
+    if (!name?.trim() || a.project !== project || project.activeComp !== comp || a.strokeActive || a.playing) return;
+    const id = this.assets.fromSelection(ids, name);
+    if (id) { a.onNotice?.(`Created ${project.comps.get(id)!.name}. Use Assets to edit, place, save or download it.`); this.showAssets(); }
     this.update();
   }
   /** Draw in a source (on one of its layers, when given). */
@@ -325,6 +339,17 @@ export class ArtworkAssetsUI {
     } catch (e) { this.app.onNotice?.(`Could not save artwork: ${e instanceof Error ? e.message : String(e)}`); }
     finally { control.disabled = false; control.removeAttribute('aria-busy'); }
   }
+  private async updateInLibrary(id: string, control: HTMLButtonElement): Promise<void> {
+    const dialog = this.dialog, project = this.app.project; control.disabled = true;
+    try {
+      const card = await this.library.updateSource(id);
+      if (card) {
+        if (this.dialog === dialog && this.app.project === project) this.showLibrary();
+        this.app.onNotice?.(`Updated ${card.name} in My Assets. Placed copies keep their artwork.`);
+      }
+    } catch (e) { this.app.onNotice?.(`Could not update artwork: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { control.disabled = false; }
+  }
   private show(replacement: ArtworkAssetsUI['replacing'] = null): void {
     if (this.app.strokeActive || this.dialog) return;
     if (replacement && !this.replacementCurrent(replacement)) return;
@@ -342,18 +367,43 @@ export class ArtworkAssetsUI {
     const title = element('h2', '', replacement ? 'Replace source' : 'Assets'); title.id = 'artwork-shelf-title';
     const add = action('New asset', 'plus', () => void this.newAsset()); add.classList.add('artwork-add');
     add.hidden = !!replacement;
+    add.disabled = this.app.playing;
     const close = button('Close assets', 'close', () => this.close()); close.classList.add('icon-only');
     head.append(title, add, close);
     const collections = element('nav', 'artwork-library-nav'); collections.setAttribute('aria-label', 'Asset collections');
     collections.append(button('My Assets', 'gallery', () => this.showLibrary())); collections.hidden = !!replacement;
+    if (!replacement && this.app.workspace === 'motion') {
+      const selected = action('From selection', 'layers', () => void this.createFromSelection(), 'Create asset from selected layers');
+      selected.disabled = !this.app.editor.selected.length || this.app.playing || this.app.editor.selected.some(id => {
+        const l = this.app.editor.layer(id); return l?.kind === 'camera' || l?.kind === 'drawings' && l.guide;
+      }); collections.append(selected);
+    }
     const artworkProject = project.activeComp === project.main && project.comp.asset;
     if (artworkProject && !replacement) {
       const save = button('Save current artwork', 'save', () => void this.saveToLibrary(project.main, save));
       save.disabled = this.app.playing || this.library.busy; collections.append(save);
+      const update = button('Update existing', 'save', () => void this.updateInLibrary(project.main, update));
+      update.disabled = this.app.playing || this.library.busy; collections.append(update);
     }
     const body = element('div', 'artwork-body');
     const note = element('p', 'artwork-note', replacement ? `Choose artwork for ${this.app.placedAsset!.name}. This placement keeps its name, timing and transform. Other placements stay linked to their current source.` : 'In this project · edit once, update every placement.');
     const grid = element('div', 'artwork-grid');
+    const searchRow = element('div', 'artwork-library-search asset-project-search');
+    const search = element('input', 'textbox'); search.type = 'search'; search.placeholder = 'Find project assets'; search.setAttribute('aria-label', 'Find project assets'); search.setAttribute('data-own-keys', '');
+    const kind = element('select', ''); kind.setAttribute('aria-label', 'Project asset type');
+    for (const [value, label] of [['all', 'All assets'], ['still', 'Stills'], ['animated', 'Animated']]) kind.append(new Option(label, value));
+    const status = element('p', 'artwork-note asset-project-count'); status.setAttribute('role', 'status');
+    const noMatch = element('p', 'artwork-empty', 'No matching assets. Clear the search or choose All assets.'); noMatch.hidden = true;
+    const filter = () => {
+      const words = search.value.trim().normalize('NFKC').toLocaleLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      for (const card of grid.querySelectorAll<HTMLElement>('.artwork-card')) {
+        card.hidden = !words.every(word => card.dataset.search!.includes(word)) || kind.value !== 'all' && card.dataset.kind !== kind.value;
+        if (!card.hidden) shown++;
+      }
+      status.textContent = `${shown} of ${assets.length} project assets`; noMatch.hidden = shown > 0 || !assets.length;
+    };
+    search.addEventListener('input', filter); kind.addEventListener('change', filter); searchRow.append(search, kind); searchRow.hidden = !!replacement;
     const previews: { comp: Comp; canvas: HTMLCanvasElement }[] = [];
     const assets = this.assets.list();
     if (!assets.length) {
@@ -365,6 +415,8 @@ export class ArtworkAssetsUI {
     }
     for (const c of assets) {
       const card = element('article', 'artwork-card'); card.setAttribute('aria-label', c.name);
+      card.dataset.search = c.name.normalize('NFKC').toLocaleLowerCase();
+      card.dataset.kind = compLength(c, project.comps) > 1 ? 'animated' : 'still';
       const canReplace = !!replacement && this.assets.canReplaceSource(replacement.id,c.id);
       const replace = () => {
         if (!replacement || !this.replacementCurrent(replacement)) { this.close(); return; }
@@ -389,16 +441,30 @@ export class ArtworkAssetsUI {
         use.disabled = !canReplace; actions.append(use);
       } else {
         actions.classList.add('artwork-project-actions');
-        actions.append(action('Edit', 'draw', () => this.openSource(c.id), `Edit ${c.name}`), action('Place', 'plus', () => { this.assets.place(c.id); this.placedPicker.focus(); }, `Place ${c.name}`));
+        const place = action('Place', 'plus', () => { this.assets.place(c.id); if (this.app.workspace === 'motion') this.app.focusCanvas(); else this.placedPicker.focus(); }, `Place ${c.name}`);
+        place.disabled = this.app.playing || !!artworkProject || this.app.workspace === 'motion' && !!project.comp.asset;
+        if (place.disabled && !this.app.playing) place.title = 'Return to your shot to place linked artwork.';
+        actions.append(action('Edit', 'draw', () => this.openSource(c.id), `Edit ${c.name}`), place);
+        const more = element('details', 'artwork-library-manage artwork-source-files'), summary = element('summary', '', 'Save / files / manage'); summary.setAttribute('aria-label', `Files and actions for ${c.name}`);
+        const files = element('div', 'artwork-project-actions');
         const rename=action('Rename','draw',()=>void this.renameSource(c.id),`Rename source ${c.name}`);
-        rename.disabled=this.app.playing;actions.append(rename);
-        const save = button('Save', 'save', () => void this.saveToLibrary(c.id, save), `Save ${c.name} to My Assets`);
-        save.disabled = this.app.playing || this.library.busy; actions.append(save);
-        if (this.sendTo) { const send = action('Send to\u2026', 'folder', () => this.sendTo?.(c.id, c.name), `Send ${c.name} to another project`); send.disabled = this.app.playing; actions.append(send); }
+        rename.disabled=this.app.playing;
+        const save = button('Save as new', 'save', () => void this.saveToLibrary(c.id, save), `Save ${c.name} to My Assets`);
+        save.disabled = this.app.playing || this.library.busy;
+        const update = button('Update existing…', 'save', () => void this.updateInLibrary(c.id, update), `Update saved asset from ${c.name}`);
+        update.disabled = this.app.playing || this.library.busy;
+        const download = button('Download .2dope', 'download', () => {
+          download.disabled = true;
+          void this.library.downloadSource(c.id).catch(e => this.app.onNotice?.(`Could not download artwork: ${e instanceof Error ? e.message : String(e)}`)).finally(() => { download.disabled = false; });
+        }, `Download ${c.name} asset file`);
+        download.disabled = this.app.playing || this.library.busy;
+        files.append(save, update, download, rename);
+        if (this.sendTo) { const send = action('Send to\u2026', 'folder', () => this.sendTo?.(c.id, c.name), `Send ${c.name} to another project`); send.disabled = this.app.playing; files.append(send); }
+        more.append(summary, files); card.append(more);
       }
-      card.append(thumb, info, actions); grid.append(card); previews.push({comp:c, canvas});
+      card.prepend(thumb, info, actions); grid.append(card); previews.push({comp:c, canvas});
     }
-    body.append(note, grid);
+    body.append(note, status, grid, noMatch); filter(); status.hidden = !!replacement;
     const placements = project.comp.layers.filter(l => l.kind === 'comp' && project.comps.get(l.comp)?.asset);
     if (placements.length && !replacement) {
       const group = element('details', 'artwork-placements');
@@ -408,7 +474,10 @@ export class ArtworkAssetsUI {
         const row = element('div', 'artwork-placement');
         const target = project.activeComp;
         const edit = action('Edit source', 'draw', () => this.openSource(l.comp), `Edit source of ${l.name}`); edit.classList.add('icon-only');
-        const arrange = action('Move', 'freeform', () => this.app.setArrangeAssets(true, l.id), `Move placement of ${l.name}`); arrange.classList.add('icon-only');
+        const arrange = action('Move', 'freeform', () => {
+          if (this.app.workspace === 'motion') { this.app.editor.select(l.id); this.app.focusCanvas(); }
+          else this.app.setArrangeAssets(true, l.id);
+        }, `Move placement of ${l.name}`); arrange.classList.add('icon-only');
         const remove = action('Remove placement', 'trash', () => this.app.editor.editProject('Remove asset placement', () => {
           const c = project.comps.get(target); if (c) c.layers = c.layers.filter(x => x.id !== l.id);
         }), `Remove placement of ${l.name}`); remove.classList.add('icon-only');
@@ -416,8 +485,12 @@ export class ArtworkAssetsUI {
       }
       body.append(group);
     }
-    body.append(element('p', 'artwork-note artwork-footnote', replacement ? 'One Undo restores the previous source. Settings for layers inside the old source reset; position, size and animation timing stay. Both sources remain editable in Assets.' : 'Place adds linked artwork behind your drawing tracks. Source layers stay editable.'));
-    d.append(head, collections, body);
+    const footnote = replacement ? 'One Undo restores the previous source. Settings for layers inside the old source reset; position, size and animation timing stay. Both sources remain editable in Assets.'
+      : artworkProject || this.app.workspace === 'motion' && project.comp.asset ? 'Return to your shot to place artwork. You can edit, save and download these sources here.'
+      : this.app.workspace === 'motion' ? 'Place adds an editable linked layer on this timeline. Edit opens Draw; Done returns to this shot and frame.'
+      : 'Place adds linked artwork behind your drawing tracks. Source layers stay editable.';
+    body.append(element('p', 'artwork-note artwork-footnote', footnote));
+    d.append(head, collections, searchRow, body);
     d.addEventListener('cancel', e => { e.preventDefault(); this.close(); });
     d.addEventListener('click', e => { if (e.target === d) { const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) this.close(); } });
     document.body.append(d); d.showModal(); (replacement ? this.replacePlaced : this.browse).setAttribute('aria-expanded', 'true');

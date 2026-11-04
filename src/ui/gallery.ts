@@ -58,6 +58,7 @@ export class Gallery {
   private menu: HTMLElement | null = null;
   private drag: { id: string; ghost: HTMLElement; hover: HTMLElement | null } | null = null;
   private renderToken = 0;
+  private openToken = 0;
 
   constructor(
     private readonly files: FileUI,
@@ -93,17 +94,24 @@ export class Gallery {
   }
 
   async open(): Promise<void> {
+    const token = ++this.openToken;
     this.isOpen = true;
     this.root.hidden = false;
     document.body.classList.add('gallery-open');
     this.selecting = false;
     this.picked.clear();
+    const loading = el('p', { class: 'menu-note', role: 'status' }, 'Loading projects…');
+    const cancel = el('button', { type: 'button', class: 'gback' }, 'Back to drawing'); cancel.addEventListener('click', () => this.close());
+    this.root.replaceChildren(cancel, loading);
+    await this.files.savePreview();
+    if (!this.isOpen || token !== this.openToken) return;
     await this.render();
   }
 
   close(): void {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this.openToken++;
     this.root.hidden = true;
     document.body.classList.remove('gallery-open');
     this.closeMenu();

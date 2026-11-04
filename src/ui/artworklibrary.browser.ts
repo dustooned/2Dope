@@ -22,6 +22,7 @@ const painting = new PaintingWorkspaceUI(app, flip, stage, () => refresh());
 const dbName = `2dope-artwork-check-${crypto.randomUUID()}`, device = new DeviceArtworkStore(dbName);
 let failSave = false, failRemove = false, holdRead: (() => void) | null = null, delayRead = false, reads = 0;
 const store: ArtworkStore = { list: () => device.list(), put: async e => { if (failSave) throw new Error('Test storage full'); await device.put(e); },
+  move: (id, collection) => device.move(id, collection), replace: (id, entry) => device.replace(id, entry),
   rename: (id, name) => device.rename(id, name), remove: async id => { if (failRemove) throw new Error('Test removal failed'); return device.remove(id); },
   get: async id => { reads++; if (delayRead) await new Promise<void>(r => { holdRead = r; }); return device.get(id); } };
 const assets = new ArtworkAssetsUI(app, document.querySelector<HTMLElement>('.painting-header')!, store);
@@ -52,7 +53,7 @@ try {
   app.project.layer.exposures = [{ drawing: ink.id, length: 2 }, { drawing: next.id, length: 2 }]; app.project.layer.mask = mask.id;
   const bg = drawingsLayer(app.project.newId('L'), 'Background', [{ drawing: background.id, length: 1 }], 16, 16); bg.still = true; bg.play = 'loop'; source.layers.push(bg); source.fps = 6;
   for (const d of [ink, next, background]) { d.rev++; app.residency.updateThumb(d); } app.setFrame(2); app.onDocChanged(); await files.autosaver.flush();
-  const before = app.history.peekUndo(); click('Assets (1)'); click('Save Library landscape to My Assets');
+  const before = app.history.peekUndo(); click('Assets (1)'); document.querySelector<HTMLElement>('.artwork-source-files summary')!.click(); click('Save Library landscape to My Assets');
   await until(() => !!document.querySelector('.artwork-library article') && !assets.library.busy);
   const cards = await new DeviceArtworkStore(dbName).list(), entry = (await device.get(cards[0]!.id))!, stored = await readArtwork(entry.archive);
   check('Save creates a durable library card without changing source position or document history', cards.length === 1 && app.project.activeComp === source.id && app.frame === 2 && app.history.peekUndo() === before);
@@ -70,6 +71,7 @@ try {
   await until(() => assets.assets.list().length === 1 && !!document.querySelector('.artwork-shelf:not(.artwork-library)'));
   const copied = assets.assets.list()[0]!, draw = copied.layers[0]!; if (draw.kind !== 'drawings') throw new Error('Expected drawing track');
   check('Add copy imports editable source layers into a different project without moving its playhead', target !== originalProject && target.activeComp === shot && app.frame === 7 && copied.layers.length === 2 && draw.exposures.length === 2 && draw.exposures[0]!.drawing !== target.layer.exposures[0]!.drawing);
+  document.querySelector<HTMLElement>('.artwork-source-files summary')!.click();
   check('A newly imported source can immediately be saved again from the project shelf', !assets.library.busy && !button(`Save ${copied.name} to My Assets`).disabled);
   check('One Undo removes the imported graph and Redo restores it', app.history.peekUndo()?.label === 'Add artwork from My Assets');
   click('Close assets'); app.undo(); await settle(); const removed = !target.comps.has(copied.id); app.redo(); await settle();

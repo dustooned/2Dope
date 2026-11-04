@@ -43,7 +43,7 @@ export interface BubbleHooks {
   /** Story (Board) actions the bubbles reach. */
   story?: { view(): BoardView; setView(v: BoardView): void; images(): void; exportBoard(): void; controlsInPanel?: boolean };
   /** Motion actions the bubbles reach. */
-  motion?: { group(): void; split(): void };
+  motion?: { group(): void; split(): void; controlsInPanel?: boolean };
   /** Draw's bottom view: the flipbook (on) or the timeline. */
   flip?: { on(): boolean; set(on: boolean): void };
   /** Share: the last mode, preview and make the movie. */
@@ -193,7 +193,16 @@ export class Bubbles {
     this.setLevel(this.level, false);
     // hiding or showing a command (here or in App settings) redraws the row
     onCommandPrefsChange(() => { this.sig = ''; this.update(); });
-    window.addEventListener('resize', () => setTimeout(() => this.measure(), 0));
+    window.addEventListener('resize', () => setTimeout(() => { this.measure(); this.revealMode(); }, 0));
+  }
+
+  /** Keep the active mode in the scrollable header after navigation or a viewport resize. */
+  private revealMode(): void {
+    const active = this.modes.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!active || !this.modes.clientWidth) return;
+    const r = active.getBoundingClientRect(), box = this.modes.getBoundingClientRect();
+    if (r.right > box.right - 6) this.modes.scrollLeft += r.right - box.right + 6;
+    else if (r.left < box.left + 6) this.modes.scrollLeft -= box.left - r.left + 6;
   }
 
   /**
@@ -207,9 +216,10 @@ export class Bubbles {
     const narrow = window.innerWidth <= 700;
     const painting = document.body.classList.contains('painting-workspace');
     if (painting) this.placePaintingRows(s);
+    if (this.app.workspace === 'board') this.stage.style.setProperty('--story-tool-left', `${Math.round(this.modes.getBoundingClientRect().right - s.left + 8)}px`);
     this.stage.style.setProperty('--edge-tool-width', `${this.tools.offsetWidth}px`);
     let left = 8, right = 8;
-    if (painting) {
+    if (painting || this.app.workspace === 'board') {
       const obstacles = [...this.stage.querySelectorAll<HTMLElement>('.sidebar:not(.compact)')];
       if (this.app.workspaceLayouts[this.app.workspace].toolDock !== 'top') obstacles.push(this.tools);
       for (const e of obstacles) {
@@ -246,7 +256,7 @@ export class Bubbles {
     this.stage.style.setProperty('--tools-bottom', `${painting ? clear : Math.round(tools + 6)}px`);
     this.stage.style.setProperty('--chrome-bottom', `${clear}px`);
     if (!painting) this.stage.style.setProperty('--dock-top', `${bottomOf(this.modes) + 8}px`);
-    this.stage.style.setProperty('--side-top', `${clear + (narrow && !painting ? 40 : 0)}px`);
+    this.stage.style.setProperty('--side-top', `${clear + (narrow && !painting && this.app.workspace !== 'board' ? 40 : 0)}px`);
     if (clear + label === this.topClear) return;
     this.topClear = clear + label;
     this.stage.style.setProperty('--top-clear', `${clear}px`);
@@ -262,34 +272,19 @@ export class Bubbles {
   private placePaintingRows(s: DOMRect): void {
     const header = this.stage.querySelector<HTMLElement>('.painting-header');
     if (!this.modes.offsetParent) return;
-    if (window.innerWidth <= 700) {
-      this.stage.style.setProperty('--ph-left', '60px'); this.stage.style.setProperty('--ph-top', '8px');
-      const headerBottom = header?.offsetParent ? header.getBoundingClientRect().bottom - s.top : 60;
-      this.stage.style.setProperty('--mode-top', `${Math.max(60, headerBottom + 6)}px`);
-      const modesBottom = this.modes.getBoundingClientRect().bottom - s.top;
-      this.stage.style.setProperty('--pt-top', `${modesBottom + 6}px`);
-      this.stage.style.setProperty('--dock-top', `${modesBottom + 6}px`);
-      return;
-    }
-    const m = this.modes.getBoundingClientRect();
-    const modesLeft = Math.round(m.left - s.left), modesRight = Math.round(m.right - s.left), modesBottom = Math.round(m.bottom - s.top);
-    const shown = !!header && !header.hidden && header.offsetParent !== null;
-    const hw = shown ? header.offsetWidth : 0, hh = shown ? header.offsetHeight : 0;
-    // the level button keeps the top right corner (60px)
-    const row1 = shown && modesRight + 8 + hw <= s.width - 60;
-    const hLeft = row1 ? modesRight + 8 : modesLeft;
-    const hTop = row1 ? 8 : modesBottom + 6;
-    this.stage.style.setProperty('--ph-left', `${hLeft}px`);
-    this.stage.style.setProperty('--ph-top', `${hTop}px`);
-    let top = modesBottom + 6;
-    if (shown && !row1) {
-      // tools hang from the right edge (70px clear of the Tools / Options handles)
-      const tw = this.tools.offsetWidth, toolsLeft = s.width - 70 - tw;
-      if (toolsLeft < hLeft + hw + 8) top = hTop + hh + 6;
-    }
+    const compact = innerHeight <= 500 && s.width >= 600;
+    const top = compact ? 8 : Math.round(this.modes.getBoundingClientRect().bottom - s.top + 4);
+    this.stage.style.setProperty('--mode-top', '8px');
+    this.stage.style.setProperty('--ph-top', `${top}px`);
     this.stage.style.setProperty('--pt-top', `${top}px`);
-    // Side docks start below both navigation and source controls, never on top of them.
-    this.stage.style.setProperty('--dock-top', `${Math.max(modesBottom, shown ? hTop + hh : 0) + 8}px`);
+    const shown = !!header && !header.hidden && header.offsetParent !== null;
+    const natural = header ? [...header.children].filter((e): e is HTMLElement => e instanceof HTMLElement && !e.hidden).reduce((sum, e) => sum + e.getBoundingClientRect().width + 6, 6) : 0;
+    const width = shown ? Math.min(natural, Math.max(100, s.width * (compact ? .25 : .45))) : 0;
+    this.stage.style.setProperty('--asset-header-width', `${Math.round(width)}px`);
+    this.stage.style.setProperty('--ph-left', `${Math.round(s.width - width - (compact ? 60 : 8))}px`);
+    this.stage.style.setProperty('--pt-left', `${compact ? Math.round(this.modes.getBoundingClientRect().right - s.left + 8) : 8}px`);
+    this.stage.style.setProperty('--tool-row-right', `${Math.round(compact ? width + 68 : width ? width + 16 : 8)}px`);
+    this.stage.style.setProperty('--dock-top', `${Math.round(top + (shown ? header.offsetHeight : 44) + 6)}px`);
   }
 
   setLevel(l: UiLevel, remember = true): void {
@@ -676,7 +671,7 @@ export class Bubbles {
   update(): void {
     const a = this.app;
     const ws = a.workspace;
-    if (ws !== this.lastWorkspace) { this.moreTools = false; this.layersOpen = false; this.lastWorkspace = ws; this.barEdit.close(); }
+    if (ws !== this.lastWorkspace) { this.moreTools = false; this.layersOpen = false; this.lastWorkspace = ws; this.barEdit.close(); setTimeout(() => this.revealMode(), 0); }
     const layout = a.workspaceLayouts[ws];
     this.stage.dataset.toolDock = layout.toolDock;
     this.stage.classList.toggle('workspace-tool-labels', layout.labels);
@@ -749,7 +744,12 @@ export class Bubbles {
     this.extraTools.id = 'workspace-extra-tools'; this.extraTools.hidden = !this.moreTools;
     this.extraTools.replaceChildren(el('strong', {}, 'More tools'), el('p', { class: 'bub-drawer-hint' }, 'Tap a tool to use it now. Edit tool bar drags tools onto the bar.'));
     const allTools = this.toolsFor(ws, true);
+    let section = '';
     for (const [k, label] of allTools) {
+      const name = ['safeareas', 'centrecross', 'overscan', 'look'].includes(k) ? 'Canvas view'
+        : ws === 'board' ? ['brush', 'eraser', 'color'].includes(k) ? 'Sketch tools' : 'Panels and sharing'
+        : ['play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'].includes(k) ? 'Animation and effects' : 'Drawing tools';
+      if (section !== name) { section = name; this.extraTools.append(el('h3', { class: 'tool-section-label' }, name)); }
       const b = this.chip(WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label, label, k === cur, b => this.pickTool(k, b));
       b.dataset.extraTool = k; this.extraTools.append(b);
     }
@@ -866,7 +866,7 @@ export class Bubbles {
         add(this.chip('\u25c0 Earlier', 'Move the selected panels earlier', false, () => a.moveSelection(-1)), this.chip('Later \u25b6', 'Move the selected panels later', false, () => a.moveSelection(1)));
         add(this.chip('Animate this shot', 'Draw the animation on top of the board', false, () => a.animateShot(), 'draw'));
       }
-    } else if (row === 'motion') {
+    } else if (row === 'motion' && !this.hooks.motion?.controlsInPanel) {
       // easing, reverse and delete only when keys are selected; otherwise just how new keys start
       if (a.editor.keys.size) {
         for (const e of EASINGS) add(this.chip(e.label, `Easing of the selected keys: ${e.label}`, false, () => a.editor.setEasing(e.id)));

@@ -4806,7 +4806,7 @@ export class App {
       flipH=Math.max(flipH,s.bottom-r.bottom+choice.getBoundingClientRect().height+
         parseFloat(css.paddingTop)+parseFloat(css.paddingBottom)+placement.offsetHeight-placement.clientHeight);
     }
-    const painting = isPaintingWorkspace(this.workspace);
+    const painting = isPaintingWorkspace(this.workspace) || this.workspace === 'board';
     const left = painting ? Math.max(0, (parseFloat(this.stage.style.getPropertyValue('--context-left')) || 8) - 8) : 0;
     const right = painting ? Math.max(0, (parseFloat(this.stage.style.getPropertyValue('--context-right')) || 8) - 8) : 0;
     const fitPage = (extraTop = 0) => {

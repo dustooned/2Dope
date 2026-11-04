@@ -42,10 +42,10 @@ const SEEN_BEFORE: Record<Workspace, readonly string[]> = {
 };
 export type WorkspaceLayouts = Record<Workspace, WorkspaceLayout>;
 export function defaultWorkspaceLayout(ws: Workspace): WorkspaceLayout {
-  return { tools: ws === 'draw' ? ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'layers', 'color']
-    : ws === 'animate' ? ['brush', 'eraser', 'eyedrop', 'select', 'assets', 'layers', 'color']
+  return { tools: ws === 'draw' ? ['brush', 'eraser', 'color', 'select', 'transform', 'smudge', 'eyedrop', 'layers']
+    : ws === 'animate' ? ['brush', 'eraser', 'color', 'select', 'assets', 'eyedrop', 'layers']
     // Timing: Play, onion and frame actions already have homes (transport, X-sheet); they can be pinned
-    : ws === 'time' ? ['layers'] : ws === 'board' ? ['brush', 'eraser', 'color'] : [...WORKSPACE_TOOLS[ws]],
+    : ws === 'time' ? ['layers'] : ws === 'board' ? ['brush', 'eraser', 'color'] : ['look', 'safeareas', 'centrecross', 'overscan'],
   toolDock: 'top', brushEdge: 'left', labels: false, advancedTargets: false, seen: [...WORKSPACE_TOOLS[ws]] };
 }
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
@@ -59,6 +59,13 @@ export function readWorkspaceLayouts(value: unknown): WorkspaceLayouts {
     // Only the untouched former Story default moves to the sketch bar. Custom bars keep their actions.
     const oldStory = SEEN_BEFORE.board;
     if (ws === 'board' && !seen.includes('brush') && v.labels !== true && !v.advancedTargets && (v.toolDock === undefined || v.toolDock === 'top') && tools.length === oldStory.length && tools.every((t, i) => t === oldStory[i])) tools = [...d.tools];
+    const oldPaint = ws === 'draw' ? ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'layers', 'color']
+      : ws === 'animate' ? ['brush', 'eraser', 'eyedrop', 'select', 'assets', 'layers', 'color'] : [];
+    if (oldPaint.length && v.labels !== true && !v.advancedTargets && (v.toolDock === undefined || v.toolDock === 'top') &&
+      tools.length === oldPaint.length && tools.every((t, i) => t === oldPaint[i])) tools = [...d.tools];
+    // Motion commands now live in its shared header; only an untouched old bar becomes view tools.
+    if (ws === 'motion' && v.labels !== true && !v.advancedTargets && (v.toolDock === undefined || v.toolDock === 'top') &&
+      [SEEN_BEFORE.motion, WORKSPACE_TOOLS.motion].some(old => tools.length === old.length && tools.every((t, i) => t === old[i]))) tools = [...d.tools];
     if (Array.isArray(v.tools)) for (const t of d.tools) if (!seen.includes(t) && !tools.includes(t)) tools.push(t);
     // A recoverable painting tool always remains, even with malformed/empty preferences.
     if ((ws === 'draw' || ws === 'animate' || ws === 'board') && !tools.includes('brush')) tools.unshift('brush');

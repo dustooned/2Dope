@@ -28,6 +28,34 @@ function rig() {
   return { a, p, assets: new ArtworkAssets(app) };
 }
 describe('local artwork assets', () => {
+  it('precomposes selected animation into a reusable source with one Undo and preserved timing', () => {
+    const { a, p, assets } = rig(), app = a as unknown as App;
+    a.workspace = 'motion';
+    const layer = p.comp.layers[0]!;
+    layer.in = 3; layer.start = 2; layer.out = 20;
+    layer.transform.position = { value: [32, 32], keys: [{ f: 2, v: [12, 20], in: LINEAR, out: LINEAR }, { f: 9, v: [40, 50], in: LINEAR, out: LINEAR }] };
+    const before = structuredClone(p.comp.layers); a.history.clear();
+    const source = assets.fromSelection([layer.id], 'Reusable movement')!;
+    expect(p.comps.get(source)?.asset).toBe(true);
+    expect(p.comps.get(source)?.layers).toEqual(before);
+    expect(p.comp.layers[0]?.kind).toBe('comp');
+    expect(app.editor.primary?.kind).toBe('comp');
+    expect(a.history.peekUndo()?.label).toBe('Create asset from selection');
+    a.history.undo(); expect(p.comps.has(source)).toBe(false); expect(p.comp.layers).toEqual(before); expect(a.history.canUndo).toBe(false);
+    a.history.redo(); expect(p.comps.get(source)?.layers).toEqual(before);
+  });
+  it('places editable links in Motion without changing workspace, including Redo and source return', () => {
+    const { a, p, assets } = rig(), app = a as unknown as App;
+    const id = assets.create('Prop')!; assets.done(); p.comp.duration = 24; a.workspace = 'motion'; a.frame = 7; a.history.clear();
+    expect(assets.place(id)).toBe(true);
+    const placement = app.editor.primary!;
+    expect(a.workspace).toBe('motion'); expect(a.frame).toBe(7); expect(placement.locked).toBe(false);
+    a.history.undo(); expect(p.comp.layers.some(l => l.id === placement.id)).toBe(false);
+    a.history.redo(); expect(p.comp.layers.find(l => l.id === placement.id)?.locked).toBe(false);
+    assets.open(id); expect(a.workspace).toBe('draw'); assets.done(); expect(a.workspace).toBe('motion'); expect(a.frame).toBe(7);
+    assets.open(id); a.workspace = 'motion'; expect(assets.place(id)).toBe(true); expect(a.workspace).toBe('motion'); expect(a.frame).toBe(7);
+    a.playing = true; expect(assets.place(id)).toBe(false); expect(assets.fromSelection([placement.id], 'Busy')).toBe(null);
+  });
   function libraryPackage(): ArtworkPackage {
     const source = new Project(64, 64); source.comp.name = 'Library sky'; source.comp.asset = true;
     const child = newComp('c2', 'Clouds', 64, 64, 6), d = source.newDrawing(), mask = source.newDrawing();
