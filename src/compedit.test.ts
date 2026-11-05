@@ -72,6 +72,38 @@ describe('precision placement and path gestures', () => {
   });
 });
 
+describe('Motion anchor placement', () => {
+  function anchorRig() { const r = rig(); Object.assign(r.app, { workspace: 'motion' }); r.ed.select('L1'); return r; }
+  it('drags through a camera and transformed parent while preserving artwork and descendants, with one Undo', () => {
+    const { ed, comp, app } = anchorRig(), l = ed.primary!, parent = nullLayer('P', 'Parent', comp), child = nullLayer('C', 'Child', comp), camera = cameraLayer('cam', comp);
+    parent.transform.scale.value = [170, 65]; parent.transform.rotation.value = 37; l.parent = parent.id; l.transform.rotation.value = -20; l.transform.scale.value = [-110, 130]; child.parent = l.id; camera.zoom.value = 160; camera.transform.rotation.value = 12; comp.layers.push(parent, child, camera);
+    const before = structuredClone(comp.layers), art = worldMatrix(comp, l, 0), descendant = worldMatrix(comp, child, 0), a = apply(ed.matrixOf(l), l.transform.anchor.value);
+    ed.setAnchorEditing(true); expect(ed.gestureStart(a, 1)).toBe(true); ed.gestureMove([a[0] + 40, a[1] + 30]); ed.gestureMove([a[0] + 60, a[1] + 20]); ed.gestureEnd();
+    close(apply(ed.matrixOf(ed.primary!), ed.primary!.transform.anchor.value), [a[0] + 60, a[1] + 20]); worldMatrix(comp, ed.primary!, 0).forEach((n, i) => expect(n).toBeCloseTo(art[i]!, 7)); worldMatrix(comp, ed.layer(child.id)!, 0).forEach((n, i) => expect(n).toBeCloseTo(descendant[i]!, 7)); expect(ed.primary!.anchorFixed).toBe(true); expect(app.history.peekUndo()?.label).toBe('Move anchor');
+    app.history.undo(); expect(comp.layers).toEqual(before); expect(app.history.canUndo).toBe(false); app.history.redo(); expect(ed.primary!.anchorFixed).toBe(true);
+  });
+  it('places by tapping, cancels a drag and creates no command for a handle tap or return to start', () => {
+    const { ed, app, comp } = anchorRig(); ed.setAnchorEditing(true); ed.gestureStart([40, 50], 1); ed.gestureEnd(); close(ed.primary!.transform.anchor.value, [40, 50]); app.history.clear();
+    const before = structuredClone(comp.layers), a = apply(ed.matrixOf(ed.primary!), ed.primary!.transform.anchor.value);
+    ed.gestureStart(a, 1); ed.gestureEnd(); expect(app.history.canUndo).toBe(false);
+    ed.gestureStart(a, 1); ed.gestureMove([a[0] + 50, a[1] + 10]); ed.gestureMove(a); ed.gestureEnd(); expect(comp.layers).toEqual(before); expect(app.history.canUndo).toBe(false);
+    ed.gestureStart(a, 1); ed.gestureMove([a[0] + 50, a[1] + 10]); ed.gestureEnd(true); expect(comp.layers).toEqual(before); expect(app.history.canUndo).toBe(false);
+  });
+  it('writes paired anchor/position keys with Auto-key and preserves this animated frame', () => {
+    const { ed, app, comp } = anchorRig(); app.frame = 5; ed.autoKey = true; const l = ed.primary!, before = worldMatrix(comp, l, 5); ed.setAnchorEditing(true); ed.gestureStart([40, 50], 1); ed.gestureEnd();
+    expect(ed.primary!.transform.anchor.keys.map(k => k.f)).toEqual([0, 5]); expect(ed.primary!.transform.position.keys.map(k => k.f)).toEqual([0, 5]); worldMatrix(comp, ed.primary!, 5).forEach((n, i) => expect(n).toBeCloseTo(before[i]!, 8));
+  });
+  it('presets use artwork edges and the chosen pivot is never auto-centered by a later scale gesture', () => {
+    const { ed, project } = anchorRig(); project.drawings.set('d1', inked('d1', 400, 300, 100, 50, 149, 79)); expect(ed.anchorPreset(0, 1)).toBe(true); close(ed.primary!.transform.anchor.value, [100, 80]);
+    ed.setValue('L1', 'anchor', [200, 150]); ed.setAnchorEditing(false); const corner = ed.corners(ed.primary!)[2]!; ed.gestureStart(corner, 1); close(ed.primary!.transform.anchor.value, [200, 150]); ed.gestureEnd(true);
+  });
+  it('refuses locked/camera/zero-scale targets and cancels if the clock changes mid-drag', () => {
+    const { ed, comp, app } = anchorRig(); ed.primary!.locked = true; ed.setAnchorEditing(true); expect(ed.anchorEditing).toBe(false); ed.primary!.locked = false; ed.primary!.transform.scale.value = [0, 100]; ed.setAnchorEditing(true); expect(ed.gestureStart([10, 10], 1)).toBe(false); ed.primary!.transform.scale.value = [100, 100];
+    const before = structuredClone(comp.layers); ed.gestureStart([40, 50], 1); app.frame = 1; ed.gestureEnd(); expect(comp.layers).toEqual(before); expect(app.history.canUndo).toBe(false);
+    const c = cameraLayer('cam', comp); comp.layers.push(c); ed.select(c.id); ed.setAnchorEditing(true); expect(ed.anchorEditing).toBe(false);
+  });
+});
+
 describe('Animate asset gestures', () => {
   function assetRig() {
     const r = rig();

@@ -1,5 +1,17 @@
 # Architecture
 
+Direct anchors (2026-11-05): `ui/anchors.ts` owns the compact Motion tool button, controls and
+resident/stale-guarded bounds presets. `CompEditor.anchorTransform` pairs Anchor/Position changes
+using the original local linear transform. Anchor gestures snapshot the layer list and inverse
+stage matrix; near-handle drags keep their grab offset, elsewhere taps place directly. A completed
+edit is one History command; cancellation or a changed frame/comp restores the original list.
+`App` routes Y/Esc, exits on workspace changes and treats cancelled pen anchor drags as cancellation.
+`view/overlay.ts` uses a larger yellow pivot while other transform handles are hidden. Additive
+`Layer.anchorFixed` survives schema IO and prevents `pivotOnContent` overriding an explicit choice.
+No new render data or minimum schema is needed. `anchors.html` and its responsive wrapper cover
+input/Auto-key/history, presets, grouped placement ownership and persistence.
+
+
 Precision tools (2026-11-04): `core/layout.ts` supplies pure alignment, equal-gap distribution
 and snapping. `CompEditor` translates in composition space through transformed/moved parents,
 keeps children from double-moving, centers anchors and commits one command per action/drag.

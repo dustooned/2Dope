@@ -26,6 +26,8 @@ export interface Transform {
 }
 
 interface LayerBase {
+  /** The user chose this pivot; do not automatically recenter it on the first transform. */
+  anchorFixed?: boolean;
   id: string;
   name: string;
   /** Comp frame where the layer's frame 0 sits. */

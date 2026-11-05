@@ -167,6 +167,8 @@ export class CompEditor {
 
   snap: SnapPrefs = (() => { try { return readSnap(JSON.parse(localStorage.getItem('2dope.motion.snap.v1') ?? 'null')); } catch { return readSnap(null); } })();
   snapGuides: SnapGuide[] = [];
+  anchorEditing = false;
+  private anchorDrag: { comp: string; frame: number; layer: string; before: Layer[]; original: Layer; inverse: Mat; offset: Vec2; autoKey: boolean; moved: boolean; start: Vec2; zoom: number; fromHandle: boolean } | null = null;
   pathEditing = false;
   pathLinked = false;
   pathFrame: number | null = null;
@@ -381,7 +383,7 @@ export class CompEditor {
   }
 
   reset(): void {
-    this.gesture = null; this.clipGesture = null; this.pathDrag = null;
+    this.gesture = null; this.clipGesture = null; this.pathDrag = null; this.anchorDrag = null; this.anchorEditing = false;
     if (this.pathEditing) { this.pathEditing = false; if (this.pathView !== null) this.throughCamera = this.pathView; this.pathView = null; this.pathFrame = null; }
     this.selected = [];
     this.keys.clear();
@@ -594,6 +596,7 @@ export class CompEditor {
     const nested = p.comps.get(l.comp);
     if (!nested) return false;
     const nf = nestedFrame(l, this.app.frame, c.fps, nested, p.comps) ?? 0;
+    this.setAnchorEditing(false);
     this.setPathEditing(false);
     this.trail.push({ comp: c.id, layer: l.id });
     this.switchTo(nested.id, nf);
@@ -604,6 +607,7 @@ export class CompEditor {
   exit(depth = this.crumbs().length - 2): boolean {
     const crumbs = this.crumbs();
     if (crumbs.length < 2 || depth < 0 || depth >= crumbs.length - 1) return false;
+    this.setAnchorEditing(false);
     this.setPathEditing(false);
     const p = this.app.project;
     // map the playhead out through every level we leave
@@ -744,6 +748,7 @@ export class CompEditor {
   picks = 0;
 
   select(id: string | null, add = false): void {
+    if (this.anchorEditing) this.setAnchorEditing(false);
     if (this.pathEditing) this.setPathEditing(false);
     this.picks++;
     if (id === null) this.selected = [];
@@ -1005,7 +1010,7 @@ export class CompEditor {
   setValue(id: string, n: PropKey, value: number | Vec2, label = 'Change value'): void {
     this.edit(label, (c) => {
       const l = c.layers.find((x) => x.id === id);
-      if (l) this.setProp(l, n, this.withValue(l, n, value));
+      if (l) { this.setProp(l, n, this.withValue(l, n, value)); if (n === 'anchor') l.anchorFixed = true; }
     });
   }
 
@@ -1020,7 +1025,7 @@ export class CompEditor {
   scrubSet(id: string, n: PropKey, value: number | Vec2): void {
     const l = this.comp.layers.find((x) => x.id === id);
     if (!l || !this.scrub) return;
-    this.setProp(l, n, this.withValue(l, n, value));
+    this.setProp(l, n, this.withValue(l, n, value)); if (n === 'anchor') l.anchorFixed = true;
     this.changedLive();
   }
 
@@ -1367,6 +1372,56 @@ export class CompEditor {
   // -------------------------------------------------------------------------------------------
   // Canvas gestures: drag a layer, its corner (scale) or the top handle (rotate)
 
+  get canEditAnchor(): boolean {
+    const l = this.primary;
+    return !!l && l.kind !== 'camera' && !l.adjust && !l.guide && !l.locked && l.visible && this.app.frame >= l.in && this.app.frame < layerEnd(l, this.app.project.comps);
+  }
+  setAnchorEditing(on: boolean): void {
+    this.gestureEnd(true);
+    if (on && (!this.canEditAnchor || this.app.playing || this.app.strokeActive)) { this.app.onNotice?.('Select unlocked artwork or a null at the playhead first.'); return; }
+    if (on && this.pathEditing) this.setPathEditing(false);
+    this.anchorEditing = on; this.onChange(); this.app.requestRender();
+  }
+  /** Reposition a pivot without changing the layer matrix at this frame. */
+  private anchorTransform(l: Layer, next: Vec2, autoKey = this.autoKey): Layer['transform'] {
+    const f = this.frameOf(l), t = l.transform, old = valueAt(t.anchor, f), pos = valueAt(t.position, f), m = localMatrix(l, this.app.frame);
+    const dx = next[0] - old[0], dy = next[1] - old[1], position: Vec2 = [pos[0] + m[0] * dx + m[2] * dy, pos[1] + m[1] * dx + m[3] * dy];
+    const write = (p: Prop<Vec2>, v: Vec2) => isAnimated(p) || autoKey ? setKey(p, f, v, this.lastEase, this.keyAtStart && !isAnimated(p) ? 0 : undefined) : { ...p, value: v };
+    const result = { ...structuredClone(t), anchor: write(t.anchor, next), position: write(t.position, position) };
+    validateProperty(result.anchor); validateProperty(result.position); return result;
+  }
+  anchorPreset(x: number, y: number): boolean {
+    if (!this.canEditAnchor || this.dragging || this.app.playing || this.app.strokeActive) return false;
+    if (![x, y].every(n => Number.isFinite(n) && n >= 0 && n <= 1)) return false;
+    const l = this.primary!, measured = l.kind === 'null' ? this.bounds(l) : layerContentBox(this.app.project, this.comp, l, this.app.frame);
+    if (measured === undefined) { this.app.onNotice?.('Artwork is still loading. Try the anchor preset again.'); return false; }
+    const b = measured ?? this.page(l), next: Vec2 = [b.x + b.w * x, b.y + b.h * y], transform = this.anchorTransform(l, next);
+    return this.edit('Place anchor', c => { const live = c.layers.find(v => v.id === l.id)!; live.transform = transform; live.anchorFixed = true; });
+  }
+  private anchorStart(pt: Vec2, zoom: number): boolean {
+    if (!this.canEditAnchor || this.dragging || this.app.playing || this.app.strokeActive) return false;
+    const l = this.primary!, matrix = this.matrixOf(l);
+    if (Math.abs(matrix[0] * matrix[3] - matrix[1] * matrix[2]) < 1e-10) { this.app.onNotice?.('Restore the layer and parent scale before dragging the anchor.'); return false; }
+    const a = this.anchorStage(l), near = Math.hypot(pt[0] - a[0], pt[1] - a[1]) * zoom <= 22;
+    this.anchorDrag = { comp: this.comp.id, frame: this.app.frame, layer: l.id, before: structuredClone(this.comp.layers), original: structuredClone(l), inverse: invert(matrix), offset: near ? [pt[0] - a[0], pt[1] - a[1]] : [0, 0], autoKey: this.autoKey, moved: false, start: pt, zoom, fromHandle: near };
+    if (!near) this.anchorMove(pt); return true;
+  }
+  private anchorMove(pt: Vec2): void {
+    const d = this.anchorDrag, l = d ? this.layer(d.layer) : null; if (!d) return;
+    if (!l || this.comp.id !== d.comp || this.app.frame !== d.frame) { this.anchorEnd(true); return; }
+    if (d.fromHandle && !d.moved && Math.hypot(pt[0] - d.start[0], pt[1] - d.start[1]) * d.zoom < 3) return;
+    const next = apply(d.inverse, [pt[0] - d.offset[0], pt[1] - d.offset[1]]), old = valueAt(d.original.transform.anchor, this.frameOf(d.original));
+    if (Math.hypot(next[0] - old[0], next[1] - old[1]) < 1e-8) { l.transform = structuredClone(d.original.transform); if (d.original.anchorFixed) l.anchorFixed = true; else delete l.anchorFixed; d.moved = false; }
+    else { try { l.transform = this.anchorTransform(d.original, next, d.autoKey); l.anchorFixed = true; d.moved = true; } catch (e) { this.app.onNotice?.((e as Error).message); return; } }
+    this.changedLive();
+  }
+  private anchorEnd(cancel: boolean): void {
+    const d = this.anchorDrag; this.anchorDrag = null; if (!d) return;
+    const comp = this.app.project.comps.get(d.comp); if (!comp) return;
+    if (cancel || !d.moved || this.app.frame !== d.frame || this.comp.id !== d.comp) { comp.layers = d.before; this.changedLive(); return; }
+    this.push('Move anchor', d.comp, d.before, structuredClone(comp.layers)); this.changed();
+  }
+
   replaceProperty(id: string, n: PropKey, expected: string, next: Prop, label: string): boolean {
     const layer = this.layer(id); if (!layer || layer.locked) throw new Error('Choose an unlocked layer.');
     if (this.app.strokeActive || this.app.playing || this.dragging || JSON.stringify(this.getProp(layer, n)) !== expected) throw new Error('The property changed. Close and reopen the editor.');
@@ -1374,6 +1429,7 @@ export class CompEditor {
     return this.edit(label, c => { const live = c.layers.find(l => l.id === id); if (live) this.setProp(live, n, structuredClone(next)); });
   }
   setPathEditing(on: boolean): void {
+    if (on && this.anchorEditing) this.setAnchorEditing(false);
     this.gestureEnd(true);
     if (!on) { this.pathEditing = false; this.pathFrame = null; if (this.pathView !== null) this.throughCamera = this.pathView; this.pathView = null; this.onChange(); this.app.requestRender(); return; }
     const layer = this.primary;
@@ -1495,7 +1551,7 @@ export class CompEditor {
    * Once moved (or once anything is animated) the anchor stays put, so animation keeps one pivot.
    */
   private pivotOnContent(l: Layer): void {
-    if (l.kind !== 'drawings' && l.kind !== 'comp') return;
+    if (l.anchorFixed || l.kind !== 'drawings' && l.kind !== 'comp') return;
     const t = l.transform;
     if (isAnimated(t.anchor) || isAnimated(t.position) || isAnimated(t.scale) || isAnimated(t.rotation)) return;
     const pg = this.page(l);
@@ -1522,6 +1578,7 @@ export class CompEditor {
    * scales; anywhere else on a layer moves it (selecting it first).
    */
   gestureStart(pt: Vec2, zoom: number, add = false, options: GestureOptions = {}): boolean {
+    if (this.anchorEditing && this.app.workspace === 'motion') return this.anchorStart(pt, zoom);
     if (this.pathEditing && this.app.workspace === 'motion') return this.pathStart(pt, zoom);
     const near = (a: Vec2, b: Vec2) => Math.hypot(a[0] - b[0], a[1] - b[1]) * zoom <= HANDLE_PX;
     const sel = this.primary;
@@ -1569,10 +1626,11 @@ export class CompEditor {
   }
 
   get dragging(): boolean {
-    return this.gesture !== null || this.clipGesture !== null || this.pathDrag !== null;
+    return this.gesture !== null || this.clipGesture !== null || this.pathDrag !== null || this.anchorDrag !== null;
   }
 
   gestureMove(pt: Vec2): void {
+    if (this.anchorDrag) { this.anchorMove(pt); return; }
     if (this.pathDrag) { this.pathMove(pt); return; }
     const g = this.gesture;
     if (!g) return;
@@ -1676,10 +1734,8 @@ export class CompEditor {
       const layers = this.layoutSelection();
       return this.edit('Center anchors on artwork', c => {
         for (const original of layers) {
-          const l = c.layers.find(x => x.id === original.id)!; const b = this.bounds(original), anchor: Vec2 = [b.x + b.w / 2, b.y + b.h / 2], f = this.frameOf(original), old = valueAt(original.transform.anchor, f), pos = valueAt(original.transform.position, f);
-          const scale = valueAt(original.transform.scale, f), angle = valueAt(original.transform.rotation, f) * Math.PI / 180, dx = (anchor[0] - old[0]) * scale[0] / 100, dy = (anchor[1] - old[1]) * scale[1] / 100;
-          this.setProp(l, 'position', this.withValue(original, 'position', [pos[0] + dx * Math.cos(angle) - dy * Math.sin(angle), pos[1] + dx * Math.sin(angle) + dy * Math.cos(angle)]));
-          this.setProp(l, 'anchor', this.withValue(original, 'anchor', anchor));
+          const l = c.layers.find(x => x.id === original.id)!, b = this.bounds(original);
+          l.transform = this.anchorTransform(original, [b.x + b.w / 2, b.y + b.h / 2]); l.anchorFixed = true;
         }
       });
     } catch (e) { this.app.onNotice?.((e as Error).message); return false; }
@@ -1704,6 +1760,7 @@ export class CompEditor {
 
   /** Finish (or cancel) a drag: one undo step if anything moved. */
   gestureEnd(cancel = false): void {
+    this.anchorEnd(cancel);
     this.pathEnd(cancel);
     this.assetClipEnd(cancel);
     this.snapGuides = [];

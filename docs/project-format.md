@@ -1,5 +1,16 @@
 # The .2dope project format (schemas 3–7)
 
+## Explicit anchor choice (2026-11-05)
+
+Layers may store `anchorFixed:true` after an explicit anchor edit. Only a boolean is accepted;
+false/absent retains the existing automatic first-transform centering behavior. Current readers
+preserve true through projects and portable artwork. It is interaction metadata: Anchor and the
+compensating Position use the existing transform properties/keys. It does not change rendering
+or raise the minimum project schema; older readers may omit the explicit-choice preference.
+Anchor movement keeps the current frame's layer matrix in place. Animated properties follow
+normal Auto-key rules; this is not an all-frame compensation bake.
+
+
 ## Spatial key handles and selection groups (2026-11-04)
 
 Vector-valued keys may carry `spatial:{in:[x,y],out:[x,y]}` offsets relative to their key value.

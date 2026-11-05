@@ -1,6 +1,41 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-04) — read this first
+## Current state (2026-11-05) — read this first
+
+### Direct Motion anchor placement (2026-11-05)
+
+User asked to make anchor-point changes much easier. This follows published precision-tools
+commit `b057c5a`; the working changes survived a usage-limit interruption and were rechecked.
+Existing untracked research and railperf experiments remain excluded.
+
+Implemented: `ui/anchors.ts` adds a prominent Motion Anchor tool (Y), selected-state controls,
+yellow labeled pivot, tap/drag placement, Center and a nine-position context grid. Done/Esc/Y
+ends it; key repeat does not flicker the mode, typing does not activate it. Short landscape hides
+secondary timeline controls while Anchor is active. `CompEditor` compensates Position using the
+original layer matrix; current-frame artwork and descendants stay in place through rotated,
+scaled/reflected parents and camera views. Each edit is one command, with cancellation/no-op
+restoration and frame/comp drift guards. Presets pin drawing content before measuring, then check
+for stale clock/selection/graph state. Unlocked, visible artwork/groups/nulls only; zero-scale
+inverse drags refuse. Source-entry double taps are suppressed while Anchor/path tools are active.
+Pen anchor cancellation restores the original transform, unlike painting's keep-stroke behavior.
+`anchorFixed?:true` is additive layer interaction metadata in the existing format. It preserves
+an explicit pivot choice against first-transform automatic centering and survives project/asset
+serialization. Anchor/Position remain ordinary existing props; ordinary archives still require 3.
+Center anchors and numeric anchor edits mark the explicit choice as well. Manual/UPDATES and
+format/architecture describe normal Auto-key behavior and the current-frame preservation limit.
+
+Checks: 749 unit tests passed + 1 skipped (87 files); strict TypeScript/production build pass
+(existing large-chunk warning). Eight affected browser fixtures: anchors 11, three-size wrapper
+33, precision 17 + wrapper 51, motionassets 13 + wrapper 39, creationtools 23, workspacefixes 23.
+Anchor checks include actual App pointer routing, pen cancel, single Undo/Redo, paired Auto-key,
+nine positions, typing/keyboard isolation, grouped placement ownership, metadata roundtrip and
+old minimum schema. Five editor unit tests cover matrix/descendant invariance, reflection,
+camera/parent mapping, no-op/cancel, keyed compensation, explicit-pivot preservation and guards.
+Real CDP mouse movement independently placed the pivot at its expected pointer position while
+leaving the artwork matrix unchanged. Screenshots reviewed at 1280x900, 375x812, coarse-pointer
+768x1024 and 812x375: `2dope-anchor-{tool,presets}-*.png` in this chat's visualization directory.
+Physical iPad/Pencil/Safari and an onscreen keyboard remain unverified. This preserves the image
+at the current frame, not every frame of animation with changing scale/rotation.
 
 ### Precision tools and workspace consistency (2026-11-04)
 

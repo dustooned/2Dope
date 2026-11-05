@@ -63,7 +63,7 @@ export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, v
     g.setLineDash([]);
     if (id !== ed.primary?.id) continue;
     // corner squares scale (not on nulls)
-    if (l.kind !== 'null') {
+    if (l.kind !== 'null' && !ed.anchorEditing) {
       for (const p of c) {
         g.beginPath();
         g.rect(p![0] - 6, p![1] - 6, 12, 12);
@@ -72,19 +72,25 @@ export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, v
       }
     }
     if (simple) continue;
-    // rotate handle
-    const top: [number, number] = [(c[0]![0] + c[1]![0]) / 2, (c[0]![1] + c[1]![1]) / 2];
-    const h = scr(ed.rotateHandle(l, view.zoom));
-    g.beginPath();
-    g.moveTo(top[0], top[1]);
-    g.lineTo(h[0], h[1]);
-    g.stroke();
-    g.beginPath();
-    g.arc(h[0], h[1], 8, 0, Math.PI * 2);
-    g.fill();
-    g.stroke();
+    if (!ed.anchorEditing) {
+      // rotate handle
+      const top: [number, number] = [(c[0]![0] + c[1]![0]) / 2, (c[0]![1] + c[1]![1]) / 2];
+      const h = scr(ed.rotateHandle(l, view.zoom));
+      g.beginPath();
+      g.moveTo(top[0], top[1]);
+      g.lineTo(h[0], h[1]);
+      g.stroke();
+      g.beginPath();
+      g.arc(h[0], h[1], 8, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+    }
     // anchor
     const a = scr(anchorStage(ed, l));
+    if (ed.anchorEditing) {
+      g.save(); g.strokeStyle = '#ffd24a'; g.fillStyle = '#26262d'; g.lineWidth = 2; g.beginPath(); g.arc(a[0], a[1], 12, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(a[0] - 18, a[1]); g.lineTo(a[0] + 18, a[1]); g.moveTo(a[0], a[1] - 18); g.lineTo(a[0], a[1] + 18); g.stroke(); g.fillStyle = '#ffd24a'; g.font = '12px system-ui'; g.fillText('Anchor', a[0] + 19, a[1] - 14); g.restore();
+    }
     g.beginPath();
     g.moveTo(a[0] - 8, a[1]);
     g.lineTo(a[0] + 8, a[1]);

@@ -5428,3 +5428,15 @@ body.ws-board .sidebar { top: var(--chrome-bottom, 118px); transform: none; max-
 .graph-dialog>p,.vector-dialog>p { color: var(--muted); }
 .precision-controls,.precision-fields,.precision-canvas { margin-block: 10px; }
 .precision-fields .precision-fields { margin: 0; }
+
+.motion-anchor-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; background: var(--panel-2); border-block: 1px solid var(--line); }
+.motion-anchor-controls[hidden] { display: none; }
+.motion-anchor-controls span { flex: 1 1 160px; font-size: 12px; color: var(--muted); }
+.motion-anchor-controls button { min-height: 44px; padding: 0 12px; }
+
+.motion-workflow .motion-anchor-controls { grid-column: 1 / -1; grid-row: 3; }
+
+@media (max-height: 500px) {
+  .motion-workflow:has(.motion-anchor-controls:not([hidden])) .motion-workspace-tools,
+  .motion-workflow:has(.motion-anchor-controls:not([hidden])) .motion-extra { display: none; }
+}

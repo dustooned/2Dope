@@ -1,3 +1,4 @@
+import { AnchorControls } from './anchors';
 import { layerPresentation } from '../core/layerpresentation';
 import type { App } from '../app';
 import { PlaybackRangeControl } from './playbackrange';
@@ -105,6 +106,7 @@ export class MotionPanel {
   private readonly startBtn: HTMLButtonElement;
   private readonly camBtn: HTMLButtonElement;
   private readonly animatedBtn: HTMLButtonElement;
+  private readonly anchors: AnchorControls;
   private readonly effectsBtn: HTMLButtonElement;
   private readonly easeBtns = new Map<Easing, HTMLButtonElement>();
   private readonly sideBtns: HTMLButtonElement[];
@@ -189,7 +191,8 @@ export class MotionPanel {
     transport.classList.add('motion-transport');
     const heading = row(this.compName, this.crumbsEl, transport, help); heading.classList.add('motion-heading');
     const presets = btn('Presets', 'Motion and Effects presets', () => this.openPresets?.()); presets.setAttribute('aria-label', 'Motion presets');
-    const menus = row(addLayer, btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()), assets, layer, btn('Layout', 'Align and snap selected layers', () => app.openLayout?.()), tools, presets, this.effectsBtn, view);
+    this.anchors = new AnchorControls(app);
+    const menus = row(addLayer, btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()), assets, layer, this.anchors.button, btn('Layout', 'Align and snap selected layers', () => app.openLayout?.()), tools, presets, this.effectsBtn, view);
     menus.classList.add('motion-menus'); menus.setAttribute('role', 'toolbar'); menus.setAttribute('aria-label', 'Motion commands');
     const filter = el('input', { type: 'search', class: 'motion-search', placeholder: 'Find a layer…', 'aria-label': 'Find Motion layers', 'data-own-keys': '' });
     filter.addEventListener('input', () => { this.filter = filter.value.trim().toLowerCase(); this.signature = ''; this.update(); });
@@ -249,7 +252,7 @@ export class MotionPanel {
     extra.addEventListener('toggle', () => {
       try { localStorage.setItem('2dope.motion.extra', extra.open ? '1' : '0'); } catch { /* optional */ }
     });
-    this.bar.append(heading, menus, workspace, extra);
+    this.bar.append(heading, menus, this.anchors.root, workspace, extra);
     this.scroll.append(this.grid);
     root.append(this.bar, this.scroll);
     this.scroll.style.setProperty('--mleft-w', `${this.leftW}px`);
@@ -322,6 +325,7 @@ export class MotionPanel {
       this.rebuild();
     }
     // toolbar
+    this.anchors.update();
     this.frameLabel.textContent = `${app.fmt(app.frame)} / ${app.fmtDur(app.compEnd)}`;
     this.drawEditLine();
     for (const name of this.grid.querySelectorAll<HTMLElement>('.lname[data-act=name]')) {
@@ -343,7 +347,7 @@ export class MotionPanel {
     this.compName.hidden = ed.crumbs().length > 1;
     this.compName.title = `${c.name} · ${c.width}×${c.height} · ${c.fps} fps`;
     const nk = ed.selectedKeys().length;
-    this.selectionInfo.textContent = ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : `${ed.selected.length} layer${ed.selected.length === 1 ? '' : 's'} · ${nk} key${nk === 1 ? '' : 's'}`;
+    this.selectionInfo.textContent = ed.anchorEditing ? `Anchor · tap/drag canvas · Esc to finish` : ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : `${ed.selected.length} layer${ed.selected.length === 1 ? '' : 's'} · ${nk} key${nk === 1 ? '' : 's'}`;
     this.renderCrumbs();
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));

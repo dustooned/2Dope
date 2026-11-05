@@ -294,6 +294,7 @@ export class App {
     if (this.gradEdit) this.applyGradEdit();
     if (w === this.workspace || this.live) return;
     this.settleTemporaryEdits();
+    if (this.editor.anchorEditing) this.editor.setAnchorEditing(false);
     if (this.editor.pathEditing) this.editor.setPathEditing(false);
     if (this.playing) this.togglePlay();
     if (w === 'motion') this.leaveBlankPage();
@@ -5764,7 +5765,7 @@ export class App {
     const grabbed = ed.gestureStart(this.stagePoint(e), this.view.zoom, e.shiftKey || ed.multiSelect);
     const hit = grabbed ? (ed.primary?.id ?? '') : '';
     const now = performance.now();
-    if (grabbed && hit === this.lastTap.layer && now - this.lastTap.at < 350 && ed.primary?.kind === 'comp') {
+    if (grabbed && !ed.anchorEditing && !ed.pathEditing && hit === this.lastTap.layer && now - this.lastTap.at < 350 && ed.primary?.kind === 'comp') {
       ed.gestureEnd(true);
       this.lastTap = { at: 0, layer: '' };
       ed.enter(hit);
@@ -5985,7 +5986,7 @@ export class App {
     if (this.held_ === e.pointerId) this.held_ = null;
     if (this.motionPointer === e.pointerId) {
       this.motionPointer = null;
-      this.editor.gestureEnd(cancelled && (this.arrangingAssets || e.pointerType !== 'pen'));
+      this.editor.gestureEnd(cancelled && (this.arrangingAssets || this.editor.anchorEditing || e.pointerType !== 'pen'));
     }
     if (this.waiting && e.pointerId === this.waiting.id) {
       // (a pen's cancel still keeps its stroke, as below)
@@ -6295,6 +6296,8 @@ export class App {
       return;
     }
     if (this.workspace === 'motion') {
+      if (e.code === 'KeyY' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); if (!e.repeat) this.editor.setAnchorEditing(!this.editor.anchorEditing); return; }
+      if (e.key === 'Escape' && this.editor.anchorEditing) { e.preventDefault(); this.editor.setAnchorEditing(false); return; }
       if (e.key === 'Escape' && this.editor.pathEditing) { e.preventDefault(); this.editor.setPathEditing(false); return; }
       if (e.code === 'Delete' || e.code === 'Backspace') {
         e.preventDefault();

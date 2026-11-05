@@ -95,6 +95,7 @@ export interface PartFile {
 }
 
 export interface LayerFile {
+  anchorFixed?: boolean;
   title?: TitleSpec;
   id: string;
   name: string;
@@ -461,6 +462,8 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
     blend: BLEND_MODES.includes(v.blend as BlendMode) ? (v.blend as BlendMode) : 'normal',
     transform: transform(v.transform, what),
   };
+  if (v.anchorFixed !== undefined && typeof v.anchorFixed !== 'boolean') throw new SchemaError(`${what}: invalid anchor choice`);
+  if (v.anchorFixed === true) out.anchorFixed = true;
   if (v.guide === true) out.guide = true;
   if (v.guideExport === true) out.guideExport = true;
   if (v.notes === true) out.notes = true;
@@ -764,6 +767,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
         label: l.label,
         blend: l.blend,
         transform: transformOf(l.transform),
+        ...(l.anchorFixed ? { anchorFixed: true } : {}),
         ...(l.guide ? { guide: true } : {}),
         ...(l.guideExport ? { guideExport: true } : {}),
         ...(l.notes ? { notes: true } : {}),
@@ -845,6 +849,7 @@ export function compFile(c: Comp): CompFile {
         blend: l.blend,
         transform: transformFile(l.transform),
       };
+      if (l.anchorFixed) base.anchorFixed = true;
       if (l.guide) base.guide = true;
       if (l.guideExport) base.guideExport = true;
       if (l.notes) base.notes = true;
