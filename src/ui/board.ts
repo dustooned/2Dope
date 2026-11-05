@@ -38,6 +38,7 @@ const BOARD_VIEWS: BoardView[] = ['grid', 'panels', 'timeline', 'split'];
 
 export class BoardPanel {
   private readonly bar = el('div', { class: 'board-bar' });
+  private readonly canvasStatus = el('div', { class: 'story-canvas-status', 'aria-label': 'Current story sketch' });
   private readonly panelWorkspace = el('div', { class: 'story-panel-workspace' });
   private readonly navigator: StoryNavigator;
   private readonly cards = el('div', { class: 'board-cards', role: 'list', 'aria-label': 'Panels' });
@@ -133,15 +134,19 @@ export class BoardPanel {
     const help = btn('?', 'Story help', () => app.onOpenManual('board')); help.classList.add('panel-help'); help.setAttribute('aria-label', 'Story help');
     const transport = el('div', { class: 'story-transport', role: 'group', 'aria-label': 'Story playback' });
     transport.append(this.playBtn, this.prevBtn, this.readout, this.nextBtn);
-    const heading = el('div', { class: 'story-heading' });
-    heading.append(el('strong', { class: 'board-title' }, 'Story'), this.info, transport, help);
-    const controls = el('div', { class: 'story-controls', role: 'toolbar', 'aria-label': 'Story views and actions' });
-    controls.append(views, this.viewSelect, this.addBtn, this.storyTools, this.shareBtn);
-    this.bar.append(heading, controls);
+    const heading = el('div', { class: 'story-heading' }), identity = el('div', { class: 'story-identity' });
+    identity.append(el('strong', { class: 'board-title' }, 'Story'), this.info);
+    const actions = el('div', { class: 'story-actions', role: 'toolbar', 'aria-label': 'Story actions' }); actions.append(this.addBtn, this.storyTools, this.shareBtn);
+    heading.append(identity, actions);
+    const controls = el('div', { class: 'story-controls', role: 'toolbar', 'aria-label': 'Story views' });
+    controls.append(views, this.viewSelect);
+    const playback = el('div', { class: 'story-playback-row' }); playback.append(transport, help);
+    this.bar.append(heading, controls, playback);
     this.grid = new BoardGrid(app, (c, id) => this.paintThumb(c, id), (i) => this.writeOn(i));
     this.navigator = new StoryNavigator(app, (c, id) => this.paintThumb(c, id));
     this.panelWorkspace.append(this.navigator.root, this.cards);
     root.append(this.bar, this.timeline.root, this.grid.root, this.panelWorkspace, this.fileIn);
+    if (root.parentElement?.classList.contains('stage-col')) root.parentElement.querySelector('.stage')?.append(this.canvasStatus);
     this.applyView();
     attachContextMenu(this.cards, ({ target }) => {
       const card = (target as HTMLElement | null)?.closest<HTMLElement>('.bcard');
@@ -225,6 +230,7 @@ export class BoardPanel {
     this.nextBtn.disabled = !b || app.playing || app.lf >= lastStart;
     this.readout.textContent = b ? `${app.fmt(app.frame)} / ${app.fmtDur(end)}` : 'No storyboard';
     if (!b) {
+      this.canvasStatus.textContent = 'STORY SKETCH · Start a storyboard to draw panels';
       if (this.sig !== 'empty') {
         this.sig = 'empty';
         this.info.textContent = '';
@@ -267,6 +273,7 @@ export class BoardPanel {
     const cur = app.lf;
     let current = ex.length - 1, clock = 0;
     for (let i = 0; i < ex.length; i++) { clock += ex[i]!.length; if (cur < clock) { current = i; break; } }
+    this.canvasStatus.replaceChildren(el('strong', {}, `Sketch · Panel ${current + 1} / ${ex.length}`), el('span', {}, ex[current]?.shot || 'Draw on the canvas · write in Story'));
     this.navigator.update(current);
     this.root.dataset.currentPanel = String(current);
     const cardKey = `${app.project.activeComp}:${current}`;

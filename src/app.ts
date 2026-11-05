@@ -3923,7 +3923,7 @@ export class App {
       l.guide = true;
       c.layers.push(l);
     });
-    if (this.workspace === 'board') this.enterBoard();
+    if (this.workspace === 'board') { this.enterBoard(); this.onFrameChange(); }
   }
 
   /** Put the storyboard in final renders and Blender packages (it stays out by default). */

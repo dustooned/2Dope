@@ -1,5 +1,15 @@
 # Architecture
 
+Whole Story desk (2026-11-05): the Story-specific wide breakpoint in `style.css` lays out the
+existing stage and Board side by side, retaining the same canvas/clock/models. Responsive and
+Focus/presentation/hidden/share exclusions restore the existing stacked geometry. Board's header
+is separated into identity/actions, view controls and playback; desktop navigator becomes a strip
+above the writing surface. `BoardPanel` also owns a view-only sketch-context label in the stage.
+`Bubbles` suppresses duplicate global Share only when the Story header owns it and includes board
+presence in its signature. `App.createBoard` emits a final frame refresh after focusing the new
+board layer, so controls and paint target agree. Main-entry browser checks supplement Board fixtures.
+
+
 Focused Story (2026-11-05): `ui/board.ts` wraps the panel forms in `story-panel-workspace` and
 presents only the shared clock's current panel. `ui/storynav.ts` is a DOM navigator with keyboard
 panel selection and viewport-only thumbnail buffers (IntersectionObserver, released offscreen).

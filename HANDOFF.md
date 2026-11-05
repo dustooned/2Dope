@@ -2,6 +2,38 @@
 
 ## Current state (2026-11-05) — read this first
 
+### Whole Story desk follow-up (2026-11-05)
+
+User confirmed they were seeing the new `6ba16da` UI and still wanted a more substantial change.
+A fresh published browser session verified the prior build was live on `2dope.xyz`; this was not
+assumed to be a cache issue. The follow-up changes the overall Story workspace rather than only
+its writing forms. Existing untracked research/railperf experiments remain excluded.
+
+At >=1100px wide and >=650px tall, `style.css` puts the canvas and Story editor side by side,
+with a shared top navigation strip and a full-height right desk. Audio spans the bottom; the old
+height splitter is hidden only in this wide desk. Smaller windows retain the stacked/splitter
+layout. Focus, hidden UI, presentation, folded timeline and Share are excluded from desk geometry.
+The right desk uses a horizontal panel navigator above a full-width writing editor. Header rows
+separate Story identity/actions, view selection and playback; New panel is primary and secondary
+actions are icon-sized with accessible names. Phones combine the view picker, Play and clock;
+previous/next selection remains available through the panel navigator. The canvas identifies the
+current panel. Simple/Full share Story navigation, with classic duplicate top bars hidden only
+in Story. `ui/bubbles.ts` hides the global Share entry while Story owns its own Share action.
+
+Native main-entry review exposed a stale sketch toolbar after starting a board. `App.createBoard`
+now notifies frame observers after entering the board drawing, and Bubbles includes board presence
+in its update signature. No document model, timing or persistence format changed.
+
+Checks: 749 unit tests + 1 skipped (87 files), strict TypeScript/production build pass (existing
+chunk warning). Story UI 24 + three-size wrapper 72, storyexport 41, workspacefixes 23,
+paintingworkflow 21, motionassets 13, anchors 11, projectpreview 7 pass. Fixtures assert final
+creation ownership/tool readiness, full-mode navigation, desk geometry, single Share, current
+sketch context and normal navigation/layout after leaving Story. Actual main-entry browser
+review covered desktop Simple/Full and the compact phone interface, including real sidebar/tools
+that the isolated Board fixture does not contain. Screenshots outside Git: `2dope-story-desk-*.png`.
+Physical iPad/Pencil/onscreen keyboard remain unverified. Wide desk sizing is responsive rather
+than a new draggable vertical divider; smaller windows keep their existing timeline-height control.
+
 ### Focused Story UI cleanup (2026-11-05)
 
 User requested another Story UI cleanup after the published anchor update (`99a62e8`).

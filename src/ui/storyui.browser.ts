@@ -5,12 +5,12 @@ import { BoardPanel } from './board';
 import { Bubbles } from './bubbles';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#canvas')!, stage = document.querySelector<HTMLElement>('#stage')!;
-const app = new App(canvas, stage); app.loadProject(new Project(320, 180)); app.setWorkspace('board');
+const app = new App(canvas, stage); app.loadProject(new Project(320, 180)); app.project.layer.exposures[0]!.length = 24; app.setWorkspace('board');
 const errors: string[] = []; addEventListener('error', (e) => errors.push(e.message));
 let shared = 0, presented = 0, help = '';
 app.onOpenManual = (section) => { help = section ?? ''; };
 const board = new BoardPanel(app, document.querySelector<HTMLElement>('#board')!, () => shared++, () => presented++);
-const bubbles = new Bubbles(app, stage, { fit: () => app.refit(), brushLibrary: () => {}, colorPanel: () => {}, layers: () => {}, story: { view: () => board.currentView, setView: (v) => board.setView(v), images: () => board.pickImages(), exportBoard: () => shared++, controlsInPanel: true } });
+const bubbles = new Bubbles(app, stage, { fit: () => app.refit(), brushLibrary: () => {}, colorPanel: () => {}, layers: () => {}, share: {open:()=>false,show:()=>shared++}, story: { view: () => board.currentView, setView: (v) => board.setView(v), images: () => board.pickImages(), exportBoard: () => shared++, controlsInPanel: true } });
 bubbles.setLevel('simple', false);
 const refresh = () => { document.body.classList.remove('ws-board', 'ws-draw', 'ws-animate', 'ws-time', 'ws-motion'); document.body.classList.add(`ws-${app.workspace}`); board.update(); bubbles.update(); };
 app.onFrameChange = refresh; app.onWorkspaceChange = refresh; app.onThumbs = refresh; app.history.onChange = refresh; board.onView = () => bubbles.update(); refresh();
@@ -29,7 +29,10 @@ await check('Simple Story has one visible control header and no duplicated float
   expect(button('Share storyboard').disabled && button('Play', bar()).disabled, 'empty Story actions enabled');
 });
 await check('New panel starts Story with one Undo and Undo restores its empty state', async () => {
-  button('New panel', bar()).click(); await wait(); expect(app.board?.exposures.length === 1 && app.history.peekUndo()?.label === 'Start storyboard', 'start command missing');
+  const owners: string[] = [], oldRefresh = app.onFrameChange; app.onFrameChange = () => { owners.push(app.project.activeLayer); oldRefresh(); };
+  button('New panel', bar()).click(); await wait(); app.onFrameChange = oldRefresh; expect(owners.at(-1) === app.board?.id, 'creation did not notify the final drawing owner');
+  expect(!document.querySelector<HTMLButtonElement>('.bub-tools [data-tool-key=eraser]')!.disabled, 'sketch tools stayed disabled');
+  expect(app.board?.exposures.length === 1 && app.history.peekUndo()?.label === 'Start storyboard', 'start command missing');
   app.undo(); await wait(); expect(!app.board && button('Share storyboard').disabled, 'empty-state recovery failed');
   app.redo(); await wait(); expect(app.board?.exposures.length === 1 && app.project.activeLayer === app.board.id, 'Redo did not restore board editing focus');
 });
@@ -63,7 +66,7 @@ await check('Story tools includes Script, Present and Animate at Simple level', 
 await check('Grid, Panels, Timeline and Split are the same non-document choices at every UI level', async () => {
   const before = snapshot(), command = app.history.peekUndo();
   for (const level of ['simple', 'full'] as const) {
-    bubbles.setLevel(level, false); await wait(); expect(bar().offsetHeight > 0, `${level} hid Story controls`);
+    bubbles.setLevel(level, false); await wait(); expect(document.querySelector<HTMLElement>('.bub-modes')!.offsetHeight > 0 && document.querySelector<HTMLElement>('.bub-tools')!.offsetHeight > 0, `${level} lost mode or sketch tools`); expect(bar().offsetHeight > 0, `${level} hid Story controls`);
     for (const [label, view] of [['Grid', 'grid'], ['Panels', 'panels'], ['Timeline', 'timeline'], ['Split', 'split']] as const) {
       button(label, bar()).click(); await wait(25); expect(board.currentView === view && button(label, bar()).getAttribute('aria-pressed') === 'true', `${label} not selected`);
     }
@@ -148,6 +151,19 @@ await check('A long panel list allocates thumbnails only around the viewport', a
   const b = app.board!, saved = b.exposures; b.exposures = Array.from({length:80}, (_, i) => ({...saved[i % saved.length]!})); board.update(); await wait(200);
   const thumbnails = [...document.querySelectorAll<HTMLCanvasElement>('.story-panel-nav canvas')]; expect(thumbnails.length === 80 && thumbnails.filter(c => c.width > 0).length < 20, 'offscreen thumbnail pixels retained');
   b.exposures = saved; board.update(); app.goPanel(0); await wait();
+});
+await check('Story has one Share entry and an explicit sketch context', () => {
+  expect(document.querySelector<HTMLElement>('.bub-modes [data-mode=share]')!.hidden && button('Share storyboard').offsetHeight > 0, 'duplicated Share controls');
+  expect(document.querySelector('.story-canvas-status')!.textContent?.includes('Panel 1'), 'sketch context missing');
+});
+await check('Wide screens put sketch and writing side by side; compact screens retain usable bounds', () => {
+  const stageBox = stage.getBoundingClientRect(), editorBox = document.querySelector('#board')!.getBoundingClientRect();
+  if (innerWidth >= 1100 && innerHeight >= 650) expect(editorBox.left >= stageBox.right - 1 && editorBox.height > innerHeight * .7 && stageBox.width > 300, 'wide Story still uses bottom-docked editor');
+  else expect(editorBox.left >= -1 && editorBox.right <= innerWidth + 1 && stageBox.height >= 60, 'compact Story exceeds viewport');
+});
+await check('Leaving Story restores regular modes, Share and canvas layout', async () => {
+  app.setWorkspace('draw'); await wait(); expect(!document.querySelector<HTMLElement>('.bub-modes [data-mode=share]')!.hidden && getComputedStyle(document.querySelector('.story-canvas-status')!).display === 'none', 'Story UI leaked into Draw');
+  app.setWorkspace('board'); await wait(); expect(app.project.activeLayer === app.board!.id && document.querySelector<HTMLElement>('.bub-modes [data-mode=share]')!.hidden, 'return lost Story ownership');
 });
 await check('No uncaught browser errors', () => expect(!errors.length, errors.join('; ')));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;
