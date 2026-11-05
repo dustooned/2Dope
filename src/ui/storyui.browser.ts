@@ -110,6 +110,45 @@ await check('Story exposes the selected panel count and restores its saved view'
   board.update(); expect(document.querySelector('.board-info')!.getAttribute('aria-label')?.includes('selected'), 'Story selection context missing');
   board.setView('grid'); const host = document.createElement('div'); document.body.append(host); const reopened = new BoardPanel(app, host); expect(reopened.currentView === 'grid', 'Story did not restore its saved view'); host.remove(); board.setView('panels');
 });
+
+await check('Panels has a navigator and exactly one focused writing editor without horizontal form scrolling', async () => {
+  board.setView('panels'); app.goPanel(0); await wait(); const editor = document.querySelector<HTMLElement>('.board-cards')!;
+  expect(document.querySelectorAll('.story-panel-nav button').length === app.board!.exposures.length && document.querySelectorAll('.bcard:not([hidden])').length === 1, 'not one focused editor');
+  expect(editor.scrollWidth <= editor.clientWidth + 1 && !card(0).hidden, 'editor scrolls sideways');
+  const command = app.history.peekUndo(); button('Select story panel 2').click(); await wait();
+  expect(card(0).hidden && !card(1).hidden && button('Select story panel 2').getAttribute('aria-current') === 'true' && app.history.peekUndo() === command, 'panel navigation edited the document or wrong editor');
+});
+await check('Navigator arrow keys change the shared panel clock and keep keyboard focus', async () => {
+  app.goPanel(0); button('Select story panel 1').focus(); const command = app.history.peekUndo();
+  button('Select story panel 1').dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight',code:'ArrowRight',bubbles:true,cancelable:true})); await wait();
+  expect(app.frame === app.board!.exposures[0]!.length && document.activeElement === button('Select story panel 2') && !card(1).hidden && app.history.peekUndo() === command, 'keyboard navigation escaped to frame stepping');
+});
+await check('Return in Action commits once and reveals/focuses the next panel without losing caption Undo', async () => {
+  app.goPanel(0); const old = app.board!.exposures[0]!.action ?? ''; const field = card(0).querySelector<HTMLTextAreaElement>('[data-field=action]')!; field.focus(); field.value = 'Crosses the courtyard';
+  field.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',bubbles:true,cancelable:true})); await wait();
+  expect(app.board!.exposures[0]!.action === 'Crosses the courtyard' && !card(1).hidden && document.activeElement === card(1).querySelector('[data-field=action]'), 'Return lost caption or next-panel focus');
+  (document.activeElement as HTMLElement).blur(); app.undo(); await wait(); expect((app.board!.exposures[0]!.action ?? '') === old, 'caption Undo failed');
+});
+await check('Selecting a panel resets the editor scroll and keeps its duration header reachable', async () => {
+  const editor = document.querySelector<HTMLElement>('.board-cards')!; app.goPanel(1); editor.scrollTop = 300; button('Select story panel 1').focus(); button('Select story panel 1').click(); await wait();
+  const header = card(0).querySelector('.bhead')!.getBoundingClientRect(), box = editor.getBoundingClientRect();
+  expect(editor.scrollTop === 0 && header.top >= box.top - 1 && header.bottom <= box.bottom + 1, 'panel opens below its header '+JSON.stringify({scroll:editor.scrollTop,top:header.top,bottom:header.bottom,boxTop:box.top,boxBottom:box.bottom}));
+});
+await check('Navigator previews preserve portrait art proportions instead of stretching it', async () => {
+  const d = app.project.drawing(app.board!.exposures[0]!.drawing), old = d.thumb, rev = d.thumbRev, preview = document.createElement('canvas'); preview.width = 80; preview.height = 160; const g = preview.getContext('2d')!; g.fillStyle = '#000'; g.fillRect(0,0,80,160); d.thumb = preview; d.thumbRev++; board.update(); await wait(180);
+  const c = button('Select story panel 1').querySelector('canvas')!, ctx = c.getContext('2d')!, edge = ctx.getImageData(2,32,1,1).data, center = ctx.getImageData(48,32,1,1).data;
+  expect(c.width === 96 && edge[0] === 255 && center[0] === 0, 'portrait art was stretched or preview missing'); d.thumb = old; d.thumbRev = rev + 2; board.update();
+});
+await check('The compact view picker switches the same views without editing Story data', () => {
+  const select = document.querySelector<HTMLSelectElement>('.story-view-select')!, before = snapshot(), command = app.history.peekUndo();
+  for (const view of ['grid','timeline','split','panels']) { select.value = view; select.dispatchEvent(new Event('change')); expect(board.currentView === view, 'compact picker diverged'); }
+  expect(snapshot() === before && app.history.peekUndo() === command, 'compact picker edited document');
+});
+await check('A long panel list allocates thumbnails only around the viewport', async () => {
+  const b = app.board!, saved = b.exposures; b.exposures = Array.from({length:80}, (_, i) => ({...saved[i % saved.length]!})); board.update(); await wait(200);
+  const thumbnails = [...document.querySelectorAll<HTMLCanvasElement>('.story-panel-nav canvas')]; expect(thumbnails.length === 80 && thumbnails.filter(c => c.width > 0).length < 20, 'offscreen thumbnail pixels retained');
+  b.exposures = saved; board.update(); app.goPanel(0); await wait();
+});
 await check('No uncaught browser errors', () => expect(!errors.length, errors.join('; ')));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;
 export { app, board, bubbles };

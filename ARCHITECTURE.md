@@ -1,5 +1,16 @@
 # Architecture
 
+Focused Story (2026-11-05): `ui/board.ts` wraps the panel forms in `story-panel-workspace` and
+presents only the shared clock's current panel. `ui/storynav.ts` is a DOM navigator with keyboard
+panel selection and viewport-only thumbnail buffers (IntersectionObserver, released offscreen).
+Its previews use the same aspect-preserving `paintThumb` path as cards/grid. Phone view selection
+and desktop tabs both delegate `BoardPanel.setView`; Split reuses the same inspector under the
+existing timeline. Cross-panel caption Return selects the destination before focus; delayed
+field scrolling checks active focus. Sidebar selection resets inspector scroll without changing
+History, and the active header stays sticky. `storyui.html` and its three-size responsive wrapper
+exercise focused editing, navigation, compact controls, portrait pixels and an 80-panel list.
+
+
 Direct anchors (2026-11-05): `ui/anchors.ts` owns the compact Motion tool button, controls and
 resident/stale-guarded bounds presets. `CompEditor.anchorTransform` pairs Anchor/Position changes
 using the original local linear transform. Anchor gestures snapshot the layer list and inverse

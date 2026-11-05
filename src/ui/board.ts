@@ -1,3 +1,4 @@
+import { StoryNavigator } from './storynav';
 import type { App } from '../app';
 import { boardSpeakers, formatDialogue, parseDialogue, splitPanel, SPEAKER_MAX, type DialogueLine } from '../core/dialogue';
 import { CAPTION_FIELDS, type CaptionField } from '../core/timeline';
@@ -37,6 +38,8 @@ const BOARD_VIEWS: BoardView[] = ['grid', 'panels', 'timeline', 'split'];
 
 export class BoardPanel {
   private readonly bar = el('div', { class: 'board-bar' });
+  private readonly panelWorkspace = el('div', { class: 'story-panel-workspace' });
+  private readonly navigator: StoryNavigator;
   private readonly cards = el('div', { class: 'board-cards', role: 'list', 'aria-label': 'Panels' });
   private readonly info = el('span', { class: 'hint board-info' });
   private readonly playBtn: HTMLButtonElement;
@@ -50,11 +53,13 @@ export class BoardPanel {
   private detailProject: App['project'] | null = null;
   private readonly fileIn = el('input', { type: 'file', accept: 'image/*', multiple: '', hidden: '' });
   private sig = '';
+  private currentCard = '';
   private thumbs = new Map<string, number>();
   /** Panels (cards), Timeline (blocks on the clock, with audio) or Split (both). Remembered per device. */
   private view: BoardView = 'panels';
   private readonly grid: BoardGrid;
   private readonly timeline: BoardTimeline;
+  private readonly viewSelect = el('select', { class: 'story-view-select', 'aria-label': 'Story view' });
   private readonly viewBtns: HTMLButtonElement[] = [];
 
   constructor(
@@ -88,9 +93,11 @@ export class BoardPanel {
     ] as const) {
       const b = el('button', { type: 'button', title: hint }, label);
       b.addEventListener('click', () => this.setView(v));
+      this.viewSelect.append(el('option', {value:v}, label));
       this.viewBtns.push(b);
       views.append(b);
     }
+    this.viewSelect.onchange = () => this.setView(this.viewSelect.value as BoardView);
     this.playBtn = btn('Play', 'Play the animatic (dialogue lines show as subtitles)', () => app.togglePlay());
     this.playBtn.classList.add('icon-only');
     this.prevBtn = btn('Previous panel', 'Go to the previous story panel', () => this.stepPanel(-1), 'prev');
@@ -129,10 +136,12 @@ export class BoardPanel {
     const heading = el('div', { class: 'story-heading' });
     heading.append(el('strong', { class: 'board-title' }, 'Story'), this.info, transport, help);
     const controls = el('div', { class: 'story-controls', role: 'toolbar', 'aria-label': 'Story views and actions' });
-    controls.append(views, this.addBtn, this.storyTools, this.shareBtn);
+    controls.append(views, this.viewSelect, this.addBtn, this.storyTools, this.shareBtn);
     this.bar.append(heading, controls);
     this.grid = new BoardGrid(app, (c, id) => this.paintThumb(c, id), (i) => this.writeOn(i));
-    root.append(this.bar, this.timeline.root, this.grid.root, this.cards, this.fileIn);
+    this.navigator = new StoryNavigator(app, (c, id) => this.paintThumb(c, id));
+    this.panelWorkspace.append(this.navigator.root, this.cards);
+    root.append(this.bar, this.timeline.root, this.grid.root, this.panelWorkspace, this.fileIn);
     this.applyView();
     attachContextMenu(this.cards, ({ target }) => {
       const card = (target as HTMLElement | null)?.closest<HTMLElement>('.bcard');
@@ -188,18 +197,19 @@ export class BoardPanel {
   onView: () => void = () => {};
 
   private applyView(): void {
-    this.root.dataset.view = this.view;
+    this.root.dataset.view = this.view; this.viewSelect.value = this.view; this.viewSelect.disabled = !this.app.board;
     this.viewBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(BOARD_VIEWS[i] === this.view)));
     this.timeline.root.hidden = this.view === 'panels' || this.view === 'grid' || !this.app.board;
     this.grid.root.hidden = this.view !== 'grid' || !this.app.board;
-    this.cards.hidden = (this.view === 'timeline' || this.view === 'grid') && !!this.app.board;
+    this.panelWorkspace.hidden = this.cards.hidden = (this.view === 'timeline' || this.view === 'grid') && !!this.app.board;
+    this.navigator.root.hidden = !this.app.board;
   }
 
   /** Refresh: rebuild the cards when panels change (never while typing in one). */
   update(): void {
     const app = this.app;
     const b = app.board;
-    if (this.detailProject !== app.project) { this.detailProject = app.project; this.openDetails.clear(); this.sig = ''; }
+    if (this.detailProject !== app.project) { this.detailProject = app.project; this.openDetails.clear(); this.sig = ''; this.currentCard = ''; this.cards.scrollTop = 0; }
     this.applyView();
     this.timeline.update();
     this.grid.update();
@@ -255,13 +265,19 @@ export class BoardPanel {
     }
     // current and selected panels
     const cur = app.lf;
-    let at = 0;
+    let current = ex.length - 1, clock = 0;
+    for (let i = 0; i < ex.length; i++) { clock += ex[i]!.length; if (cur < clock) { current = i; break; } }
+    this.navigator.update(current);
+    this.root.dataset.currentPanel = String(current);
+    const cardKey = `${app.project.activeComp}:${current}`;
+    const resetScroll = cardKey !== this.currentCard && !this.cards.contains(document.activeElement);
+    this.currentCard = cardKey;
     this.cards.querySelectorAll<HTMLElement>('.bcard').forEach((c, i) => {
-      const len = ex[i]?.length ?? 0;
-      c.classList.toggle('on', cur >= at && cur < at + len);
+      c.classList.toggle('on', i === current); c.hidden = i !== current;
+      c.setAttribute('aria-label', `Editing story panel ${i + 1}`);
       c.classList.toggle('selected', app.selection.includes(i));
-      at += len;
     });
+    if (resetScroll) this.cards.scrollTop = 0;
   }
 
   private rebuild(): void {
@@ -277,7 +293,8 @@ export class BoardPanel {
       // the scene's colour along the top (scenes come from "Sc N" in Shot / scene)
       if (scenes[i]) { card.style.setProperty('--scene', sceneColour(scenes[i]!)); card.classList.add('in-scene'); }
       const head = el('div', { class: 'bhead' });
-      head.append(el('span', { class: 'bnum', title: `Panel ${i + 1}` }, String(i + 1)));
+      const number = el('button', { type: 'button', class: 'bnum', 'aria-label': `Draw on panel ${i + 1}`, title: 'Return to the drawing canvas for this panel' }, `Panel ${i + 1} ↗`);
+      number.onclick = () => { app.goPanel(i); app.focusCanvas(); }; head.append(number);
       head.append(el('span', { class: 'story-duration-label' }, 'Duration'));
       const dur = el('input', {
         type: 'number',
@@ -310,8 +327,8 @@ export class BoardPanel {
       // the picture: tap to go to this panel (the canvas above draws on it)
       const thumb = el('canvas', { class: 'bthumb', width: '192', height: String(Math.round((192 * p.height) / p.width)), role: 'img', 'aria-label': `Panel ${i + 1} picture`, title: 'Go to this panel (draw on it above)' });
       this.paintThumb(thumb, e.drawing);
-      const picture = el('button', { type: 'button', class: 'story-panel-picture', 'aria-label': `Draw on panel ${i + 1}`, title: 'Select this panel to draw on the canvas' });
-      picture.append(thumb); picture.addEventListener('click', () => app.goPanel(i));
+      const picture = el('button', { type: 'button', class: 'story-panel-picture', 'aria-label': `Preview and draw on panel ${i + 1}`, title: 'Select this panel to draw on the canvas' });
+      picture.append(thumb, el('span', { class: 'story-picture-label' }, 'Draw on canvas')); picture.addEventListener('click', () => { app.goPanel(i); app.focusCanvas(); });
       picture.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); });
       card.append(picture);
       // the dialogue lines first (what the animatic subtitles), then the other captions
@@ -332,7 +349,7 @@ export class BoardPanel {
         t.addEventListener('focus', () => {
           if (!app.selection.includes(i) || app.selection.length > 1) app.goPanel(i);
           // the on-screen keyboard can cover it: keep the box you type in in view
-          setTimeout(() => t.scrollIntoView({ block: 'nearest', inline: 'nearest' }), 250);
+          setTimeout(() => { if (t.isConnected && document.activeElement === t) t.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, 250);
         });
         const commit = () => {
           if ((app.board?.exposures[i]?.[f.key] ?? '') !== t.value.trim()) app.setCaption(i, f.key, t.value);
@@ -345,7 +362,7 @@ export class BoardPanel {
             k.preventDefault();
             commit();
             const next = this.cards.querySelector<HTMLTextAreaElement | HTMLInputElement>(`.bcard[data-i="${i + 1}"] [data-field="${f.key}"]`);
-            if (next) { const folded = next.closest('details'); if (folded) folded.open = true; next.focus(); }
+            if (next) { app.goPanel(i + 1); const live = this.cards.querySelector<HTMLElement>(`.bcard[data-i="${i + 1}"] [data-field="${f.key}"]`); const folded = live?.closest('details'); if (folded) folded.open = true; live?.focus(); }
             else t.blur();
           } else if (k.key === 'Escape') {
             t.value = app.board?.exposures[i]?.[f.key] ?? '';
@@ -440,7 +457,7 @@ export class BoardPanel {
       for (const f of [who, say] as HTMLElement[]) {
         f.addEventListener('focus', () => {
           focusPanel();
-          setTimeout(() => f.scrollIntoView({ block: 'nearest', inline: 'nearest' }), 250);
+          setTimeout(() => { if (f.isConnected && document.activeElement === f) f.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, 250);
         });
         f.addEventListener('change', commit);
         f.addEventListener('blur', () => setTimeout(() => this.update(), 0));
@@ -466,7 +483,7 @@ export class BoardPanel {
           k.preventDefault();
           commit();
           const next = r.nextElementSibling?.querySelector<HTMLTextAreaElement>('.bsay') ?? this.cards.querySelector<HTMLTextAreaElement>(`.bcard[data-i="${i + 1}"] [data-field="dialogue"]`);
-          if (next) next.focus();
+          if (next) { if (!r.nextElementSibling) app.goPanel(i + 1); next.focus(); }
           else say.blur();
         } else if (k.key === 'Escape') {
           reverting = true;
@@ -564,7 +581,7 @@ export class BoardPanel {
     g.fillStyle = '#ffffff';
     g.fillRect(0, 0, c.width, c.height);
     const t = d?.thumb;
-    if (t) g.drawImage(t, 0, 0, c.width, c.height);
+    if (t?.width && t.height) { const scale = Math.min(c.width / t.width, c.height / t.height), w = t.width * scale, h = t.height * scale; g.drawImage(t, (c.width - w) / 2, (c.height - h) / 2, w, h); }
     if (d) this.thumbs.set(drawingId, d.thumbRev);
   }
 }

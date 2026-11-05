@@ -2,6 +2,42 @@
 
 ## Current state (2026-11-05) — read this first
 
+### Focused Story UI cleanup (2026-11-05)
+
+User requested another Story UI cleanup after the published anchor update (`99a62e8`).
+Pre-existing untracked research/railperf material remains excluded.
+
+`ui/board.ts` now puts one current-panel writing surface beside `ui/storynav.ts`'s compact panel
+navigator. Hidden forms remain available for existing caption/keyboard commands; only the active
+panel is presented. Dialogue and Action are side by side on wider screens, details remain folded,
+and the sticky header offers Duration, panel actions and a direct drawing-canvas focus button.
+The navigator is horizontal above the editor on phones. Phone controls consolidate view tabs into
+one picker and compact Story tools/Share buttons; all four views still use the same `setView`.
+Short landscape uses one toolbar row; Split shares the focused editor under the existing timeline.
+No new document fields, timings or export formats were added.
+
+The navigator follows the shared panel clock, supports arrows/Home/End, restores focus across
+rebuilds and uses an IntersectionObserver to allocate only visible 96x64 thumbnail canvases.
+Offscreen buffers release to 0x0; previews letterbox actual thumbnail proportions. Panel changes
+reset editor scrolling after visibility changes. Return across panel fields reveals/selects the
+next panel before focusing it. Existing delayed keyboard scroll callbacks now require that their
+field is still connected and focused, avoiding a late jump after navigating elsewhere. Caption
+Undo and folded metadata remain intact. The export fixture explicitly selects panel 1 before
+editing its form because other panel forms are now hidden.
+
+Checks: 749 unit tests + 1 skipped (87 files), strict TypeScript/production build pass, with the
+existing large-chunk warning. Story UI 21 and its expanded three-size wrapper 63, storyexport 41,
+workspacefixes 23, paintingworkflow 21, motionassets 13, anchors 11 and projectpreview 7 pass
+(eight unique fixtures). Checks cover navigation-only state, writing/Undo/Return, current-panel and
+header visibility, no sideways form scrolling, the phone view picker, portrait preview pixels
+and bounded thumbnail allocation on an 80-panel list. Real CDP mouse selection and Action typing,
+commit and caption Undo also passed. Visual review covers Grid/Panels/Timeline/Split at 1280x900,
+375x812, coarse-pointer 768x1024 and 812x375. Before/after screenshots live outside Git in this
+chat's visualization directory: `2dope-story-{view}-{BEFORE,AFTER}-{size}.png` (disposable test art).
+Physical iPad/Pencil and a real onscreen keyboard remain unverified. Long dialogue/details scroll
+within the focused editor; the navigator has its own independent scroll. No virtualized form
+rebuild or new all-panel writing mode was introduced.
+
 ### Direct Motion anchor placement (2026-11-05)
 
 User asked to make anchor-point changes much easier. This follows published precision-tools

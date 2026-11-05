@@ -54,6 +54,7 @@ try {
 
   // --- the subtitle lines on the Story card
   check('Each card has a dialogue block with one empty line', rows(0).length === 1 && rows(1).length === 1 && !!card(0).querySelector('.bdialogue .bspeaker[list="board-speakers"]'));
+  app.goPanel(0); await settle();
   const r0 = rows(0)[0]!;
   type(r0.querySelector<HTMLInputElement>('.bspeaker')!, 'Sam'); change(r0.querySelector('.bspeaker')!);
   key(r0.querySelector('.bspeaker')!, 'Enter');
