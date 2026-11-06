@@ -1,4 +1,4 @@
-import { readEffectStyleOrigin, type EffectStyleOrigin } from '../core/effects';
+import { readEffectStyleOrigin, temporalEffect, type EffectStyleOrigin } from '../core/effects';
 import { readTitle, type TitleSpec } from '../core/title';
 import { readEffects, type LayerEffect } from '../core/effects';
 import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
@@ -38,7 +38,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 7;
+export const SCHEMA = 8;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -129,6 +129,7 @@ export interface LayerFile {
   clip?: boolean;
   alphaLock?: boolean;
   adjust?: boolean;
+  tweenVectors?: boolean;
   reference?: boolean;
   mask?: string;
   effects?: LayerEffect[];
@@ -176,6 +177,8 @@ export interface DrawingFile {
 
 /** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
 export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comps?: Record<string, CompFile>): number {
+  if (comps && Object.values(comps).some(c => c.layers.some(l =>
+    l.tweenVectors || l.effects?.some(e => temporalEffect(e.type)) || l.styleOrigin?.effects.some(e => temporalEffect(e.type))))) return 8;
   const spatial = (v: unknown): boolean => !!v && typeof v === 'object' && (Array.isArray(v) ? v.some(spatial) : Object.entries(v).some(([key, value]) => key === 'spatial' && value !== undefined || spatial(value)));
   if (comps && spatial(comps)) return 7;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.title))) return 6;
@@ -482,6 +485,7 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   }
   if (v.title !== undefined && kind !== 'drawings') throw new SchemaError(`${what}: titles must be drawing layers`);
   if (kind === 'drawings') {
+    if (v.tweenVectors === true && !out.adjust && !out.guide && !out.notes && !v.title) out.tweenVectors = true;
     out.exposures = exposureList(v.exposures, what, drawings);
     if (!out.exposures.length) throw new SchemaError(`${what} has no frames`);
     timing(v, out, what);
@@ -544,6 +548,7 @@ export function migrate(input: unknown): Record<string, unknown> {
   if ((raw.schema as number) < 5) raw = { ...raw, schema: 5 };
   if ((raw.schema as number) < 6) raw = { ...raw, schema: 6 };
   if ((raw.schema as number) < 7) raw = { ...raw, schema: 7 };
+  if ((raw.schema as number) < 8) raw = { ...raw, schema: 8 };
   return raw;
 }
 
@@ -776,6 +781,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
         ...(l.clip ? { clip: true } : {}),
         ...(l.alphaLock ? { alphaLock: true } : {}),
         ...(l.adjust ? { adjust: true } : {}),
+        ...(l.tweenVectors ? { tweenVectors: true } : {}),
         ...(l.reference ? { reference: true } : {}),
         ...(l.mask ? { mask: l.mask } : {}),
         ...(l.effects?.length ? { effects: structuredClone(l.effects) } : {}),
@@ -858,6 +864,7 @@ export function compFile(c: Comp): CompFile {
       if (l.clip) base.clip = true;
       if (l.alphaLock) base.alphaLock = true;
       if (l.adjust) base.adjust = true;
+      if (l.kind === 'drawings' && l.tweenVectors) base.tweenVectors = true;
       if (l.reference) base.reference = true;
       if (l.mask) base.mask = l.mask;
       if (l.effects?.length) base.effects = readEffects(l.effects);

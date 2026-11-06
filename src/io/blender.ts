@@ -1,6 +1,6 @@
 import { valueAt } from '../core/anim';
 import { blenderHandles, staticProp, type Prop, type Value, type Vec2 } from '../core/anim';
-import { activeEffects } from '../core/effects';
+import { activeEffects, temporalEffect } from '../core/effects';
 import { compLength, exportComp, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type DrawingsLayer, type Layer, partsActive, skippedInExport } from '../core/comp';
 
 /**
@@ -147,7 +147,7 @@ const clips = (l: Layer): boolean => l.kind === 'drawings' && l.clip === true &&
  */
 export function clipComp(c: Comp, l: Layer): Comp {
   const at = c.layers.indexOf(l);
-  let base = at + 1;
+  let base = clips(l) ? at + 1 : c.layers.length;
   while (base < c.layers.length && clips(c.layers[base]!)) base++;
   const layers = c.layers.filter((x) => x.kind !== 'camera').map((x): Layer => {
     if (x === l) return { ...x, blend: 'normal', transform: { ...x.transform, opacity: staticProp(100) } } as Layer;
@@ -242,6 +242,7 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
       if (skippedInExport(l)) continue; // the storyboard / guides stay in 2Dope
       if (l.kind === 'drawings' && l.title) notes.add(`“${l.name}”: Title exported as an image.`);
       const t = l.transform;
+      const temporal = activeEffects(l).some(e => temporalEffect(e.type));
       const anchorValue = t.anchor.keys.length ? t.anchor.keys[0]!.v : t.anchor.value;
       if (t.position.keys.some(k => k.spatial) || t.scale.keys.some(k => k.spatial)) notes.add(`“${l.name}”: curved motion is baked to per-frame transform keys.`);
       if (t.anchor.keys.length > 1) notes.add(`“${l.name}”: an animated anchor point is exported as its first value.`);
@@ -273,12 +274,13 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
         // cameras inside precomps only matter in 2Dope (the shot's camera frames Blender's render)
       } else if (l.kind === 'drawings' && l.adjust) {
         notes.add(`“${l.name}” is an adjustment layer: its effects change everything below it, so it stays in 2Dope (Blender gets the layers without them).`);
-      } else if (l.kind === 'drawings' && (clips(l) || l.mask || activeEffects(l).length > 0 || partsActive(l))) {
+      } else if (temporal || l.kind === 'drawings' && (clips(l) || l.mask || l.tweenVectors || activeEffects(l).length > 0 || partsActive(l))) {
         // what Blender cannot do with an image plane: 2Dope renders the layer as it draws it.
         // Clipped: in the comp's space (it depends on the layer below); otherwise on its own page
         // with no transform, so the plane keeps the layer's moves
         const clipped = clips(l);
-        const solo = clipped ? clipComp(c, l) : soloComp(c, l, anchorValue, project.width, project.height);
+        const compSpace = temporal || clipped || l.kind !== 'drawings';
+        const solo = compSpace ? clipComp(c, l) : soloComp(c, l, anchorValue, project.width, project.height);
         const keys = new Map<string, string>();
         const per: (string | null)[] = [];
         for (let f = 0; f < length; f++) {
@@ -296,13 +298,13 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
           }
           per.push(image);
         }
-        if (clipped) {
+        if (compSpace) {
           const centre = staticProp<Vec2>([c.width / 2, c.height / 2]);
           bc.layers.push({ ...base, kind: 'drawings', parent: null, anchor: [c.width / 2, c.height / 2], size: [c.width, c.height], channels: { ...channels(centre, ['position.x', 'position.y'], 0), ...channels(t.opacity, ['opacity'], l.start) }, frames: runs(per) });
-          notes.add(`“${l.name}” is clipped to the layer below, so Blender gets it as rendered frames with its moves in them.`);
-        } else {
+          notes.add(temporal ? `“${l.name}”: Echo or motion blur is baked into comp-sized frames with its moves.` : `“${l.name}” is clipped to the layer below, so Blender gets it as rendered frames with its moves in them.`);
+        } else if (l.kind === 'drawings') {
           bc.layers.push({ ...base, kind: 'drawings', size: [project.width, project.height], frames: runs(per) });
-          const what = [l.mask ? 'mask' : '', activeEffects(l).length ? 'effects' : '', partsActive(l) ? 'Ink / Colour settings' : ''].filter(Boolean);
+          const what = [l.mask ? 'mask' : '', activeEffects(l).length ? 'effects' : '', partsActive(l) ? 'Ink / Colour settings' : '', l.tweenVectors ? 'vector tweens' : ''].filter(Boolean);
           notes.add(`“${l.name}”: its ${what.join(' and ')} ${what.length === 1 && l.mask ? 'is' : 'are'} rendered into its pictures (still moving as a plane in Blender).`);
         }
       } else if (l.kind === 'drawings') {

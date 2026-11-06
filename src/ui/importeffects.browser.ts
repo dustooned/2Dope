@@ -1,6 +1,6 @@
 import { App } from '../app';
-import { staticProp } from '../core/anim';
-import { compLayer, drawingsLayer, newComp } from '../core/comp';
+import { setKey, staticProp } from '../core/anim';
+import { compLayer, drawingsLayer, frameContent, newComp } from '../core/comp';
 import { effectPreview, newEffect } from '../core/effects';
 import { Project, planeCanvas } from '../core/project';
 import { captureProject, loadProjectFile } from '../io/projectio';
@@ -164,45 +164,51 @@ await check('Group effects render after internal effects/adjustments, before ins
   expect(pixel(render(p), 5, 32)[3]! < pixel(c, 5, 32)[3]!, 'effect did not follow group transform');
   app.loadProject(p); app.setWorkspace('motion'); app.editor.select(group.id); motion.update();
 });
-await check('Motion, Share and the downloaded PNG agree on nested and adjustment effects', async () => {
-  const group = app.editor.primary!;
-  const nestedAdjustment = app.project.comps.get('nested')!.layers[0]!;
-  nestedAdjustment.effects![0]!.amount = 4;
-  group.transform.position = staticProp([32, 32]);
+async function comparePicture(xs: number[], y = 30): Promise<number[][]> {
+  const selected = app.editor.primary?.id ?? null;
   app.editor.select(null);
   app.setCanvasView({ transparency: false });
   app.fit(); app.requestRender(); await wait(160);
-  const motionPixels = [6, 24].map(x => {
-    const pt = app.view.docToScreen(x, 30), ratio = canvas.width / canvas.getBoundingClientRect().width;
+  const motionPixels = xs.map(x => {
+    const pt = app.view.docToScreen(x, y), ratio = canvas.width / canvas.getBoundingClientRect().width;
     return pixel(canvas, Math.floor(pt.x * ratio), Math.floor(pt.y * ratio));
   });
   const share = new ShareView(app, { sounds: new SoundBank(() => true), backup() {}, onOpenChange() {} });
   share.show('picture');
   try {
-    const background = [...document.querySelectorAll<HTMLSelectElement>('.share-settings select')].find(s => [...s.options].some(o => o.value === 'transparent'))!;
+    const panel = document.querySelector<HTMLElement>('.share:not([hidden])')!;
+    const background = [...panel.querySelectorAll<HTMLSelectElement>('.share-settings select')].find(s => [...s.options].some(o => o.value === 'transparent'))!;
     background.value = 'white';
     background.dispatchEvent(new Event('change'));
     await wait(200);
-    const preview = document.querySelector<HTMLCanvasElement>('.share-canvas')!;
-    const shares = [6, 24].map(x => pixel(preview, Math.floor(x * preview.width / 64), Math.floor(30 * preview.height / 64)));
-    document.querySelector<HTMLButtonElement>('.share-go')!.click();
+    const preview = panel.querySelector<HTMLCanvasElement>('.share-canvas')!;
+    const shares = xs.map(x => pixel(preview, Math.floor(x * preview.width / 64), Math.floor(y * preview.height / 64)));
+    panel.querySelector<HTMLButtonElement>('.share-go')!.click();
     let save: HTMLAnchorElement | null = null;
-    for (let i = 0; i < 100 && !save; i++) { await wait(); save = document.querySelector<HTMLAnchorElement>('.share-save'); }
+    for (let i = 0; i < 100 && !save; i++) { await wait(); save = panel.querySelector<HTMLAnchorElement>('.share-save'); }
     expect(save, 'PNG download missing');
     const png = await createImageBitmap(await (await fetch(save!.href)).blob());
     const decoded = blank(png.width, png.height);
     decoded.getContext('2d')!.drawImage(png, 0, 0);
     png.close();
     const close = (a: number[], b: number[]) => a.every((n, i) => Math.abs(n - b[i]!) <= 10);
-    for (const [i, x] of [6, 24].entries()) {
-      const exported = pixel(decoded, Math.floor(x * decoded.width / 64), Math.floor(30 * decoded.height / 64));
+    return xs.map((x, i) => {
+      const exported = pixel(decoded, Math.floor(x * decoded.width / 64), Math.floor(y * decoded.height / 64));
       expect(close(exported, shares[i]!) && close(exported, motionPixels[i]!), `at ${x}: Motion ${motionPixels[i]}, Share ${shares[i]}, PNG ${exported}`);
-      expect(exported[0]! >= 250 && exported[1]! < (i === 0 ? 250 : 136) && exported[1]! > (i === 0 ? 145 : 119), `unexpected effect output at ${x}: ${exported}`);
-    }
+      return exported;
+    });
   } finally {
     share.close();
-    app.editor.select(group.id);
+    app.editor.select(selected);
   }
+}
+await check('Motion, Share and the downloaded PNG agree on nested and adjustment effects', async () => {
+  const group = app.editor.primary!;
+  const nestedAdjustment = app.project.comps.get('nested')!.layers[0]!;
+  nestedAdjustment.effects![0]!.amount = 4;
+  group.transform.position = staticProp([32, 32]);
+  const pixels = await comparePicture([6, 24]);
+  pixels.forEach((px, i) => expect(px[0]! >= 250 && px[1]! < (i === 0 ? 250 : 136) && px[1]! > (i === 0 ? 145 : 119), `unexpected effect output: ${px}`));
 });
 await check('Effects card opens the selected group, filters effects and commits one group effect', () => {
   const l = app.editor.primary!; effects.show(l.id);
@@ -249,6 +255,63 @@ await check('Effects Add enforces the saved stack limit and routes contextual he
   const box = panel.getBoundingClientRect();
   expect(box.left >= -1 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1, `panel offscreen: ${box.toJSON()}`);
   if (innerWidth <= 760) expect(Math.abs(box.bottom - innerHeight) <= 1, 'touch card is not docked at the bottom');
+});
+await check('Echo and motion blur on a nested clip match Motion, Share, PNG and Blender bake', async () => {
+  const { p, a, d } = adjustment(50);
+  const red = d.line.getContext('2d')!;
+  red.clearRect(0, 0, 64, 64); red.fillStyle = '#ff0000'; red.fillRect(9, 22, 8, 18);
+  const next = p.newDrawing(), blue = next.line.getContext('2d')!;
+  blue.fillStyle = '#0000ff'; blue.fillRect(24, 22, 8, 18);
+  const inner = p.comp, art = p.layer;
+  a.effects![0]!.amount = 3; a.exposures[0]!.length = 2;
+  art.exposures.push({ drawing: next.id, length: 1 });
+  p.comps.delete(inner.id); inner.id = 'temporalSource'; p.comps.set(inner.id, inner);
+  const outer = newComp('c1', 'Temporal shot', 64, 64, inner.fps);
+  const group = compLayer('temporalGroup', 'Temporal clip', inner, outer);
+  group.transform.position = setKey(setKey(staticProp<[number, number]>([32, 32]), 0, [32, 32]), 1, [48, 32]);
+  group.effects = [{ ...newEffect('echo', 'echo', 1), amount: 60, size: 1 }, { ...newEffect('motionblur', 'shutter', 1), amount: 100 }];
+  outer.layers = [group]; p.comps.set(outer.id, outer); p.main = p.activeComp = outer.id;
+  app.loadProject(p); app.setWorkspace('motion'); app.setFrame(1); setFxPreview('full'); motion.update();
+  const content = frameContent(p.comps, outer, 1);
+  expect(content.drawings.has(d.id) && content.drawings.has(next.id), 'frame dependencies omitted the earlier drawing');
+  expect(content.key !== frameContent(p.comps, outer, 0).key, 'frame signature ignored temporal samples');
+  const [echo, smear, end] = await comparePicture([12, 33, 52]);
+  expect(echo![0]! > 240 && echo![1]! < 170, `historical red pose missing: ${echo}`);
+  expect(smear![2]! > 240 && smear![0]! < 240, `subframe blue smear missing: ${smear}`);
+  expect(end![0]! >= 250 && end![1]! >= 250, `unexpected paint outside the trail: ${end}`);
+  const job = planBlender(p, 'Temporal').renders.find(r => r.frame === 1 && r.image.startsWith('r:c1:temporalGroup:'))!;
+  const baked = blank(); drawComp(baked.getContext('2d')!, p, job.comp, 1, { export: true });
+  expect(pixel(baked, 12, 30)[3]! > 80 && pixel(baked, 33, 30)[3]! > 15, 'Blender bake dropped the trail or blur');
+  const saved = await captureProject(p).settle();
+  const loaded = parseProjectFile(stringifyProjectFile(saved.file));
+  expect(saved.file.schema === 8 && loaded.comps.c1!.layers[0]!.effects?.map(e => e.type).join() === 'echo,motionblur', 'temporal settings lost during file round-trip');
+});
+await check('Vector tween draws a new pose between matching shapes and survives save, reopen and PNG export', async () => {
+  const p = fresh(), a = p.drawing(p.layer.exposures[0]!.drawing!);
+  const doc = importVectorDocument('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M8 20L18 20L18 36L8 36Z" fill="#0000ff"/></svg>');
+  a.vectors = doc.strokes;
+  const b = p.cloneDrawing(a);
+  const path = b.vectors[0]!;
+  b.vectors = [{ ...path, shape: { ...path.shape!, path: 'M40 20L50 20L50 36L40 36Z' } }];
+  p.layer.exposures = [{ drawing: a.id, length: 4 }, { drawing: b.id, length: 1 }];
+  app.editor.setVectorTween(p.layer.id, true);
+  app.setFrame(2);
+  const [before, middle, after] = await comparePicture([12, 28, 45], 27);
+  expect(before![0] === 255 && middle![0] === 0 && middle![2] === 255 && after![0] === 255, 'export missed the in-between pose');
+  const archive = await captureProject(p).settle();
+  const loaded = loadProjectFile(parseProjectFile(stringifyProjectFile(archive.file))).project;
+  expect(archive.file.schema === 8 && loaded.layer.tweenVectors, 'vector tween setting did not round-trip');
+  app.loadProject(loaded); app.setWorkspace('motion'); app.setFrame(2);
+  const pinned = [...frameContent(loaded.comps, loaded.comp, 2).drawings].map(id => loaded.drawing(id));
+  try {
+    for (const drawing of pinned) await app.residency.pin(drawing);
+    const g = blank().getContext('2d')!;
+    drawComp(g, loaded, loaded.comp, 2, { export: true });
+    expect(pixel(g.canvas, 28, 27)[2] === 255, 'loaded project did not render the same tween');
+  } finally {
+    for (const drawing of pinned) app.residency.unpin(drawing);
+  }
+  expect(planBlender(p, 'Tween').renders.some(r => r.frame === 2), 'Blender plan omitted the in-between frame');
 });
 await check('No uncaught browser errors', () => expect(errors.length === 0, errors.join('; ')));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

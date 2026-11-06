@@ -4,7 +4,7 @@ import { syncCelGroups } from './core/cellink';
 import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
 import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
 import { loopKeys, smoothKeys, staggerOffsets, wiggle, type LoopMode, type StaggerOrder, type WiggleOptions } from './core/keytools';
-import { effectDef, keyableSettings, plainName, stillSetting } from './core/effects';
+import { effectDef, keyableSettings, plainName, stillSetting, temporalEffect } from './core/effects';
 import {
   apply,
   cameraLayer,
@@ -812,10 +812,29 @@ export class CompEditor {
   setAdjust(id: string, on: boolean): void {
     const target = this.layer(id);
     if (on && target?.kind === 'drawings' && target.title) { this.app.onNotice?.('Convert this title to paint before making it an adjustment layer.'); return; }
+    if (on && target?.effects?.some(e => temporalEffect(e.type))) {
+      this.app.onNotice?.('Remove Echo and Motion blur before making this an adjustment layer.');
+      return;
+    }
     this.edit(on ? 'Adjustment layer' : 'Adjustment layer off', (c) => {
       const l = c.layers.find((x) => x.id === id);
-      if (l && l.kind === 'drawings') { if (on) l.adjust = true; else delete l.adjust; }
+      if (l && l.kind === 'drawings') {
+        if (on) { l.adjust = true; delete l.tweenVectors; }
+        else delete l.adjust;
+      }
     });
+  }
+
+  setVectorTween(id: string, on: boolean): void {
+    const l = this.layer(id);
+    if (!l || l.kind !== 'drawings' || l.locked || l.adjust || l.guide || l.notes || l.title || !!l.tweenVectors === on) return;
+    this.edit(on ? 'Enable vector tweening' : 'Disable vector tweening', c => {
+      const layer = c.layers.find(layer => layer.id === id);
+      if (layer?.kind !== 'drawings') return;
+      if (on) layer.tweenVectors = true;
+      else delete layer.tweenVectors;
+    });
+    if (on) this.app.onNotice?.('Duplicate a vector drawing, move its points, and give the first pose a hold to tween across.');
   }
 
   deleteLayers(ids = this.selected): void {

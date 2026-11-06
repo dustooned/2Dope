@@ -4989,6 +4989,9 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .bub-ctx[data-row=transform] .bub-chip { min-height: 44px; }
 .bub-ctx[data-row=transform] :is([data-command="transform.uniform"], [data-command="transform.freeform"], [data-command="transform.distort"], [data-command="transform.warp"]) { border-radius: var(--radius-md); padding-inline: 10px; }
 .bub-ctx[data-row=transform] .transform-sampling { min-height: 44px; font-size: 12px; max-width: 150px; }
+.transform-fields { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 6px 10px; padding: 4px 6px; border-top: 1px solid var(--line); }
+.transform-fields label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+.transform-fields input { width: 76px; min-height: 44px; padding: 0 6px; }
 @media (max-width: 700px) { .bub-ctx[data-row=transform] .bub-row-title { display: none; } }
 .bub-tool-drawer .bub-drawer-hint { flex-basis: 100%; margin: -2px 0 4px; font-size: 12px; color: var(--muted); }
 body.painting-workspace .painting-views .painting-handle.folded { opacity: 0.75; border-style: dashed; }

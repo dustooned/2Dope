@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
 import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
-import { canMerge, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, TARGET_NAMES, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
+import { canMerge, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, TARGET_NAMES, temporalEffect, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { setKey } from '../core/anim';
 import { showContextMenu, type CtxItem } from './contextmenu';
@@ -174,6 +174,10 @@ export class EffectsPanel {
   /** One undo step: the layer's effects become `next`. */
   private commit(label: string, next: LayerEffect[]): void {
     if (next.length > MAX_LAYER_EFFECTS) { this.app.onNotice?.(`A layer can hold ${MAX_LAYER_EFFECTS} effects. Remove one before adding another.`); return; }
+    if (this.layer()?.adjust && next.some(e => temporalEffect(e.type))) {
+      this.app.onNotice?.('Echo and Motion blur need an artwork or clip layer.');
+      return;
+    }
     const id = this.layerId;
     effectPreview.delete(id);
     this.app.editor.edit(label, (c) => {
@@ -202,7 +206,7 @@ export class EffectsPanel {
     const name = plainName(effectDef(e.type));
     const below = list[i + 1];
     return [
-      { label: 'Duplicate', run: () => { const id = this.newId(); this.opened.add(id); this.swiped = ''; this.commit(`Duplicate ${name.toLowerCase()}`, duplicateEffect(list, i, id)); } },
+      { label: 'Duplicate', disabled: temporalEffect(e.type), run: () => { const id = this.newId(); this.opened.add(id); this.swiped = ''; this.commit(`Duplicate ${name.toLowerCase()}`, duplicateEffect(list, i, id)); } },
       { label: 'Merge down', disabled: !canMerge(e, below), title: canMerge(e, below) ? 'Join with the effect under it (the amounts add up)' : 'Merge works with the same effect, on the same part, right under this one', run: () => { const m = mergeDown(list, i); this.swiped = ''; if (m) this.commit(`Merge ${name.toLowerCase()}`, m); } },
       { label: 'Reset', title: 'Back to the starting settings', run: () => this.patch(i, resetEffect(e), `Reset ${name.toLowerCase()}`) },
       { label: 'Delete', danger: true, run: () => { this.swiped = ''; this.commit(`Delete ${name.toLowerCase()}`, list.filter((_, k) => k !== i)); } },
@@ -284,11 +288,12 @@ export class EffectsPanel {
       search.value = this.search;
       const sections = new Map<string, HTMLElement>();
       for (const t of EFFECT_TYPES) {
-        const category = ['blur', 'dirblur', 'radialblur', 'shadow', 'glow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'offset', 'wave'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv'].includes(t.id) ? 'Texture and retro' : 'Colour and style';
+        if (l.adjust && temporalEffect(t.id)) continue;
+        const category = temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'offset', 'wave'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv'].includes(t.id) ? 'Texture and retro' : 'Colour and style';
         let section = sections.get(category);
         if (!section) { section = el('section', { class: 'fx-category' }); section.append(el('strong', {}, category)); sections.set(category, section); add.append(section); }
         const b = el('button', { type: 'button', title: t.hint, 'aria-label': `Add ${plainName(t)}`, 'data-effect': t.id });
-        b.disabled = list.length >= MAX_LAYER_EFFECTS;
+        b.disabled = list.length >= MAX_LAYER_EFFECTS || temporalEffect(t.id) && list.some(e => e.type === t.id);
         b.append(el('strong', {}, plainName(t)), el('span', { class: 'fx-add-hint' }, t.hint));
         b.dataset.search = `${plainName(t)} ${t.hint} ${category}`.toLowerCase();
         b.addEventListener('click', () => {
@@ -296,7 +301,7 @@ export class EffectsPanel {
           this.opened.add(id);
           // Keep Add open for a stack of effects. Each addition is its own undoable edit.
           this.added = `Added ${plainName(t)} to ${l.name}.`;
-          this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, { ...newEffect(t.id, id, newSeed()), ...((l.kind === 'comp' || l.adjust) ? { target: 'layer' as const } : l.title ? { target: 'fill' as const } : {}) }]);
+          this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, { ...newEffect(t.id, id, newSeed()), ...((l.kind === 'comp' || l.adjust || temporalEffect(t.id)) ? { target: 'layer' as const } : l.title ? { target: 'fill' as const } : {}) }]);
           this.root.querySelector<HTMLButtonElement>(`[data-effect="${t.id}"]`)?.focus({ preventScroll: true });
         });
         section.append(b);
@@ -338,7 +343,7 @@ export class EffectsPanel {
     const top = el('div', { class: 'fx-top' });
     const grip = el('button', { type: 'button', class: 'fx-grip', title: 'Drag to reorder', 'aria-label': `Reorder ${name}` }, '☰');
     const title = el('button', { type: 'button', class: 'fx-title', 'aria-expanded': String(open), title: open ? 'Fold this effect' : 'Show its settings' });
-    title.append(el('span', { class: 'fx-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), el('span', { class: 'fx-name' }, name), el('span', { class: 'fx-badge' }, (this.layer()?.kind === 'comp' || this.layer()?.adjust ? 'Composite' : TARGET_NAMES[e.target])));
+    title.append(el('span', { class: 'fx-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), el('span', { class: 'fx-name' }, name), el('span', { class: 'fx-badge' }, (temporalEffect(e.type) ? 'Motion' : this.layer()?.kind === 'comp' || this.layer()?.adjust ? 'Composite' : TARGET_NAMES[e.target])));
     title.addEventListener('click', () => { if (this.swiped) { this.swiped = ''; this.render(); return; } if (open) this.opened.delete(e.id); else this.opened.add(e.id); this.render(); });
     const sw = el('button', { type: 'button', class: `fx-switch${e.on ? ' on' : ''}`, role: 'switch', 'aria-checked': String(e.on), title: e.on ? 'Turn this effect off' : 'Turn this effect on', 'aria-label': `${name} on` });
     sw.append(el('span', { class: 'lc-switch-knob', 'aria-hidden': 'true' }));
@@ -372,7 +377,7 @@ export class EffectsPanel {
     const name = plainName(def);
     const adv = this.advanced;
     const body = el('div', { class: 'fx-body' });
-    if (adv && this.layer()?.kind === 'drawings' && !this.layer()?.adjust) {
+    if (adv && this.layer()?.kind === 'drawings' && !this.layer()?.adjust && !temporalEffect(e.type)) {
       const seg = el('div', { class: 'fx-seg', role: 'group', 'aria-label': 'Works on' });
       for (const t of ['line', 'fill', 'layer'] as EffectTarget[]) {
         const b = el('button', { type: 'button', 'aria-pressed': String(e.target === t) }, TARGET_NAMES[t]);

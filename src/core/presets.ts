@@ -1,4 +1,4 @@
-import { effectAt, EFFECT_TYPES, MAX_LAYER_EFFECTS, newEffect, readEffects, type LayerEffect } from './effects';
+import { effectAt, EFFECT_TYPES, MAX_LAYER_EFFECTS, newEffect, readEffects, temporalEffect, type LayerEffect } from './effects';
 import { EASED, valueAt, type Key, type Prop, type Side, type Value, type Vec2 } from './anim';
 import type { Comp, Layer } from './comp';
 import { DITHER_METHODS, PALETTES } from './dither';
@@ -101,10 +101,14 @@ export function presetLayer(preset: Preset, target: Layer, comp: Comp, options: 
   if (target.locked) return fail('unlock the selected layer first.');
   if (p.kind === 'effects') {
     if (target.kind !== 'drawings' && target.kind !== 'comp') return fail('select artwork, a group or an adjustment layer.');
+    if (target.adjust && p.effects.some(e => temporalEffect(e.type))) return fail('Echo and Motion blur need an artwork or clip layer.');
     if (target.kind === 'drawings' && target.title && p.effects.some(e => e.target === 'line')) return fail('titles use Colour pixels; choose Colour or Whole layer effects.');
     const effects = p.effects.map(e => ({ ...structuredClone(e), id: id(), ...((target.kind === 'comp' || target.adjust) ? { target: 'layer' as const } : {}) }));
     if (options.append && (target.effects?.length ?? 0) + effects.length > MAX_LAYER_EFFECTS) return fail('appending would exceed 16 effects.');
-    out.effects = options.append ? [...(out.effects ?? []), ...effects] : effects;
+    const next = options.append ? [...(out.effects ?? []), ...effects] : effects;
+    const temporal = next.filter(e => temporalEffect(e.type)).map(e => e.type);
+    if (new Set(temporal).size < temporal.length) return fail('a layer can hold one Echo and one Motion blur.');
+    out.effects = next;
     out.styleOrigin = { v: 1, name: p.name, effects: structuredClone(out.effects) }; return out;
   }
   if (p.camera !== (target.kind === 'camera')) return fail(p.camera ? 'select a camera layer for this move.' : 'select an artwork, group or anchor layer.');

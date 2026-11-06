@@ -1,7 +1,7 @@
 import type { TitleSpec } from './title';
-import { effectsKey, type EffectStyleOrigin, type LayerEffect } from './effects';
+import { effectsKey, temporalSamples, type EffectStyleOrigin, type LayerEffect } from './effects';
 import { staticProp, valueAt, type Prop, type Vec2 } from './anim';
-import { drawingAt, totalFrames, type Exposure } from './timeline';
+import { drawingAt, locate, totalFrames, type Exposure } from './timeline';
 import { soundStart, type SoundClip } from './audio';
 
 /**
@@ -111,6 +111,8 @@ export interface DrawingsLayer extends LayerBase, Timed {
   title?: TitleSpec;
   kind: 'drawings';
   exposures: Exposure[];
+  /** Interpolate matching authored vectors over the hold before the next drawing. */
+  tweenVectors?: boolean;
   /**
    * Settings for the Line and Fill parts of every drawing this layer shows (missing = defaults).
    * They let lines and colour be shown, faded, recoloured or shifted separately across the shot.
@@ -454,6 +456,15 @@ export function drawingOf(l: DrawingsLayer, compFrame: number): string | null {
   return f === null ? null : drawingAt(l.exposures, f);
 }
 
+export function vectorTweenAt(l: DrawingsLayer, frame: number): { next: string; t: number } | null {
+  if (!l.tweenVectors) return null;
+  const f = contentFrameAt(l, frame, totalFrames(l.exposures), EMPTY);
+  const at = f === null ? null : locate(l.exposures, f);
+  if (!at || at.offset <= 0) return null;
+  const current = l.exposures[at.index]!, next = l.exposures[at.index + 1]?.drawing;
+  return current.drawing && next && next !== current.drawing ? { next, t: at.offset / current.length } : null;
+}
+
 const EMPTY: ReadonlyMap<string, Comp> = new Map();
 
 /** The nested comp frame a precomp layer shows at a parent comp frame (converting fps if they differ). */
@@ -639,31 +650,42 @@ export interface FrameContent {
 const round = (m: Mat) => m.map((x) => Math.round(x * 1e4) / 1e4).join(',');
 
 /** Describe a comp frame without drawing it. */
-export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | Comp, frame: number, depth = 0): FrameContent {
+export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | Comp, frame: number, depth = 0, temporal = true): FrameContent {
   const c = typeof compId === 'string' ? comps.get(compId) : compId;
   const drawings = new Set<string>();
   if (!c || depth > 8) return { key: '', drawings };
   const parts: string[] = [c.background ?? '-', round(viewMatrix(c, frame, comps))];
-  for (const l of c.layers) {
-    if (l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps)) continue;
+  const describe = (l: DrawingsLayer | CompLayer, frame: number, childTemporal: boolean): string | null => {
     const look = `${round(worldMatrix(c, l, frame))}|${opacityAt(l, frame).toFixed(4)}|${l.blend}`;
+    const fx = effectsKey(l, frame - l.start);
     if (l.kind === 'drawings') {
       const id = drawingOf(l, frame);
-      if (!id) continue;
+      if (!id) return null;
       drawings.add(id);
       if (l.mask) drawings.add(l.mask);
-      const fx = effectsKey(l, frame - l.start);
+      const tween = vectorTweenAt(l, frame);
+      if (tween) drawings.add(tween.next);
       const pk = partsKey(l, frame - l.start);
-      parts.push(`${l.id}:${id}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}${pk ? `<${pk}>` : ''}@${look}`);
-    } else {
-      const n = comps.get(l.comp);
-      const nf = n ? nestedFrame(l, frame, c.fps, n, comps) : null;
-      if (!n || nf === null) continue;
-      const inner = frameContent(comps, instanceComp(n, l), nf, depth + 1);
-      for (const d of inner.drawings) drawings.add(d);
-      const fx = effectsKey(l, frame - l.start);
-      parts.push(`${l.id}:[${inner.key}]${fx ? `{${fx}}` : ''}@${look}`);
+      return `${l.id}:${id}${tween ? `>${tween.next}:${tween.t}` : ''}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}${pk ? `<${pk}>` : ''}@${look}`;
     }
+    const n = comps.get(l.comp);
+    const nf = n ? nestedFrame(l, frame, c.fps, n, comps) : null;
+    if (!n || nf === null) return null;
+    const inner = frameContent(comps, instanceComp(n, l), nf, depth + 1, childTemporal);
+    for (const d of inner.drawings) drawings.add(d);
+    return `${l.id}:[${inner.key}]${fx ? `{${fx}}` : ''}@${look}`;
+  };
+  for (const l of c.layers) {
+    if (l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps)) continue;
+    const present = describe(l, frame, temporal);
+    if (present) parts.push(present);
+    if (!temporal || l.adjust) continue;
+    const { echoes, poses } = temporalSamples(l, frame);
+    for (const sample of echoes) {
+      const past = describe(l, sample.frame, false);
+      if (past) parts.push(`echo:${sample.alpha}:${past}`);
+    }
+    if (poses.length) parts.push(`shutter:${poses.map(f => round(worldMatrix(c, l, f))).join('/')}`);
   }
   return { key: parts.join(';'), drawings };
 }

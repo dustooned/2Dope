@@ -11,7 +11,7 @@
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
-export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur';
 export type EffectTarget = 'line' | 'fill' | 'layer';
 export const MAX_LAYER_EFFECTS = 16;
 export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
@@ -91,6 +91,9 @@ export const EFFECT_TYPES: EffectDef[] = [
   { id: 'turbulence', label: 'Ripple', hint: 'Swirling, rippling warp: heat haze, water, wobbly shapes (turbulent displace)', target: 'layer', amount: 6, size: 90, hold: 2, amountRange: [0, 40], sizeRange: [8, 300], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
   { id: 'grain', label: 'Film grain', hint: 'Tiny specks in the paint that change every frame, like old film (noise)', target: 'layer', amount: 35, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Strength', sizeLabel: 'Speck', amountUnit: '%', sizeUnit: ' px', animated: true },
   { id: 'blur', label: 'Gaussian blur', hint: 'Softens the layer like a camera out of focus, or a dreamy glow (Gaussian blur)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [0, 40], sizeRange: [0, 0], amountLabel: 'Blur', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false },
+  { id: 'echo', label: 'Echo', hint: 'Leave fading copies of earlier artwork frames behind the current layer.', target: 'layer', amount: 45, size: 3, hold: 1, amountRange: [0, 100], sizeRange: [1, 6], amountLabel: 'Fade per copy', sizeLabel: 'Copies', amountUnit: '%', sizeUnit: '', animated: false,
+    extras: [{ key: 'spacing', label: 'Frame spacing', kind: 'range', min: 1, max: 12, step: 1, unit: ' frames', def: 1 }] },
+  { id: 'motionblur', label: 'Motion blur', hint: 'Smear the current drawing along the layer’s animated movement, rotation and scale.', target: 'layer', amount: 50, size: 5, hold: 1, amountRange: [0, 100], sizeRange: [2, 6], amountLabel: 'Shutter', sizeLabel: 'Samples', amountUnit: '% of frame', sizeUnit: '', animated: false },
   { id: 'shadow', label: 'Drop shadow', hint: 'A shadow behind the art, offset and softened, like a sticker or a cut-out (drop shadow)', target: 'layer', amount: 5, size: 0, hold: 1, amountRange: [0, 120], sizeRange: [0, 100], amountLabel: 'Distance', sizeLabel: 'Softness', amountUnit: ' px', sizeUnit: ' px', animated: false,
     extras: [
       { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 135 },
@@ -311,7 +314,7 @@ export function readEffects(v: unknown): LayerEffect[] | undefined {
       id: typeof r.id === 'string' && r.id.length <= 40 ? r.id : `fx${out.length + 1}`,
       type: def.id,
       on: r.on !== false,
-      target: r.target === 'fill' || r.target === 'layer' ? r.target : r.target === 'line' ? 'line' : def.target,
+      target: temporalEffect(def.id) ? 'layer' : r.target === 'fill' || r.target === 'layer' ? r.target : r.target === 'line' ? 'line' : def.target,
       amount: num(r.amount, def.amountRange, def.amount),
       size: num(r.size, def.sizeRange, def.size),
       hold: Math.round(num(r.hold, EFFECT_LIMITS.hold, def.hold)),
@@ -352,6 +355,35 @@ export const effectPreview = new Map<string, LayerEffect[]>();
 export function activeEffects(l: { id: string; effects?: LayerEffect[] }): LayerEffect[] {
   const list = effectPreview.get(l.id) ?? l.effects ?? [];
   return list.filter((e) => e.on);
+}
+
+export function temporalEffect(type: EffectType): boolean {
+  return type === 'echo' || type === 'motionblur';
+}
+
+/** One effect of each kind keeps temporal work bounded even when past drawings contain clips. */
+export function temporalSamples(l: { id: string; in: number; start: number; effects?: LayerEffect[] }, frame: number) {
+  const effects = activeEffects(l);
+  const echo = effects.find(e => e.type === 'echo');
+  const blur = effects.find(e => e.type === 'motionblur');
+  const echoes: { frame: number; alpha: number }[] = [];
+  const poses: number[] = [];
+  if (echo) {
+    const e = effectAt(echo, frame - l.start);
+    const spacing = Math.round(param<number>(e, 'spacing'));
+    if (e.amount > 0) for (let i = Math.round(e.size); i > 0; i--) {
+      const at = frame - spacing * i;
+      if (at >= Math.max(0, l.in)) echoes.push({ frame: at, alpha: (e.amount / 100) ** i });
+    }
+  }
+  if (blur) {
+    const e = effectAt(blur, frame - l.start);
+    const count = Math.round(e.size);
+    if (e.amount > 0) for (let i = count - 1; i >= 0; i--) {
+      poses.push(Math.max(0, l.in, frame - (e.amount / 100) * i / (count - 1)));
+    }
+  }
+  return { echoes, poses };
 }
 
 /** A short signature of what effects do at a frame (frame keys, caches). */

@@ -2,6 +2,35 @@
 
 ## Current state (2026-11-05) — read this first
 
+### Transform precision, vector poses and temporal effects
+
+Draw and Animate keep the four Transform modes and Apply/Cancel at the top of the options row.
+`ui/bubbles.ts` opens exact Width, Height and Angle, adjustable snap distance, sampling, flips,
+and reset under Transform options. `app.ts` uses drawing-space dimensions before rotation and
+draws a size or angle badge during a drag. Uniform preserves the current proportions.
+
+In Animate, choose Vector on a drawing layer, enable Tween vector points and extend the first
+drawing's hold. Duplicate vector pose copies its stroke IDs. Use Edit points or Vector objects
+on the copy. Playback and Motion interpolate the geometry of matching brush strokes or
+compatible imported paths. Unmatched geometry and raster paint stay held. Both original
+drawings stay editable. Motion's Selected layer menu also toggles the layer setting.
+
+Echo and Motion blur are whole-layer effects on drawings and clip instances. Echo samples
+earlier content and the poses it occupied. Motion blur accumulates the current artwork over
+subframe transforms, including parents. They run after spatial effects. Clip source
+adjustments render inside the sampled artwork. Historical samples skip further temporal
+history to keep nested rendering bounded. `core/comp.ts` shares dependencies and frame
+signatures with residency and exports. The Blender handoff bakes temporal effects in
+composition space and vector tweens into rendered drawings. Projects and artwork archives
+with these features require reader 8. Unrelated saves keep their previous minimum versions.
+
+Checks covered exact dimensions and a pen stroke duplicated and edited through the Animate
+UI. Motion, Share preview and the downloaded PNG agreed for a nested clip with an active
+adjustment and both temporal effects, and for a vector in-between. The fixtures also checked
+project reopen, Blender bake planning and rendered temporal bake pixels. The production build,
+754 unit tests (one skipped) and nine targeted Chromium fixtures passed. Physical iPad and
+Apple Pencil validation is still pending.
+
 ### Draw and Animate Transform (2026-11-05)
 
 The toolbar starts Transform on the current selection or on the artwork bounds of the current
@@ -23,7 +52,7 @@ a blurred group and an active partial-opacity adjustment in its source. The prod
 passed with the existing chunk warning. Unit tests passed 751 with one skipped. Browser checks
 covered compact and Full Transform controls, actual Freeform and Distort handles, the Warp center,
 Cancel, one-step Undo and synthetic pinch navigation. Physical iPad gestures and native Procreate
-clipboard handoff still need device verification. Temporal Echo and motion blur are pending.
+clipboard handoff still need device verification.
 
 ### Clipboard, imported assets and editable clips (2026-11-05)
 

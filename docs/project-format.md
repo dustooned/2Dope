@@ -1,4 +1,23 @@
-# The .2dope project format (schemas 3–7)
+# The .2dope project format (schemas 3–8)
+
+## Vector poses and temporal effects
+
+Schema 8 adds the opt-in `tweenVectors:true` flag on an artwork drawing layer and the
+`echo` and `motionblur` effect types on artwork and clip instances. The project and artwork
+archive writers require reader 8 when these features occur in the saved comp graph, including
+temporal effects in a layer’s applied style snapshot. Other files retain their existing minimum.
+
+Vector poses are ordinary drawings and exposures. Duplication keeps the stroke IDs that match
+the same path between poses. Intermediate frames interpolate compatible vector geometry over
+the previous pose’s hold. Raster planes and unmatched paths hold. No generated pose is stored.
+Frame dependencies include both source drawings on an intermediate frame.
+
+Echo uses earlier integer frames in the parent composition and renders oldest first. The
+motion blur shutter samples the current artwork at subframe positions, rotations and scales.
+Both reuse the layer effect settings schema and apply to the whole layer after its spatial
+effects. Frame dependencies include the earlier Echo artwork and the sampled transforms.
+Historical Echo samples render a nested clip’s spatial effects without starting a second
+temporal history. That bounds work across nested clips.
 
 ## Explicit anchor choice (2026-11-05)
 
@@ -19,7 +38,7 @@ one-third offset. Hold timing still holds. Reverse swaps incoming/outgoing offse
 negating them. Schema 7 validates both finite two-component offsets; scalar spatial handles and
 unknown handle fields are refused. Captures with spatial handles anywhere in the comp graph
 (including pins/overrides/effect snapshots) require reader 7. Earlier readers refuse those files;
-ordinary captures retain minimum 3/4/5/6. Loading migrates any supported file to runtime schema 7.
+ordinary captures retain minimum 3/4/5/6. Loading migrates any supported file to runtime schema 8.
 Project/asset archives retain the geometry. Curved motion presets use portable version 2;
 position handle offsets normalize by source width/height and adapt to the target canvas.
 Straight presets remain version 1; the device database version and independent snapshot behavior

@@ -1,5 +1,5 @@
 import { makeCanvas } from '../brush/raster';
-import { activeEffects, effectAt, effectDef, effectsKey, effectsPad, effectTick, param, type LayerEffect } from '../core/effects';
+import { activeEffects, effectAt, effectDef, effectsKey, effectsPad, effectTick, param, temporalEffect, type LayerEffect } from '../core/effects';
 import { applyBlur } from '../core/adjust';
 import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
@@ -76,7 +76,7 @@ export function drawEffected(
   flattened = false,
 ): HTMLCanvasElement | null {
   // keyframed settings take their value at this frame (and, in Fast preview, pixel sizes shrink with the page)
-  const fx = activeEffects(l).map((e) => scaled(effectAt(flattened ? { ...e, target: 'layer' } : e, frame), scale));
+  const fx = activeEffects(l).filter(e => !temporalEffect(e.type)).map((e) => scaled(effectAt(flattened ? { ...e, target: 'layer' } : e, frame), scale));
   if (!fx.length) return null;
   // shadows and glows reach past the art: work on a page grown by the pad
   const full = effectsPad(l), pad = full * scale;

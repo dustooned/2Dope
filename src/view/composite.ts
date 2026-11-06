@@ -1,4 +1,4 @@
-import { activeEffects, effectsPad } from '../core/effects';
+import { activeEffects, effectsPad, temporalEffect, temporalSamples } from '../core/effects';
 import { drawEffected, fxPreview, fxPreviewScale, releaseEffectScratch } from './effects';
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
@@ -18,6 +18,7 @@ import {
   partOf,
   partsActive,
   viewMatrix,
+  vectorTweenAt,
   worldMatrix,
   type BlendMode,
   type Comp,
@@ -29,6 +30,7 @@ import {
 } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
 import { strokeLength, type StrokeRecord } from '../core/stroke';
+import { tweenStrokes } from '../core/vectortween';
 
 /** Which planes of each drawing to draw: everything, only linework (with vectors), or only fills. */
 export type Planes = 'all' | 'line' | 'fill';
@@ -60,6 +62,8 @@ export interface CompositeOptions {
   onlyGuide?: boolean;
   /** Draw this drawing's pixels from other canvases (the stroke being painted right now). */
   source?: (d: Drawing) => DrawingSource | null;
+  /** Echo reads a past source without starting another temporal history from that sample. */
+  temporal?: false;
 }
 
 const BLEND: Record<BlendMode, GlobalCompositeOperation> = {
@@ -295,7 +299,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
   const shows = (l: Layer) => !(l.kind === 'camera' || l.kind === 'null' || !activeAt(l, frame, comps) || (depth === 0 && opt.skip === l.id) || (depth === 0 && opt.onlyGuide && l.id !== opt.guide) || (opt.export && skippedInExport(l) && !(depth === 0 && l.id === opt.guide)));
   const alphaOf = (l: Layer) => opacityAt(l, frame) * (depth === 0 ? (opt.alpha ?? 1) : 1);
   // adjustment layers work on what is below them: the comp is drawn on its own page first
-  const adjusts = (l: Layer) => l.kind === 'drawings' && !!l.adjust && shows(l) && activeEffects(l).length > 0 && (!!opt.export || fxPreview !== 'off');
+  const adjusts = (l: Layer) => l.kind === 'drawings' && !!l.adjust && shows(l) && activeEffects(l).some(e => !temporalEffect(e.type)) && (!!opt.export || fxPreview !== 'off');
   const page = c.layers.some(adjusts) ? scratchFor(`adj${depth}`, c.width, c.height) : null;
   const out = g;
   if (page) {
@@ -309,7 +313,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     g.fillStyle = c.background;
     g.fillRect(0, 0, c.width, c.height);
   }
-  const matOf = (l: Layer) => (page ? new DOMMatrix() : base).multiply(toDom(mul(view, worldMatrix(c, l, frame))));
+  const layerBase = page ? new DOMMatrix() : base;
   for (let i = c.layers.length - 1; i >= 0; i--) {
     const l = c.layers[i]!;
     if (l.kind === 'drawings' && l.adjust) {
@@ -323,12 +327,12 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     if (members) {
       drawClipGroup(
         g,
-        (x) => drawLayer(x, project, c, plain(l), frame, matOf(l), 1, planes, opt, depth),
+        (x) => drawTimedLayer(x, project, c, plain(l), frame, layerBase, 1, planes, opt, depth, view),
         alphaOf(l),
         l.blend,
         members.filter((j) => shows(c.layers[j]!) && alphaOf(c.layers[j]!) > 0).map((j) => {
           const cl = c.layers[j]!;
-          return { draw: (x) => drawLayer(x, project, c, plain(cl), frame, matOf(cl), alphaOf(cl), planes, opt, depth), blend: cl.blend };
+          return { draw: (x) => drawTimedLayer(x, project, c, plain(cl), frame, layerBase, alphaOf(cl), planes, opt, depth, view), blend: cl.blend };
         }),
         `${depth}`,
       );
@@ -336,7 +340,7 @@ export function drawComp(g: CanvasRenderingContext2D, project: Project, compId: 
     }
     const alpha = alphaOf(l);
     if (alpha <= 0) continue;
-    drawLayer(g, project, c, l, frame, matOf(l), alpha, planes, opt, depth);
+    drawTimedLayer(g, project, c, l, frame, layerBase, alpha, planes, opt, depth, view);
   }
   if (page) {
     g = out;
@@ -373,14 +377,58 @@ function applyAdjustment(page: HTMLCanvasElement, l: DrawingsLayer, frame: numbe
   g.globalCompositeOperation = 'source-over';
 }
 
-function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, m: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number, editingDrawing?: Drawing): void {
+function drawTimedLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, base: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number, view: Mat = IDENTITY): void {
+  const now = worldMatrix(c, l, frame);
+  if (!l.adjust && opt.temporal !== false && (opt.export || fxPreview !== 'off')) {
+    const { echoes, poses } = temporalSamples(l, frame);
+    const motion = poses.map(at => worldMatrix(c, l, at));
+    const blur = motion.some(pose => pose.some((n, i) => Math.abs(n - now[i]!) > 1e-7));
+    if (echoes.length || blur) {
+      const scale = opt.export ? 1 : fxPreviewScale();
+      const w = Math.max(1, Math.round(c.width * scale)), h = Math.max(1, Math.round(c.height * scale));
+      const plate = fresh(`temporal${depth}`, w, h);
+      const plateBase = new DOMMatrix().scale(w / c.width, h / c.height).multiply(toDom(view));
+      const layer = plain(l), previous: CompositeOptions = { ...opt, temporal: false };
+      for (const sample of echoes) {
+        const pose = plateBase.multiply(toDom(worldMatrix(c, l, sample.frame)));
+        drawLayer(plate, project, c, layer, sample.frame, pose, sample.alpha, planes, previous, depth);
+      }
+      if (blur) {
+        const target = echoes.length ? fresh(`shutter${depth}`, w, h) : plate;
+        drawLayer(target, project, c, layer, frame, plateBase, 1, planes, opt, depth, undefined,
+          motion.map(pose => plateBase.multiply(toDom(pose))));
+        if (target !== plate) {
+          plate.setTransform(1, 0, 0, 1, 0, 0);
+          plate.drawImage(target.canvas, 0, 0);
+        }
+      } else drawLayer(plate, project, c, layer, frame, plateBase.multiply(toDom(now)), 1, planes, opt, depth);
+      g.setTransform(base);
+      g.globalAlpha = alpha;
+      g.globalCompositeOperation = BLEND[l.blend];
+      g.drawImage(plate.canvas, 0, 0, c.width, c.height);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      return;
+    }
+  }
+  drawLayer(g, project, c, l, frame, base.multiply(toDom(mul(view, now))), alpha, planes, opt, depth);
+}
+
+function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, m: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number, editingDrawing?: Drawing, poses?: DOMMatrix[]): void {
   let source: HTMLCanvasElement | null = null;
   let direct: Drawing | null = null;
   let pad = 0;
   if (l.kind === 'drawings') {
     const id = drawingOf(l, frame);
-    const d = editingDrawing ?? (id ? project.drawings.get(id) : undefined);
+    let d = editingDrawing ?? (id ? project.drawings.get(id) : undefined);
     if (!d || d.parked) return;
+    const tween = !editingDrawing && vectorTweenAt(l, frame);
+    const next = tween && project.drawings.get(tween.next);
+    let tweenKey = '';
+    if (tween && next && !next.parked) {
+      d = { ...d, vectors: tweenStrokes(d.vectors, next.vectors, tween.t) };
+      tweenKey = `:${next.id}:${next.rev}:${tween.t}`;
+    }
     // A plain layer draws straight in; with opacity, a blend mode or a mask the drawing is
     // flattened first (its fill does not show through its own lines; the mask takes paint away)
     const mask = l.mask ? project.drawings.get(l.mask) : undefined;
@@ -389,13 +437,14 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     // effects (line boil...): the layer is painted part by part and processed first
     // while you work effects can be faster (half size) or off; exports always render them in full
     const fxScale = opt.export ? 1 : fxPreviewScale();
-    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, d, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}:${l.parts ? JSON.stringify(l.parts) : ''}`, c.fps, fxScale) : null;
-    if (alpha >= 1 && l.blend === 'normal' && !masked && !fx) direct = d;
+    const drawing = d;
+    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, drawing, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}${tweenKey}:${l.parts ? JSON.stringify(l.parts) : ''}`, c.fps, fxScale) : null;
+    if (alpha >= 1 && l.blend === 'normal' && !masked && !fx && !poses) direct = d;
     else {
       // effects that reach past the art (shadow, glow) come back on a grown page
       pad = fx ? effectsPad(l) : 0;
-      source = scratchFor(`d${depth}`, project.width + 2 * pad, project.height + 2 * pad);
-      const sg = source.getContext('2d')!;
+      const sg = fresh(`d${depth}`, project.width + 2 * pad, project.height + 2 * pad);
+      source = sg.canvas;
       if (fx) {
         sg.setTransform(1, 0, 0, 1, 0, 0);
         sg.clearRect(0, 0, source.width, source.height);
@@ -415,9 +464,8 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     const n = project.comps.get(l.comp);
     const nf = n ? nestedFrame(l, frame, c.fps, n, project.comps) : null;
     if (!n || nf === null) return;
-    source = scratchFor(`c${depth}`, n.width, n.height);
-    const sg = source.getContext('2d')!;
-    sg.setTransform(1, 0, 0, 1, 0, 0);
+    const sg = fresh(`c${depth}`, n.width, n.height);
+    source = sg.canvas;
     drawComp(sg, project, instanceComp(n, l), nf, opt, depth + 1);
     if (activeEffects(l).length && (opt.export || fxPreview !== 'off')) {
       const fx = drawEffected(l, layerFrame(l, frame), n.width, n.height, planes, depth,
@@ -430,11 +478,20 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
       }
     }
   }
-  g.setTransform(m);
-  g.globalAlpha = alpha;
-  g.globalCompositeOperation = BLEND[l.blend];
-  if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
-  else if (source) g.drawImage(source, -pad, -pad);
+  if (poses && source) {
+    g.globalAlpha = alpha / poses.length;
+    g.globalCompositeOperation = 'lighter';
+    for (const pose of poses) {
+      g.setTransform(pose);
+      g.drawImage(source, -pad, -pad);
+    }
+  } else {
+    g.setTransform(m);
+    g.globalAlpha = alpha;
+    g.globalCompositeOperation = BLEND[l.blend];
+    if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
+    else if (source) g.drawImage(source, -pad, -pad);
+  }
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
 }
@@ -520,7 +577,7 @@ const aroundAlpha = (l: Layer, frame: number, alpha: number, guideAlpha: number)
 export function drawLayerAround(g: CanvasRenderingContext2D, project: Project, c: Comp, frame: number, activeId: string, l: Layer, alpha: number, base: DOMMatrix): void {
   const active = c.layers.find((x) => x.id === activeId);
   const rel = active ? invert(worldMatrix(c, active, frame)) : IDENTITY;
-  drawLayer(g, project, c, l, frame, base.multiply(toDom(mul(rel, worldMatrix(c, l, frame)))), alpha, 'all', {}, 0);
+  drawTimedLayer(g, project, c, l, frame, base.multiply(toDom(rel)), alpha, 'all', {}, 0);
   g.setTransform(base);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';

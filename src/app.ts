@@ -27,7 +27,8 @@ import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareF
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
-import { compLayer, compLength, drawingsLayer, frameContent, invert, newComp, opacityAt, partOf, PART_LABEL, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { compLayer, compLength, drawingsLayer, frameContent, invert, newComp, opacityAt, partOf, PART_LABEL, vectorTweenAt, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { tweenStrokes } from './core/vectortween';
 import { MAX_COMPS, MAX_DRAWINGS, MAX_FRAMES, MAX_LAYERS } from './io/schema';
 import type { SoundAsset } from './core/audio';
 import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
@@ -1604,6 +1605,21 @@ export class App {
     }
     for (const c of f.handles) dot(c, 7);
     dot(f.knob, 11);
+    const drag = this.xf?.drag, size = this.transformDimensions;
+    if (drag && size) {
+      const label = drag.kind === 'rotate' ? `${size.angle.toFixed(1)}°` : `${Math.round(size.width)} × ${Math.round(size.height)} px`;
+      const p = this.view.docToScreen(...f.knob);
+      g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      g.font = '600 12px system-ui';
+      g.textBaseline = 'middle';
+      const width = g.measureText(label).width + 16;
+      const left = Math.max(4, Math.min(p.x - width / 2, this.canvas.width / this.dpr - width - 4));
+      const top = Math.max(4, Math.min(p.y - 38, this.canvas.height / this.dpr - 28));
+      g.fillStyle = '#222633';
+      g.fillRect(left, top, width, 24);
+      g.fillStyle = '#fff';
+      g.fillText(label, left + 8, top + 12);
+    }
     g.restore();
   }
 
@@ -1716,6 +1732,35 @@ export class App {
   transformInterpolation: Interpolation = 'bilinear';
   transformSnap = false;
   transformMagnetics = false;
+  transformSnapDistance = 8;
+
+  get transformDimensions(): { width: number; height: number; angle: number } | null {
+    const x = this.xf;
+    if (!x) return null;
+    const nodes = x.nodes ?? transformNodes(x.area, 2);
+    const xs = nodes.map(p => p[0]), ys = nodes.map(p => p[1]);
+    return {
+      width: (Math.max(...xs) - Math.min(...xs)) * x.params.scale * (x.params.sx ?? 1),
+      height: (Math.max(...ys) - Math.min(...ys)) * x.params.scale * (x.params.sy ?? 1),
+      angle: x.params.rotate,
+    };
+  }
+
+  setTransformDimension(field: 'width' | 'height' | 'angle', value: number): void {
+    const x = this.xf, size = this.transformDimensions;
+    if (!x || x.drag || !size || !Number.isFinite(value)) return;
+    if (field === 'angle') this.setTransform({ rotate: value });
+    else if (value > 0) {
+      const factor = value / size[field];
+      if (this.transformMode === 'uniform') this.setTransform({ scale: x.params.scale * factor });
+      else if (field === 'width') this.setTransform({ sx: (x.params.sx ?? 1) * factor });
+      else this.setTransform({ sy: (x.params.sy ?? 1) * factor });
+    }
+  }
+
+  setTransformSnapDistance(value: number): void {
+    if (Number.isFinite(value)) this.transformSnapDistance = Math.max(2, Math.min(32, Math.round(value)));
+  }
 
   setTransformMode(mode: TransformMode): void {
     if (!this.xf || this.xf.drag) return;
@@ -6108,7 +6153,7 @@ export class App {
             const deltas = [-lo - shift, size / 2 - (lo + hi) / 2 - shift, size - hi - shift];
             const index = deltas.reduce((best, v, i) => Math.abs(v) < Math.abs(deltas[best]!) ? i : best, 0);
             const nearest = deltas[index]!;
-            if (Math.abs(nearest) > 8 / this.view.zoom) return shift;
+            if (Math.abs(nearest) > this.transformSnapDistance / this.view.zoom) return shift;
             guides[axis] = targets[index]!;
             return shift + nearest;
           };
@@ -6151,7 +6196,7 @@ export class App {
         } else {
           let deg = base.rotate + ((Math.atan2(p.y - ay, p.x - ax) - xd.a0) * 180) / Math.PI;
           const snap = Math.round(deg / 15) * 15;
-          if (this.transformSnap && Math.abs(deg - snap) < 3) deg = snap;
+          if (this.transformSnap && Math.abs(deg - snap) < Math.min(7, this.transformSnapDistance * 3 / 8)) deg = snap;
           this.setTransform({ rotate: deg }, false);
         }
       }
@@ -6273,7 +6318,7 @@ export class App {
       const drag = this.xf.drag;
       this.xf.drag = null;
       this.touches.delete(e.pointerId);
-      if (drag.guides) this.requestRender();
+      this.requestRender();
       if (cancelled) {
         this.xf.nodes = drag.nodes;
         this.setTransform(drag.base);
@@ -6970,6 +7015,8 @@ export class App {
     const d = this.live && this.live.drawing !== maskD ? this.live.drawing : this.drawing;
     const base = g.getTransform();
     const active = this.project.layer;
+    const tween = this.playing && !this.editingMask && vectorTweenAt(active, this.frame);
+    const nextPose = tween && this.project.drawings.get(tween.next);
     const source = (drawing: Drawing): DrawingSource => {
       const ink = this.live?.drawing === drawing ? this.live : null;
       const raster = ink && ink.record.tool !== 'pen' ? ink : null;
@@ -6990,6 +7037,7 @@ export class App {
         return t;
       };
       let vectors = drawing.vectors;
+      if (drawing === d && tween && nextPose && !nextPose.parked) vectors = tweenStrokes(vectors, nextPose.vectors, tween.t);
       if (ink?.record.tool === 'pen') {
         const extra = ink.record.brush.smoothing < 0.15 ? ink.predicted : [];
         const points = [...ink.record.points, ...extra];
@@ -7106,6 +7154,9 @@ export class App {
       return [...out];
     }
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
+    const tween = this.playing && vectorTweenAt(p.layer, this.frame);
+    const nextPose = tween && p.drawings.get(tween.next);
+    if (nextPose) out.add(nextPose);
     if (this.maskDrawing) out.add(this.maskDrawing);
     out.add(this.drawing);
     // notes show even with Others hidden

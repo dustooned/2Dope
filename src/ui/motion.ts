@@ -1263,6 +1263,10 @@ export class MotionPanel {
       ...(l.kind === 'drawings' || l.kind === 'comp' ? [{ label: 'Effects', icon: 'fx', run: () => this.app.openEffects?.(l.id) }] : []),
       { label: 'Graph', icon: 'graph', run: () => { if (ed.primary?.id !== l.id) ed.select(l.id); this.openGraph?.(); } },
       ...(l.kind === 'comp' ? [{ label: 'Edit Clip', icon: 'time', run: () => this.editClip(l.id) }] : []),
+      ...(l.kind === 'drawings' && !l.adjust && !l.guide && !l.notes && !l.title ? [{
+        label: 'Tween vector points', icon: 'editpoints', checked: !!l.tweenVectors, disabled: l.locked,
+        run: () => ed.setVectorTween(l.id, !l.tweenVectors),
+      }] : []),
       ...(asset && this.clipPlayback ? [
         { title: 'Clip playback' },
         ...([['once', 'Once', 'play'], ['loop', 'Loop', 'recent'], ['hold', 'Hold Last Frame', 'last']] as const)

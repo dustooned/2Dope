@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, param, readEffects, resetEffect } from './effects';
+import { activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, param, readEffects, resetEffect, temporalSamples } from './effects';
 
 describe('layer effects', () => {
+  it('samples Echo oldest first and keeps its trails and shutter inside the layer trim', () => {
+    const l = { id: 'trail', in: 3, start: 1, effects: [
+      { ...newEffect('echo', 'echo', 1), amount: 50, size: 5, params: { spacing: 2 } },
+      { ...newEffect('motionblur', 'blur', 1), amount: 100, size: 3 },
+    ] };
+    expect(temporalSamples(l, 8)).toEqual({ echoes: [{ frame: 4, alpha: 0.25 }, { frame: 6, alpha: 0.5 }], poses: [7, 7.5, 8] });
+    expect(temporalSamples(l, 3)).toEqual({ echoes: [], poses: [3, 3, 3] });
+  });
   it('makes a line boil with its defaults, aimed at the Line', () => {
     const e = newEffect('boil', 'fx1', 7);
     expect(e).toMatchObject({ type: 'boil', on: true, target: 'line', hold: 2, seed: 7 });

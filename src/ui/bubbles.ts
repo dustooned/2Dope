@@ -101,6 +101,7 @@ export class Bubbles {
   /** The Layers bubble shows this cel's linked layers in the context bar. */
   private layersOpen = false;
   private moreTools = false;
+  private transformOptions = false;
   /** Point editing's on/off settings, folded behind one chip. */
   private pointSettings = false;
   /** Dock-style editing of the tool bar or an options row. */
@@ -678,6 +679,12 @@ export class Bubbles {
     const cur = this.current();
     const sel = !!a.spatialSelection;
     const xp = a.transformParams;
+    if (!xp) this.transformOptions = false;
+    const size = a.transformDimensions;
+    for (const field of this.ctx.querySelectorAll<HTMLInputElement>('[data-transform-dimension]')) {
+      const key = field.dataset.transformDimension as 'width' | 'height' | 'angle';
+      if (size && document.activeElement !== field) field.value = String(Number(size[key].toFixed(2)));
+    }
     const flip = this.flipOn;
     const cels = this.layersOpen && (ws === 'draw' || ws === 'animate' || ws === 'time') ? a.celLayers : [];
     const editing = a.pointEditing;
@@ -696,7 +703,7 @@ export class Bubbles {
     const shareMode = this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]');
     if (shareMode) { shareMode.setAttribute('aria-pressed', String(sharing)); shareMode.hidden = ws === 'board' && !!this.hooks.story?.controlsInPanel && !sharing; }
     this.modeName.textContent = sharing ? 'Share' : { animate: 'Animate', draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
-    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}|${this.editingTools}`;
+    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}|${this.editingTools}|${this.transformOptions}|${a.project.layer.tweenVectors}|${a.project.layer.locked}`;
     if (paintingSig === this.sig) return;
     this.sig = paintingSig;
 
@@ -795,14 +802,49 @@ export class Bubbles {
       });
       add(this.chip('Add layer', 'A new art layer for these cels: same frames and timing, its own drawing', false, () => { a.addCelLayer(); this.sig = ''; this.update(); }, 'plus'));
       if (!flip) add(this.chip('All layers', 'Every layer of the shot', false, (b) => this.hooks.layers(b), 'layers'));
-    } else if (row === 'transform' && xp) {
-      add(...this.commandChips('transform'));
-      const sampling = el('select', { class: 'transform-sampling', 'aria-label': 'Transform interpolation', title: 'Transform interpolation' });
-      for (const [value, label] of [['nearest', 'Nearest Neighbor'], ['bilinear', 'Bilinear'], ['bicubic', 'Bicubic']] as const)
-        sampling.add(new Option(label, value));
-      sampling.value = a.transformInterpolation;
-      sampling.onchange = () => a.setTransformInterpolation(sampling.value as typeof a.transformInterpolation);
-      add(sampling);
+    } else if (row === 'transform' && xp && size) {
+      const essentials = ['uniform', 'freeform', 'distort', 'warp', 'apply', 'cancel'];
+      const chips = this.commandChips('transform');
+      const primary = (b: HTMLButtonElement) => essentials.includes(b.dataset.command?.split('.')[1] ?? '');
+      add(...chips.filter(primary));
+      const options = this.chip('Transform options', 'Show precision, snapping and transform options', this.transformOptions, () => {
+        if (this.transformOptions) this.barEdit.close();
+        this.transformOptions = !this.transformOptions;
+        this.update();
+        this.ctx.querySelector<HTMLButtonElement>('[aria-label="Transform options"]')?.focus();
+      }, 'gear');
+      options.setAttribute('aria-expanded', String(this.transformOptions));
+      add(options);
+      if (this.transformOptions) {
+        add(...chips.filter(b => !primary(b)));
+        const fields = el('div', { class: 'transform-fields' });
+        for (const [key, label] of [['width', 'Width (px)'], ['height', 'Height (px)'], ['angle', 'Angle (°)']] as const) {
+          const input = el('input', { type: 'number', step: 'any', 'data-transform-dimension': key });
+          input.value = String(Number(size[key].toFixed(2)));
+          input.onchange = () => {
+            a.setTransformDimension(key, input.valueAsNumber);
+            const result = a.transformDimensions;
+            if (result) input.value = String(Number(result[key].toFixed(2)));
+          };
+          input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } };
+          const row = el('label', {}, label);
+          row.append(input);
+          fields.append(row);
+        }
+        const sampling = el('select', { class: 'transform-sampling' });
+        for (const [value, label] of [['nearest', 'Nearest Neighbor'], ['bilinear', 'Bilinear'], ['bicubic', 'Bicubic']] as const)
+          sampling.add(new Option(label, value));
+        sampling.value = a.transformInterpolation;
+        sampling.onchange = () => a.setTransformInterpolation(sampling.value as typeof a.transformInterpolation);
+        const distance = el('input', { type: 'number', min: '2', max: '32', step: '1' });
+        distance.value = String(a.transformSnapDistance);
+        distance.onchange = () => { a.setTransformSnapDistance(distance.valueAsNumber); distance.value = String(a.transformSnapDistance); };
+        const interpolation = el('label', {}, 'Interpolation'), snapping = el('label', {}, 'Snap distance (px)');
+        interpolation.append(sampling);
+        snapping.append(distance);
+        fields.append(interpolation, snapping);
+        add(fields);
+      }
     } else if (row === 'adjust') {
       add(el('span', { class: 'bub-hint adjustment-scope' }, a.adjusting?.mask ? 'Adjust: selected area · current drawing' : 'Adjust: current drawing · ink + colour'));
       add(...this.adjustControls());
@@ -831,6 +873,12 @@ export class Bubbles {
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
       add(...this.cmd('paint.editpoints'), ...this.cmd('paint.objects'), ...this.cmd('paint.svg'), ...this.cmd('paint.rasterize'), this.customizeChip('paint'));
+      const layer = a.project.layer;
+      if (ws === 'animate' && a.tool === 'pen' && !layer.locked && !layer.adjust && !layer.guide && !layer.notes && !layer.title && a.drawing.vectors.length) {
+        add(this.chip('Tween vector points', 'Interpolate matching vector points between drawings', !!layer.tweenVectors,
+          () => a.editor.setVectorTween(layer.id, !layer.tweenVectors)));
+        if (layer.tweenVectors) add(this.chip('Duplicate vector pose', 'Copy this drawing and its editable points to the next pose', false, () => a.duplicateFrame(), 'copy'));
+      }
     } else if (row === 'fill') {
       add(...this.gradChips());
       add(

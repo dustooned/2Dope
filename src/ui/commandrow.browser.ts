@@ -12,6 +12,8 @@ import { Bubbles } from './bubbles';
 import { AppSettingsUI } from './settings';
 import { closeContextMenu, showContextMenu } from './contextmenu';
 import { frameMenu } from './framemenu';
+import { frameContent } from '../core/comp';
+import { tweenStrokes } from '../core/vectortween';
 
 const PASS_KEY = 'commandrow.pass';
 const second = sessionStorage.getItem(PASS_KEY) === '2';
@@ -70,13 +72,15 @@ function restore() {
 
 const SHAPES = ['Freehand', 'Rectangle', 'Ellipse', 'Automatic', 'Colour', 'New', 'Add', 'Subtract'];
 const WITH_SELECTION = ['Transform', 'Fill', 'Copy', 'Cut', 'Duplicate', 'Copy to layer', 'Cut to layer', 'Delete', 'Invert', 'Deselect'];
-const TRANSFORM = ['Uniform', 'Freeform', 'Distort', 'Warp', 'Apply', 'Cancel', 'Snapping', 'Magnetics', '−', '+', '⟲45', '⟳45', 'Flip ↔', 'Flip ↕', 'Fit', 'Reset', 'Customize'];
+const TRANSFORM_PRIMARY = ['Uniform', 'Freeform', 'Distort', 'Warp', 'Apply', 'Cancel', 'Transform options'];
+const TRANSFORM = [...TRANSFORM_PRIMARY, 'Snapping', 'Magnetics', '−', '+', '⟲45', '⟳45', 'Flip ↔', 'Flip ↕', 'Fit', 'Reset', 'Customize'];
 const hint = (text: string) => [...document.querySelectorAll('.bub-ctx .bub-hint')].some((s) => s.textContent === text);
 
 /** Slice 2: the other rows come from the registry with the same chips, in the same order. */
 async function otherRows() {
   // Transform: all modes stay available; a hidden step leaves the rest in place.
   chip('Transform')!.click(); await settle();
+  chip('Transform options')!.click(); await settle();
   const ff = chip('Freeform')!;
   ff.click(); await settle();
   check('Transform: Freeform is pressed and describes independent scaling', app.transformMode === 'freeform' && chip('Freeform')!.getAttribute('aria-pressed') === 'true' && /independently/.test(chip('Freeform')!.title));
@@ -158,7 +162,7 @@ try {
     check('Copy still copies, and Paste appears before Customize', app.hasArtClip && labels().slice(-2).join() === 'Paste,Customize');
     chip('Transform')!.click(); await settle();
     const transformRow = labels();
-    check('Transform still starts a transform, with its own row from the registry', app.transforming && transformRow.join() === TRANSFORM.join(), transformRow);
+    check('Transform starts with modes and Apply/Cancel, with other controls folded', app.transforming && transformRow.join() === TRANSFORM_PRIMARY.join(), transformRow);
     app.cancelTransform(); await settle();
     const toolsBefore = tools();
 
@@ -256,7 +260,19 @@ try {
     if (!tool('transform')) tool('more')?.click();
     tool('transform')!.click(); await settle();
     check('Toolbar Transform opens on the ink bounds and keeps Brush as the return tool', app.transforming && app.tool === 'brush');
+    chip('Transform options')!.click(); await settle();
+    const edit = (selector: string, value: string) => {
+      const input = document.querySelector<HTMLInputElement>(selector)!;
+      input.value = value; input.dispatchEvent(new Event('change'));
+    };
+    edit('[data-transform-dimension=width]', '80');
+    check('Exact width in Uniform scales both dimensions', app.transformDimensions?.width === 80 && app.transformDimensions.height === 80);
+    chip('Reset')!.click();
     chip('Freeform')!.click(); await settle();
+    edit('[data-transform-dimension=height]', '72');
+    edit('[data-transform-dimension=angle]', '12.5');
+    check('Freeform numeric height and angle retain the width', app.transformDimensions?.width === 64 && app.transformDimensions.height === 72 && app.transformDimensions.angle === 12.5);
+    chip('Reset')!.click();
     drag(89, 57, 104, 57);
     check('Freeform side handle changes width and leaves the opposite edge and height in place', (app.transformParams?.sx ?? 0) > 1.2 && (app.transformParams?.sy ?? 1) === 1 && at(25, 57)[3]! > 100 && at(100, 57)[3]! > 100);
     chip('Reset')!.click(); chip('Distort')!.click(); await settle();
@@ -286,6 +302,26 @@ try {
     check('Returning to Brush applies the edit without opening the library or leaving a selection', !app.transforming && app.tool === 'brush' && !app.spatialSelection && brushPanels === beforeBrush && app.history.canUndo);
     app.undo(); await settle();
     check('One Undo restores the original Warp pixels', at(57, 57)[2] === 255 && at(70, 64)[2] === 0 && !app.history.canUndo);
+
+    app.loadProject(new Project(128, 128)); app.setWorkspace('animate'); app.setTool('pen'); app.fit(); await settle();
+    pointer('pointerdown', 26, 50);
+    for (let x = 30; x <= 90; x += 4) pointer('pointermove', x, 50);
+    pointer('pointerup', 90, 50); await settle();
+    const poseA = app.drawing, strokeA = poseA.vectors[0]!;
+    chip('Tween vector points')!.click(); await settle();
+    app.changeHold(3);
+    chip('Duplicate vector pose')!.click(); await settle();
+    const poseB = app.drawing;
+    chip('Edit points')!.click(); await settle();
+    const first = strokeA.points[0]!;
+    drag(first.x, first.y, first.x, first.y + 18); await settle();
+    chip('Done')!.click(); await settle();
+    const strokeB = poseB.vectors[0]!, middle = tweenStrokes(poseA.vectors, poseB.vectors, 0.5)[0]!;
+    const content = frameContent(app.project.comps, app.project.comp, 2);
+    check('A duplicated pose can move its own points and interpolate without editing the source pose',
+      poseB.id !== poseA.id && strokeB.id === strokeA.id && strokeB.points[0]!.y > first.y + 10 &&
+      poseA.vectors[0] === strokeA && middle.points[0]!.y === (first.y + strokeB.points[0]!.y) / 2 &&
+      content.drawings.has(poseA.id) && content.drawings.has(poseB.id), { a: first.y, b: strokeB.points[0]!.y, middle: middle.points[0]!.y, frame: app.frame });
   }
 } catch (e) {
   check(String(e), false);
