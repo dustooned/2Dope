@@ -26,7 +26,9 @@ import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareF
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
-import { compLength, drawingsLayer, frameContent, invert, opacityAt, partOf, PART_LABEL, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { compLayer, compLength, drawingsLayer, frameContent, invert, newComp, opacityAt, partOf, PART_LABEL, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
+import { MAX_COMPS, MAX_DRAWINGS, MAX_FRAMES, MAX_LAYERS } from './io/schema';
+import type { SoundAsset } from './core/audio';
 import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
 import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type InterfaceLevel } from './core/studentprefs';
 import { WORKSPACE_LAYOUT_KEY, readWorkspaceLayouts, type WorkspaceLayouts } from './core/workspacelayout';
@@ -1810,6 +1812,22 @@ export class App {
     return true;
   }
 
+  /** A transparent system clipboard representation of the current editable art copy. */
+  clipboardArtwork(): HTMLCanvasElement | null {
+    const clip = this.artClip;
+    if (!clip) return null;
+    const { rect, fill, line, vectors } = clip;
+    const canvas = makeCanvas(rect.w, rect.h), g = canvas.getContext('2d')!;
+    if (fill) g.putImageData(fill, 0, 0);
+    const ink = makeCanvas(rect.w, rect.h);
+    ink.getContext('2d')!.putImageData(line, 0, 0);
+    g.drawImage(ink, 0, 0);
+    ink.width = 0;
+    g.translate(-rect.x, -rect.y);
+    for (const stroke of vectors) drawVectorStroke(g, stroke, this.lengthOf(stroke));
+    return canvas;
+  }
+
   /** Delete what is selected (one undo step). The selection stays. */
   deleteSelectedArt(label = 'Delete selected'): void {
     if (this.titlePaintBlocked()) return;
@@ -3022,6 +3040,10 @@ export class App {
   openEffects: ((layerId: string) => void) | null = null;
   /** Open the media picker (pictures, movies, sounds); set by the shell. */
   pickMedia: (() => void) | null = null;
+  pasteMedia: (() => void) | null = null;
+  copyVisible: (() => void) | null = null;
+  pickAssetMedia: (() => void) | null = null;
+  importAssetArchive: ((file: File, frame: number) => Promise<void>) | null = null;
 
   /** Shows a short message to the person (the file UI sets it to a toast), with an optional fix button. */
   onNotice: ((message: string, action?: { label: string; run: () => void }) => void) | null = null;
@@ -3510,20 +3532,21 @@ export class App {
   }
 
   /** A new layer above the one you draw on, holding these drawings from frame 1 (one undo step). */
-  private addMediaLayer(name: string, frames: Drawing[], still: boolean, holds?: number[], label?: string): void {
+  private addMediaLayer(name: string, frames: Drawing[], still: boolean, holds?: number[], label?: string, assetFrame?: number): void {
     const p = this.project;
     const id = p.newId('L');
     const above = p.isPlaceholder ? null : p.activeLayer;
+    const makeLayer = (cc: Comp) => {
+      const layer = drawingsLayer(id, name.slice(0, 60), frames.map((d, i) => ({ drawing: d.id, length: Math.max(1, holds?.[i] ?? 1) })), p.width, p.height, cc.width, cc.height);
+      if (still) { layer.still = true; layer.play = 'loop'; }
+      return layer;
+    };
+    if (assetFrame !== undefined) {
+      this.addMediaAsset(name, frames, [makeLayer(p.comp)], assetFrame, still);
+      return;
+    }
     this.editor.edit(label ?? (still ? 'Import picture' : 'Import movie'), (cc) => {
-      const made = drawingsLayer(id, name.slice(0, 60), frames.map((d, i) => ({ drawing: d.id, length: Math.max(1, holds?.[i] ?? 1) })), p.width, p.height, cc.width, cc.height);
-      if (still) {
-        made.still = true;
-        made.play = 'loop';
-      }
-      made.start = 0;
-      made.in = 0;
-      made.out = null;
-      cc.layers.splice(Math.max(0, cc.layers.findIndex((l) => l.id === above)), 0, made);
+      cc.layers.splice(Math.max(0, cc.layers.findIndex((l) => l.id === above)), 0, makeLayer(cc));
     });
     this.focusLayer(id);
     this.onCompChanged();
@@ -3532,19 +3555,69 @@ export class App {
     this.onDocChanged();
   }
 
+  private checkMediaAsset(drawings: number, layers = 1): void {
+    const p = this.project;
+    if (p.comps.size >= MAX_COMPS || p.comp.layers.length >= MAX_LAYERS || layers > MAX_LAYERS || p.drawings.size + drawings > MAX_DRAWINGS)
+      throw new Error('This asset would exceed the project size limit.');
+    const bytes = p.width * p.height * 8 * drawings;
+    if (bytes > (this.device.lite ? 128 : 384) * 1024 * 1024) throw new Error('This asset is too large to paste. Try a smaller image or shorter clip.');
+  }
+
+  private addMediaAsset(name: string, drawings: Drawing[], layers: DrawingsLayer[], frame: number, still: boolean, audio?: { id: string; sound: SoundAsset }): void {
+    const p = this.project, shot = p.comp;
+    const source = newComp(p.newId('c'), name.trim().slice(0, 80) || 'Pasted artwork', shot.width, shot.height, shot.fps);
+    source.asset = true;
+    source.layers = layers;
+    if (audio) {
+      if (!p.sounds.has(audio.id) && p.sounds.size >= 64) throw new Error('This project has reached its sound limit.');
+      const trimOut = layers.length ? Math.min(audio.sound.duration, compLength(source, p.comps) / source.fps) : audio.sound.duration;
+      source.audio = [{ id: p.newId('a'), asset: audio.id, name: audio.sound.name, start: 0, trimIn: 0, trimOut, gain: 1, muted: false, link: null }];
+      p.sounds.set(audio.id, audio.sound);
+    }
+    source.duration = compLength(source, p.comps);
+    this.placeImportedAsset(source, [source], drawings, frame, still);
+  }
+
+  importSoundAsset(name: string, audio: { id: string; sound: SoundAsset }, frame: number): void {
+    this.checkMediaAsset(0);
+    this.addMediaAsset(name.replace(/\.[a-z0-9]+$/i, ''), [], [], frame, false, audio);
+  }
+
+  /** Add a complete asset graph and its first placement in one Undo step. */
+  placeImportedAsset(source: Comp, graph: Comp[], drawings: Drawing[], frame: number, still: boolean): void {
+    const p = this.project, shot = p.comp;
+    const placement = compLayer(p.newId('L'), source.name, source, shot);
+    placement.start = placement.in = frame;
+    placement.play = still ? 'loop' : 'once';
+    placement.locked = this.workspace !== 'motion' && !shot.asset;
+    this.editor.editProject('Import media as asset', () => {
+      for (const comp of graph) p.comps.set(comp.id, comp);
+      shot.layers.unshift(placement);
+    }, drawings);
+    if (this.workspace === 'motion' || shot.asset) this.editor.select(placement.id);
+    else { this.setWorkspace('animate'); this.setArrangeAssets(true, placement.id); }
+    this.setFrame(frame);
+    this.focusCanvas();
+    this.onNotice?.(`Added ${source.name} to Assets and placed it at frame ${frame + 1}.`);
+  }
+
   /**
    * An animation from another program (an animated GIF): one drawing per frame, each held as long
    * as it was (`holds`, in frames at the shot's fps), from frame 1.
    */
-  importAnimation(name: string, frames: CanvasImageSource[], w: number, h: number, holds: number[]): void {
+  importAnimation(name: string, frames: CanvasImageSource[], w: number, h: number, holds: number[], assetFrame?: number): void {
     if (this.strokeActive || !frames.length || w <= 0 || h <= 0) return;
+    if (assetFrame !== undefined) {
+      this.checkMediaAsset(frames.length);
+      if (holds.reduce((duration, hold) => duration + hold, 0) > MAX_FRAMES) throw new Error('This animation is too long to paste.');
+    }
     if (this.playing) this.togglePlay();
     const made = frames.map((src) => {
       const d = this.project.newDrawing();
       this.paintMedia(d, src, w, h);
       return d;
     });
-    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), made, false, holds, 'Import animation');
+    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), made, false, holds, 'Import animation', assetFrame);
   }
 
   /**
@@ -3553,8 +3626,9 @@ export class App {
    * name, opacity, blend, visibility and clipping. Every layer is a page-size picture (`w` × `h`)
    * so they stay lined up. One undo step.
    */
-  importLayered(name: string, w: number, h: number, layers: { name: string; src: CanvasImageSource; opacity: number; visible: boolean; blend: BlendMode; clip: boolean }[], background: boolean): void {
+  importLayered(name: string, w: number, h: number, layers: { name: string; src: CanvasImageSource; opacity: number; visible: boolean; blend: BlendMode; clip: boolean }[], background: boolean, assetFrame?: number): void {
     if (this.strokeActive || !layers.length || w <= 0 || h <= 0) return;
+    if (assetFrame !== undefined) this.checkMediaAsset(layers.length, layers.length);
     const p = this.project;
     const above = p.isPlaceholder ? null : p.activeLayer;
     const ids = layers.map(() => p.newId('L'));
@@ -3565,7 +3639,7 @@ export class App {
       return d;
     });
     const base = name.replace(/\.[a-z0-9]+$/i, '').slice(0, 40);
-    this.editor.edit(`Import ${base}`, (cc) => {
+    const makeStack = (cc: Comp) => {
       const made = layers.map((l, i) => {
         const x = drawingsLayer(ids[i]!, i === 0 ? base : l.name.slice(0, 60), [{ drawing: drawings[i]!.id, length: 1 }], p.width, p.height, cc.width, cc.height);
         x.still = true;
@@ -3581,7 +3655,11 @@ export class App {
         return x;
       });
       // the stack goes in top first; a background goes to the very bottom of the shot
-      const stack = made.reverse();
+      return made.reverse();
+    };
+    if (assetFrame !== undefined) { this.addMediaAsset(base, drawings, makeStack(p.comp), assetFrame, true); return; }
+    this.editor.edit(`Import ${base}`, (cc) => {
+      const stack = makeStack(cc);
       const at = background ? cc.layers.length : Math.max(0, cc.layers.findIndex((l) => l.id === above));
       cc.layers.splice(at, 0, ...stack);
     });
@@ -3660,23 +3738,25 @@ export class App {
   }
 
   /** A picture as an object layer: it shows for the whole shot. Move or scale it with Select. */
-  importPicture(name: string, src: CanvasImageSource, w: number, h: number): void {
+  importPicture(name: string, src: CanvasImageSource, w: number, h: number, assetFrame?: number): void {
     if (this.strokeActive || w <= 0 || h <= 0) return;
+    if (assetFrame !== undefined) this.checkMediaAsset(1);
     const d = this.project.newDrawing();
     this.paintMedia(d, src, w, h);
-    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), [d], true);
+    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), [d], true, undefined, undefined, assetFrame);
   }
 
   /** Imported curves remain portable paths when placed or transformed. */
-  importVectors(name: string, doc: import('./io/vectorimport').ImportedVectors): void {
+  importVectors(name: string, doc: import('./io/vectorimport').ImportedVectors, assetFrame?: number): void {
     if (this.strokeActive || !(doc.width > 0 && doc.height > 0)) return;
+    if (assetFrame !== undefined) this.checkMediaAsset(1);
     const k = Math.min(this.docW / doc.width, this.docH / doc.height);
     const vectors = doc.strokes.map((v) => transformVector(v, [k, 0, 0, k, (this.docW - doc.width * k) / 2, (this.docH - doc.height * k) / 2], k));
     assertVectorBudget([...this.project.drawings.values()].flatMap((d) => d.vectors).concat(vectors));
     const d = this.project.newDrawing();
     d.vectors = vectors; d.rev++;
     this.residency.touch(d); this.residency.updateThumb(d);
-    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), [d], true, undefined, 'Import vectors');
+    this.addMediaLayer(name.replace(/\.[a-z0-9]+$/i, ''), [d], true, undefined, 'Import vectors', assetFrame);
   }
 
   /** One undoable conversion for brushes and pixel erasing, preserving the Ink stack order. */
@@ -3698,10 +3778,17 @@ export class App {
    * A movie as a drawings layer: one drawing per frame of the shot, from frame 1 (up to
    * MOVIE_MAX_S seconds). Trace over it, or keep it as live footage in the shot.
    */
-  async importMovie(file: File, progress: (done: number, total: number) => void = () => {}): Promise<boolean> {
+  async importMovie(
+    file: File,
+    progress: (done: number, total: number) => void = () => {},
+    asset?: { frame: number; audio: () => Promise<{ id: string; sound: SoundAsset } | null> },
+  ): Promise<boolean> {
     if (this.strokeActive) return false;
     if (this.playing) this.togglePlay();
-    const p = this.project;
+    const p = this.project, comp = p.comp;
+    const check = () => {
+      if (this.project !== p || p.comp !== comp || this.strokeActive || this.playing) throw new Error('The timeline changed while the movie was loading.');
+    };
     const url = URL.createObjectURL(file);
     const v = document.createElement('video');
     v.muted = true;
@@ -3715,25 +3802,37 @@ export class App {
         v.onerror = () => bad(new Error('This movie could not be opened here. MP4 (H.264) or MOV usually works.'));
         setTimeout(() => bad(new Error('This movie took too long to open.')), 15000);
       });
+      check();
       if (!v.videoWidth || !Number.isFinite(v.duration)) throw new Error('This movie has no picture to bring in.');
       const fps = p.comp.fps;
       const all = Math.max(1, Math.round(v.duration * fps));
       const total = Math.min(all, App.MOVIE_MAX_S * fps);
+      if (asset) this.checkMediaAsset(total);
+      const audio = await asset?.audio();
+      check();
+      if (asset) this.checkMediaAsset(total);
       for (let i = 0; i < total; i++) {
-        if (this.project !== p) throw new Error('The project changed while the movie was loading.');
-        const t = Math.min(v.duration - 0.001, (i + 0.25) / fps);
-        await new Promise<void>((ok) => {
+        check();
+        const t = Math.max(0, Math.min(v.duration - 0.001, (i + 0.25) / fps));
+        if (Math.abs(v.currentTime - t) > 1e-6) await new Promise<void>((ok, fail) => {
           const done = () => { clearTimeout(timer); ok(); };
-          const timer = setTimeout(done, 3000);
+          const timer = setTimeout(() => { v.removeEventListener('seeked', done); fail(new Error('A movie frame took too long to load.')); }, 3000);
           v.addEventListener('seeked', done, { once: true });
           v.currentTime = t;
         });
+        check();
         const d = p.newDrawing();
         this.paintMedia(d, v, v.videoWidth, v.videoHeight);
         made.push(d);
         if (i % 6 === 0) progress(i, total);
       }
-      this.addMediaLayer(file.name.replace(/\.[a-z0-9]+$/i, ''), made, false);
+      if (made.some(d => !p.drawings.has(d.id))) throw new Error('The project changed while preparing the movie frames.');
+      const name = file.name.replace(/\.[a-z0-9]+$/i, '');
+      if (asset) {
+        if (p.comp.layers.length >= MAX_LAYERS || p.comps.size >= MAX_COMPS) throw new Error('This asset would exceed the project size limit.');
+        const track = drawingsLayer(p.newId('L'), name.slice(0, 60), made.map(d => ({ drawing: d.id, length: 1 })), p.width, p.height, comp.width, comp.height);
+        this.addMediaAsset(name, made, [track], asset.frame, false, audio ?? undefined);
+      } else this.addMediaLayer(name, made, false);
       if (total < all) this.onNotice?.(`Only the first ${App.MOVIE_MAX_S} seconds of the movie came in (${total} frames).`);
       return true;
     } catch (e) {
@@ -6233,7 +6332,12 @@ export class App {
         return;
       }
       if (!mod && e.code === 'KeyD') { this.duplicatePlacedAsset(); return; }
-      if (['Delete', 'Backspace', 'KeyN'].includes(e.code) || (mod && ['KeyA', 'KeyC', 'KeyX', 'KeyV'].includes(e.code))) { e.preventDefault(); return; }
+      if (['Delete', 'Backspace'].includes(e.code) && !mod && this.placedAsset) {
+        e.preventDefault();
+        this.editor.deleteLayers([this.placedAsset.id]);
+        return;
+      }
+      if (['Delete', 'Backspace', 'KeyN'].includes(e.code) || (mod && e.code === 'KeyA')) { e.preventDefault(); return; }
     }
     if (mod && e.code === 'KeyA') {
       e.preventDefault();
@@ -6248,12 +6352,11 @@ export class App {
       if (!this.editor.split()) this.onNotice?.('Move the playhead inside a layer to split it there.');
       return;
     }
-    // copy / cut / paste drawings on the timeline (Shift+Ctrl+V pastes new copies)
-    if (mod && this.workspace !== 'motion' && (e.code === 'KeyC' || e.code === 'KeyX' || e.code === 'KeyV')) {
+    // Retain the explicit timeline shortcut for independent drawing copies.
+    // Ordinary Copy/Cut/Paste use the browser clipboard events.
+    if (mod && e.shiftKey && this.workspace !== 'motion' && !this.arrangingAssets && e.code === 'KeyV') {
       e.preventDefault();
-      if (e.code === 'KeyC') this.copySelection();
-      else if (e.code === 'KeyX') this.cutSelection();
-      else void this.paste(e.shiftKey);
+      void this.paste(true);
       return;
     }
     // Ctrl+↑ / ↓ in the flipbook: top / bottom track

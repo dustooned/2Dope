@@ -75,6 +75,8 @@ export class AudioTracks {
     return b;
   }
 
+  decodeAsset(file: File) { return this.playback.bank.import(this.app.project, file); }
+
   async import(file: File, quiet = false): Promise<void> {
     if (this.importing || this.app.strokeActive) return;
     if (this.app.playing) this.app.togglePlay();
@@ -82,7 +84,7 @@ export class AudioTracks {
     const p = this.app.project; const comp = p.comp; const frame = 0;
     this.update(true);
     try {
-      const result = await this.playback.bank.import(p, file);
+      const result = await this.decodeAsset(file);
       if (this.app.project !== p || p.comp !== comp) throw new Error('The project changed while audio was loading. Import it again in the intended shot.');
       p.sounds.set(result.id, result.sound);
       const clip: SoundClip = { id: p.newId('a'), asset: result.id, name: file.name.slice(0, 120), start: frame, trimIn: 0, trimOut: result.sound.duration, gain: 1, muted: false, link: null };

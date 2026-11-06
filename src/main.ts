@@ -17,6 +17,7 @@ import './style.css';
 import { AudioPlayback } from './audio';
 import { AudioTracks } from './ui/audiotracks';
 import { mediaPicker } from './ui/media';
+import { installClipboard } from './ui/clipboard';
 
 // Tells the page's start-up watchdog (index.html) that the app code loaded.
 (window as unknown as { __2dopeBooted?: boolean }).__2dopeBooted = true;
@@ -390,7 +391,10 @@ app.onFrameChange = chain(app.onFrameChange, () => effectsPanel.frameChanged());
 if (app.device.lite) setEffectCacheBudget(32 * 1024 * 1024);
 app.openEffects = (id) => effectsPanel.show(id);
 // Media (Procreate Dreams style): pictures, movies and sounds each become a track from frame 1
-app.pickMedia = mediaPicker(app, audioTracks);
+const media = mediaPicker(app, audioTracks);
+app.pickMedia = media;
+app.pickAssetMedia = media.pickAssets;
+installClipboard(app, $('#stage'), media.importAssets);
 {
   const addMedia = document.createElement('button');
   addMedia.type = 'button';
@@ -606,6 +610,9 @@ try {
 }
 let openSettings = (): void => {};
 const menuActions: Record<string, () => void> = {
+  'import-media': () => app.pickMedia?.(),
+  'paste-media': () => app.pasteMedia?.(),
+  'copy-visible': () => app.copyVisible?.(),
   settings: () => openSettings(),
   manual: () => showManual(),
   updates: () => showManual('updates'),
@@ -694,14 +701,21 @@ const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
 paintingUI.editWorkspace = anchor => editWorkspace(anchor);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
+app.importAssetArchive = (file, frame) => artworkUI.importArchive(file, frame);
+motion.makeClip = save => void artworkUI.makeClip(save);
+motion.clipPlayback = (id, mode) => artworkUI.assets.setClipPlayback(id, mode);
+motion.removeClip = id => { if (artworkUI.assets.removePlacement(id)) app.onNotice?.('Removed placement. Undo restores it.'); };
 const symbols = new SymbolUI(app, artworkUI.assets, source => artworkUI.openSource(source));
 app.openSymbol = id => symbols.show(id); motion.openSymbol = id => symbols.show(id);
 const bundleUI = new BundleUI(app, () => share.show('video'));
 share.onBundle = comp => bundleUI.show(comp);
 const vectorObjects = new VectorObjectsUI(app);
 app.openVectorObjects = id => { void vectorObjects.show(id).catch(e => app.onNotice?.((e as Error).message)); };
-const graphUI = new GraphUI(app);
+const graphUI = new GraphUI(app, $('.workspace'));
 motion.openGraph = () => graphUI.show();
+app.onWorkspaceChange = chain(app.onWorkspaceChange, () => graphUI.close());
+app.onFrameChange = chain(app.onFrameChange, () => graphUI.update());
+app.editor.onChange = chain(app.editor.onChange, () => graphUI.update());
 const layoutUI = new LayoutUI(app);
 app.openLayout = () => layoutUI.show();
 const presetLibrary = new PresetLibraryUI(app);

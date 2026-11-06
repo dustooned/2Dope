@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clipboard, assets and clips</title>
+<style>
+  body { margin: 0; background: #191b22; color: white; font: 12px system-ui; }
+  iframe { display: block; width: 100vw; height: 100vh; border: 0; }
+  #report { position: fixed; bottom: 0; right: 0; padding: 8px; background: #191b22e8; pointer-events: none; }
+</style>
+<iframe title="2Dope" src="../index.html"></iframe>
+<aside id="report"><strong id="summary">Running…</strong><ol id="results"></ol></aside>
+<script type="module">
+  import { Project } from '../src/core/project';
+  import { captureProject } from '../src/io/projectio';
+  import { captureArtwork, packArtwork } from '../src/io/artwork';
+  import { REAL_GIF_B64 } from '../src/io/fixtures/realgif';
+  import { drawComp } from '../src/view/composite';
+  import { wavBytes } from '../src/io/sound';
+  import { soundVoices } from '../src/io/soundmix';
+  import { exportVideo } from '../src/io/exportvideo';
+
+  const frame = document.querySelector('iframe'), win = frame.contentWindow;
+  const wait = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms));
+  const expect = (condition, message) => { if (!condition) throw new Error(message); };
+  const until = async condition => {
+    for (let i = 0; i < 70; i++) { if (condition()) return; await wait(60); }
+    throw new Error('Operation did not finish.');
+  };
+  let passed = 0, failed = 0;
+  const check = async (label, run) => {
+    const row = document.createElement('li');
+    try { await run(); passed++; row.textContent = `PASS: ${label}`; }
+    catch (error) { failed++; row.textContent = `FAIL: ${label}: ${error.message}`; }
+    document.querySelector('#results').append(row);
+  };
+  for (let i = 0; i < 120 && !win.__2dope; i++) await wait();
+  const app = win.__2dope, doc = win.document;
+  const button = (label, root = doc) => {
+    const found = [...root.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === label || b.textContent.trim() === label);
+    expect(found && !found.disabled, `Missing or disabled ${label}`);
+    return found;
+  };
+  const shot = () => app.project.comps.get(app.project.main);
+  const asset = name => [...app.project.comps.values()].find(c => c.asset && c.name === name);
+  const canvas = doc.querySelector('#canvas');
+  const clipboard = (type, data, target = canvas) => {
+    const e = new win.ClipboardEvent(type, { clipboardData: data, bubbles: true, cancelable: true });
+    target.dispatchEvent(e);
+    return e;
+  };
+  const pasteFile = (blob, name, type) => {
+    const data = new win.DataTransfer();
+    data.items.add(new win.File([blob], name, { type }));
+    return clipboard('paste', data);
+  };
+  const pixelAt = (frame, x, y) => {
+    const image = doc.createElement('canvas');
+    image.width = image.height = 64;
+    const ctx = image.getContext('2d');
+    drawComp(ctx, app.project, shot(), frame, { export: true });
+    return [...ctx.getImageData(x, y, 1, 1).data];
+  };
+  const openLayer = () => button('Layer actions', doc.querySelector('#motion')).click();
+  const nameDialog = async (title, name, confirm) => {
+    const input = doc.querySelector(`dialog[open] input[aria-label="${title}"]`);
+    expect(input, `Missing ${title} dialog`);
+    input.value = name;
+    button(confirm, input.closest('dialog')).click();
+    await wait();
+  };
+  let png;
+
+  await check('External PNG becomes an asset and a selected placement at the playhead with alpha', async () => {
+    expect(app, 'App did not start');
+    await wait(1200);
+    doc.querySelectorAll('dialog[open]').forEach(d => d.close());
+    doc.body.classList.remove('gallery-open');
+    const project = new Project(64, 64);
+    project.comp.duration = 120;
+    project.comp.fps = 30;
+    app.loadProject(project);
+    app.setWorkspace('draw');
+    app.setFrame(8);
+    const shortcut = new win.KeyboardEvent('keydown', { code: 'KeyV', ctrlKey: true, bubbles: true, cancelable: true });
+    canvas.dispatchEvent(shortcut);
+    expect(!shortcut.defaultPrevented, 'The timeline shortcut intercepted native Paste');
+    const image = doc.createElement('canvas');
+    image.width = image.height = 64;
+    const ctx = image.getContext('2d');
+    ctx.fillStyle = '#e43231'; ctx.fillRect(20, 20, 24, 24);
+    png = await new Promise(resolve => image.toBlob(resolve, 'image/png'));
+    expect(pasteFile(png, 'Paint.png', 'image/png').defaultPrevented, 'Paste was not handled');
+    await until(() => asset('Paint'));
+    const layer = app.placedAsset;
+    expect(layer?.comp === asset('Paint').id && layer.start === 8 && app.frame === 8, 'Placement did not start at the playhead');
+    expect(pixelAt(8, 25, 25)[0] > 200 && pixelAt(8, 0, 0)[3] === 0 && pixelAt(7, 25, 25)[3] === 0, 'Pixels or timing changed');
+    expect(app.history.peekUndo()?.label === 'Import media as asset', 'Import was not one Undo command');
+  });
+  await check('Remove from Shot keeps the asset, while Undo restores the placement', async () => {
+    const placement = app.placedAsset.id;
+    button('Remove from Shot', doc.querySelector('.asset-placement-tools')).click();
+    expect(asset('Paint') && !shot().layers.some(l => l.id === placement), 'Remove deleted the source or kept the placement');
+    app.undo();
+    await until(() => shot().layers.some(l => l.id === placement));
+  });
+  await check('Copy Visible writes the rendered frame as a transparent PNG', async () => {
+    const system = win.navigator.clipboard;
+    const own = Object.getOwnPropertyDescriptor(system, 'write');
+    let copied;
+    Object.defineProperty(system, 'write', { configurable: true, value: async items => { copied = await items[0].getType('image/png'); } });
+    try {
+      app.copyVisible();
+      await until(() => copied);
+      const bitmap = await createImageBitmap(copied), image = document.createElement('canvas');
+      image.width = image.height = 64;
+      const ctx = image.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      expect(ctx.getImageData(25, 25, 1, 1).data[0] > 200 && ctx.getImageData(0, 0, 1, 1).data[3] === 0, 'Clipboard PNG lost artwork or transparency');
+    } finally {
+      if (own) Object.defineProperty(system, 'write', own);
+      else delete system.write;
+    }
+  });
+  await check('GIF bytes preserve all frames and original holds, and Undo removes the source and placement together', async () => {
+    app.setWorkspace('motion');
+    app.setFrame(12);
+    const data = Uint8Array.from(atob(REAL_GIF_B64), c => c.charCodeAt(0));
+    pasteFile(data, 'Loop.gif', 'image/gif');
+    await until(() => asset('Loop'));
+    const source = asset('Loop'), layer = app.editor.primary;
+    const holds = source.layers[0].exposures.map(e => e.length);
+    expect(holds.length === 4 && new Set(holds).size > 1 && layer.start === 12 && layer.play === 'once',
+      `GIF frames or timing changed: holds ${holds}, start ${layer?.start}, mode ${layer?.play}, playhead ${app.frame}`);
+    app.undo();
+    await until(() => !asset('Loop'));
+    expect(!shot().layers.some(l => l.id === layer.id), 'Undo left a placement');
+    app.redo();
+    await until(() => asset('Loop'));
+  });
+  await check('Text fields retain normal paste and timeline Copy and Paste make independent frames', async () => {
+    const text = new win.DataTransfer();
+    text.setData('text/plain', 'Find me');
+    expect(!clipboard('paste', text, doc.querySelector('.motion-search')).defaultPrevented, 'Search lost normal paste');
+    app.setWorkspace('draw');
+    app.setFrame(0);
+    const original = app.project.layer.id;
+    app.pickLayer(original);
+    const length = app.project.exposures.length;
+    const data = new win.DataTransfer();
+    expect(clipboard('copy', data, doc.querySelector('#strip')).defaultPrevented, 'Copy did not use timeline selection');
+    clipboard('paste', data);
+    await until(() => app.project.exposures.length > length);
+    const copied = app.project.exposures.slice(0, 2);
+    expect(copied[0].drawing !== copied[1].drawing && copied[0].length === copied[1].length, 'Frame copy lost timing or reused its drawing');
+  });
+  await check('Make Clip combines two tracks, and Edit Clip returns to the same shot, frame and placement', async () => {
+    app.setWorkspace('motion');
+    const picked = shot().layers.slice(0, 2).map(l => l.id);
+    app.editor.select(picked[0]); app.editor.select(picked[1], true);
+    const count = shot().layers.length;
+    const before = pixelAt(13, 25, 25);
+    openLayer();
+    button('Make Clip…', doc.querySelector('.ctxmenu')).click();
+    await nameDialog('Make Clip', 'Combined', 'Make Clip');
+    const clip = asset('Combined'), placement = app.editor.primary;
+    expect(clip?.layers.length === 2 && shot().layers.length === count - 1 && placement?.comp === clip.id && placement.start === 8, 'Clip did not combine the selected time span');
+    expect(pixelAt(13, 25, 25).join() === before.join(), 'Combining tracks changed their rendered appearance');
+    app.setFrame(20);
+    openLayer();
+    button('Edit Clip', doc.querySelector('.ctxmenu')).click();
+    expect(app.project.activeComp === clip.id, 'Edit Clip did not open the source');
+    app.setFrame(1);
+    doc.querySelector('.mcrumbs button').click();
+    expect(app.project.activeComp === shot().id && app.frame === 20 && app.editor.primary.id === placement.id, 'Breadcrumb did not restore the entry position');
+    openLayer();
+    button('Loop', doc.querySelector('.ctxmenu')).click();
+    expect(app.editor.primary.play === 'loop', 'Playback control did not loop the clip');
+    for (let tap = 0; tap < 2; tap++) {
+      const bar = doc.querySelector(`[data-bar="${placement.id}"]`);
+      const r = bar.getBoundingClientRect();
+      for (const type of ['pointerdown', 'pointerup']) bar.dispatchEvent(new win.PointerEvent(type, {
+        pointerId: 1, button: 0, pointerType: 'mouse', clientX: r.left + 24, clientY: r.top + 8, bubbles: true,
+      }));
+    }
+    expect(app.project.activeComp === clip.id, 'Double-click lost the clip after the timeline rebuilt');
+    doc.querySelector('.mcrumbs button').click();
+  });
+  await check('Save as Asset copies the editable graph and its .2dope archive places as one asset', async () => {
+    const layerId = app.editor.primary.id, source = asset('Combined'), count = shot().layers.length;
+    openLayer();
+    button('Save as Asset…', doc.querySelector('.ctxmenu')).click();
+    await nameDialog('Save as Asset', 'Reusable', 'Save');
+    await until(() => asset('Reusable'));
+    const copy = asset('Reusable');
+    expect(shot().layers.length === count && app.editor.primary.id === layerId && copy.layers[0].comp !== source.id, 'Saving changed the shot or reused the source');
+    copy.fps = 15;
+    const captured = await captureProject(app.project, { mode: 'archive' }).settle();
+    const bundle = await captureArtwork(app.project, copy.id, async key => captured.assets.get(key) ?? null);
+    const bytes = packArtwork(bundle);
+    app.setFrame(27);
+    pasteFile(bytes, 'Reusable.2dope', 'application/zip');
+    await until(() => shot().layers.length === count + 1);
+    const placed = app.editor.primary, placedSource = app.project.comps.get(placed.comp);
+    expect(placed.start === 27 && placedSource.asset && placedSource.fps === 15, 'Archive did not place one editable asset at the playhead');
+    const bar = doc.querySelector(`[data-bar="${placed.id}"]`);
+    const cell = parseFloat(bar.style.left) / placed.start;
+    expect(Math.abs(parseFloat(bar.style.width) / cell - placedSource.duration * 2) < 0.01, 'Timeline bar used source frames without converting to the shot frame rate');
+  });
+  await check('Asset shelf protects used sources and deletes unused sources with Undo', async () => {
+    const shelf = () => doc.querySelector('.artwork-shelf[open]');
+    const show = () => button('Motion assets', doc.querySelector('#motion')).click();
+    show();
+    button('Delete Asset Paint', shelf()).click();
+    expect(asset('Paint'), 'Deleting a used source broke a nested clip');
+    pasteFile(png, 'Temporary.png', 'image/png');
+    await until(() => asset('Temporary'));
+    openLayer();
+    button('Remove from Shot', doc.querySelector('.ctxmenu')).click();
+    show();
+    button('Delete Asset Temporary', shelf()).click();
+    expect(!asset('Temporary') && app.history.peekUndo()?.label === 'Delete asset', 'Unused asset was not deleted');
+    app.undo();
+    await until(() => asset('Temporary'));
+  });
+  await check('Pasted WAV becomes an audio asset timed to the playhead', async () => {
+    app.setFrame(34);
+    const signal = new AudioBuffer({ numberOfChannels: 1, length: 11025, sampleRate: 44100 });
+    signal.getChannelData(0).fill(0.2);
+    pasteFile(wavBytes(signal), 'Tone.wav', 'audio/wav');
+    await until(() => asset('Tone'));
+    const placement = app.editor.primary, source = asset('Tone');
+    const voice = soundVoices(app.project, shot().id).find(v => v.asset === source.audio[0].asset);
+    expect(placement.start === 34 && placement.comp === source.id && voice?.sourceTime(1) === null &&
+      Math.abs(voice.sourceTime(1.2) - (1.2 - 34 / 30)) < 0.001, 'Audio asset lost its start or nested sound');
+  });
+  await check('A short movie pasted as a file remains one editable asset with multiple frames', async () => {
+    const project = new Project(64, 64);
+    project.comp.fps = 30;
+    const movie = await exportVideo(project, { format: 'webm', size: 'original', background: 'black' },
+      () => {}, new AbortController().signal, { pin: async () => {}, unpin() {} }, undefined, undefined, {
+        frames: 6, drawings: () => [], paint(ctx, i) { ctx.fillStyle = i < 3 ? 'blue' : 'lime'; ctx.fillRect(0, 0, 64, 64); },
+      });
+    app.setFrame(48);
+    pasteFile(movie.blob, 'Footage.webm', 'video/webm');
+    await until(() => asset('Footage'));
+    expect(asset('Footage').layers[0].exposures.length === 6 && app.editor.primary.start === 48 &&
+      pixelAt(48, 25, 25)[2] > 200 && pixelAt(52, 25, 25)[1] > 200, 'Movie frames were missing, flattened or mistimed');
+  });
+  document.querySelector('#summary').textContent = `${passed} passed, ${failed} failed`;
+</script>
+</html>

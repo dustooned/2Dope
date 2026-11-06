@@ -69,7 +69,7 @@ function lzw(data: Uint8Array, minSize: number, count: number): Uint8Array {
   return out;
 }
 
-export function decodeGif(bytes: Uint8Array): GifOut {
+export function decodeGif(bytes: Uint8Array, pixelBudget = Infinity): GifOut {
   const sig = String.fromCharCode(...bytes.subarray(0, 6));
   if (sig !== 'GIF87a' && sig !== 'GIF89a') throw new Error('not a GIF');
   const u16 = (i: number) => bytes[i]! | (bytes[i + 1]! << 8);
@@ -104,7 +104,7 @@ export function decodeGif(bytes: Uint8Array): GifOut {
     for (const b of parts) { out.set(b, o); o += b.length; }
     return out;
   };
-  while (p < bytes.length && frames.length < MAX_FRAMES) {
+  while (p < bytes.length) {
     const b = bytes[p++]!;
     if (b === 0x3b) break; // trailer
     if (b === 0x21) {
@@ -119,12 +119,18 @@ export function decodeGif(bytes: Uint8Array): GifOut {
       continue;
     }
     if (b !== 0x2c) break; // not an image: stop here
+    if (frames.length >= MAX_FRAMES) {
+      if (pixelBudget !== Infinity) throw new Error('This GIF has too many frames to paste');
+      break;
+    }
+    if ((frames.length + 1) * width * height > pixelBudget) throw new Error('This GIF is too large to paste as an animation');
     // the previous frame's disposal applies before this one is drawn
     if (lastRect && lastDisposal === 2) {
       const [x0, y0, w0, h0] = lastRect;
       for (let y = y0; y < Math.min(height, y0 + h0); y++) canvas.fill(0, (y * width + x0) * 4, (y * width + Math.min(width, x0 + w0)) * 4);
     } else if (lastRect && lastDisposal === 3 && restore) canvas.set(restore);
     const x = u16(p), y = u16(p + 2), w = u16(p + 4), h = u16(p + 6), f = bytes[p + 8]!;
+    if (!w || !h || w > MAX_SIDE || h > MAX_SIDE) throw new Error('This GIF frame is too large');
     p += 9;
     let table = global;
     if (f & 0x80) {

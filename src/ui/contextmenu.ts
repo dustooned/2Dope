@@ -7,10 +7,11 @@
 
 import { isCommandHidden } from '../core/commandprefs';
 import { commandPrefs } from './commands';
+import { decorate } from './icons';
 
 export type CtxItem =
   /** `id`: a registered menu entry (see MENU_ENTRIES) that this device can hide. */
-  | { label: string; run: () => unknown; hint?: string; danger?: boolean; disabled?: boolean; checked?: boolean; id?: string }
+  | { label: string; run: () => unknown; hint?: string; icon?: string; danger?: boolean; disabled?: boolean; checked?: boolean; id?: string }
   | { chips: { label: string; run: () => unknown; title?: string; on?: boolean }[] }
   | { title: string }
   | { sep: true };
@@ -89,9 +90,14 @@ export function showContextMenu(x: number, y: number, all: CtxItem[]): void {
       }
       root.append(row);
     } else {
-      const b = el('button', it.danger ? 'danger' : '', `${it.checked ? '✓ ' : ''}${it.label}`);
+      const b = el('button', it.danger ? 'danger' : '', `${it.checked && !it.icon ? '✓ ' : ''}${it.label}`);
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
+      if (it.icon) decorate(b, it.checked ? 'check' : it.icon);
+      if (it.icon && it.checked !== undefined) {
+        b.setAttribute('role', 'menuitemcheckbox');
+        b.setAttribute('aria-checked', String(it.checked));
+      }
       if (it.disabled) b.disabled = true;
       if (it.hint) b.append(el('span', 'ctx-hint', it.hint));
       b.addEventListener('click', () => run(it.run));

@@ -8,6 +8,7 @@ import { importVectorDocument } from '../io/vectorimport';
 
 /** What the media picker offers: pictures (also animated GIFs and layered PSD / OpenRaster), movies and sounds. */
 export const MEDIA_ACCEPT = 'image/*,video/*,audio/*,.svg,.eps,.psd,.ora,.gif,.mov,.mp4,.m4v,.webm,.wav,.mp3,.m4a,.aac,.ogg,.flac';
+const ASSET_ACCEPT = `${MEDIA_ACCEPT},.2dope`;
 
 type Kind = 'picture' | 'vector' | 'gif' | 'layered' | 'movie' | 'sound';
 
@@ -26,42 +27,63 @@ export function mediaKind(name: string, type: string): Kind | null {
  * becomes its own track on the timeline from frame 1. A picture is an object layer for the whole
  * shot, a movie is a layer of frames (plus its sound, when it has one), a sound is a clip.
  */
-export function mediaPicker(app: App, audio: AudioTracks): () => void {
+export function mediaPicker(app: App, audio: AudioTracks) {
   let input: HTMLInputElement | null = null;
+  let assetPick = false;
   let busy = false;
-  const bring = async (files: File[]) => {
+  const bring = async (files: File[], assetFrame?: number) => {
+    if (busy || app.strokeActive) { app.onNotice?.('Finish the current edit or import first.'); return; }
+    if (assetFrame !== undefined && app.playing) app.togglePlay();
+    const project = app.project, comp = project.comp;
+    const checkTarget = () => {
+      if (app.project !== project || project.comp !== comp || app.strokeActive || (assetFrame !== undefined && app.playing))
+        throw new Error('The timeline changed while importing. Try again.');
+    };
     busy = true;
     try {
       for (const f of files) {
+        try { checkTarget(); } catch (e) { app.onNotice?.((e as Error).message); break; }
+        if (/\.2dope$/i.test(f.name) && app.importAssetArchive) {
+          try { await app.importAssetArchive(f, assetFrame ?? app.frame); }
+          catch (e) { app.onNotice?.(`${f.name}: ${(e as Error).message}`); }
+          continue;
+        }
+        if (assetFrame !== undefined && !canPasteMedia(f)) { app.onNotice?.(`${f.name}: use Import media for this file.`); continue; }
         const kind = mediaKind(f.name, f.type);
         if (kind === 'vector') {
           try {
-            const project = app.project, comp = project.activeComp;
             const doc = importVectorDocument(await f.text(), /\.eps$/i.test(f.name) || f.type === 'application/postscript');
-            if (app.project !== project || project.activeComp !== comp) throw new Error('The timeline changed while this vector file was loading; import it again');
-            app.importVectors(f.name, doc);
-            app.onNotice?.(`${f.name}: ${doc.strokes.length} scalable vector paths. Arrange in Motion; Rasterize imported vectors in the Vector tools enables pixel painting.`);
+            checkTarget();
+            app.importVectors(f.name, doc, assetFrame);
+            if (assetFrame === undefined) app.onNotice?.(`${f.name}: ${doc.strokes.length} scalable vector paths. Arrange in Motion; Rasterize imported vectors in the Vector tools enables pixel painting.`);
           } catch (e) { app.onNotice?.(`${f.name}: ${e instanceof Error ? e.message : 'could not be read'}.`); }
           continue;
         }
         if (kind === 'gif') {
           // an animated GIF comes in frame by frame (its holds kept); one frame is a picture
           try {
-            const g = decodeGif(new Uint8Array(await f.arrayBuffer()));
+            const budget = (app.device.lite ? 12 : 32) * 1024 * 1024;
+            const g = decodeGif(new Uint8Array(await f.arrayBuffer()), assetFrame === undefined ? Infinity : budget);
+            checkTarget();
             if (g.frames.length > 1) {
               const frames = g.frames.map((fr) => pictureOf(fr.rgba, g.width, g.height));
-              app.importAnimation(f.name, frames, g.width, g.height, gifHolds(g.frames.map((x) => x.delay), app.project.comp.fps));
-              app.onNotice?.(`${f.name}: ${g.frames.length} frames on a new layer from frame 1, each held as long as in the GIF.`);
+              try { app.importAnimation(f.name, frames, g.width, g.height, gifHolds(g.frames.map((x) => x.delay), app.project.comp.fps), assetFrame); }
+              finally { frames.forEach(canvas => { canvas.width = 0; }); }
+              if (assetFrame === undefined) app.onNotice?.(`${f.name}: ${g.frames.length} frames on a new layer from frame 1, each held as long as in the GIF.`);
               continue;
             }
-          } catch { /* not readable by us: try it as a plain picture below */ }
+          } catch (e) {
+            if (assetFrame !== undefined) { app.onNotice?.(`${f.name}: ${(e as Error).message}.`); continue; }
+            // The legacy file picker also accepts GIFs the bitmap decoder can open as stills.
+          }
         }
         if (kind === 'layered') {
           try {
             const bytes = new Uint8Array(await f.arrayBuffer());
-            const doc = /\.ora$/i.test(f.name) ? await oraLayers(bytes) : psdLayers(bytes);
-            app.importLayered(f.name, doc.width, doc.height, doc.layers, doc.background);
-            app.onNotice?.(`${f.name}: ${doc.layers.length} layer${doc.layers.length === 1 ? '' : 's'} as a paint stack${doc.background ? ' at the back' : ''}. Each keeps its name, opacity and blend.`);
+            const doc = /\.ora$/i.test(f.name) || f.type === 'image/openraster' ? await oraLayers(bytes) : psdLayers(bytes);
+            checkTarget();
+            app.importLayered(f.name, doc.width, doc.height, doc.layers, doc.background, assetFrame);
+            if (assetFrame === undefined) app.onNotice?.(`${f.name}: ${doc.layers.length} layer${doc.layers.length === 1 ? '' : 's'} as a paint stack${doc.background ? ' at the back' : ''}. Each keeps its name, opacity and blend.`);
           } catch (e) {
             app.onNotice?.(`${f.name}: ${e instanceof Error ? e.message : 'could not be read'}.`);
           }
@@ -69,31 +91,43 @@ export function mediaPicker(app: App, audio: AudioTracks): () => void {
         }
         if (kind === 'picture' || kind === 'gif') {
           try {
-            const project = app.project, comp = project.activeComp;
             const picture = await decodePicture(f);
             try {
-              if (app.project !== project || project.activeComp !== comp) throw new Error('The timeline changed');
-              app.importPicture(f.name, picture.source, picture.width, picture.height);
+              checkTarget();
+              app.importPicture(f.name, picture.source, picture.width, picture.height, assetFrame);
             } finally { picture.close(); }
-            app.onNotice?.(`${f.name} is an object layer for the whole shot; transparent pixels stay transparent. View → Transparency grid shows them. Move or scale it in Motion.`);
-          } catch {
-            app.onNotice?.(`${f.name}: this picture could not be read.`);
+            if (assetFrame === undefined) app.onNotice?.(`${f.name} is an object layer for the whole shot; transparent pixels stay transparent. View → Transparency grid shows them. Move or scale it in Motion.`);
+          } catch (e) {
+            app.onNotice?.(`${f.name}: ${(e as Error).message}.`);
           }
         } else if (kind === 'movie') {
           app.onNotice?.(`Bringing in ${f.name}…`);
-          const ok = await app.importMovie(f, (i, n) => app.onNotice?.(`Bringing in ${f.name}… ${Math.round((i / n) * 100)}%`));
-          if (ok) {
+          let audioUnavailable = false;
+          const ok = await app.importMovie(f, (i, n) => app.onNotice?.(`Bringing in ${f.name}… ${Math.round((i / n) * 100)}%`),
+            assetFrame === undefined ? undefined : { frame: assetFrame, audio: async () => {
+              try { return await audio.decodeAsset(f); }
+              catch { audioUnavailable = true; return null; }
+            } });
+          if (ok && assetFrame === undefined) {
             await audio.import(f, true);
             app.onNotice?.(`${f.name} is a layer from frame 1, one drawing per frame. Draw over it on another layer. To remove it, hold its track (or Layers → Delete); any sound it had is a separate clip with its own delete.`);
+          } else if (ok && audioUnavailable) app.onNotice?.(`${f.name}: added a movie asset. The browser did not provide a readable sound track.`);
+        } else if (kind === 'sound') {
+          if (assetFrame === undefined) await audio.import(f);
+          else {
+            try {
+              const decoded = await audio.decodeAsset(f);
+              checkTarget();
+              app.importSoundAsset(f.name, decoded, assetFrame);
+            } catch (e) { app.onNotice?.(`${f.name}: ${(e as Error).message}.`); }
           }
-        } else if (kind === 'sound') await audio.import(f);
-        else app.onNotice?.(`${f.name}: not a picture, movie or sound.`);
+        } else app.onNotice?.(`${f.name}: not a picture, movie or sound.`);
       }
     } finally {
       busy = false;
     }
   };
-  return () => {
+  const open = (asset = false) => {
     if (busy) {
       app.onNotice?.('Still bringing in the last file…');
       return;
@@ -101,18 +135,25 @@ export function mediaPicker(app: App, audio: AudioTracks): () => void {
     if (!input) {
       input = document.createElement('input');
       input.type = 'file';
-      input.accept = MEDIA_ACCEPT;
       input.multiple = true;
       input.hidden = true;
       input.addEventListener('change', () => {
         const files = [...(input!.files ?? [])];
         input!.value = '';
-        if (files.length) void bring(files);
+        if (files.length) void bring(files, assetPick ? app.frame : undefined);
       });
       document.body.append(input);
     }
+    assetPick = asset;
+    input.accept = asset ? ASSET_ACCEPT : MEDIA_ACCEPT;
     input.click();
   };
+  return Object.assign(() => open(), { pickAssets: () => open(true), importAssets: (files: File[], frame: number) => bring(files, frame) });
+}
+
+export function canPasteMedia(file: File): boolean {
+  if (/\.2dope$/i.test(file.name)) return true;
+  return mediaKind(file.name, file.type) !== null;
 }
 
 /** Bitmap decoding can reject an otherwise readable PNG on a device. Both paths preserve alpha. */

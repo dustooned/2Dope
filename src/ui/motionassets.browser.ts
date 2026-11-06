@@ -38,8 +38,10 @@ await check('Motion keeps transport, task menus and auto-key visible at Simple a
   for (const level of ['simple', 'full'] as const) {
     bubbles.setLevel(level, false); refresh();
     expect(!!document.querySelector('.motion-transport')?.getClientRects().length && !document.querySelector<HTMLElement>('.bub-ctx')?.textContent, 'transport missing or duplicated settings');
-    for (const name of ['New Motion layer', 'Motion assets', 'Layer actions', 'Motion tools', 'Motion view options']) expect(button(name).getClientRects().length, `${name} hidden`);
-    expect(button('● Auto-key').getClientRects().length, 'auto-key folded');
+    for (const name of ['New Motion layer', 'Motion assets', 'Graph', 'Layer actions', 'Motion tools', 'Motion view options', 'Auto-key']) {
+      const control = button(name, document.querySelector('.mbar')!);
+      expect(control.getClientRects().length && control.querySelector('svg[aria-hidden=true]'), `${name} or its icon is hidden`);
+    }
   }
   bubbles.setLevel('simple', false); refresh();
 });

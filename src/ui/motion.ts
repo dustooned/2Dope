@@ -2,7 +2,7 @@ import { AnchorControls } from './anchors';
 import { layerPresentation } from '../core/layerpresentation';
 import type { App } from '../app';
 import { PlaybackRangeControl } from './playbackrange';
-import { autoIcon, iconSvg, setLabel } from './icons';
+import { autoIcon, decorate, iconSvg, setLabel } from './icons';
 import { CURVES, curveOf, easingOf, EASINGS, isAnimated, spacingTicks, type Curve, type Easing, type Prop, type Vec2 } from '../core/anim';
 import { BLEND_MODES, compLength, layerEnd, PART_LABEL, PART_NAMES, partOf, playsOn, type BlendMode, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
@@ -117,8 +117,12 @@ export class MotionPanel {
   private filterProject: App['project'] | null = null;
   private filterComp = '';
   private animatedOnly = false;
+  private lastClipTap: { comp: string; layer: string; x: number; y: number; time: number } | null = null;
   openAssets: ((opener: HTMLElement) => void) | null = null;
   createAsset: (() => void) | null = null;
+  makeClip: ((save: boolean) => void) | null = null;
+  clipPlayback: ((id: string, mode: 'once' | 'loop' | 'hold') => void) | null = null;
+  removeClip: ((id: string) => void) | null = null;
   openPresets: (() => void) | null = null;
   openGraph: (() => void) | null = null;
   openCameraMove: (() => void) | null = null;
@@ -163,20 +167,21 @@ export class MotionPanel {
     this.multiBtn = btn('Select', 'Tap layers to pick several (to group or stagger them)', () => {
       this.ed.multiSelect = !this.ed.multiSelect; this.update();
     });
-    const menu = (label: string, title: string, items: () => CtxItem[]) => {
+    const menu = (label: string, title: string, icon: string, items: () => CtxItem[]) => {
       const b = btn(label, title, () => {
         const box = b.getBoundingClientRect(); showContextMenu(box.left, box.bottom, items());
       });
+      decorate(b, icon);
       b.setAttribute('aria-label', title); b.setAttribute('aria-haspopup', 'menu'); return b;
     };
-    const addLayer = menu('New layer', 'New Motion layer', () => [
+    const addLayer = menu('New layer', 'New Motion layer', 'plus', () => [
       { title: 'New layer' },
-      { label: 'Title…', run: () => app.editTitle?.() },
-      ...([['drawings', 'Drawing'], ['adjustment', 'Adjustment'], ['null', 'Anchor'], ['camera', 'Camera']] as const).map(([kind, label]) => ({ label, run: () => ed.addLayer(kind, ed.primary?.id) })),
+      { label: 'Title…', icon: 'text', run: () => app.editTitle?.() },
+      ...([['drawings', 'Drawing', 'draw'], ['adjustment', 'Adjustment', 'fx'], ['null', 'Anchor', 'centrecross'], ['camera', 'Camera', 'camera']] as const).map(([kind, label, icon]) => ({ label, icon, run: () => ed.addLayer(kind, ed.primary?.id) })),
     ]);
-    const layer = menu('Layer', 'Layer actions', () => ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
-    const tools = menu('Animation', 'Motion tools', () => this.animationItems());
-    const view = menu('View', 'Motion view options', () => this.viewItems());
+    const layer = menu('Selected layer', 'Layer actions', 'layers', () => ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
+    const tools = menu('Animation', 'Motion tools', 'motion', () => this.animationItems());
+    const view = menu('View', 'Motion view options', 'viewfinder', () => this.viewItems());
     const assets = btn('Assets', 'Project assets and reusable files', () => {
       if (this.openAssets) this.openAssets(assets); else app.onNotice?.('The asset browser is unavailable.');
     });
@@ -186,22 +191,40 @@ export class MotionPanel {
       if (l?.kind === 'drawings' || l?.kind === 'comp') app.openEffects?.(l.id);
       else app.onNotice?.('Select a drawing, adjustment or group layer first.');
     });
-    const help = btn('?', 'Motion help', () => app.onOpenManual('motion'), 'panel-help'); help.setAttribute('aria-label', 'Motion help');
+    const help = btn('Motion help', 'Motion help', () => app.onOpenManual('motion'), 'panel-help icon-only');
+    decorate(help, 'help');
     const transport = group(this.playBtn, btn('◀', 'Previous frame (←)', () => app.prevFrame()), this.frameLabel, btn('▶', 'Next frame (→)', () => app.nextFrame()), this.range.button);
     transport.classList.add('motion-transport');
     const heading = row(this.compName, this.crumbsEl, transport, help); heading.classList.add('motion-heading');
     const presets = btn('Presets', 'Motion and Effects presets', () => this.openPresets?.()); presets.setAttribute('aria-label', 'Motion presets');
     this.anchors = new AnchorControls(app);
-    const menus = row(addLayer, btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.()), assets, layer, this.anchors.button, btn('Layout', 'Align and snap selected layers', () => app.openLayout?.()), tools, presets, this.effectsBtn, view);
-    menus.classList.add('motion-menus'); menus.setAttribute('role', 'toolbar'); menus.setAttribute('aria-label', 'Motion commands');
+    const importMedia = btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.());
+    const paste = btn('Paste', 'Paste artwork from the clipboard', () => app.pasteMedia?.());
+    const layout = btn('Layout', 'Align and snap selected layers', () => app.openLayout?.());
+    const graph = btn('Graph', 'Edit animation curves', () => this.openGraph?.());
+    const menus = row(
+      group(addLayer, importMedia, paste, assets),
+      group(graph, layer, this.anchors.button, this.effectsBtn, layout),
+      group(tools, presets, view),
+    );
+    menus.classList.add('motion-menus'); menus.setAttribute('role', 'group'); menus.setAttribute('aria-label', 'Motion commands');
+    decorate(importMedia, 'import');
+    decorate(paste, 'paste');
+    decorate(assets, 'folder');
+    decorate(layout, 'layout');
+    decorate(graph, 'graph');
+    decorate(presets, 'save');
+    decorate(this.effectsBtn, 'fx');
     const filter = el('input', { type: 'search', class: 'motion-search', placeholder: 'Find a layer…', 'aria-label': 'Find Motion layers', 'data-own-keys': '' });
     filter.addEventListener('input', () => { this.filter = filter.value.trim().toLowerCase(); this.signature = ''; this.update(); });
     this.animatedBtn = btn('Animated', 'Show only properties that have keyframes', () => { this.animatedOnly = !this.animatedOnly; this.signature = ''; this.update(); });
     this.animatedBtn.setAttribute('aria-pressed', 'false');
-    this.autoBtn = btn('● Auto-key', 'Every change you make writes a keyframe at the playhead', () => {
+    decorate(this.animatedBtn, 'filter');
+    this.autoBtn = btn('Auto-key', 'Every change you make writes a keyframe at the playhead', () => {
       ed.autoKey = !ed.autoKey;
       this.update();
     });
+    decorate(this.autoBtn, 'key');
     this.startBtn = btn('Move from start', 'On: your first key also keeps where things were at the first frame, so they move from the start. Off: they jump straight to the key.', () => {
       ed.keyAtStart = !ed.keyAtStart;
       this.update();
@@ -211,6 +234,8 @@ export class MotionPanel {
       app.requestRender();
       this.update();
     });
+    decorate(this.startBtn, 'first');
+    decorate(this.camBtn, 'camera');
 
     // Row 3: easing and the key actions
     const ease = el('div', { class: 'group', role: 'group', 'aria-label': 'Easing of the selected keys' });
@@ -347,7 +372,7 @@ export class MotionPanel {
     this.compName.hidden = ed.crumbs().length > 1;
     this.compName.title = `${c.name} · ${c.width}×${c.height} · ${c.fps} fps`;
     const nk = ed.selectedKeys().length;
-    this.selectionInfo.textContent = ed.anchorEditing ? `Anchor · tap/drag canvas · Esc to finish` : ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : `${ed.selected.length} layer${ed.selected.length === 1 ? '' : 's'} · ${nk} key${nk === 1 ? '' : 's'}`;
+    this.selectionInfo.textContent = ed.anchorEditing ? `Anchor · tap/drag canvas · Esc to finish` : ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : `${ed.selected.length === 1 ? ed.primary?.name ?? '1 layer' : `${ed.selected.length} layers`} · ${nk} key${nk === 1 ? '' : 's'}`;
     this.renderCrumbs();
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));
@@ -608,9 +633,15 @@ export class MotionPanel {
 
     const right = el('div', { class: 'mright' });
     right.style.width = `${end * this.cell}px`;
-    const stop = layerEnd(l, comps);
+    const stop = layerEnd(l, comps, ed.comp.fps);
     const last = Number.isFinite(stop) ? stop : Math.max(compLength(ed.comp, comps), l.in + 1);
     const b = el('div', { class: 'mbar-el', 'data-bar': l.id });
+    if (l.kind === 'comp') {
+      b.title = 'Double-click to edit clip';
+      b.addEventListener('dblclick', event => {
+        if (!(event.target as HTMLElement).closest('[data-handle]')) this.editClip(l.id);
+      });
+    }
     b.style.left = `${l.in * this.cell}px`;
     b.style.width = `${Math.max(1, last - l.in) * this.cell}px`;
     b.style.background = l.label ? (LABELS[l.label] ?? LABELS[0]!) : KIND_COLOR[l.kind];
@@ -1157,17 +1188,17 @@ export class MotionPanel {
     const ed = this.ed, ref = ed.selectedKeys()[0];
     return [
       { title: 'Curves and paths' },
-      { label: 'Graph editor…', run: () => this.openGraph?.() },
+      { label: 'Graph editor…', icon: 'graph', run: () => this.openGraph?.() },
       { label: ed.pathEditing ? 'Done editing motion path' : 'Edit motion path on canvas', checked: ed.pathEditing, run: () => ed.setPathEditing(!ed.pathEditing) },
       { label: 'Smooth motion path', run: () => ed.changePath(true) },
       { label: 'Straight motion path', run: () => ed.changePath(false) },
       { label: 'Link motion path handles', checked: ed.pathLinked, run: () => { ed.pathLinked = !ed.pathLinked; } },
       { title: 'Camera' },
-      { label: 'Camera move…', disabled: !this.openCameraMove, run: () => this.openCameraMove?.() },
+      { label: 'Camera move…', icon: 'camera', disabled: !this.openCameraMove, run: () => this.openCameraMove?.() },
       { title: 'Keyframe assistants' },
       { label: 'Wiggle…', disabled: !ref, run: () => ref && void this.askWiggle(ref) },
       { label: 'Smooth keys…', disabled: !ref, run: () => void this.askSmooth() },
-      { label: 'Loop keys…', disabled: !ref, run: () => void this.askLoop() },
+      { label: 'Loop keys…', icon: 'recent', disabled: !ref, run: () => void this.askLoop() },
       { label: 'Stagger layers…', disabled: ed.selected.length < 2, run: () => void this.askStagger() },
       { label: 'React to audio…', disabled: !ed.selected.length, run: () => reactToAudio(this.app, this.sounds) },
       { title: 'Easing' },
@@ -1177,10 +1208,10 @@ export class MotionPanel {
         showContextMenu(box.left, box.bottom, [{ title: 'Easing curves' }, ...CURVES.map(c => ({ label: c.label, run: () => ed.setCurve(c.id) }))]);
       } },
       { sep: true },
-      { label: 'Copy easing', disabled: !ref, run: () => ed.copyEasing() },
-      { label: 'Paste easing', disabled: !ref || !ed.easeClipboard, run: () => ed.pasteEasing() },
+      { label: 'Copy easing', icon: 'copy', disabled: !ref, run: () => ed.copyEasing() },
+      { label: 'Paste easing', icon: 'paste', disabled: !ref || !ed.easeClipboard, run: () => ed.pasteEasing() },
       { label: 'Reverse keys', disabled: !ref, run: () => ed.reverse() },
-      { label: 'Delete selected keys', disabled: !ref, danger: true, run: () => ed.deleteKeys() },
+      { label: 'Delete selected keys', icon: 'trash', disabled: !ref, danger: true, run: () => ed.deleteKeys() },
     ];
   }
 
@@ -1205,6 +1236,9 @@ export class MotionPanel {
 
   layerItems(l: Layer): CtxItem[] {
     const ed = this.ed;
+    const asset = l.kind === 'comp' && this.app.project.comps.get(l.comp)?.asset;
+    const playback = l.kind === 'comp' ? l.timeRemap?.keys.length ? null : l.play === 'loop' ? 'loop' :
+      l.play === 'once' && l.out !== null && l.out > layerEnd({ ...l, out: null }, this.app.project.comps, ed.comp.fps) ? 'hold' : l.play : null;
     const actions = this.layerActions(l);
     const action = (a: { label: string; value: LayerAct }): CtxItem => ({ label: a.label, run: () => this.runLayerAction(l, a.value), danger: a.value === 'delete' || a.value === 'unmask' });
     const family = (label: string, ids: LayerAct[]): CtxItem[] => {
@@ -1218,11 +1252,31 @@ export class MotionPanel {
     };
     return [
       { title: l.name },
+      { label: 'Transform', icon: 'transform', run: () => {
+        if (ed.primary?.id !== l.id) ed.select(l.id);
+        this.animatedOnly = false; ed.open.add(l.id); this.signature = ''; this.update();
+        const row = this.grid.querySelector<HTMLElement>(`.mrow.layer[data-layer="${CSS.escape(l.id)}"]`);
+        row?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      } },
+      { label: 'Anchor', icon: 'centrecross', disabled: l.kind === 'camera' || l.locked || !l.visible || l.kind === 'drawings' && !!l.adjust,
+        run: () => { if (ed.primary?.id !== l.id) ed.select(l.id); ed.setAnchorEditing(true); this.app.focusCanvas(); } },
+      ...(l.kind === 'drawings' || l.kind === 'comp' ? [{ label: 'Effects', icon: 'fx', run: () => this.app.openEffects?.(l.id) }] : []),
+      { label: 'Graph', icon: 'graph', run: () => { if (ed.primary?.id !== l.id) ed.select(l.id); this.openGraph?.(); } },
+      ...(l.kind === 'comp' ? [{ label: 'Edit Clip', icon: 'time', run: () => this.editClip(l.id) }] : []),
+      ...(asset && this.clipPlayback ? [
+        { title: 'Clip playback' },
+        ...([['once', 'Once', 'play'], ['loop', 'Loop', 'recent'], ['hold', 'Hold Last Frame', 'last']] as const)
+          .map(([mode, label, icon]) => ({ label, icon, checked: playback === mode, disabled: playback === null, run: () => this.clipPlayback?.(l.id, mode) })),
+      ] : []),
+      ...(this.makeClip ? [
+        { title: 'Reuse selected tracks' },
+        { label: 'Make Clip…', icon: 'layers', disabled: !ed.selected.length || this.app.playing, run: () => this.makeClip?.(false) },
+        { label: 'Save as Asset…', icon: 'save', disabled: !ed.selected.length || this.app.playing, run: () => this.makeClip?.(true) },
+      ] : []),
       ...(l.kind === 'comp' && this.app.project.comps.get(l.comp)?.asset ? [{ label: 'Symbol options…', disabled: !this.openSymbol, run: () => this.openSymbol?.(l.id) }] : []),
       ...(l.kind === 'drawings' && l.title ? [{ label: 'Edit title…', run: () => this.app.editTitle?.(l.id) }, { label: 'Convert to paint…', run: () => this.app.convertTitle?.(l.id) }] : []),
-      { label: 'Create asset from selection…', disabled: !this.createAsset || this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() },
+      ...(!this.makeClip && this.createAsset ? [{ label: 'Create asset from selection…', disabled: this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() }] : []),
       ...(l.kind === 'drawings' && !l.adjust && !l.guide ? [{ label: 'Edit in Flipbook', run: () => this.app.openFlipbook?.(l.id) }] : []),
-      ...actions.filter(a => ['enter', 'effects'].includes(a.value)).map(action),
       { title: 'Organize' },
       { label: l.visible ? 'Hide' : 'Show', run: () => ed.setFlag(l.id, 'visible', !l.visible) },
       ...actions.filter(a => ['rename', 'dup', 'lock'].includes(a.value)).map(action),
@@ -1234,8 +1288,14 @@ export class MotionPanel {
       ...family('Blending and masks…', ['blend', 'clip', 'mask', 'editmask', 'unmask']),
       { sep: true },
       ...(l.kind === 'drawings' && l.adjust ? [{ label: 'Make it a normal layer', run: () => ed.setAdjust(l.id, false) }] : [{ label: 'New adjustment layer above', run: () => ed.addLayer('adjustment', l.id) }]),
-      ...actions.filter(a => a.value === 'delete').map(action),
+      ...(asset && this.removeClip ? [{ label: 'Remove from Shot', icon: 'trash', danger: true, run: () => this.removeClip?.(l.id) }] : actions.filter(a => a.value === 'delete').map(action)),
     ];
+  }
+
+  private editClip(id: string): void {
+    if (this.app.strokeActive || this.ed.dragging) return;
+    if (this.app.playing) this.app.togglePlay();
+    if (this.ed.enter(id, true)) this.app.focusCanvas();
   }
 
   /** Context menu on empty space: add layers, view options. */
@@ -1455,12 +1515,24 @@ export class MotionPanel {
     }
     const df = Math.round((e.clientX - d.x0) / this.cell);
     if (cancelled || !d.moved) {
+      if (!cancelled && d.kind === 'bar' && d.mode === 'move' && !e.shiftKey && this.ed.layer(d.layer)?.kind === 'comp') {
+        const tap = { comp: this.ed.comp.id, layer: d.layer, x: e.clientX, y: e.clientY, time: e.timeStamp };
+        const last = this.lastClipTap;
+        if (last?.comp === tap.comp && last.layer === tap.layer && tap.time - last.time < 400 &&
+            Math.hypot(tap.x - last.x, tap.y - last.y) < 12) {
+          this.lastClipTap = null;
+          this.editClip(d.layer);
+          return;
+        }
+        this.lastClipTap = tap;
+      } else this.lastClipTap = null;
       if (d.kind === 'key') d.el.style.transform = '';
       else if (d.moved) d.el.style.transform = '';
       this.signature = '';
       this.update();
       return;
     }
+    this.lastClipTap = null;
     if (d.kind === 'key') {
       d.el.style.transform = '';
       this.ed.nudgeKeys(df);
@@ -1470,7 +1542,7 @@ export class MotionPanel {
       if (d.mode === 'move') this.ed.setTiming(l.id, { start: l.start + df });
       else if (d.mode === 'in') this.ed.setTiming(l.id, { in: Math.max(0, l.in + df) }, 'Trim layer start');
       else {
-        const natural = layerEnd({ ...l, out: null }, this.app.project.comps);
+        const natural = layerEnd({ ...l, out: null }, this.app.project.comps, this.ed.comp.fps);
         const cur = l.out ?? (Number.isFinite(natural) ? natural : this.ed.length());
         let out = cur + df;
         if (Number.isFinite(natural) && !playsOn(l)) out = Math.max(out, l.in + 1); // a "once" layer made longer holds its last frame

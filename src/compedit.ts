@@ -33,6 +33,7 @@ import { totalFrames } from './core/timeline';
 import { layerContentBox } from './view/contentbox';
 import type { Command } from './core/history';
 import type { App } from './app';
+import { MAX_LAYERS } from './io/schema';
 
 /** The properties the Motion view animates, by name. */
 export type PropName = 'position' | 'scale' | 'rotation' | 'opacity' | 'anchor' | 'zoom' | 'remap' | PartProp;
@@ -397,10 +398,10 @@ export class CompEditor {
   // Precomps: group, ungroup, make unique, go inside and back out
 
   /** How we got into the open comp: each step is a precomp layer of the comp above. */
-  private trail: { comp: string; layer: string }[] = [];
+  private trail: { comp: string; layer: string; returnFrame?: number }[] = [];
 
   /** One undo step that may change several comps (group, ungroup, make unique). */
-  editProject(label: string, fn: () => void): void {
+  editProject(label: string, fn: () => void, drawings?: Command['drawings']): void {
     const p = this.app.project;
     const snap = () => ({ comps: structuredClone([...p.comps.values()]), active: p.activeComp, trail: [...this.trail] });
     const before = snap();
@@ -416,7 +417,7 @@ export class CompEditor {
       if (was !== st.active) this.app.onCompChange();
       this.changed();
     };
-    this.app.history.push({ label, do: () => set(after), undo: () => set(before) }, true);
+    this.app.history.push({ label, drawings, do: () => set(after), undo: () => set(before) }, true);
     this.tidy();
     this.changed();
   }
@@ -588,7 +589,7 @@ export class CompEditor {
   }
 
   /** Go inside a precomp layer: its comp becomes the one you edit, at the frame it was showing. */
-  enter(id: string): boolean {
+  enter(id: string, returnToEntry = false): boolean {
     const c = this.comp;
     const l = c.layers.find((x) => x.id === id);
     if (!l || l.kind !== 'comp') return false;
@@ -598,7 +599,7 @@ export class CompEditor {
     const nf = nestedFrame(l, this.app.frame, c.fps, nested, p.comps) ?? 0;
     this.setAnchorEditing(false);
     this.setPathEditing(false);
-    this.trail.push({ comp: c.id, layer: l.id });
+    this.trail.push({ comp: c.id, layer: l.id, ...(returnToEntry ? { returnFrame: this.app.frame } : {}) });
     this.switchTo(nested.id, nf);
     return true;
   }
@@ -610,17 +611,19 @@ export class CompEditor {
     this.setAnchorEditing(false);
     this.setPathEditing(false);
     const p = this.app.project;
+    const returnStep = this.trail[depth];
     // map the playhead out through every level we leave
     let frame = this.app.frame;
     for (let i = crumbs.length - 1; i > depth; i--) {
       const via = crumbs[i]!.via!;
       const parent = crumbs[i - 1]!.comp;
       const inner = crumbs[i]!.comp;
-      frame = via ? via.start + Math.floor((frame * parent.fps) / inner.fps + 1e-9) : 0;
+      frame = this.trail[i - 1]?.returnFrame ?? (via ? via.start + Math.floor((frame * parent.fps) / inner.fps + 1e-9) : 0);
     }
     this.trail = this.trail.slice(0, depth);
     this.gestureEnd(true);
     this.switchTo(crumbs[depth]!.comp.id, frame);
+    if (returnStep?.returnFrame !== undefined && this.layer(returnStep.layer)) this.select(returnStep.layer);
     void p;
     return true;
   }
@@ -824,6 +827,42 @@ export class CompEditor {
     });
     this.tidy();
     this.onChange();
+  }
+
+  /** Copy layer timing and settings while keeping their drawing and source references. */
+  pasteLayers(layers: Layer[], sourceComp: string): boolean {
+    const app = this.app, p = app.project, c = this.comp;
+    if (!layers.length || app.strokeActive || app.playing || this.dragging || c.layers.length + layers.length > MAX_LAYERS) return false;
+    const seen = new Set<string>();
+    const usable = (id: string): boolean => {
+      if (id === c.id || !p.comps.has(id)) return false;
+      if (seen.has(id)) return true;
+      seen.add(id);
+      return p.comps.get(id)!.layers.every(l => l.kind !== 'comp' || usable(l.comp));
+    };
+    if (layers.some(l => l.kind === 'comp' ? !usable(l.comp) : l.kind === 'drawings' && (
+      l.exposures.some(e => !p.drawings.has(e.drawing)) || (l.mask && !p.drawings.has(l.mask))
+    ))) return false;
+    const ids = new Map(layers.map(l => [l.id, p.newId('L')]));
+    const groups = new Map<string, string>();
+    const copies = structuredClone(layers);
+    for (const l of copies) {
+      l.id = ids.get(l.id)!;
+      if (l.parent) l.parent = ids.get(l.parent) ?? (sourceComp === c.id && c.layers.some(x => x.id === l.parent) ? l.parent : null);
+      if (l.kind === 'drawings' && l.cel) {
+        const group = groups.get(l.cel) ?? l.id;
+        groups.set(l.cel, group);
+        l.cel = group;
+      }
+    }
+    this.edit('Paste layers', cc => {
+      const at = cc.layers.findIndex(l => l.id === this.primary?.id);
+      cc.layers.splice(Math.max(0, at), 0, ...copies);
+    });
+    this.selected = copies.map(l => l.id);
+    this.keys.clear();
+    this.onChange();
+    return true;
   }
 
   /** Move a layer up (−1) or down (+1) the stack. */
@@ -1374,7 +1413,7 @@ export class CompEditor {
 
   get canEditAnchor(): boolean {
     const l = this.primary;
-    return !!l && l.kind !== 'camera' && !l.adjust && !l.guide && !l.locked && l.visible && this.app.frame >= l.in && this.app.frame < layerEnd(l, this.app.project.comps);
+    return !!l && l.kind !== 'camera' && !l.adjust && !l.guide && !l.locked && l.visible && this.app.frame >= l.in && this.app.frame < layerEnd(l, this.app.project.comps, this.comp.fps);
   }
   setAnchorEditing(on: boolean): void {
     this.gestureEnd(true);
@@ -1524,7 +1563,7 @@ export class CompEditor {
     for (const l of this.comp.layers) {
       if (!l.visible || (l.locked && !options.allowLocked) || (options.accept && !options.accept(l))) continue;
       if (l.kind === 'camera' && this.throughCamera) continue;
-      const end = layerEnd(l, this.app.project.comps);
+      const end = layerEnd(l, this.app.project.comps, this.comp.fps);
       if (this.app.frame < l.in || this.app.frame >= end) continue;
       const q = apply(invert(this.matrixOf(l)), p);
       const b = this.bounds(l);
@@ -1584,7 +1623,7 @@ export class CompEditor {
     const sel = this.primary;
     let kind: GestureKind = 'move';
     let target: Layer | null = null;
-    if (sel && sel.visible && (!sel.locked || options.allowLocked) && (!options.accept || options.accept(sel)) && this.app.frame >= sel.in && this.app.frame < layerEnd(sel, this.app.project.comps)) {
+    if (sel && sel.visible && (!sel.locked || options.allowLocked) && (!options.accept || options.accept(sel)) && this.app.frame >= sel.in && this.app.frame < layerEnd(sel, this.app.project.comps, this.comp.fps)) {
       if (!options.simple && near(this.rotateHandle(sel, zoom), pt)) [kind, target] = ['rotate', sel];
       else if (sel.kind !== 'null' && this.corners(sel).some((c) => near(c, pt))) [kind, target] = ['scale', sel];
     }
@@ -1609,7 +1648,7 @@ export class CompEditor {
     const box = this.snap.on && target.kind !== 'camera' ? unionBoxes(movable.map(l => this.layoutBox(l))) : null;
     const targets: LayoutBox[] = [];
     if (this.snap.on && this.snap.canvas) targets.push({ x: 0, y: 0, w: this.comp.width, h: this.comp.height });
-    if (this.snap.on && this.snap.layers) for (const l of this.comp.layers) if (!movesWithSelection(l) && l.visible && !l.guide && !l.adjust && l.kind !== 'camera' && this.app.frame >= l.in && this.app.frame < layerEnd(l, this.app.project.comps)) targets.push(this.layoutBox(l));
+    if (this.snap.on && this.snap.layers) for (const l of this.comp.layers) if (!movesWithSelection(l) && l.visible && !l.guide && !l.adjust && l.kind !== 'camera' && this.app.frame >= l.in && this.app.frame < layerEnd(l, this.app.project.comps, this.comp.fps)) targets.push(this.layoutBox(l));
     this.snapGuides = [];
     this.gesture = {
       kind,
@@ -1703,7 +1742,7 @@ export class CompEditor {
     if (this.app.strokeActive || this.app.playing || this.dragging) throw new Error('Finish the current edit first.');
     const layers = this.selected.map(id => this.layer(id)).filter((l): l is Layer => !!l);
     if (!layers.length) throw new Error('Select layers first.');
-    if (layers.some(l => l.kind === 'camera' || l.adjust || l.guide || !l.visible || this.app.frame < l.in || this.app.frame >= layerEnd(l, this.app.project.comps))) throw new Error('Select visible artwork or anchors at the playhead.');
+    if (layers.some(l => l.kind === 'camera' || l.adjust || l.guide || !l.visible || this.app.frame < l.in || this.app.frame >= layerEnd(l, this.app.project.comps, this.comp.fps))) throw new Error('Select visible artwork or anchors at the playhead.');
     if (layers.some(l => l.locked) && !this.app.arrangingAssets) throw new Error('Unlock the selected layers first.');
     return layers;
   }

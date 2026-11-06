@@ -2,6 +2,77 @@
 
 ## Current state (2026-11-05) — read this first
 
+### Clipboard, imported assets and editable clips (2026-11-05)
+
+`ui/clipboard.ts` handles browser Copy, Cut and Paste events. It respects text fields and
+routes canvas selections, timeline frames and Motion layers separately. Native timeline Paste
+makes independent drawings. Paste (same drawings) is still in the frame menu. Copy Visible
+renders a PNG using the composition renderer and drawing residency pins. External files arrive
+through Paste, drop, or Assets → Import and use the media and artwork decoders.
+
+`app.ts`, `ui/media.ts`, `ui/audiotracks.ts` and `core/assets.ts` commit the editable source graph
+and its first placement at the playhead in one History step. The project shelf supports pictures,
+SVG/EPS, original GIF frames, PSD/OpenRaster, sound, short movies and compatible .2dope artwork
+archives. GIF holds use shot FPS. Movies retain decodable sound and use up to 12 seconds of
+footage. Clipboard formats depend on the sending app and browser. Movie decode, asset size,
+duration and project limits apply. Existing file import commands still work.
+
+`ui/artworkassets.ts` and `ui/motion.ts` expose Remove from Shot and Delete Asset. Source deletion
+requires no remaining placements and reports the compositions that use it. Make Clip replaces
+adjacent tracks, protecting dependencies across the clip boundary. Save as Asset copies the
+editable graph and drawing data without changing the shot. Motion's Selected layer menu brings
+Transform, Anchor, Effects, Graph, and Edit Clip together. Edit Clip and a double-click on its
+timeline bar open the source. The breadcrumb restores the original shot frame and selection.
+Once, Loop and Hold Last Frame use existing timeline controls and no project schema bump.
+
+Checks: 749 unit tests passed, one skipped, and the production build passed with the existing
+chunk warning. The main-entry clipboardassets fixture passed all 10 checks, including PNG alpha,
+GIF holds, WAV and generated WebM, independent frame copy, PNG clipboard output, dependency-safe
+deletion, double-click and return, and a cross-FPS .2dope clip import. The surrounding workspace,
+media, asset library, painting, Flipbook, anchor and precision fixtures passed in targeted runs.
+The clipboard fixture supplies browser clipboard events and intercepts the outgoing PNG write.
+Native Procreate/iPad clipboard permissions and format handoff remain unverified.
+
+### Docked Flipbook divider (2026-11-05)
+
+`ui/flipmode.ts` now uses the timeline's `ui/splitter.ts` pointer and keyboard resizing for the
+Flipbook track viewport. The Flipbook stays at the bottom. Drag or use Up/Down to resize.
+Double-click restores the automatic height. The chosen height is a device preference shared by
+Draw and Animate. Old floating coordinates are ignored. Draw retains Canvas/Flipbook and Animate
+retains Flipbook/Clips. `style.css` bounds the panel by the stage height and the existing resize
+observer keeps the active track visible and reserves the measured height for canvas fitting.
+The manual and Updates document the divider.
+
+Checks: 749 unit tests passed, 1 skipped, and the production build passed with the existing
+chunk warning. Seven Chromium fixtures passed on a separate origin: flipbooksource (30),
+workspacelayout-responsive (88), workspacecontrols (4), paintinglayout (16), paintingworkflow (21),
+playbackrange-responsive (50), and artworkworkflow (31). The Flipbook fixture verifies drag,
+keyboard resize, height persistence, default reset, and ignoring an old floating preference.
+Physical touch and Safari remain unverified.
+
+### Workspace controls and Motion graph dock (2026-11-05)
+
+Motion groups its toolbar into creation/import, graph/canvas tools, and layer/animation/view menus.
+`ui/motion.ts`, `ui/anchors.ts`, `ui/icons.ts` and `style.css` give those actions distinct icons and
+keep Graph reachable on the first toolbar screen at phone width. `ui/contextmenu.ts` supports
+optional icons alongside menu labels. `ui/paintingworkspace.ts` and `ui/bubbles.ts` add view, paint
+target and layer action icons. At 360 px and below the painting view buttons use compact 44 px
+targets so Tool settings and Workspace stay reachable. `ui/board.ts` adds icons to Story views,
+panel actions and dialogue editing. The manual and Updates describe the controls.
+
+`ui/graph.ts` and `main.ts` dock the selected layer’s graph beside the canvas and timeline at
+1100 × 650 and up. The dock shows animated transform curves with a common layer-time playhead and
+independent value scales. Timing and value edits remain per property and use a detached draft.
+Apply uses the existing stale-property guard and one Undo. Reset reloads the saved property.
+Switching property requires applying or resetting pending edits. Leaving Motion, changing shots,
+or removing the target closes the dock. Compact windows open the modal editor.
+
+Checks: 749 unit tests passed, 1 skipped, production build passed with the existing chunk warning.
+All 10 targeted Chromium fixtures passed on a separate origin (369 checks across desktop, 320 px,
+phone, tablet and landscape). The main-entry `workspacecontrols` fixture covers dock geometry,
+timeline sync, draft retention, Undo, workspace icon labels and compact dialog fallback. Physical
+touch/Pencil and Safari remain unverified.
+
 ### Whole Story desk follow-up (2026-11-05)
 
 User confirmed they were seeing the new `6ba16da` UI and still wanted a more substantial change.

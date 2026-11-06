@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { frameContent } from '../core/comp';
 import type { Drawing } from '../core/project';
 import { showContextMenu } from './contextmenu';
+import { decorate } from './icons';
 
 /** Compact canvas-tool controls; presets use resident artwork bounds, never parked pixels. */
 export class AnchorControls {
@@ -23,6 +24,10 @@ export class AnchorControls {
       ...[0, .5, 1].map((y, row) => ({ chips: [0, .5, 1].map((x, column) => { const label = [['Top left', 'Top center', 'Top right'], ['Middle left', 'Center', 'Middle right'], ['Bottom left', 'Bottom center', 'Bottom right']][row]![column]!; return { label, title: `Anchor ${label.toLowerCase()}`, run: () => void this.place(x, y) }; }) })),
     ]); };
     const done = document.createElement('button'); done.type = 'button'; done.textContent = 'Done'; done.setAttribute('aria-label', 'Finish anchor editing'); done.onclick = () => ed.setAnchorEditing(false);
+    decorate(this.button, 'centrecross');
+    decorate(this.center, 'fit');
+    decorate(this.presets, 'gallery');
+    decorate(done, 'check');
     this.root.append(this.hint, this.center, this.presets, done); this.update();
   }
   update(): void {

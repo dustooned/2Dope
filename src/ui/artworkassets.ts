@@ -10,6 +10,7 @@ import { askText, pickBox } from './dialogs';
 import { decorate } from './icons';
 import { ArtworkLibraryUI } from './artworklibrary';
 import type { ArtworkStore } from '../io/artworkstore';
+import { readArtwork } from '../io/artwork';
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag); e.className = className;
@@ -49,6 +50,7 @@ export class ArtworkAssetsUI {
   private finishPlacement: HTMLButtonElement;
   private placementUndo: HTMLButtonElement;
   private placementRedo: HTMLButtonElement;
+  private removePlaced: HTMLButtonElement;
   private placedSig = '';
   private timing = element('div', 'asset-timing');
   private timingToggle: HTMLButtonElement;
@@ -104,6 +106,11 @@ export class ArtworkAssetsUI {
     this.duplicatePlaced.setAttribute('aria-haspopup','dialog');
     this.finishPlacement = button('Done', 'check', () => { app.setArrangeAssets(false); app.focusCanvas(); }, 'Done arranging assets');
     this.finishPlacement.classList.add('asset-done');
+    this.removePlaced = button('Remove from Shot', 'trash', () => {
+      const layer = app.placedAsset;
+      if (layer && this.assets.removePlacement(layer.id)) { app.focusCanvas(); app.onNotice?.('Removed placement. Undo restores it.'); }
+    });
+    this.removePlaced.classList.add('icon-only', 'asset-remove-placement');
     this.optionsToggle = button('Options','more',()=>{
       if(app.strokeActive)return;
       app.preserveCanvasView(); this.optionsOpen=!this.optionsOpen;this.update();
@@ -118,7 +125,7 @@ export class ArtworkAssetsUI {
     const choice = element('div', 'asset-placement-choice');
     this.timingToggle = button('Timing', 'time', () => { if(app.strokeActive)return;app.preserveCanvasView();this.timingOpen = !this.timingOpen; this.update(); }, 'Asset timing');
     this.timingToggle.classList.add('asset-timing-toggle'); this.timingToggle.setAttribute('aria-controls', 'asset-timing');
-    choice.append(this.placedPicker,this.editPlaced,this.optionsToggle,this.finishPlacement);
+    choice.append(this.placedPicker,this.editPlaced,this.optionsToggle,this.removePlaced,this.finishPlacement);
     const actions=element('div','asset-placement-actions');
     actions.append(this.replacePlaced,this.duplicatePlaced,this.names);
     const secondary=element('div','asset-placement-secondary');
@@ -202,6 +209,7 @@ export class ArtworkAssetsUI {
       this.finishPlacement.disabled = a.strokeActive;
       this.placementUndo.disabled = !a.history.canUndo || a.strokeActive;
       this.placementRedo.disabled = !a.history.canRedo || a.strokeActive;
+      this.removePlaced.disabled = !a.placedAsset || a.strokeActive || a.playing;
       const identity = a.placedAsset ? assetLabel(a.project,a.project.comp,a.placedAsset) : null;
       this.sourceInfo.textContent = this.assets.copying ? 'Copying editable artwork…' : identity ? `Source: ${identity.source} · ${count(identity.count,'linked placement')} in this shot` : 'Choose a placement to move or time it.';
       this.editPlaced.title = identity ? `Edit shared source ${identity.source}. Changes update every linked placement, including other shots.` : 'Edit shared source';
@@ -259,6 +267,30 @@ export class ArtworkAssetsUI {
     if (!name?.trim() || a.project !== project || project.activeComp !== comp || a.strokeActive || a.playing) return;
     const id = this.assets.fromSelection(ids, name);
     if (id) { a.onNotice?.(`Created ${project.comps.get(id)!.name}. Use Assets to edit, place, save or download it.`); this.showAssets(); }
+    this.update();
+  }
+
+  async makeClip(save: boolean): Promise<void> {
+    const a = this.app, project = a.project, comp = project.activeComp, ids = [...a.editor.selected];
+    if (!ids.length || a.strokeActive || a.playing || this.assets.copying) return;
+    const title = save ? 'Save as Asset' : 'Make Clip';
+    const name = await askText(title, a.editor.primary?.name ?? 'Animation clip', save ? 'Save' : 'Make Clip',
+      save ? 'Save an independent editable copy in Assets. Your shot stays as it is.' : 'Combine these tracks into one editable clip on the timeline.');
+    if (!name?.trim() || a.project !== project || project.activeComp !== comp) return;
+    try {
+      const made = save ? await this.assets.saveSelection(ids, name) : this.assets.makeClip(ids, name);
+      a.onNotice?.(made ? (save ? 'Saved an editable copy to Assets.' : 'Clip ready. Use Edit Clip to open its tracks.') : 'The selection changed. Try again.');
+    } catch (e) { a.onNotice?.((e as Error).message); }
+    finally { this.update(); }
+  }
+
+  async importArchive(file: File, frame: number): Promise<void> {
+    const a = this.app, project = a.project, comp = project.comp;
+    if (file.size > 1024 * 1024 * 1024) throw new Error('This artwork file is too large.');
+    if (a.playing) a.togglePlay();
+    const bundle = await readArtwork(new Uint8Array(await file.arrayBuffer()));
+    if (a.project !== project || project.comp !== comp || !this.assets.addPackage(bundle, frame))
+      throw new Error('The timeline changed or is busy. Import the asset again.');
     this.update();
   }
   /** Draw in a source (on one of its layers, when given). */
@@ -372,8 +404,14 @@ export class ArtworkAssetsUI {
     head.append(title, add, close);
     const collections = element('nav', 'artwork-library-nav'); collections.setAttribute('aria-label', 'Asset collections');
     collections.append(button('My Assets', 'gallery', () => this.showLibrary())); collections.hidden = !!replacement;
+    if (!replacement && this.app.pickAssetMedia) {
+      collections.append(action('Import', 'import', () => this.app.pickAssetMedia?.(), 'Import artwork or a .2dope asset'));
+    }
+    if (!replacement && this.app.pasteMedia) {
+      collections.append(action('Paste', 'paste', () => this.app.pasteMedia?.(), 'Paste into project assets'));
+    }
     if (!replacement && this.app.workspace === 'motion') {
-      const selected = action('From selection', 'layers', () => void this.createFromSelection(), 'Create asset from selected layers');
+      const selected = action('Save as Asset', 'save', () => void this.makeClip(true), 'Save selected layers as an asset');
       selected.disabled = !this.app.editor.selected.length || this.app.playing || this.app.editor.selected.some(id => {
         const l = this.app.editor.layer(id); return l?.kind === 'camera' || l?.kind === 'drawings' && l.guide;
       }); collections.append(selected);
@@ -444,7 +482,12 @@ export class ArtworkAssetsUI {
         const place = action('Place', 'plus', () => { this.assets.place(c.id); if (this.app.workspace === 'motion') this.app.focusCanvas(); else this.placedPicker.focus(); }, `Place ${c.name}`);
         place.disabled = this.app.playing || !!artworkProject || this.app.workspace === 'motion' && !!project.comp.asset;
         if (place.disabled && !this.app.playing) place.title = 'Return to your shot to place linked artwork.';
-        actions.append(action('Edit', 'draw', () => this.openSource(c.id), `Edit ${c.name}`), place);
+        const removeSource = action('Delete Asset', 'trash', () => {
+          if (this.app.project === project && this.assets.deleteSource(c.id)) { this.update(); this.app.onNotice?.('Asset deleted. Undo restores it.'); }
+        }, `Delete Asset ${c.name}`);
+        removeSource.classList.add('icon-only');
+        removeSource.disabled = this.app.playing || this.assets.copying;
+        actions.append(action('Edit', 'draw', () => this.openSource(c.id), `Edit ${c.name}`), place, removeSource);
         const more = element('details', 'artwork-library-manage artwork-source-files'), summary = element('summary', '', 'Save / files / manage'); summary.setAttribute('aria-label', `Files and actions for ${c.name}`);
         const files = element('div', 'artwork-project-actions');
         const rename=action('Rename','draw',()=>void this.renameSource(c.id),`Rename source ${c.name}`);
@@ -472,15 +515,13 @@ export class ArtworkAssetsUI {
       for (const l of placements) {
         if (l.kind !== 'comp') continue;
         const row = element('div', 'artwork-placement');
-        const target = project.activeComp;
         const edit = action('Edit source', 'draw', () => this.openSource(l.comp), `Edit source of ${l.name}`); edit.classList.add('icon-only');
         const arrange = action('Move', 'freeform', () => {
           if (this.app.workspace === 'motion') { this.app.editor.select(l.id); this.app.focusCanvas(); }
           else this.app.setArrangeAssets(true, l.id);
         }, `Move placement of ${l.name}`); arrange.classList.add('icon-only');
-        const remove = action('Remove placement', 'trash', () => this.app.editor.editProject('Remove asset placement', () => {
-          const c = project.comps.get(target); if (c) c.layers = c.layers.filter(x => x.id !== l.id);
-        }), `Remove placement of ${l.name}`); remove.classList.add('icon-only');
+        const remove = action('Remove from Shot', 'trash', () => { if (this.app.project === project) this.assets.removePlacement(l.id); },
+          `Remove placement of ${l.name}`); remove.classList.add('icon-only');
         row.append(element('span', '', assetLabel(project,project.comp,l).picker), arrange, edit, remove); group.append(row);
       }
       body.append(group);

@@ -42,13 +42,16 @@ export class PaintingWorkspaceUI {
     this.header.className = 'painting-header'; this.header.setAttribute('aria-label', 'Artwork assets');
     stage.append(this.header);
     this.footer.className = 'painting-views'; this.footer.setAttribute('aria-label', 'Drawing views');
-    for (const label of ['Canvas', 'Flipbook', 'Clips']) {
+    for (const [label, icon] of [['Canvas', 'canvas'], ['Flipbook', 'flipbook'], ['Clips', 'time']] as const) {
       const b = button(label, () => {
         if (!isPaintingWorkspace(app.workspace)) return;
         this.prefs[app.workspace].editor = false;
         document.body.classList.remove('painting-editor-folded');
         flip.set(label === 'Flipbook'); this.save(); this.update(); this.refresh();
       });
+      b.title = label;
+      b.classList.add('painting-view');
+      decorate(b, icon);
       this.viewButtons.push(b); this.footer.append(b);
     }
     const hint = document.createElement('span'); hint.className = 'painting-purpose';

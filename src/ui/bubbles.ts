@@ -792,8 +792,8 @@ export class Bubbles {
       cels.forEach((l) => {
         add(this.chip(l.name, l.id === me ? 'You draw on this layer' : `Draw on ${l.name}`, l.id === me, () => { if (l.id !== me) a.pickLayer(l.id); this.sig = ''; this.update(); }));
       });
-      add(this.chip('+ Layer', 'A new art layer for these cels: same frames and timing, its own drawing', false, () => { a.addCelLayer(); this.sig = ''; this.update(); }));
-      if (!flip) add(this.chip('All layers', 'Every layer of the shot', false, (b) => this.hooks.layers(b)));
+      add(this.chip('Add layer', 'A new art layer for these cels: same frames and timing, its own drawing', false, () => { a.addCelLayer(); this.sig = ''; this.update(); }, 'plus'));
+      if (!flip) add(this.chip('All layers', 'Every layer of the shot', false, (b) => this.hooks.layers(b), 'layers'));
     } else if (row === 'transform' && xp) {
       add(...this.commandChips('transform'));
     } else if (row === 'adjust') {
@@ -801,8 +801,8 @@ export class Bubbles {
       add(...this.adjustControls());
     } else if (row === 'smudge') {
       add(
-        this.chip('Ink target', 'Smudge the Ink', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }),
-        this.chip('Colour target', 'Smudge the Colour', a.plane === 'fill', () => { a.setPlane('fill'); a.setSmudging(true); }),
+        this.chip('Ink target', 'Smudge the Ink', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }, 'lineplane'),
+        this.chip('Colour target', 'Smudge the Colour', a.plane === 'fill', () => { a.setPlane('fill'); a.setSmudging(true); }, 'fillplane'),
         ...this.cmd('smudge.softer'),
         el('span', { class: 'bub-hint' }, `Strength ${Math.round(a.smudgeStrength * 100)}%`),
         ...this.cmd('smudge.stronger'),
@@ -817,7 +817,10 @@ export class Bubbles {
         add(this.chip('Paint colour', `Automatic paint: ${a.color}. Choose paint colour.`, false, b => this.hooks.colorPanel(b), 'palette'));
       }
       add(this.chip('Brushes', 'Brush library', false, (b) => this.hooks.brushLibrary(b), 'brushes'));
-      if (a.studentUI.controls.planes) add(this.chip('Ink target', 'Paint on Ink: your lines', a.plane === 'line', () => a.setPlane('line')), this.chip('Colour target', 'Paint on Colour: colour under the ink', a.plane === 'fill', () => a.setPlane('fill')));
+      if (a.studentUI.controls.planes) add(
+        this.chip('Ink target', 'Paint on Ink: your lines', a.plane === 'line', () => a.setPlane('line'), 'lineplane'),
+        this.chip('Colour target', 'Paint on Colour: colour under the ink', a.plane === 'fill', () => a.setPlane('fill'), 'fillplane'),
+      );
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
       add(...this.cmd('paint.editpoints'), ...this.cmd('paint.objects'), ...this.cmd('paint.svg'), ...this.cmd('paint.rasterize'), this.customizeChip('paint'));

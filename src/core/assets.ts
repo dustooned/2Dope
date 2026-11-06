@@ -4,7 +4,7 @@ import type { Parked, Project } from './project';
 import { artworkDrawings, artworkGraph, copyArtworkGraph, snapshotArtwork } from './assetcopy';
 import type { ArtworkPackage } from '../io/artwork';
 import { loadProjectFile } from '../io/projectio';
-import { MAX_COMPS, MAX_DRAWINGS, MAX_VECTORS, validateProjectFile } from '../io/schema';
+import { MAX_COMPS, MAX_DRAWINGS, MAX_FRAMES, MAX_LAYERS, MAX_VECTORS, validateProjectFile } from '../io/schema';
 
 /** Assets are normal editable comps. Placement and source changes use existing History commands. */
 export class ArtworkAssets {
@@ -41,6 +41,136 @@ export class ArtworkAssets {
     const placement = a.editor.group(ids, name.trim().slice(0, 80), true);
     const l = p.comp.layers.find(l => l.id === placement);
     return l?.kind === 'comp' ? l.comp : null;
+  }
+
+  /** Remove a placement while keeping its reusable source. */
+  removePlacement(id: string): boolean {
+    const a = this.app, layer = a.editor.layer(id);
+    if (a.strokeActive || a.playing || a.editor.dragging || layer?.kind !== 'comp' || !a.project.comps.get(layer.comp)?.asset) return false;
+    a.editor.deleteLayers([id]);
+    return true;
+  }
+
+  deleteSource(id: string): boolean {
+    const a = this.app, p = a.project, source = p.comps.get(id);
+    if (!source?.asset || id === p.main || a.strokeActive || a.playing || this.copying) return false;
+    if (id === p.activeComp) { a.onNotice?.('Close the asset before deleting it.'); return false; }
+    const uses = [...p.comps.values()].filter(c => c.layers.some(l => l.kind === 'comp' && l.comp === id));
+    if (uses.length) {
+      a.onNotice?.(`Remove or replace placements in ${uses.slice(0, 3).map(c => c.name).join(', ')}${uses.length > 3 ? ' and other compositions' : ''} first.`);
+      return false;
+    }
+    const drawings = source.layers.flatMap(l => l.kind === 'drawings' ? [...l.exposures.map(e => e.drawing), ...(l.mask ? [l.mask] : [])] : []);
+    a.editor.editProject('Delete asset', () => { p.comps.delete(id); }, [...new Set(drawings)].map(id => ({ id })));
+    return true;
+  }
+
+  private clipDraft(ids: string[], name: string, replace: boolean) {
+    const a = this.app, p = a.project, shot = p.comp;
+    const picked = new Set(ids), layers = shot.layers.filter(l => picked.has(l.id));
+    if (!layers.length || layers.length !== picked.size || layers.some(l => l.kind === 'camera' || l.kind === 'drawings' && l.guide))
+      throw new Error('Select artwork tracks to make a clip.');
+    const first = shot.layers.indexOf(layers[0]!), last = shot.layers.indexOf(layers.at(-1)!);
+    if (last - first + 1 !== layers.length) throw new Error('Select adjacent tracks to keep their stacking order.');
+    const celGroups = new Set(layers.flatMap(l => l.kind === 'drawings' && l.cel ? [l.cel] : []));
+    if (shot.layers.some(l => {
+      if (l.parent && picked.has(l.id) !== picked.has(l.parent) && (replace || picked.has(l.id))) return true;
+      return l.kind === 'drawings' && !!l.cel && celGroups.has(l.cel) && !picked.has(l.id);
+    })) throw new Error('Include linked drawing tracks and their parent layers.');
+    if (layers.at(-1)?.clip || (replace && first > 0 && shot.layers[first - 1]?.clip))
+      throw new Error('Include the full clipping stack.');
+    if ((last < shot.layers.length - 1 || replace && shot.background !== null) &&
+        layers.some(l => l.blend !== 'normal' || l.kind === 'drawings' && l.adjust))
+      throw new Error('Include the layers below that the blend or adjustment affects.');
+    if (replace && (shot.pins.some(pin => picked.has(pin.layer)) || shot.audio?.some(clip => clip.link && picked.has(clip.link.layer))))
+      throw new Error('Use Save as Asset for tracks with exposed controls or linked audio.');
+    const start = Math.max(0, Math.min(...layers.map(l => l.in)));
+    const shotEnd = compLength(shot, p.comps);
+    const source = newComp(p.newId('c'), name.trim().slice(0, 80), shot.width, shot.height, shot.fps);
+    source.asset = true;
+    source.layers = structuredClone(layers);
+    // Finite clips use the selected span. A repeating track uses the shot boundary when replacing
+    // it, or its natural content and keyed duration when saving a standalone copy.
+    const natural = compLength({ ...shot, duration: null, audio: [], layers }, p.comps);
+    const end = Math.max(start + 1, ...layers.map(l => {
+      const n = layerEnd(l, p.comps, shot.fps);
+      if (Number.isFinite(n)) return Math.min(shotEnd, n);
+      if (replace) return shotEnd;
+      return Math.max(natural, ...a.editor.rowsOf(l).filter(key => !key.startsWith('pin:'))
+        .map(key => l.start + (a.editor.getProp(l, key).keys.at(-1)?.f ?? 0) + 1));
+    }));
+    if (end - start > MAX_FRAMES) throw new Error('This selection is too long to save as a clip.');
+    source.duration = end - start;
+    for (const l of source.layers) {
+      l.start -= start;
+      l.in = Math.max(0, l.in - start);
+      if (l.out !== null) l.out -= start;
+    }
+    return { source, first, start, picked };
+  }
+
+  makeClip(ids: string[], name: string): boolean {
+    const a = this.app, p = a.project, shot = p.comp;
+    if (a.strokeActive || a.playing || a.editor.dragging || !name.trim()) return false;
+    if (p.comps.size >= MAX_COMPS) throw new Error('The project has reached its composition limit.');
+    const { source, first, start, picked } = this.clipDraft(ids, name, true);
+    const placement = compLayer(p.newId('L'), source.name, source, shot);
+    placement.start = placement.in = start;
+    a.editor.editProject('Make clip', () => {
+      p.comps.set(source.id, source);
+      shot.layers = shot.layers.filter(l => !picked.has(l.id));
+      shot.layers.splice(first, 0, placement);
+    });
+    a.editor.select(placement.id);
+    return true;
+  }
+
+  async saveSelection(ids: string[], name: string): Promise<boolean> {
+    const a = this.app, p = a.project, shot = p.comp;
+    if (a.strokeActive || a.playing || a.editor.dragging || this.copying || !name.trim()) return false;
+    const { source } = this.clipDraft(ids, name, false);
+    const graph = new Map([[source.id, source]]);
+    for (const l of source.layers) if (l.kind === 'comp') {
+      for (const c of artworkGraph(p, l.comp, false)) graph.set(c.id, c);
+    }
+    if (p.comps.size + graph.size > MAX_COMPS) throw new Error('The project has reached its composition limit.');
+    const comps = [...graph.values()], drawings = artworkDrawings(p, comps);
+    const shotSignature = JSON.stringify(shot);
+    const graphSignature = JSON.stringify(comps.slice(1));
+    const revs = drawings.map(d => d.rev);
+    const available = () => a.project === p && p.comp === shot && !a.strokeActive && !a.playing && !a.editor.dragging;
+    this.copying = true;
+    try {
+      const snapshots: Parked[] = [];
+      for (const drawing of drawings) {
+        snapshots.push(await snapshotArtwork(drawing, a.residency));
+        if (!available()) return false;
+      }
+      if (!available() || JSON.stringify(shot) !== shotSignature ||
+          JSON.stringify(comps.slice(1).map(c => p.comps.get(c.id))) !== graphSignature ||
+          drawings.some((d, i) => p.drawings.get(d.id) !== d || d.rev !== revs[i]) ||
+          p.comps.size + graph.size > MAX_COMPS) return false;
+      artworkDrawings(p, comps);
+      const drawingIds = new Map(drawings.map((d, i) => [d.id, p.cloneStoredDrawing(d, snapshots[i]!).id]));
+      const copy = copyArtworkGraph(p, comps, source.id, drawingIds, compLayer('', name, source, shot), true);
+      for (const c of copy.comps) { c.asset = c.id === copy.root; c.folder = null; }
+      a.editor.editProject('Save selection as asset', () => {
+        for (const c of copy.comps) p.comps.set(c.id, c);
+      }, [...drawingIds.values()].map(id => ({ id })));
+      return true;
+    } finally { this.copying = false; }
+  }
+
+  setClipPlayback(id: string, mode: 'once' | 'loop' | 'hold'): void {
+    const a = this.app, p = a.project, layer = a.editor.layer(id);
+    if (a.strokeActive || a.playing || a.editor.dragging || layer?.kind !== 'comp' || layer.timeRemap?.keys.length || !p.comps.get(layer.comp)?.asset) return;
+    const shot = p.comp;
+    a.editor.edit('Clip playback', c => {
+      const live = c.layers.find(l => l.id === id);
+      if (live?.kind !== 'comp') return;
+      live.play = mode === 'loop' ? 'loop' : 'once';
+      live.out = mode === 'hold' ? Math.max(compLength(shot, p.comps), layerEnd({ ...live, out: null }, p.comps, shot.fps)) : null;
+    });
   }
 
   /** Draw in a source: on `layerId` when given, else where you last were in it. `stay` keeps Animate (else Draw). */
@@ -89,7 +219,7 @@ export class ArtworkAssets {
   }
 
   /** Adopt an independent library snapshot; document Undo removes all its source comps together. */
-  addPackage(bundle: ArtworkPackage): string | null {
+  addPackage(bundle: ArtworkPackage, frame?: number): string | null {
     const a = this.app, p = a.project;
     if (a.strokeActive || a.playing || this.copying) return null;
     const file = validateProjectFile(bundle.file);
@@ -112,6 +242,7 @@ export class ArtworkAssets {
     const used = [...p.usedDrawings()];
     if (p.comps.size + graph.length > MAX_COMPS || used.length + ids.size > MAX_DRAWINGS)
       throw new Error('This artwork would exceed the project size limit.');
+    if (frame !== undefined && p.comp.layers.length >= MAX_LAYERS) throw new Error('This shot has reached its layer limit.');
     const vectors = used.reduce((n, id) => n + (p.drawings.get(id)?.vectors.length ?? 0), 0) +
       [...ids].reduce((n, id) => n + from.drawing(id).vectors.length, 0);
     if (vectors > MAX_VECTORS) throw new Error('This artwork would exceed the project vector stroke limit.');
@@ -137,8 +268,12 @@ export class ArtworkAssets {
       c.folder = null; c.asset = c.id === copy.root;
       for (const clip of c.audio ?? []) clip.asset = sounds.get(clip.asset)!;
     }
-    a.editor.editProject('Add artwork from My Assets', () => { for (const c of copy.comps) p.comps.set(c.id, c); });
-    const cmd = a.history.peekUndo(); if (cmd) cmd.drawings = [...drawings.values()].map(id => p.drawing(id));
+    const copiedDrawings = [...drawings.values()].map(id => p.drawing(id));
+    if (frame !== undefined) {
+      const root = copy.comps.find(c => c.id === copy.root)!;
+      const graph = new Map(copy.comps.map(c => [c.id, c]));
+      a.placeImportedAsset(root, copy.comps, copiedDrawings, frame, compLength(root, graph) === 1);
+    } else a.editor.editProject('Add artwork from My Assets', () => { for (const c of copy.comps) p.comps.set(c.id, c); }, copiedDrawings);
     return copy.root;
   }
 

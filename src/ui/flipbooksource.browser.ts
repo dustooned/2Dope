@@ -10,9 +10,10 @@ import { FlipMode } from './flipmode';
 import { Bubbles } from './bubbles';
 import { Sidebar } from './sidebar';
 
-const keys = ['2dope.painting.layout.draw', '2dope.painting.layout.animate', '2dope.draw.view', '2dope.animate.view', '2dope.sheet.draw', '2dope.sheet.animate', '2dope.m3.--track-h', '2dope.flip.mini', '2dope.ui.level', '2dope.m0.brush', '2dope.m0.color'];
+const keys = ['2dope.painting.layout.draw', '2dope.painting.layout.animate', '2dope.draw.view', '2dope.animate.view', '2dope.sheet.draw', '2dope.sheet.animate', '2dope.m3.--track-h', '2dope.flip.mini', '2dope.m3.--flipbook-h', '2dope.ui.level', '2dope.m0.brush', '2dope.m0.color'];
 const saved = keys.map(k => localStorage.getItem(k));
 for (const k of keys) localStorage.removeItem(k);
+localStorage.setItem('2dope.flip.mini', '{"x":20,"y":30}');
 const stage = document.querySelector<HTMLElement>('#stage')!, canvas = document.querySelector<HTMLCanvasElement>('#canvas')!, stripRoot = document.querySelector<HTMLElement>('#strip')!;
 const app = new App(canvas, stage); app.loadProject(new Project(128, 128)); app.project.comp.duration = 24; app.project.comp.fps = 24; app.setWorkspace('animate'); app.setFrame(7); app.quickShape = false;
 const sidebar = new Sidebar(app, document.querySelector<HTMLElement>('#sidebar')!), flip = new FlipMode(app, stage), strip = new Strip(app, stripRoot);
@@ -87,6 +88,21 @@ try {
   check('Short screens limit the track list to one row while taller screens show up to three', innerHeight > 500 || scroll.clientHeight <= 75);
   const stageH = stage.getBoundingClientRect().height, measured = parseFloat(stage.style.getPropertyValue('--flip-h'));
   check('Canvas fitting tracks the measured Flipbook height', Math.abs(measured - (flip.row.offsetHeight + 16)) < 1 && measured < stageH);
+  const divider = flip.row.querySelector<HTMLElement>('.flip-handle')!;
+  const beforeSize = scroll.clientHeight, beforeDock = flip.row.getBoundingClientRect(), beforeFrame = app.frame, beforeHistory = app.history.peekUndo();
+  const y = divider.getBoundingClientRect().top;
+  for (const [type, clientY] of [['pointerdown', y], ['pointermove', y - 110], ['pointerup', y - 110]] as const) {
+    divider.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 11, pointerType: 'touch', clientY }));
+  }
+  await settle();
+  const bigger = scroll.clientHeight, afterDock = flip.row.getBoundingClientRect();
+  check('Dragging the divider reveals more tracks while the Flipbook stays docked', bigger > beforeSize + 40 && afterDock.bottom === beforeDock.bottom && afterDock.left === beforeDock.left && !flip.row.classList.contains('mini'));
+  check('Resizing remembers the height and preserves timing and Undo', Number(localStorage.getItem('2dope.m3.--flipbook-h')) > beforeSize && app.frame === beforeFrame && app.history.peekUndo() === beforeHistory);
+  key(divider, 'ArrowDown');
+  check('The divider is keyboard resizable', scroll.clientHeight < bigger && app.frame === beforeFrame);
+  divider.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  await settle();
+  check('Double-click restores the default and clears the height override', scroll.clientHeight === beforeSize && localStorage.getItem('2dope.m3.--flipbook-h') === null);
   check('Tools, tool settings and Brush recovery buttons remain directly reachable together', ['Toggle tools', 'Toggle tool settings', 'Toggle brush controls'].every(name => hit(button(name))));
   click('Toggle tools'); click('Toggle tool settings'); click('Toggle brush controls'); app.fit(); await settle(); // View → Fit canvas in the app (this fixture has no View button)
   const page = app.view.docToScreen(64, 64), cr = canvas.getBoundingClientRect();

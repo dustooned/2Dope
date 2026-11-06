@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workspace controls</title>
+<style>
+  body { margin: 0; background: #191b22; color: white; font: 12px system-ui; }
+  iframe { display: block; width: 100vw; height: 100vh; border: 0; }
+  #report { position: fixed; bottom: 0; right: 0; padding: 8px; background: #191b22e8; pointer-events: none; }
+</style>
+<iframe title="2Dope" src="../index.html"></iframe>
+<aside id="report"><strong id="summary">Running…</strong><ol id="results"></ol></aside>
+<script type="module">
+  import { Project } from '../src/core/project';
+  import { setKey } from '../src/core/anim';
+
+  const frame = document.querySelector('iframe'), win = frame.contentWindow;
+  const wait = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms));
+  const expect = (condition, message) => { if (!condition) throw new Error(message); };
+  let passed = 0, failed = 0;
+  const check = async (label, run) => {
+    const row = document.createElement('li');
+    try { await run(); passed++; row.textContent = `PASS: ${label}`; }
+    catch (error) { failed++; row.textContent = `FAIL: ${label}: ${error.message}`; }
+    document.querySelector('#results').append(row);
+  };
+  for (let i = 0; i < 100 && !win.__2dope; i++) await wait();
+  const app = win.__2dope, doc = win.document;
+  const button = (label, root = doc) => {
+    const found = [...root.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === label || b.textContent.trim() === label);
+    expect(found, `Missing ${label}`);
+    return found;
+  };
+  const icon = b => b.querySelector('svg[aria-hidden=true]');
+  const dock = () => doc.querySelector('.graph-dock');
+
+  await check('Real entry point opens the graph next to the live canvas and timeline', async () => {
+    expect(app, 'App did not start');
+    await wait(1200);
+    doc.querySelectorAll('dialog[open]').forEach(d => d.close());
+    doc.body.classList.remove('gallery-open');
+    const project = new Project(320, 180);
+    project.comp.duration = 30;
+    app.loadProject(project);
+    app.setWorkspace('motion');
+    const layer = project.layer;
+    app.editor.select(layer.id);
+    const t = layer.transform;
+    t.position = setKey(setKey(t.position, 0, [160, 90]), 20, [220, 110]);
+    t.rotation = setKey(setKey(t.rotation, 0, 0), 20, 90);
+    t.scale = setKey(setKey(t.scale, 0, [100, 100]), 20, [160, 160]);
+    const graph = button('Graph', doc.querySelector('#motion'));
+    expect(icon(graph) && graph.getBoundingClientRect().height >= 44, 'Graph is missing its toolbar icon or touch target');
+    graph.click();
+    await wait();
+    const bounds = dock()?.getBoundingClientRect(), stage = doc.querySelector('#stage').getBoundingClientRect();
+    expect(bounds && stage.width > 350 && bounds.left >= stage.right - 1 && bounds.right <= win.innerWidth, 'Dock covers the canvas');
+    expect(doc.querySelector('#motion .mscroll').getBoundingClientRect().height > 40, 'Timeline is inaccessible');
+    expect(dock().querySelectorAll('.graph-channels button').length === 3, 'Animated transform curves are missing');
+    app.setFrame(10);
+    expect(dock().querySelector('.graph-channels').style.getPropertyValue('--graph-playhead') === '50%', 'Graph did not follow the timeline');
+  });
+  await check('Curve selection, detached value edits, and Undo work in the dock', async () => {
+    button('Rotation', dock().querySelector('.graph-channels')).click();
+    const end = dock().querySelector('input[aria-label="End value"]');
+    end.value = '45';
+    end.dispatchEvent(new win.Event('change'));
+    button('Scale', dock().querySelector('.graph-channels')).click();
+    expect(dock().querySelector('select[aria-label="Animated property"]').value === 'rotation', 'Switching curves dropped a draft');
+    expect(app.editor.primary.transform.rotation.keys[1].v === 90, 'Draft changed live keys');
+    button('Apply graph', dock()).click();
+    expect(dock() && app.editor.primary.transform.rotation.keys[1].v === 45 && app.history.peekUndo()?.label === 'Edit motion graph', 'Apply did not save the key');
+    app.undo();
+    await wait(200);
+    expect(app.editor.primary.transform.rotation.keys[1].v === 90 && !app.history.canUndo, 'Undo did not restore the single edit');
+    expect(dock().querySelector('input[aria-label="End value"]').value === '90', 'Dock still shows the value that Undo replaced');
+  });
+  await check('Workspace changes close the dock and keep named icons in Draw, Animate and Story', () => {
+    app.setWorkspace('draw');
+    expect(!dock(), 'Graph remained after leaving Motion');
+    const views = doc.querySelector('.painting-views');
+    expect(icon(button('Canvas', views)) && icon(button('Flipbook', views)), 'Drawing views have no icons');
+    app.setWorkspace('animate');
+    expect(icon(button('Clips', views)), 'Clips has no icon');
+    app.setWorkspace('board');
+    const story = doc.querySelector('.board-views');
+    expect(['Grid', 'Panels', 'Timeline', 'Split'].every(label => icon(button(label, story))), 'Story tabs lost an icon or accessible name');
+  });
+  await check('Compact Motion keeps Graph reachable and opens the modal editor', async () => {
+    frame.style.width = '375px';
+    frame.style.height = '812px';
+    await wait(300);
+    app.setWorkspace('motion');
+    app.editor.select(app.project.layer.id);
+    const graph = button('Graph', doc.querySelector('#motion'));
+    expect(graph.getBoundingClientRect().right <= win.innerWidth, 'Graph scrolled out of the initial toolbar');
+    graph.click();
+    const modal = doc.querySelector('dialog.graph-dialog[open]');
+    expect(modal && !dock() && modal.getBoundingClientRect().width <= win.innerWidth, 'Compact graph did not fit as a dialog');
+    button('Cancel', modal).click();
+    expect(!doc.querySelector('dialog.graph-dialog[open]'), 'Cancel did not close the graph');
+  });
+  document.querySelector('#summary').textContent = `${passed} passed, ${failed} failed`;
+</script>
+</html>

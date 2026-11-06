@@ -86,13 +86,14 @@ export class BoardPanel {
       // default view
     }
     const views = el('div', { class: 'seg board-views', role: 'group', 'aria-label': 'Story view' });
-    for (const [v, label, hint] of [
-      ['grid', 'Grid', 'A wall of panel pictures in story order'],
-      ['panels', 'Panels', 'Write dialogue and action on panel cards'],
-      ['timeline', 'Timeline', 'Panel timing with audio underneath'],
-      ['split', 'Split', 'Timeline and panel cards together'],
+    for (const [v, label, icon, hint] of [
+      ['grid', 'Grid', 'gallery', 'A wall of panel pictures in story order'],
+      ['panels', 'Panels', 'board', 'Write dialogue and action on panel cards'],
+      ['timeline', 'Timeline', 'time', 'Panel timing with audio underneath'],
+      ['split', 'Split', 'splitview', 'Timeline and panel cards together'],
     ] as const) {
       const b = el('button', { type: 'button', title: hint }, label);
+      decorate(b, icon);
       b.addEventListener('click', () => this.setView(v));
       this.viewSelect.append(el('option', {value:v}, label));
       this.viewBtns.push(b);
@@ -116,22 +117,22 @@ export class BoardPanel {
       const box = this.storyTools.getBoundingClientRect(), hasBoard = !!app.board, selected = hasBoard && !!app.targets.length;
       showContextMenu(box.left, box.bottom, [
         { title: 'Bring in a story' },
-        { label: 'Import panel images…', run: () => this.pickImages() },
-        { label: 'Paste a script…', run: () => void this.pasteScript() },
+        { label: 'Import panel images…', icon: 'import', run: () => this.pickImages() },
+        { label: 'Paste a script…', icon: 'paste', run: () => void this.pasteScript() },
         { sep: true }, { title: 'Selected panels' },
-        { label: 'Duplicate panels', disabled: !selected || app.playing, run: () => app.duplicateSelection() },
-        { label: 'Move earlier', disabled: !selected || app.playing, run: () => app.moveSelection(-1) },
-        { label: 'Move later', disabled: !selected || app.playing, run: () => app.moveSelection(1) },
-        { label: 'Delete panels', disabled: !selected || app.playing, danger: true, run: () => app.deleteFrame() },
+        { label: 'Duplicate panels', icon: 'copy', disabled: !selected || app.playing, run: () => app.duplicateSelection() },
+        { label: 'Move earlier', icon: 'prev', disabled: !selected || app.playing, run: () => app.moveSelection(-1) },
+        { label: 'Move later', icon: 'next', disabled: !selected || app.playing, run: () => app.moveSelection(1) },
+        { label: 'Delete panels', icon: 'trash', disabled: !selected || app.playing, danger: true, run: () => app.deleteFrame() },
         { sep: true }, { title: 'Use this story' },
-        { label: 'Present storyboard', disabled: !hasBoard, run: () => this.present() },
-        { label: 'Animate this shot', disabled: !hasBoard || app.playing, run: () => app.animateShot() },
+        { label: 'Present storyboard', icon: 'play', disabled: !hasBoard, run: () => this.present() },
+        { label: 'Animate this shot', icon: 'flipbook', disabled: !hasBoard || app.playing, run: () => app.animateShot() },
       ]);
     }, 'more');
     this.storyTools.setAttribute('aria-haspopup', 'menu');
     this.shareBtn = btn('Share', 'Share storyboard sheets, panel images or an animatic video', () => this.exportStory(), 'export');
     this.shareBtn.setAttribute('aria-label', 'Share storyboard');
-    const help = btn('?', 'Story help', () => app.onOpenManual('board')); help.classList.add('panel-help'); help.setAttribute('aria-label', 'Story help');
+    const help = btn('Story help', 'Story help', () => app.onOpenManual('board'), 'help'); help.classList.add('panel-help', 'icon-only');
     const transport = el('div', { class: 'story-transport', role: 'group', 'aria-label': 'Story playback' });
     transport.append(this.playBtn, this.prevBtn, this.readout, this.nextBtn);
     const heading = el('div', { class: 'story-heading' }), identity = el('div', { class: 'story-identity' });
@@ -300,7 +301,8 @@ export class BoardPanel {
       // the scene's colour along the top (scenes come from "Sc N" in Shot / scene)
       if (scenes[i]) { card.style.setProperty('--scene', sceneColour(scenes[i]!)); card.classList.add('in-scene'); }
       const head = el('div', { class: 'bhead' });
-      const number = el('button', { type: 'button', class: 'bnum', 'aria-label': `Draw on panel ${i + 1}`, title: 'Return to the drawing canvas for this panel' }, `Panel ${i + 1} ↗`);
+      const number = el('button', { type: 'button', class: 'bnum', 'aria-label': `Draw on panel ${i + 1}`, title: 'Return to the drawing canvas for this panel' }, `Panel ${i + 1}`);
+      decorate(number, 'draw');
       number.onclick = () => { app.goPanel(i); app.focusCanvas(); }; head.append(number);
       head.append(el('span', { class: 'story-duration-label' }, 'Duration'));
       const dur = el('input', {
@@ -322,11 +324,11 @@ export class BoardPanel {
         if (!app.selection.includes(i)) app.goPanel(i);
         const box = more.getBoundingClientRect(); showContextMenu(box.left, box.bottom, [
           { title: app.targets.length > 1 ? `${app.targets.length} panels` : `Panel ${i + 1}` },
-          { label: 'New panel after', run: () => app.addPanel() },
-          { label: 'Duplicate panels', run: () => app.duplicateSelection() },
-          { label: 'Move earlier', run: () => app.moveSelection(-1) },
-          { label: 'Move later', run: () => app.moveSelection(1) },
-          { sep: true }, { label: 'Delete panels', danger: true, run: () => app.deleteFrame() },
+          { label: 'New panel after', icon: 'plus', run: () => app.addPanel() },
+          { label: 'Duplicate panels', icon: 'copy', run: () => app.duplicateSelection() },
+          { label: 'Move earlier', icon: 'prev', run: () => app.moveSelection(-1) },
+          { label: 'Move later', icon: 'next', run: () => app.moveSelection(1) },
+          { sep: true }, { label: 'Delete panels', icon: 'trash', danger: true, run: () => app.deleteFrame() },
         ]);
       });
       head.append(more);
@@ -421,6 +423,7 @@ export class BoardPanel {
     const box = el('div', { class: 'board-writing-field bdialogue', role: 'group', 'aria-label': `Panel ${n} dialogue and subtitles` });
     const list = el('ol', { class: 'blines' });
     const add = el('button', { type: 'button', class: 'bline-add', title: 'Add a subtitle line to this panel (Shift+Return)' }, '+ Line');
+    decorate(add, 'plus');
     box.append(el('span', {}, 'Dialogue / subtitles'), list, add);
     const rows = () => [...list.querySelectorAll<HTMLLIElement>('.bline-row')];
     const read = (): DialogueLine[] => rows().map((r) => ({ who: r.querySelector<HTMLInputElement>('.bspeaker')!.value, text: r.querySelector<HTMLTextAreaElement>('.bsay')!.value }));
@@ -457,7 +460,8 @@ export class BoardPanel {
       const r = el('li', { class: 'bline-row' });
       const who = el('input', { type: 'text', class: 'bfield bspeaker', list: 'board-speakers', placeholder: 'Who', maxlength: String(SPEAKER_MAX), autocomplete: 'off' });
       const say = el('textarea', { class: 'bfield bsay', rows: '1', placeholder: 'What is said (or a sound)', maxlength: '500' });
-      const del = el('button', { type: 'button', class: 'bline-del icon-only', title: 'Remove this line' }, '×');
+      const del = el('button', { type: 'button', class: 'bline-del icon-only', title: 'Remove this line' }, 'Remove line');
+      decorate(del, 'close');
       who.value = line.who;
       say.value = line.text;
       r.append(who, say, el('span', { class: 'btime hint', title: 'How long this line shows in the animatic' }), del);
