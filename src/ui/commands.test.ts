@@ -41,7 +41,7 @@ describe('command registry', () => {
 
   it('keeps the transform and timing rows in their order', () => {
     const t = { transformParams: { scale: 1, rotate: 0, flipH: false, flipV: false } } as unknown as App;
-    expect(ids(commandsFor('transform', t))).toEqual(['transform.apply', 'transform.cancel', 'transform.freeform', 'transform.smaller', 'transform.bigger', 'transform.rotateleft', 'transform.rotateright', 'transform.fliph', 'transform.flipv', 'transform.fit', 'transform.reset']);
+    expect(ids(commandsFor('transform', t))).toEqual(['transform.uniform', 'transform.freeform', 'transform.distort', 'transform.warp', 'transform.apply', 'transform.cancel', 'transform.snap', 'transform.magnetics', 'transform.smaller', 'transform.bigger', 'transform.rotateleft', 'transform.rotateright', 'transform.fliph', 'transform.flipv', 'transform.fit', 'transform.reset']);
     expect(commandsFor('transform', { transformParams: null } as unknown as App)).toEqual([]);
     expect(ids(commandsIn('time'))).toEqual(['time.hold1', 'time.hold2', 'time.hold3', 'time.hold4', 'time.shorter', 'time.longer', 'time.key', 'time.breakdown', 'time.inbetween']);
   });
@@ -54,7 +54,8 @@ describe('command registry', () => {
     expect(width.face!(p(null, 'point')).label).toBe('Width: this point');
     expect(width.face!(p(null, 'section')).icon).toBe('wsection');
     const freeform = commandById('transform.freeform')!;
-    expect(freeform.face!({ transformFreeform: true } as unknown as App).title).toMatch(/^Freeform/);
+    expect(freeform.isOn!({ transformMode: 'freeform' } as unknown as App)).toBe(true);
+    expect(freeform.isOn!({ transformMode: 'uniform' } as unknown as App)).toBe(false);
   });
 
   it('drops disabled commands, matching the row today', () => {

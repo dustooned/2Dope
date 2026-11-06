@@ -336,7 +336,7 @@ export class Bubbles {
 
   private commandChip(c: Command): HTMLButtonElement {
     const a = this.app, f = c.face?.(a) ?? {};
-    // a command may change state no App callback reports (Freeform, Smudge strength): redraw if the row changed
+    // A command may change state no App callback reports. Redraw if the row changed.
     const b = this.chip(f.label ?? c.label, f.title ?? c.title, c.isOn?.(a) ?? false, () => { c.run(a); this.update(); }, f.icon ?? c.icon);
     b.dataset.command = c.id;
     // right-click or hold: take it off this row (Customize brings it back)
@@ -376,7 +376,6 @@ export class Bubbles {
   /** Edit this mode's tool bar: drag tools along it, off it, or onto it from the tray. */
   editTools(): void {
     const a = this.app, ws = a.workspace;
-    if (a.interfaceLevel === 'full' && isPaintingWorkspace(ws)) a.onNotice?.('At the Full level Draw and Animate use the classic top bar; this edits the tool bubbles of the Clean and Simple levels.');
     const allowed: readonly string[] = WORKSPACE_TOOLS[ws];
     const save = (tools: string[]) => { a.setWorkspaceLayouts({ ...a.workspaceLayouts, [ws]: { ...a.workspaceLayouts[ws], tools: tools as WorkspaceTool[] } }); this.sig = ''; this.update(); };
     this.moreTools = false;
@@ -502,22 +501,23 @@ export class Bubbles {
   private pickTool(k: ToolKey, b: HTMLButtonElement): void {
     const a = this.app;
     const arranging = a.arrangingAssets;
+    const transforming = a.transforming;
     if (k === 'assets') { a.setArrangeAssets(!a.arrangingAssets); return; }
     if (a.arrangingAssets && ['brush', 'pen', 'eraser', 'smudge', 'fill', 'select', 'adjust'].includes(k)) a.setArrangeAssets(false);
     if (k === 'more') { this.moreTools = !this.moreTools; this.sig = ''; this.update(); return; }
     this.moreTools = false;
-    if (a.transforming && k !== 'select') a.cancelTransform();
+    if (a.transforming && ['brush', 'eraser', 'pen', 'smudge', 'fill', 'select', 'adjust'].includes(k)) a.applyTransform();
     if (a.adjusting && k !== 'adjust' && k !== 'color' && k !== 'layers') a.applyAdjust();
     switch (k) {
       case 'adjust': if (!a.adjusting) a.beginAdjust('hsb'); break;
-      case 'transform': if (a.spatialSelection) a.beginTransform(); else a.moveAll(); break;
+      case 'transform': a.toggleDrawTransform(); break;
       case 'brush': case 'pen': case 'eraser':
-        if (a.tool === k && !arranging && !(k === 'brush' && a.smudging)) this.hooks.brushLibrary(b);
+        if (a.tool === k && !arranging && !transforming && !(k === 'brush' && a.smudging)) this.hooks.brushLibrary(b);
         else { a.setTool(k as Tool); if (k === 'brush') a.setSmudging(false); }
         break;
       case 'smudge':
         // like Brush: the second tap opens the brushes Smudge carries paint with
-        if (a.smudging && a.tool === 'brush' && !arranging) this.hooks.brushLibrary(b);
+        if (a.smudging && a.tool === 'brush' && !arranging && !transforming) this.hooks.brushLibrary(b);
         else a.setSmudging(true);
         break;
       case 'fill':
@@ -689,7 +689,8 @@ export class Bubbles {
     // what changes from frame to frame: frozen while playing, so the bubbles are not rebuilt on every
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
-    const sig = [!!a.board, shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, xp ? JSON.stringify(xp) : '', a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.eyedropArmed, JSON.stringify(a.canvasView), a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.transformFreeform, a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
+    const transform = xp ? [a.transformMode, a.transformInterpolation, a.transformSnap, a.transformMagnetics, xp.flipH, xp.flipV].join(',') : '';
+    const sig = [!!a.board, shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, transform, a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.eyedropArmed, JSON.stringify(a.canvasView), a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     const shareMode = this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]');
@@ -796,6 +797,12 @@ export class Bubbles {
       if (!flip) add(this.chip('All layers', 'Every layer of the shot', false, (b) => this.hooks.layers(b), 'layers'));
     } else if (row === 'transform' && xp) {
       add(...this.commandChips('transform'));
+      const sampling = el('select', { class: 'transform-sampling', 'aria-label': 'Transform interpolation', title: 'Transform interpolation' });
+      for (const [value, label] of [['nearest', 'Nearest Neighbor'], ['bilinear', 'Bilinear'], ['bicubic', 'Bicubic']] as const)
+        sampling.add(new Option(label, value));
+      sampling.value = a.transformInterpolation;
+      sampling.onchange = () => a.setTransformInterpolation(sampling.value as typeof a.transformInterpolation);
+      add(sampling);
     } else if (row === 'adjust') {
       add(el('span', { class: 'bub-hint adjustment-scope' }, a.adjusting?.mask ? 'Adjust: selected area · current drawing' : 'Adjust: current drawing · ink + colour'));
       add(...this.adjustControls());

@@ -100,6 +100,31 @@
     button('Cancel', modal).click();
     expect(!doc.querySelector('dialog.graph-dialog[open]'), 'Cancel did not close the graph');
   });
+  await check('Compact Draw fits the four Transform choices and Full opens the same options', async () => {
+    app.setWorkspace('draw');
+    app.setInterfaceLevel('simple');
+    const drawing = app.project.drawingAtFrame(0);
+    drawing.line.getContext('2d').fillRect(32, 32, 80, 52);
+    await wait();
+    doc.querySelector('.bub-tools [data-tool-key=transform]').click();
+    const row = doc.querySelector('.bub-ctx[data-row=transform]');
+    expect(app.transforming && !row.hidden, 'Transform did not open in compact Draw');
+    const bounds = row.getBoundingClientRect();
+    for (const mode of ['Uniform', 'Freeform', 'Distort', 'Warp']) {
+      const b = button(mode, row), r = b.getBoundingClientRect();
+      expect(r.height >= 44 && r.left >= bounds.left && r.right <= bounds.right, mode + ' falls outside the compact options');
+    }
+    button('Cancel', row).click();
+    frame.style.width = '100vw';
+    app.setInterfaceLevel('full');
+    await wait();
+    const transformTool = () => doc.querySelector('.bub-tools [data-tool-key=transform]');
+    expect(transformTool().getBoundingClientRect().height > 0 && icon(transformTool()), 'Full toolbar has no Transform button');
+    transformTool().click();
+    expect(app.transforming && transformTool().getAttribute('aria-pressed') === 'true' && !row.hidden, 'Full Transform did not open the options');
+    transformTool().click();
+    expect(!app.transforming, 'Tapping the Full Transform tool again did not close it');
+  });
   document.querySelector('#summary').textContent = `${passed} passed, ${failed} failed`;
 </script>
 </html>

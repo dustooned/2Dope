@@ -30,6 +30,15 @@ export interface Rect {
   h: number;
 }
 
+export type Interpolation = 'nearest' | 'bilinear' | 'bicubic';
+export type InverseSample = (x: number, y: number) => [number, number] | null;
+
+function cubic(x: number): number {
+  const t = Math.abs(x);
+  if (t <= 1) return (1.5 * t - 2.5) * t * t + 1;
+  return t < 2 ? ((-0.5 * t + 2.5) * t - 4) * t + 2 : 0;
+}
+
 export function isIdentity(p: XParams): boolean {
   return p.dx === 0 && p.dy === 0 && p.scale === 1 && p.rotate === 0 && !p.flipH && !p.flipV && (p.sx ?? 1) === 1 && (p.sy ?? 1) === 1;
 }
@@ -94,7 +103,10 @@ export function unionRect(a: Rect | null, b: Rect | null): Rect | null {
  * and drawn back through `m` with bilinear sampling, over whatever stays. `src` is the untouched
  * plane (straight-alpha RGBA, `w` × `h`); the result is `region.w` × `region.h`.
  */
-export function transformRegion(src: Uint8ClampedArray, w: number, h: number, mask: Uint8Array, m: Mat, region: Rect): Uint8ClampedArray<ArrayBuffer> {
+export function transformRegion(
+  src: Uint8ClampedArray, w: number, h: number, mask: Uint8Array, m: Mat, region: Rect,
+  interpolation: Interpolation = 'bilinear', inverseSample?: InverseSample,
+): Uint8ClampedArray<ArrayBuffer> {
   const out = new Uint8ClampedArray(region.w * region.h * 4);
   const inv = invert(m);
   // the lifted layer, premultiplied, sampled at a source pixel
@@ -116,13 +128,29 @@ export function transformRegion(src: Uint8ClampedArray, w: number, h: number, ma
         a = src[si + 3]! / 255;
         r = (src[si]! / 255) * a; g = (src[si + 1]! / 255) * a; b = (src[si + 2]! / 255) * a;
       }
-      if (inv) {
+      const point = inverseSample?.(gx + 0.5, gy + 0.5);
+      if (inverseSample ? point : inv) {
         // pixel centre -> source position -> the four neighbouring source pixels
-        const u = inv[0] * (gx + 0.5) + inv[2] * (gy + 0.5) + inv[4] - 0.5;
-        const v = inv[1] * (gx + 0.5) + inv[3] * (gy + 0.5) + inv[5] - 0.5;
+        const u = (point?.[0] ?? (inv![0] * (gx + 0.5) + inv![2] * (gy + 0.5) + inv![4])) - 0.5;
+        const v = (point?.[1] ?? (inv![1] * (gx + 0.5) + inv![3] * (gy + 0.5) + inv![5])) - 0.5;
         const u0 = Math.floor(u), v0 = Math.floor(v);
         const fu = u - u0, fv = v - v0;
-        if (u0 >= -1 && v0 >= -1 && u0 < w && v0 < h) {
+        if (interpolation === 'nearest') {
+          const px = Math.round(u), py = Math.round(v), la = lifted(px, py, 3), keep = 1 - la;
+          r = lifted(px, py, 0) + r * keep; g = lifted(px, py, 1) + g * keep;
+          b = lifted(px, py, 2) + b * keep; a = la + a * keep;
+        } else if (interpolation === 'bicubic' && u0 >= -2 && v0 >= -2 && u0 <= w && v0 <= h) {
+          let lr = 0, lg = 0, lb = 0, la = 0;
+          for (let j = -1; j <= 2; j++) for (let i = -1; i <= 2; i++) {
+            const weight = cubic(i - fu) * cubic(j - fv), px = u0 + i, py = v0 + j;
+            lr += lifted(px, py, 0) * weight; lg += lifted(px, py, 1) * weight;
+            lb += lifted(px, py, 2) * weight; la += lifted(px, py, 3) * weight;
+          }
+          la = Math.max(0, Math.min(1, la));
+          const keep = 1 - la;
+          r = Math.max(0, Math.min(la, lr)) + r * keep; g = Math.max(0, Math.min(la, lg)) + g * keep;
+          b = Math.max(0, Math.min(la, lb)) + b * keep; a = la + a * keep;
+        } else if (u0 >= -1 && v0 >= -1 && u0 < w && v0 < h) {
           const w00 = (1 - fu) * (1 - fv), w10 = fu * (1 - fv), w01 = (1 - fu) * fv, w11 = fu * fv;
           const la = lifted(u0, v0, 3) * w00 + lifted(u0 + 1, v0, 3) * w10 + lifted(u0, v0 + 1, 3) * w01 + lifted(u0 + 1, v0 + 1, 3) * w11;
           if (la > 0) {
@@ -156,10 +184,10 @@ export function transformVectors(vectors: StrokeRecord[], mask: Uint8Array, w: n
 }
 
 /** Where a selection mask lands under the transform (keeps an exact selection exact after Apply). */
-export function transformMask(mask: Uint8Array, w: number, h: number, m: Mat, region: Rect): Uint8Array {
+export function transformMask(mask: Uint8Array, w: number, h: number, m: Mat, region: Rect, inverseSample?: InverseSample): Uint8Array {
   const src = new Uint8ClampedArray(w * h * 4);
   for (let i = 0; i < mask.length; i++) if (mask[i]) src[i * 4 + 3] = 255;
-  const moved = transformRegion(src, w, h, mask, m, region);
+  const moved = transformRegion(src, w, h, mask, m, region, 'bilinear', inverseSample);
   const out = new Uint8Array(w * h);
   for (let y = 0; y < region.h; y++)
     for (let x = 0; x < region.w; x++) if (moved[(y * region.w + x) * 4 + 3]! >= 128) out[(region.y + y) * w + region.x + x] = 1;

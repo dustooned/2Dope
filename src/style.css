@@ -4986,6 +4986,10 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .bub-tools-sep { align-self: center; }
 .stage[data-tool-dock=left] .bub-tools-sep, .stage[data-tool-dock=right] .bub-tools-sep { width: 26px; height: 1px; margin: 2px 0; }
 .bub-ctx .bub-row-title { font-weight: 600; color: var(--text); padding-right: 2px; }
+.bub-ctx[data-row=transform] .bub-chip { min-height: 44px; }
+.bub-ctx[data-row=transform] :is([data-command="transform.uniform"], [data-command="transform.freeform"], [data-command="transform.distort"], [data-command="transform.warp"]) { border-radius: var(--radius-md); padding-inline: 10px; }
+.bub-ctx[data-row=transform] .transform-sampling { min-height: 44px; font-size: 12px; max-width: 150px; }
+@media (max-width: 700px) { .bub-ctx[data-row=transform] .bub-row-title { display: none; } }
 .bub-tool-drawer .bub-drawer-hint { flex-basis: 100%; margin: -2px 0 4px; font-size: 12px; color: var(--muted); }
 body.painting-workspace .painting-views .painting-handle.folded { opacity: 0.75; border-style: dashed; }
 body.painting-workspace .painting-folds { display: inline-flex; flex: 0 0 auto; gap: 4px; padding: 3px; border-radius: var(--radius-md); background: var(--panel-2); }

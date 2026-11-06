@@ -2,6 +2,29 @@
 
 ## Current state (2026-11-05) — read this first
 
+### Draw and Animate Transform (2026-11-05)
+
+The toolbar starts Transform on the current selection or on the artwork bounds of the current
+drawing. Switching drawing tools applies the edit in one History step and returns directly to
+painting. Tapping Transform again or pressing Enter also applies. Escape and Cancel restore
+the starting pixels. A temporary selection made from artwork bounds ends with the transform.
+
+The options row exposes Uniform, Freeform, Distort and Warp. Opposite handles anchor scaling.
+Distort uses a four-corner perspective transform. Warp uses a nine-point mesh and rejects folded
+cells. Two fingers navigate the canvas while Transform is active. Canvas-edge and center snapping
+shows guides, and Magnetics constrains movement to one axis. The row also offers interpolation,
+scale steps, rotation, mirroring, Fit and Reset. The arrow keys nudge by one document pixel,
+or ten with Shift. Warp and Distort rasterize affected vectors to the ink plane when applied.
+The affine modes keep vector paths editable. Undo restores the original pixels and vectors.
+The cage and preview controls are session state with no project-format change.
+
+The importeffects fixture compares the real Motion canvas, Share preview and downloaded PNG with
+a blurred group and an active partial-opacity adjustment in its source. The production build
+passed with the existing chunk warning. Unit tests passed 751 with one skipped. Browser checks
+covered compact and Full Transform controls, actual Freeform and Distort handles, the Warp center,
+Cancel, one-step Undo and synthetic pinch navigation. Physical iPad gestures and native Procreate
+clipboard handoff still need device verification. Temporal Echo and motion blur are pending.
+
 ### Clipboard, imported assets and editable clips (2026-11-05)
 
 `ui/clipboard.ts` handles browser Copy, Cut and Paste events. It respects text fields and

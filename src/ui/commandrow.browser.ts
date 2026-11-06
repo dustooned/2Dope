@@ -24,7 +24,8 @@ const app = new App(canvas, stage);
 app.loadProject(new Project(128, 128));
 app.setWorkspace('draw');
 app.setFrame(0);
-const bubbles = new Bubbles(app, stage, { brushLibrary() {}, colorPanel() {}, layers() {}, layerCards() {}, fit: () => app.refit(), editShape() {} });
+let brushPanels = 0;
+const bubbles = new Bubbles(app, stage, { brushLibrary() { brushPanels++; }, colorPanel() {}, layers() {}, layerCards() {}, fit: () => app.refit(), editShape() {} });
 bubbles.setLevel('simple', false);
 const refresh = () => bubbles.update();
 app.onFrameChange = refresh; app.onCompChange = refresh; app.onToolChange = refresh; app.history.onChange = refresh;
@@ -41,10 +42,13 @@ function tapTray(id: string) {
   b.dispatchEvent(new PointerEvent('pointerdown', { ...o, buttons: 1 })); b.dispatchEvent(new PointerEvent('pointerup', { ...o, buttons: 0 })); b.click();
 }
 const menuItem = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('.ctxmenu button')].find((b) => (b.firstChild?.textContent ?? '').trim() === text) ?? null;
-function pointer(type: string, x: number, y: number) {
+function pointer(type: string, x: number, y: number, pointerType = 'pen', pointerId = 1) {
   const r = canvas.getBoundingClientRect(), p = app.view.docToScreen(x, y);
-  canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: 'pen', pointerId: 1, button: 0, buttons: type === 'pointerup' ? 0 : 1, pressure: 1, clientX: r.left + p.x, clientY: r.top + p.y }));
+  canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType, pointerId, button: 0, buttons: type === 'pointerup' ? 0 : 1, pressure: 1, clientX: r.left + p.x, clientY: r.top + p.y }));
 }
+const drag = (x: number, y: number, toX: number, toY: number) => {
+  pointer('pointerdown', x, y); pointer('pointermove', toX, toY); pointer('pointerup', toX, toY);
+};
 async function selectRect() {
   app.setTool('fill'); app.setFillMode('lasso'); app.setSelectShape('rect'); app.setSelectOp('new');
   pointer('pointerdown', 20, 20); pointer('pointermove', 100, 100); pointer('pointerup', 100, 100);
@@ -66,17 +70,21 @@ function restore() {
 
 const SHAPES = ['Freehand', 'Rectangle', 'Ellipse', 'Automatic', 'Colour', 'New', 'Add', 'Subtract'];
 const WITH_SELECTION = ['Transform', 'Fill', 'Copy', 'Cut', 'Duplicate', 'Copy to layer', 'Cut to layer', 'Delete', 'Invert', 'Deselect'];
-const TRANSFORM = ['Apply', 'Cancel', 'Freeform', '−', '+', '⟲45', '⟳45', 'Flip ↔', 'Flip ↕', 'Fit', 'Reset', 'Customize'];
+const TRANSFORM = ['Uniform', 'Freeform', 'Distort', 'Warp', 'Apply', 'Cancel', 'Snapping', 'Magnetics', '−', '+', '⟲45', '⟳45', 'Flip ↔', 'Flip ↕', 'Fit', 'Reset', 'Customize'];
 const hint = (text: string) => [...document.querySelectorAll('.bub-ctx .bub-hint')].some((s) => s.textContent === text);
 
 /** Slice 2: the other rows come from the registry with the same chips, in the same order. */
 async function otherRows() {
-  // Transform: Freeform still flips its state and title; a hidden step leaves the rest in place
+  // Transform: all modes stay available; a hidden step leaves the rest in place.
   chip('Transform')!.click(); await settle();
   const ff = chip('Freeform')!;
   ff.click(); await settle();
-  check('Transform: Freeform still toggles (pressed, title)', app.transformFreeform && chip('Freeform')!.getAttribute('aria-pressed') === 'true' && chip('Freeform')!.title.startsWith('Freeform'));
-  chip('Freeform')!.click(); await settle();
+  check('Transform: Freeform is pressed and describes independent scaling', app.transformMode === 'freeform' && chip('Freeform')!.getAttribute('aria-pressed') === 'true' && /independently/.test(chip('Freeform')!.title));
+  for (const mode of ['Distort', 'Warp', 'Uniform']) {
+    chip(mode)!.click(); await settle();
+    check(`Transform: ${mode} is the only active mode`, app.transformMode === mode.toLowerCase() &&
+      ['Uniform', 'Freeform', 'Distort', 'Warp'].filter((name) => chip(name)?.getAttribute('aria-pressed') === 'true').join() === mode);
+  }
   const scale = app.transformParams!.scale;
   chip('+')!.click(); await settle();
   check('Transform: + still makes it bigger', app.transformParams!.scale > scale);
@@ -235,6 +243,49 @@ try {
     showContextMenu(100, 100, frameMenu(app)); await settle();
     check('Apply puts the menu entries back', menuLabels().join() === frameBefore.join() && JSON.parse(localStorage.getItem(COMMANDS_HIDDEN_KEY) ?? '{}').hidden?.length === 0, menuLabels());
     closeContextMenu();
+    document.querySelectorAll('dialog[open]').forEach((d) => (d as HTMLDialogElement).close());
+
+    app.loadProject(new Project(128, 128)); app.setWorkspace('draw'); app.setTool('brush'); app.fit();
+    const drawing = app.project.drawingAtFrame(0)!;
+    const g = drawing.line.getContext('2d')!;
+    g.fillStyle = '#ff000080'; g.fillRect(25, 25, 64, 64);
+    g.fillStyle = '#0000ff'; g.fillRect(54, 54, 7, 7);
+    const at = (x: number, y: number) => [...g.getImageData(x, y, 1, 1).data];
+    await settle();
+    const tool = (key: string) => document.querySelector<HTMLButtonElement>(`.bub-tools [data-tool-key="${key}"]`);
+    if (!tool('transform')) tool('more')?.click();
+    tool('transform')!.click(); await settle();
+    check('Toolbar Transform opens on the ink bounds and keeps Brush as the return tool', app.transforming && app.tool === 'brush');
+    chip('Freeform')!.click(); await settle();
+    drag(89, 57, 104, 57);
+    check('Freeform side handle changes width and leaves the opposite edge and height in place', (app.transformParams?.sx ?? 0) > 1.2 && (app.transformParams?.sy ?? 1) === 1 && at(25, 57)[3]! > 100 && at(100, 57)[3]! > 100);
+    chip('Reset')!.click(); chip('Distort')!.click(); await settle();
+    drag(25, 25, 43, 40);
+    check('Distort moves the selected corner and preserves the opposite corner', at(27, 27)[3] === 0 && at(87, 87)[3] === 128);
+    chip('Reset')!.click(); chip('Warp')!.click(); await settle();
+    const sampling = document.querySelector<HTMLSelectElement>('.transform-sampling')!;
+    sampling.value = 'nearest'; sampling.dispatchEvent(new Event('change'));
+    drag(57, 57, 70, 64);
+    check('Warp moves the center of the artwork with its grid point and leaves the corner in place', at(70, 64)[2] === 255 && at(70, 64)[3] === 255 && at(27, 27)[3] === 128 && app.transformInterpolation === 'nearest');
+    const zoom = app.view.zoom;
+    pointer('pointerdown', 15, 55, 'touch', 2);
+    pointer('pointermove', 12, 55, 'touch', 2);
+    pointer('pointerdown', 100, 55, 'touch', 3);
+    pointer('pointermove', 120, 55, 'touch', 3);
+    pointer('pointerup', 120, 55, 'touch', 3);
+    pointer('pointerup', 12, 55, 'touch', 2);
+    check('Two fingers zoom the canvas without changing the active Warp', app.transforming && app.view.zoom > zoom && app.transformParams?.dx === 0 && at(70, 64)[2] === 255);
+    app.fit();
+    chip('Cancel')!.click(); await settle();
+    check('Cancel restores the original pixels, with no selection or Undo step', at(57, 57)[2] === 255 && at(70, 64)[2] === 0 && !app.spatialSelection && !app.history.canUndo);
+    if (!tool('transform')) tool('more')?.click();
+    tool('transform')!.click(); await settle();
+    drag(57, 57, 70, 64);
+    const beforeBrush = brushPanels;
+    tool('brush')!.click(); await settle();
+    check('Returning to Brush applies the edit without opening the library or leaving a selection', !app.transforming && app.tool === 'brush' && !app.spatialSelection && brushPanels === beforeBrush && app.history.canUndo);
+    app.undo(); await settle();
+    check('One Undo restores the original Warp pixels', at(57, 57)[2] === 255 && at(70, 64)[2] === 0 && !app.history.canUndo);
   }
 } catch (e) {
   check(String(e), false);

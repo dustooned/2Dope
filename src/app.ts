@@ -21,7 +21,8 @@ import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
-import { applyPoint, clipRect, IDENTITY, isIdentity, matrixFor, overallScale, transformedRect, transformMask, transformRegion, transformVectors, unionRect, type Rect, type XParams } from './core/selxform';
+import { applyPoint, clipRect, IDENTITY, invert as invertSelection, isIdentity, matrixFor, overallScale, transformedRect, transformMask, transformRegion, transformVectors, unionRect, type Interpolation, type Rect, type XParams } from './core/selxform';
+import { deformation, transformNodes, validTransformNodes, type Point, type TransformMode } from './core/transformmesh';
 import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures } from './core/ripple';
@@ -250,6 +251,7 @@ export class App {
   setArrangeAssets(on: boolean, selected?: string): void {
     if (on && (this.workspace !== 'animate' || this.project.comp.asset || this.strokeActive)) return;
     if (on && this.playing) this.togglePlay();
+    if (on && this.xf) this.applyTransform();
     const was = this.arrangingAssets;
     this.editor.gestureEnd(true); this.motionPointer = null;
     this.arrangeProject = on ? this.project : null; this.arrangeComp = on ? this.project.activeComp : '';
@@ -521,6 +523,7 @@ export class App {
   }
 
   setTool(t: Tool): void {
+    if (this.xf) this.applyTransform();
     if (this.arrangingAssets) this.setArrangeAssets(false);
     if (this.adjusting) this.applyAdjust();
     if (this.gradEdit) this.applyGradEdit();
@@ -1203,9 +1206,14 @@ export class App {
   /** A live selection transform: the selected pixels (and whole vector strokes inside) are previewed on the canvases, one undo step on Apply. */
   private xf: {
     d: Drawing; area: Area; points: [number, number][]; pivot: [number, number]; params: XParams;
+    whole: boolean; nodes: Point[] | null; vectorPixels?: ImageData; vectorBounds?: Rect | null; rasterIds?: Set<string>;
     baseLine: ImageData; baseFill: ImageData | null; vectors: StrokeRecord[]; region: Rect | null;
-    drag: { id: number; kind: 'move' | 'scale' | 'rotate'; x: number; y: number; dx: number; dy: number; scale: number; rotate: number; d0: number; a0: number; sx: number; sy: number; lx: number; ly: number } | null;
+    drag: { id: number; kind: 'move' | 'scale' | 'rotate' | 'deform'; x: number; y: number; base: XParams;
+      anchor: Point; anchorLocal: Point; d0: number; a0: number; lx: number; ly: number;
+      handle: number; nodes: Point[] | null; nodeStart: Point[] | null; guides?: [number | null, number | null] } | null;
   } | null = null;
+
+  private transformPreview = 0;
 
   get transforming(): boolean {
     return this.xf !== null;
@@ -1224,6 +1232,7 @@ export class App {
   private smudgeClip: HTMLCanvasElement | null = null;
 
   setSmudging(on: boolean): void {
+    if (on && this.xf) this.applyTransform();
     this.smudging = on;
     if (on && this.tool !== 'brush') this.setTool('brush');
     this.onToolChange();
@@ -1386,11 +1395,22 @@ export class App {
     const area = polygonMask(points, W, H);
     if (!area) return;
     this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: this.drawing, frame: this.frame, area, points };
-    this.beginTransform();
+    if (!this.beginTransform(true)) this.spatial = null;
+  }
+
+  toggleDrawTransform(): void {
+    if (this.xf) { this.applyTransform(); return; }
+    if (this.arrangingAssets) this.setArrangeAssets(false);
+    if (this.adjusting) this.applyAdjust();
+    if (this.gradEdit) this.applyGradEdit();
+    if (this.ve) this.exitPointEdit();
+    if (this.eyedropArmed) this.armEyedropper(false);
+    if (this.spatialSelection) this.beginTransform();
+    else this.selectContents(true);
   }
 
   /** Select (Procreate): exactly what the current drawing has (Line, Fill, vector lines), ready to move. */
-  selectContents(): boolean {
+  selectContents(forWholeTransform = false): boolean {
     if (this.strokeActive || this.playing || this.project.layer.locked || this.blankPage) return false;
     const d = this.drawing;
     if (!this.residency.isReady(d)) return false;
@@ -1418,17 +1438,16 @@ export class App {
     }
     // the box around it marks the selection on screen; the mask is exact
     const points: [number, number][] = [[x0, y0], [x1 + 1, y0], [x1 + 1, y1 + 1], [x0, y1 + 1]];
-    this.setTool('fill');
-    this.setFillMode('lasso');
+    if (!forWholeTransform) { this.setTool('fill'); this.setFillMode('lasso'); }
     this.spatial = { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: d, frame: this.frame, area: { mask, x0, y0, x1, y1 }, points, exact: true };
-    this.beginTransform();
+    if (!this.beginTransform(forWholeTransform) && forWholeTransform) this.spatial = null;
     this.onToolChange();
     this.requestRender();
     return true;
   }
 
   /** Start moving / scaling / rotating / flipping the selection. */
-  beginTransform(): boolean {
+  beginTransform(whole = false): boolean {
     if (this.titlePaintBlocked()) return false;
     const s = this.spatial;
     const area = this.spatialSelection;
@@ -1440,14 +1459,14 @@ export class App {
     this.xf = {
       d, area, points: s.points.map((p) => [p[0], p[1]]), pivot: [(area.x0 + area.x1 + 1) / 2, (area.y0 + area.y1 + 1) / 2], params: { ...IDENTITY },
       baseLine: d.line.getContext('2d')!.getImageData(0, 0, W, H), baseFill: d.fill ? d.fill.getContext('2d')!.getImageData(0, 0, W, H) : null,
-      vectors: d.vectors, region: null, drag: null,
+      vectors: d.vectors, region: null, drag: null, whole, nodes: null,
     };
     this.requestRender();
     this.onToolChange();
     return true;
   }
 
-  setTransform(patch: Partial<XParams>): void {
+  setTransform(patch: Partial<XParams>, notify = true): void {
     const x = this.xf;
     if (!x) return;
     const p = { ...x.params, ...patch };
@@ -1456,8 +1475,9 @@ export class App {
     if (p.sy !== undefined) p.sy = Math.max(0.05, Math.min(20, p.sy));
     p.rotate = ((((p.rotate + 180) % 360) + 360) % 360) - 180;
     x.params = p;
-    this.renderTransform();
-    this.onToolChange();
+    if (notify || !x.drag) this.renderTransform();
+    else this.queueTransformPreview();
+    if (notify) this.onToolChange();
   }
 
   /** Flip is a mirror about the selection's centre; flipping twice returns to the start. */
@@ -1468,36 +1488,80 @@ export class App {
   }
 
   private renderTransform(): void {
+    if (this.transformPreview) {
+      cancelAnimationFrame(this.transformPreview);
+      this.transformPreview = 0;
+    }
     const x = this.xf;
     if (!x) return;
     const W = this.docW, H = this.docH, a = x.area;
     const m = matrixFor(x.params, x.pivot[0], x.pivot[1]);
-    const region = unionRect(unionRect(transformedRect(m, a, W, H), clipRect(a.x0, a.y0, a.x1 + 1, a.y1 + 1, W, H)), x.region);
+    const warp = x.nodes && deformation(a, x.nodes, m);
+    if (warp && !x.rasterIds) {
+      const picked = x.vectors.filter(v => vectorSelected(v, a.mask, W, H));
+      x.rasterIds = new Set(picked.map(v => v.id));
+      if (picked.length) {
+        const canvas = makeCanvas(W, H), g = canvas.getContext('2d')!;
+        for (const v of picked) drawVectorStroke(g, v, this.lengthOf(v));
+        x.vectorPixels = g.getImageData(0, 0, W, H);
+        let left = W, top = H, right = 0, bottom = 0;
+        for (let y = 0; y < H; y++) for (let col = 0; col < W; col++) {
+          if (!x.vectorPixels.data[(y * W + col) * 4 + 3]) continue;
+          left = Math.min(left, col); top = Math.min(top, y);
+          right = Math.max(right, col + 1); bottom = Math.max(bottom, y + 1);
+        }
+        x.vectorBounds = clipRect(left, top, right, bottom, W, H);
+        canvas.width = 0;
+        this.onNotice?.('Distort and Warp turn the selected vectors into ink pixels when applied.');
+      }
+    }
+    const bounds = warp ? clipRect(
+      Math.floor(Math.min(...warp.points.map(p => p[0]))) - 2, Math.floor(Math.min(...warp.points.map(p => p[1]))) - 2,
+      Math.ceil(Math.max(...warp.points.map(p => p[0]))) + 2, Math.ceil(Math.max(...warp.points.map(p => p[1]))) + 2, W, H,
+    ) : transformedRect(m, a, W, H);
+    const source = unionRect(clipRect(a.x0, a.y0, a.x1 + 1, a.y1 + 1, W, H), warp ? x.vectorBounds ?? null : null);
+    const region = unionRect(unionRect(bounds, source), x.region);
     x.region = region;
     if (!region) return;
     const put = (canvas: HTMLCanvasElement, base: ImageData) =>
-      canvas.getContext('2d')!.putImageData(new ImageData(transformRegion(base.data, W, H, a.mask, m, region), region.w, region.h), region.x, region.y);
+      canvas.getContext('2d')!.putImageData(new ImageData(transformRegion(base.data, W, H, a.mask, m, region, this.transformInterpolation, warp ? warp.inverse : undefined), region.w, region.h), region.x, region.y);
     put(x.d.line, x.baseLine);
     if (x.baseFill && x.d.fill) put(x.d.fill, x.baseFill);
-    x.d.vectors = transformVectors(x.vectors, a.mask, W, H, m, overallScale(x.params)).vectors;
-    this.touch(x.d);
+    if (warp) {
+      if (x.vectorPixels) {
+        const canvas = makeCanvas(region.w, region.h);
+        canvas.getContext('2d')!.putImageData(new ImageData(transformRegion(x.vectorPixels.data, W, H, a.mask, m, region, this.transformInterpolation, warp.inverse), region.w, region.h), 0, 0);
+        x.d.line.getContext('2d')!.drawImage(canvas, region.x, region.y);
+        canvas.width = 0;
+      }
+      x.d.vectors = x.vectors.filter(v => !x.rasterIds!.has(v.id));
+    } else x.d.vectors = transformVectors(x.vectors, a.mask, W, H, m, overallScale(x.params)).vectors;
+    x.d.rev++;
+    this.residency.touch(x.d);
     this.requestRender();
   }
 
+  private queueTransformPreview(): void {
+    if (!this.transformPreview) this.transformPreview = requestAnimationFrame(() => this.renderTransform());
+  }
+
   /** Corners of the transformed selection box, its centre, and the rotate knob (document space). */
-  private transformFrame(): { corners: [number, number][]; centre: [number, number]; knob: [number, number] } | null {
+  private transformFrame(): { corners: Point[]; handles: Point[]; outline: Point[]; centre: Point; knob: Point } | null {
     const x = this.xf;
     if (!x) return null;
     const m = matrixFor(x.params, x.pivot[0], x.pivot[1]);
-    const a = x.area;
-    const corners = ([[a.x0, a.y0], [a.x1 + 1, a.y0], [a.x1 + 1, a.y1 + 1], [a.x0, a.y1 + 1]] as const).map(([px, py]) => applyPoint(m, px, py));
+    const warp = x.nodes && deformation(x.area, x.nodes, m);
+    const grid = transformNodes(x.area, 3).map(p => warp ? warp.forward(...p) : applyPoint(m, ...p));
+    const corners = [0, 2, 8, 6].map(i => grid[i]!);
+    const outline = [0, 1, 2, 5, 8, 7, 6, 3].map(i => grid[i]!);
+    const handles = this.transformMode === 'warp' ? grid : this.transformMode === 'distort' ? corners : outline;
     const centre = applyPoint(m, x.pivot[0], x.pivot[1]);
     // the knob sits beyond the middle of the top edge, away from the centre
-    const top: [number, number] = [(corners[0]![0] + corners[1]![0]) / 2, (corners[0]![1] + corners[1]![1]) / 2];
+    const top = grid[1]!;
     const len = Math.hypot(top[0] - centre[0], top[1] - centre[1]) || 1;
     const reach = 34 / this.view.zoom;
     const knob: [number, number] = [top[0] + ((top[0] - centre[0]) / len) * reach, top[1] + ((top[1] - centre[1]) / len) * reach];
-    return { corners, centre, knob };
+    return { corners, handles, outline, centre, knob };
   }
 
   private drawTransformHandles(g: CanvasRenderingContext2D): void {
@@ -1506,12 +1570,22 @@ export class App {
     const z = this.view.zoom;
     g.save();
     g.lineWidth = 1.5 / z;
+    const guides = this.xf?.drag?.guides;
+    if (guides) {
+      g.strokeStyle = '#4aa3ff';
+      g.setLineDash([6 / z, 4 / z]);
+      g.beginPath();
+      if (guides[0] !== null) { g.moveTo(guides[0], 0); g.lineTo(guides[0], this.docH); }
+      if (guides[1] !== null) { g.moveTo(0, guides[1]); g.lineTo(this.docW, guides[1]); }
+      g.stroke();
+      g.setLineDash([]);
+    }
     g.strokeStyle = '#4aa3ff';
     g.beginPath();
-    f.corners.forEach((c, i) => (i ? g.lineTo(c[0], c[1]) : g.moveTo(c[0], c[1])));
+    f.outline.forEach((c, i) => (i ? g.lineTo(c[0], c[1]) : g.moveTo(c[0], c[1])));
     g.closePath();
     g.stroke();
-    const top: [number, number] = [(f.corners[0]![0] + f.corners[1]![0]) / 2, (f.corners[0]![1] + f.corners[1]![1]) / 2];
+    const top = f.outline[1]!;
     g.beginPath();
     g.moveTo(top[0], top[1]);
     g.lineTo(f.knob[0], f.knob[1]);
@@ -1523,19 +1597,25 @@ export class App {
       g.fill();
       g.stroke();
     };
-    for (const c of f.corners) dot(c, 9);
+    if (this.transformMode === 'warp') {
+      for (const [a, b, c] of [[1, 4, 7], [3, 4, 5]] as const) {
+        g.beginPath(); g.moveTo(...f.handles[a]!); g.lineTo(...f.handles[b]!); g.lineTo(...f.handles[c]!); g.stroke();
+      }
+    }
+    for (const c of f.handles) dot(c, 7);
     dot(f.knob, 11);
     g.restore();
   }
 
   /** What a touch at document point (x, y) grabs while transforming: a corner scales, the knob rotates, anywhere else moves. */
-  private transformGrab(x: number, y: number): 'scale' | 'rotate' | 'move' {
+  private transformGrab(x: number, y: number): { kind: 'scale' | 'rotate' | 'move' | 'deform'; handle: number } {
     const f = this.transformFrame();
-    if (!f) return 'move';
+    if (!f) return { kind: 'move', handle: -1 };
     const r = 26 / this.view.zoom;
-    if (Math.hypot(x - f.knob[0], y - f.knob[1]) <= r) return 'rotate';
-    if (f.corners.some((c) => Math.hypot(x - c[0], y - c[1]) <= r)) return 'scale';
-    return 'move';
+    if (Math.hypot(x - f.knob[0], y - f.knob[1]) <= r) return { kind: 'rotate', handle: -1 };
+    let nearest = r, handle = -1;
+    f.handles.forEach((p, i) => { const distance = Math.hypot(x - p[0], y - p[1]); if (distance < nearest) { nearest = distance; handle = i; } });
+    return { kind: handle < 0 ? 'move' : this.transformMode === 'warp' || this.transformMode === 'distort' ? 'deform' : 'scale', handle };
   }
 
   /** The selection outline where the transform would leave it. */
@@ -1543,13 +1623,17 @@ export class App {
     const x = this.xf;
     if (!x) return null;
     const m = matrixFor(x.params, x.pivot[0], x.pivot[1]);
-    return x.points.map((p) => applyPoint(m, p[0], p[1]));
+    const warp = x.nodes && deformation(x.area, x.nodes, m);
+    return x.points.map(p => warp ? warp.forward(...p) : applyPoint(m, ...p));
   }
 
   cancelTransform(): void {
     const x = this.xf;
     if (!x) return;
+    cancelAnimationFrame(this.transformPreview);
+    this.transformPreview = 0;
     this.xf = null;
+    if (x.whole) this.spatial = null;
     if (x.region) {
       const r = x.region;
       const back = (canvas: HTMLCanvasElement | null, base: ImageData | null) => {
@@ -1568,8 +1652,9 @@ export class App {
   applyTransform(): void {
     const x = this.xf;
     if (!x) return;
+    if (this.transformPreview) this.renderTransform();
     const region = x.region;
-    if (!region || isIdentity(x.params)) {
+    if (!region || (isIdentity(x.params) && !x.nodes)) {
       this.cancelTransform();
       return;
     }
@@ -1588,13 +1673,15 @@ export class App {
     const fillBefore = x.baseFill ? grab(x.baseFill) : null;
     const fillAfter = x.baseFill && d.fill ? d.fill.getContext('2d')!.getImageData(region.x, region.y, region.w, region.h) : null;
     const vBefore = x.vectors, vAfter = d.vectors;
-    const selBefore = this.spatial;
-    let area: Area | null;
-    if (selBefore?.exact) {
-      const mask = transformMask(x.area.mask, W, H, matrixFor(x.params, x.pivot[0], x.pivot[1]), region);
+    const selBefore = x.whole ? null : this.spatial;
+    let area: Area | null = null;
+    if (selBefore && (selBefore.exact || x.nodes)) {
+      const matrix = matrixFor(x.params, x.pivot[0], x.pivot[1]);
+      const warp = x.nodes && deformation(x.area, x.nodes, matrix);
+      const mask = transformMask(x.area.mask, W, H, matrix, region, warp ? warp.inverse : undefined);
       area = boxOf(mask, W, H);
-    } else area = polygonMask(pts, W, H);
-    const selAfter = selBefore && area ? { ...selBefore, area, points: selBefore.exact ? boxPoints(area) : pts } : null;
+    } else if (selBefore) area = polygonMask(pts, W, H);
+    const selAfter = selBefore && area ? { ...selBefore, area, exact: selBefore.exact || !!x.nodes, points: selBefore.exact || x.nodes ? boxPoints(area) : pts } : null;
     this.spatial = selAfter;
     this.history.push({
       label: 'Transform selection',
@@ -1615,7 +1702,6 @@ export class App {
       },
     });
     this.touch(d);
-    this.residency.updateThumb(d);
     this.requestRender();
     this.onToolChange();
   }
@@ -1626,8 +1712,30 @@ export class App {
 
   selectShape: SelectShape = loadJSON<SelectShape>(SELECT_SHAPE_KEY) ?? 'free';
   selectOp: 'new' | 'add' | 'subtract' = 'new';
-  /** Transform: corners stretch freely instead of keeping proportions. */
-  transformFreeform = false;
+  transformMode: TransformMode = 'uniform';
+  transformInterpolation: Interpolation = 'bilinear';
+  transformSnap = false;
+  transformMagnetics = false;
+
+  setTransformMode(mode: TransformMode): void {
+    if (!this.xf || this.xf.drag) return;
+    this.transformMode = mode;
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  setTransformInterpolation(value: Interpolation): void {
+    if (!this.xf) return;
+    this.transformInterpolation = value;
+    if (this.xf.region) this.renderTransform();
+    this.onToolChange();
+  }
+
+  toggleTransformSnap(kind: 'snap' | 'magnetics'): void {
+    if (kind === 'snap') this.transformSnap = !this.transformSnap;
+    else this.transformMagnetics = !this.transformMagnetics;
+    this.onToolChange();
+  }
   /** Copied art (Copy / Cut): the selected pixels of Line and Fill, and the vector lines inside. */
   private artClip: { rect: Rect; line: ImageData; fill: ImageData | null; vectors: StrokeRecord[] } | null = null;
 
@@ -1972,12 +2080,20 @@ export class App {
     const x = this.xf;
     if (!x) return;
     const a = x.area;
-    const k = Math.min(this.docW / (a.x1 - a.x0 + 1), this.docH / (a.y1 - a.y0 + 1));
-    this.setTransform({ scale: k, sx: 1, sy: 1, rotate: 0, dx: this.docW / 2 - x.pivot[0], dy: this.docH / 2 - x.pivot[1] });
+    const points = x.nodes ?? transformNodes(a, 2);
+    const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+    const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
+    const scale = Math.max(0.1, Math.min(8, this.docW / (right - left), this.docH / (bottom - top)));
+    const params = { ...x.params, scale, sx: 1, sy: 1, rotate: 0, dx: 0, dy: 0 };
+    const centre = applyPoint(matrixFor(params, ...x.pivot), (left + right) / 2, (top + bottom) / 2);
+    this.setTransform({ ...params, dx: this.docW / 2 - centre[0], dy: this.docH / 2 - centre[1] });
   }
 
   resetTransform(): void {
-    if (this.xf) this.setTransform({ ...IDENTITY, sx: 1, sy: 1 });
+    if (this.xf) {
+      this.xf.nodes = null;
+      this.setTransform({ ...IDENTITY, sx: 1, sy: 1 });
+    }
   }
 
   /** Direct fill uses the selection itself, never line detection or following drawings. */
@@ -2058,6 +2174,7 @@ export class App {
   static readonly BLUR_MAX = 40;
 
   beginAdjust(kind: 'hsb' | 'blur'): void {
+    if (this.xf) this.applyTransform();
     if (this.titlePaintBlocked()) return;
     if (this.strokeActive) return;
     if (this.adjusting) {
@@ -5533,16 +5650,41 @@ export class App {
       return;
     }
     if (this.xf) {
-      // dragging the canvas moves the selection being transformed
-      if (!this.xf.drag) {
+      const x = this.xf;
+      if (e.pointerType === 'touch') {
+        // A second finger navigates the canvas. Drop any tentative single-finger edit.
+        if (x.drag && !this.touches.has(x.drag.id)) return;
+        const p = this.local(e);
+        this.tapSession = null;
+        this.touches.set(e.pointerId, { ...p, sx: p.x, sy: p.y });
+        if (this.touches.size > 1) {
+          const drag = x.drag;
+          if (drag) {
+            x.drag = null;
+            x.nodes = drag.nodes;
+            this.setTransform(drag.base, false);
+          }
+          this.startPinchIfNeeded();
+          return;
+        }
+      } else if (this.touches.size) return;
+      if (!x.drag) {
         const p = this.toPoint(e, e.timeStamp);
-        const x = this.xf;
-        const c = this.transformFrame()?.centre ?? [p.x, p.y];
-        const [lx, ly] = this.localOf(p.x - c[0], p.y - c[1]);
+        const f = this.transformFrame()!;
+        const grab = this.transformGrab(p.x, p.y);
+        const m = matrixFor(x.params, ...x.pivot);
+        const anchor = grab.kind === 'scale' ? f.handles[(grab.handle + 4) % 8]! : f.centre;
+        const local = invertSelection(m)!;
+        const [lx, ly] = this.localOf(p.x - anchor[0], p.y - anchor[1]);
+        let nodeStart = x.nodes;
+        if (grab.kind === 'deform' && this.transformMode === 'warp' && x.nodes?.length !== 9) {
+          const warped = x.nodes && deformation(x.area, x.nodes, m);
+          nodeStart = transformNodes(x.area, 3).map(pt => warped ? applyPoint(local, ...warped.forward(...pt)) : pt);
+        } else if (grab.kind === 'deform' && !nodeStart) nodeStart = transformNodes(x.area, 2);
         x.drag = {
-          id: e.pointerId, kind: this.transformGrab(p.x, p.y), x: p.x, y: p.y, dx: x.params.dx, dy: x.params.dy, scale: x.params.scale, rotate: x.params.rotate,
-          d0: Math.max(1, Math.hypot(p.x - c[0], p.y - c[1])), a0: Math.atan2(p.y - c[1], p.x - c[0]),
-          sx: x.params.sx ?? 1, sy: x.params.sy ?? 1, lx: Math.max(1, Math.abs(lx)), ly: Math.max(1, Math.abs(ly)),
+          id: e.pointerId, ...grab, x: p.x, y: p.y, base: { ...x.params, sx: x.params.sx ?? 1, sy: x.params.sy ?? 1 }, anchor, anchorLocal: applyPoint(local, ...anchor),
+          d0: Math.max(1, Math.hypot(p.x - anchor[0], p.y - anchor[1])), a0: Math.atan2(p.y - anchor[1], p.x - anchor[0]),
+          lx, ly, nodes: x.nodes, nodeStart,
         };
       }
       return;
@@ -5943,21 +6085,74 @@ export class App {
     const xd = this.xf?.drag;
     if (xd && e.pointerId === xd.id) {
       const p = this.toPoint(e, e.timeStamp);
-      if (xd.kind === 'move') this.setTransform({ dx: xd.dx + (p.x - xd.x), dy: xd.dy + (p.y - xd.y) });
-      else {
-        const x = this.xf!;
-        const c: [number, number] = [x.pivot[0] + x.params.dx, x.pivot[1] + x.params.dy];
-        if (xd.kind === 'scale' && this.transformFreeform) {
-          // Freeform: a corner stretches across and down on their own
-          const [lx, ly] = this.localOf(p.x - c[0], p.y - c[1]);
-          this.setTransform({ sx: xd.sx * (Math.max(1, Math.abs(lx)) / xd.lx), sy: xd.sy * (Math.max(1, Math.abs(ly)) / xd.ly) });
-        } else if (xd.kind === 'scale') this.setTransform({ scale: xd.scale * (Math.hypot(p.x - c[0], p.y - c[1]) / xd.d0) });
-        else {
-          let deg = xd.rotate + ((Math.atan2(p.y - c[1], p.x - c[0]) - xd.a0) * 180) / Math.PI;
-          // a gentle snap to every 15 degrees
+      const touch = this.touches.get(e.pointerId);
+      if (touch) Object.assign(touch, this.local(e));
+      const x = this.xf!, base = xd.base;
+      const dx = p.x - xd.x, dy = p.y - xd.y;
+      if (xd.kind === 'move') {
+        let tx = dx, ty = dy;
+        xd.guides = undefined;
+        const constrained = this.transformMagnetics || e.shiftKey;
+        const horizontal = Math.abs(tx) >= Math.abs(ty);
+        if (constrained) {
+          if (horizontal) ty = 0; else tx = 0;
+        }
+        if (this.transformSnap) {
+          const guides: [number | null, number | null] = xd.guides = [null, null];
+          const m = matrixFor(base, ...x.pivot);
+          const cage = xd.nodes && deformation(x.area, xd.nodes, m);
+          const points = cage ? cage.points : transformNodes(x.area, 2).map(pt => applyPoint(m, ...pt));
+          const align = (axis: 0 | 1, shift: number, size: number) => {
+            const coords = points.map(pt => pt[axis]), lo = Math.min(...coords), hi = Math.max(...coords);
+            const targets = [0, size / 2, size];
+            const deltas = [-lo - shift, size / 2 - (lo + hi) / 2 - shift, size - hi - shift];
+            const index = deltas.reduce((best, v, i) => Math.abs(v) < Math.abs(deltas[best]!) ? i : best, 0);
+            const nearest = deltas[index]!;
+            if (Math.abs(nearest) > 8 / this.view.zoom) return shift;
+            guides[axis] = targets[index]!;
+            return shift + nearest;
+          };
+          if (!constrained || horizontal) tx = align(0, tx, this.docW);
+          if (!constrained || !horizontal) ty = align(1, ty, this.docH);
+        }
+        this.setTransform({ dx: base.dx + tx, dy: base.dy + ty }, false);
+      } else if (xd.kind === 'deform') {
+        if (!dx && !dy) {
+          if (x.nodes !== xd.nodes) {
+            x.nodes = xd.nodes;
+            this.queueTransformPreview();
+          }
+          return;
+        }
+        const inv = invertSelection(matrixFor(base, ...x.pivot))!;
+        const tx = inv[0] * dx + inv[2] * dy, ty = inv[1] * dx + inv[3] * dy;
+        const nodes = xd.nodeStart!;
+        const picked = this.transformMode === 'warp' ? xd.handle : (nodes.length === 9 ? [0, 2, 8, 6] : [0, 1, 3, 2])[xd.handle]!;
+        const next = nodes.map(([px, py], i): Point => {
+          let weight = Number(i === picked);
+          if (this.transformMode === 'distort' && nodes.length === 9)
+            weight = (1 - Math.abs((i % 3) - (picked % 3)) / 2) * (1 - Math.abs(Math.floor(i / 3) - Math.floor(picked / 3)) / 2);
+          return [px + tx * weight, py + ty * weight];
+        });
+        if (validTransformNodes(next)) { x.nodes = next; this.queueTransformPreview(); }
+      } else {
+        const [ax, ay] = xd.anchor;
+        if (xd.kind === 'scale') {
+          const next = { ...base };
+          if (this.transformMode === 'freeform') {
+            const [lx, ly] = this.localOf(p.x - ax, p.y - ay);
+            const h = xd.handle;
+            if (h % 2 === 0 || h === 3 || h === 7) next.sx = Math.max(0.05, Math.min(20, (base.sx ?? 1) * lx / (xd.lx || 1)));
+            if (h % 2 === 0 || h === 1 || h === 5) next.sy = Math.max(0.05, Math.min(20, (base.sy ?? 1) * ly / (xd.ly || 1)));
+          } else next.scale = Math.max(0.1, Math.min(8, base.scale * Math.hypot(p.x - ax, p.y - ay) / xd.d0));
+          const moved = applyPoint(matrixFor(next, ...x.pivot), ...xd.anchorLocal);
+          next.dx += ax - moved[0]; next.dy += ay - moved[1];
+          this.setTransform(next, false);
+        } else {
+          let deg = base.rotate + ((Math.atan2(p.y - ay, p.x - ax) - xd.a0) * 180) / Math.PI;
           const snap = Math.round(deg / 15) * 15;
-          if (Math.abs(deg - snap) < 3) deg = snap;
-          this.setTransform({ rotate: deg });
+          if (this.transformSnap && Math.abs(deg - snap) < 3) deg = snap;
+          this.setTransform({ rotate: deg }, false);
         }
       }
       return;
@@ -6014,7 +6209,7 @@ export class App {
       }
 
       if (this.tapSession && Math.hypot(p.x - t.sx, p.y - t.sy) > 10) this.tapSession.moved = true;
-      this.touchNavigate(e.pointerId, p);
+      if (!this.xf || this.pinch) this.touchNavigate(e.pointerId, p);
       return;
     }
     if (e.pointerType === 'pen') this.trackStats(e, 1);
@@ -6075,7 +6270,17 @@ export class App {
       return;
     }
     if (this.xf?.drag && e.pointerId === this.xf.drag.id) {
+      const drag = this.xf.drag;
       this.xf.drag = null;
+      this.touches.delete(e.pointerId);
+      if (drag.guides) this.requestRender();
+      if (cancelled) {
+        this.xf.nodes = drag.nodes;
+        this.setTransform(drag.base);
+      } else {
+        if (this.transformPreview) this.renderTransform();
+        this.onToolChange();
+      }
       return;
     }
     if (this.fillG && e.pointerId === this.fillG.pointerId) this.endFill(cancelled);
@@ -6372,6 +6577,16 @@ export class App {
     if (this.xf && (e.code === 'Escape' || e.code === 'Enter')) {
       if (e.code === 'Enter') this.applyTransform();
       else this.cancelTransform();
+      return;
+    }
+    if (this.xf && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      const { dx, dy } = this.xf.params;
+      this.setTransform({
+        dx: dx + (e.code === 'ArrowRight' ? step : e.code === 'ArrowLeft' ? -step : 0),
+        dy: dy + (e.code === 'ArrowDown' ? step : e.code === 'ArrowUp' ? -step : 0),
+      }, false);
       return;
     }
     if (e.code === 'Escape' && this.workspace !== 'motion') {

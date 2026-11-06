@@ -166,10 +166,11 @@ for (const b of planeButtons) b.addEventListener('click', () => app.setPlane(b.d
 for (const b of toolButtons)
   b.addEventListener('click', () => {
     const t = b.dataset.tool as Tool;
-    if (app.transforming) app.cancelTransform();
+    const transforming = app.transforming;
+    if (transforming) app.applyTransform();
     if (t === 'brush' && app.smudging) app.setSmudging(false);
     else if (t === 'fill' && app.tool === 'fill' && app.fillMode === 'lasso') app.setFillMode('tap');
-    else if (t === app.tool && t !== 'fill') brushLib.toggle(b);
+    else if (!transforming && t === app.tool && t !== 'fill') brushLib.toggle(b);
     else app.setTool(t);
   });
 for (const b of toolXButtons)

@@ -8,9 +8,11 @@ import { parseProjectFile, stringifyProjectFile } from '../io/schema';
 import { importVectorDocument } from '../io/vectorimport';
 import { vectorsToSvg } from '../io/svg';
 import { planBlender } from '../io/blender';
+import { SoundBank } from '../io/sound';
 import { decodePicture, mediaPicker } from './media';
 import { EffectsPanel } from './effectspanel';
 import { MotionPanel } from './motion';
+import { ShareView } from './share';
 import { drawComp, releaseScratch } from '../view/composite';
 import { setFxPreview } from '../view/effects';
 import { transformVector } from '../core/vectorstyle';
@@ -161,6 +163,46 @@ await check('Group effects render after internal effects/adjustments, before ins
   group.transform.position = staticProp([40, 32]);
   expect(pixel(render(p), 5, 32)[3]! < pixel(c, 5, 32)[3]!, 'effect did not follow group transform');
   app.loadProject(p); app.setWorkspace('motion'); app.editor.select(group.id); motion.update();
+});
+await check('Motion, Share and the downloaded PNG agree on nested and adjustment effects', async () => {
+  const group = app.editor.primary!;
+  const nestedAdjustment = app.project.comps.get('nested')!.layers[0]!;
+  nestedAdjustment.effects![0]!.amount = 4;
+  group.transform.position = staticProp([32, 32]);
+  app.editor.select(null);
+  app.setCanvasView({ transparency: false });
+  app.fit(); app.requestRender(); await wait(160);
+  const motionPixels = [6, 24].map(x => {
+    const pt = app.view.docToScreen(x, 30), ratio = canvas.width / canvas.getBoundingClientRect().width;
+    return pixel(canvas, Math.floor(pt.x * ratio), Math.floor(pt.y * ratio));
+  });
+  const share = new ShareView(app, { sounds: new SoundBank(() => true), backup() {}, onOpenChange() {} });
+  share.show('picture');
+  try {
+    const background = [...document.querySelectorAll<HTMLSelectElement>('.share-settings select')].find(s => [...s.options].some(o => o.value === 'transparent'))!;
+    background.value = 'white';
+    background.dispatchEvent(new Event('change'));
+    await wait(200);
+    const preview = document.querySelector<HTMLCanvasElement>('.share-canvas')!;
+    const shares = [6, 24].map(x => pixel(preview, Math.floor(x * preview.width / 64), Math.floor(30 * preview.height / 64)));
+    document.querySelector<HTMLButtonElement>('.share-go')!.click();
+    let save: HTMLAnchorElement | null = null;
+    for (let i = 0; i < 100 && !save; i++) { await wait(); save = document.querySelector<HTMLAnchorElement>('.share-save'); }
+    expect(save, 'PNG download missing');
+    const png = await createImageBitmap(await (await fetch(save!.href)).blob());
+    const decoded = blank(png.width, png.height);
+    decoded.getContext('2d')!.drawImage(png, 0, 0);
+    png.close();
+    const close = (a: number[], b: number[]) => a.every((n, i) => Math.abs(n - b[i]!) <= 10);
+    for (const [i, x] of [6, 24].entries()) {
+      const exported = pixel(decoded, Math.floor(x * decoded.width / 64), Math.floor(30 * decoded.height / 64));
+      expect(close(exported, shares[i]!) && close(exported, motionPixels[i]!), `at ${x}: Motion ${motionPixels[i]}, Share ${shares[i]}, PNG ${exported}`);
+      expect(exported[0]! >= 250 && exported[1]! < (i === 0 ? 250 : 136) && exported[1]! > (i === 0 ? 145 : 119), `unexpected effect output at ${x}: ${exported}`);
+    }
+  } finally {
+    share.close();
+    app.editor.select(group.id);
+  }
 });
 await check('Effects card opens the selected group, filters effects and commits one group effect', () => {
   const l = app.editor.primary!; effects.show(l.id);
