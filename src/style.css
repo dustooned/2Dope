@@ -4200,7 +4200,6 @@ body.ws-motion .audio-tracks { display: none !important; }
 .bub[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .bub-color { background: var(--chip, #fff); border: 3px solid var(--panel-2); box-shadow: 0 0 0 1px var(--line); }
 .bub-color[aria-pressed='true'] { background: var(--chip, #fff); }
-.bub-name { font-size: 13px; color: var(--muted); padding: 0 10px 0 4px; white-space: nowrap; }
 .bub-ctx { position: absolute; top: 66px; right: 60px; z-index: 8; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: calc(100% - 140px); padding: 6px; border-radius: var(--radius-lg); background: var(--panel); border: 1px solid var(--line); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
 .bub-ctx[hidden] { display: none; }
 .bub-chip { min-height: 40px; padding: 0 14px; border-radius: var(--pill); white-space: nowrap; }
@@ -4224,7 +4223,6 @@ body.ui-clean .bub-modes { display: none !important; }
 body.ui-clean:not(.quick) #strip, body.ui-clean:not(.quick) #board, body.ui-clean:not(.quick) #motion, body.ui-clean .tracks-handle, body.ui-clean .audio-tracks, body.ui-clean #splitter { display: none !important; }
 body.quick .bub-modes, body.quick .bub-tools, body.quick .bub-ctx, body.ui-hidden .bub-modes, body.ui-hidden .bub-tools, body.ui-hidden .bub-ctx, body.ui-hidden .bub-level { display: none !important; }
 @media (max-width: 700px) {
-  .bub-name { display: none; }
   .bub-tools { top: 62px; right: 8px; left: auto; max-width: calc(100% - 16px); flex-wrap: wrap; }
   .bub-ctx { top: var(--tools-bottom, 116px); right: 8px; max-width: calc(100% - 16px); }
 }
@@ -4863,7 +4861,6 @@ body.painting-workspace.workspace-brush-right .stage[data-tool-dock=right] .side
 @media (min-width: 1000px) {
   .bub-modes .bub { width: auto; padding: 0 8px; gap: 5px; border-radius: var(--radius-md); font-size: 12px; }
   .bub-modes .lbl { display: inline; }
-  .bub-name { display: none; }
 }
 @media (max-width: 700px) {
   body.painting-workspace .bub-modes { max-width: calc(100% - 16px); left: 8px; top: var(--mode-top, 66px); }
@@ -5272,7 +5269,6 @@ body.ui-simple .board .board-bar, body.ui-clean .board .board-bar { display: fle
 body:not(.painting-workspace) .bub-modes { max-width: calc(100% - 120px); overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
 body:not(.painting-workspace) .bub-modes .bub { width: auto; min-width: 44px; height: 44px; min-height: 44px; padding: 0 8px; gap: 5px; border-radius: var(--radius-md); font-size: 12px; }
 body:not(.painting-workspace) .bub-modes .lbl { display: inline; }
-body:not(.painting-workspace) .bub-name { display: none; }
 body:not(.painting-workspace) .bub-tools { max-width: calc(100% - 120px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 body:not(.painting-workspace) .bub-tools .bub { min-width: 44px; min-height: 44px; width: 44px; height: 44px; }
 @media (max-width: 700px) {
@@ -5336,7 +5332,6 @@ body.ui-hidden .canvas-menu-btn, body.quick .canvas-menu-btn { display: none; }
 body:is(.painting-workspace,.ws-board) .bub-modes { left: 60px; top: 8px; max-width: calc(100% - 120px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; border-radius: var(--radius-md); }
 body:is(.painting-workspace,.ws-board) .bub-modes .bub { width: auto; min-width: 44px; height: 44px; min-height: 44px; padding: 0 8px; gap: 5px; border-radius: var(--radius-md); font-size: 12px; }
 body:is(.painting-workspace,.ws-board) .bub-modes .lbl { display: inline; }
-body:is(.painting-workspace,.ws-board) .bub-name { display: none; }
 body.painting-workspace .painting-header, body.painting-workspace .painting-header.editing-asset { top: var(--ph-top, 60px); left: var(--ph-left, auto); right: 8px; width: var(--asset-header-width, max-content); max-width: var(--asset-header-width, 45%); min-width: 0; box-sizing: border-box; padding: 3px; gap: 4px; border-radius: var(--radius-md); }
 body.painting-workspace .stage[data-tool-dock=top] .bub-tools { left: var(--pt-left, 8px); right: var(--tool-row-right, 120px); top: var(--pt-top, 60px); width: auto; max-width: none; margin: 0; justify-content: flex-start; }
 body.ws-board .stage[data-tool-dock=top] .bub-tools { left: 8px; right: auto; top: 60px; max-width: calc(100% - 16px); width: max-content; }
@@ -5661,3 +5656,43 @@ body.ws-board #stats { display: none; }
 @media (max-height: 500px) { body.ws-board .story-canvas-status { display: none !important; } }
 
 body.ws-board.ui-full:not(.ui-hidden):not(.presenting) .bub-modes, body.ws-board.ui-full:not(.ui-hidden):not(.presenting) .bub-tools { display: flex !important; }
+
+/* Name tools beside their icons, including on touch screens where hover tips are unavailable. */
+.bub-tool-drawer { display: block; width: min(388px, calc(100% - 16px)); padding: 0 10px 10px; overscroll-behavior: contain; }
+.tool-drawer-header { position: sticky; z-index: 1; top: 0; display: flex; align-items: center; justify-content: space-between; padding: 4px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+.tool-drawer-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
+.tool-drawer-group .tool-section-label { grid-column: 1 / -1; margin: 0 0 2px; }
+.tool-drawer-group .bub-chip.icon, .tool-drawer-footer .bub-chip.icon { justify-content: flex-start; gap: 7px; border-radius: var(--radius-md); padding-inline: 8px; text-align: left; white-space: normal; }
+.tool-drawer-group .bub-chip .ico { flex: 0 0 20px; width: 20px; height: 20px; }
+.tool-drawer-group [data-extra-tool=color] .ico { color: var(--drawer-swatch); filter: drop-shadow(0 0 1px var(--text)); }
+.tool-drawer-header .bub-chip.icon { width: 44px; padding: 0; }
+.tool-drawer-header .bub-chip.icon .lbl { display: none; }
+.tool-drawer-footer { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--line); }
+.bub-levelmenu button { min-height: 44px; }
+.bub-ctx[data-row=transform] .bub-chip.icon .lbl { display: inline; }
+.bub-ctx[data-row=transform] .bub-chip.icon { width: auto; padding-inline: 8px; gap: 5px; }
+.share-more-formats { margin-top: 8px; border-top: 1px solid var(--line); }
+.share-more-formats > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-weight: 600; list-style: none; }
+.share-more-formats > summary::-webkit-details-marker { display: none; }
+.share-more-formats > summary::after { content: '▸'; margin-left: auto; }
+.share-more-formats[open] > summary::after { content: '▾'; }
+.share-more-formats:not([open]) > .share-kinds { display: none; }
+@media (min-width: 761px) {
+  .story-actions > button[aria-haspopup=menu] { width: auto; padding-inline: 8px; gap: 5px; }
+  .story-actions > button[aria-haspopup=menu] .lbl { display: inline; }
+}
+@media (min-width: 1000px) and (min-height: 501px) {
+  .ws-time .xs-acts .has-ico.icon-only { display: inline-flex; align-items: center; gap: 5px; }
+  .ws-time .xs-acts .has-ico.icon-only .lbl { position: static; width: auto; height: auto; clip-path: none; }
+}
+@media (max-width: 760px), (max-height: 500px) {
+  body:is(.painting-workspace,.ws-board,.ws-motion,.ws-time) .bub-modes .bub { width: 48px; height: 44px; padding: 2px 0; gap: 2px; flex-direction: column; }
+  body:is(.painting-workspace,.ws-board,.ws-motion,.ws-time) .bub-modes .bub .lbl { display: inline; font-size: 10px; line-height: 1; }
+  body:is(.painting-workspace,.ws-board,.ws-motion,.ws-time) .bub-modes .bub .ico { width: 18px; height: 18px; }
+  .motion-workflow .motion-menus button.has-ico { width: 54px; height: 44px; flex-direction: column; justify-content: center; gap: 2px; padding: 0 2px; }
+  .motion-workflow .motion-menus button.has-ico .lbl { display: inline; position: static; width: auto; height: auto; clip-path: none; font-size: 10px; line-height: 1; }
+}
+@media (max-width: 440px) {
+  body:is(.painting-workspace,.ws-board,.ws-motion,.ws-time) .bub-modes { left: 54px; right: 54px; max-width: none; padding: 0; gap: 0; }
+  body:is(.painting-workspace,.ws-board,.ws-motion,.ws-time) .bub-modes .bub { width: 44px; }
+}

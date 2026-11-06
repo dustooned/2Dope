@@ -312,6 +312,12 @@ await check('Vector tween draws a new pose between matching shapes and survives 
     for (const drawing of pinned) app.residency.unpin(drawing);
   }
   expect(planBlender(p, 'Tween').renders.some(r => r.frame === 2), 'Blender plan omitted the in-between frame');
+  const remove = motion.layerItems(loaded.layer).find(item => 'label' in item && item.label === 'Remove vector tweening');
+  expect(remove && 'run' in remove, 'older projects have no way to remove tweening');
+  if (remove && 'run' in remove) remove.run();
+  expect(!loaded.layer.tweenVectors && loaded.layer.exposures.length === 2, 'removing tweening changed the drawings');
+  app.undo(); await wait();
+  expect(loaded.layer.tweenVectors, 'removing tweening could not be undone');
 });
 await check('No uncaught browser errors', () => expect(errors.length === 0, errors.join('; ')));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

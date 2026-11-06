@@ -101,7 +101,13 @@ try {
   document.querySelector<HTMLButtonElement>('.board-bar button[aria-label="Share storyboard"]')!.click();
   await settle(300);
   check('Story Export opens Share on Storyboard', share.open && exportCalls === 1 && checked() === 'Storyboard');
-  check('Animatic and Storyboard are both formats in Share', !!kindBtn('Animatic') && !!kindBtn('Storyboard'));
+  const moreFormats = side().querySelector<HTMLDetailsElement>('.share-more-formats')!;
+  check('Story keeps Animatic and Storyboard visible and folds additional formats', !!kindBtn('Animatic').getClientRects().length &&
+    !!kindBtn('Storyboard').getClientRects().length && !moreFormats.open && !kindBtn('Blender').getClientRects().length,
+    { expanded: moreFormats.open, formats: [...side().querySelectorAll('.share-kinds strong')].map(s => s.textContent) });
+  moreFormats.querySelector('summary')!.click();
+  check('More formats reveals the Blender option with its icon', moreFormats.open && !!kindBtn('Blender').querySelector('svg'));
+  moreFormats.querySelector('summary')!.click();
   await until(() => !goBtn().disabled, 5000);
   check('Storyboard summary counts panels and pages', /2 panels on 1 page/.test(side().querySelector('.share-summary')?.textContent ?? ''), side().querySelector('.share-summary')?.textContent);
   goBtn().click();

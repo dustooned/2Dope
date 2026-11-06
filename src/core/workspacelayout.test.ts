@@ -59,6 +59,9 @@ describe('workspace layout preferences', () => {
     const old = ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'layers', 'color'];
     expect(readWorkspaceLayouts({ draw: { tools: old, seen: [...WORKSPACE_TOOLS.draw] } }).draw.tools.slice(0, 3)).toEqual(defaultWorkspaceLayout('board').tools);
     expect(defaultWorkspaceLayout('animate').tools.slice(0, 3)).toEqual(defaultWorkspaceLayout('board').tools);
+    const former = ['brush', 'eraser', 'color', 'select', 'transform', 'smudge', 'eyedrop', 'layers'];
+    expect(readWorkspaceLayouts({ draw: { tools: former } }).draw.tools).toEqual(defaultWorkspaceLayout('draw').tools);
+    expect(readWorkspaceLayouts({ draw: { tools: former, brushEdge: 'right' } }).draw.tools).toEqual(former);
     expect(readWorkspaceLayouts({ draw: { tools: old, seen: [...WORKSPACE_TOOLS.draw], labels: true } }).draw.tools).toEqual(old);
     expect(readWorkspaceLayouts({ draw: { tools: ['brush', 'color'], seen: [...WORKSPACE_TOOLS.draw] } }).draw.tools).toEqual(['brush', 'color']);
   });

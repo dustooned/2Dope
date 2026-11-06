@@ -120,6 +120,7 @@ export class ShareView {
   private sheets: BoardOpts =(() => { try { return boardOpts(JSON.parse(localStorage.getItem(BOARD_KEY) ?? 'null')); } catch { return boardOpts(null); } })();
   private extraUrl: string | null = null;
   private advancedOpen = false;
+  private formatsOpen = false;
   private prevWs: Workspace | null = null;
   private abort: AbortController | null = null;
   private url: string | null = null;
@@ -368,16 +369,34 @@ export class ShareView {
     this.releaseUrl();
     const s = this.side;
     s.replaceChildren();
-    // every format, one tap each
-    const grid = el('div', { class: 'share-kinds', role: 'radiogroup', 'aria-label': 'Make a' });
+    const primary: Kind[] = this.prevWs === 'board' ? ['board', 'animatic', 'video', 'backup'] : ['video', 'gif', 'picture', 'backup'];
+    const formats = el('div', { class: 'share-formats', role: 'radiogroup', 'aria-label': 'Export format' });
+    const grid = el('div', { class: 'share-kinds' });
+    const more = el('details', { class: 'share-more-formats' });
+    more.open = this.formatsOpen || !primary.includes(this.kind);
+    more.addEventListener('toggle', () => { if (more.isConnected) this.formatsOpen = more.open; });
+    const summary = el('summary', {}, 'More formats');
+    decorate(summary, 'more');
+    const others = el('div', { class: 'share-kinds' });
+    more.append(summary, others);
+    const buttons = new Map<Kind, HTMLButtonElement>();
     for (const k of KINDS) {
-      const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(this.kind === k.id), title: k.hint });
+      const b = el('button', { type: 'button', role: 'radio', 'aria-label': k.label, 'aria-checked': String(this.kind === k.id), 'data-share-kind': k.id, title: k.hint });
       decorate(b, k.icon);
       b.append(el('strong', {}, k.label), el('span', {}, k.hint));
-      b.addEventListener('click', () => { this.kind = k.id; save(KIND_KEY, k.id); this.renderSide(); });
-      grid.append(b);
+      b.addEventListener('click', () => {
+        this.kind = k.id;
+        this.formatsOpen = more.open;
+        save(KIND_KEY, k.id);
+        this.renderSide();
+        this.side.querySelector<HTMLButtonElement>(`[data-share-kind="${k.id}"]`)?.focus({ preventScroll: true });
+      });
+      buttons.set(k.id, b);
+      if (!primary.includes(k.id)) others.append(b);
     }
-    s.append(el('h3', {}, 'Make a'), grid);
+    for (const id of primary) grid.append(buttons.get(id)!);
+    formats.append(grid, more);
+    s.append(el('h3', {}, 'Export format'), formats);
 
     const main = el('div', { class: 'share-settings' });
     const adv = el('details', { class: 'share-advanced' });

@@ -179,7 +179,7 @@ export class MotionPanel {
       { label: 'Title…', icon: 'text', run: () => app.editTitle?.() },
       ...([['drawings', 'Drawing', 'draw'], ['adjustment', 'Adjustment', 'fx'], ['null', 'Anchor', 'centrecross'], ['camera', 'Camera', 'camera']] as const).map(([kind, label, icon]) => ({ label, icon, run: () => ed.addLayer(kind, ed.primary?.id) })),
     ]);
-    const layer = menu('Selected layer', 'Layer actions', 'layers', () => ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
+    const layer = menu('Layer', 'Layer actions', 'layers', () => ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
     const tools = menu('Animation', 'Motion tools', 'motion', () => this.animationItems());
     const view = menu('View', 'Motion view options', 'viewfinder', () => this.viewItems());
     const assets = btn('Assets', 'Project assets and reusable files', () => {
@@ -196,24 +196,21 @@ export class MotionPanel {
     const transport = group(this.playBtn, btn('◀', 'Previous frame (←)', () => app.prevFrame()), this.frameLabel, btn('▶', 'Next frame (→)', () => app.nextFrame()), this.range.button);
     transport.classList.add('motion-transport');
     const heading = row(this.compName, this.crumbsEl, transport, help); heading.classList.add('motion-heading');
-    const presets = btn('Presets', 'Motion and Effects presets', () => this.openPresets?.()); presets.setAttribute('aria-label', 'Motion presets');
     this.anchors = new AnchorControls(app);
-    const importMedia = btn('Import', 'Import pictures, SVG/EPS vectors, movies or sounds', () => app.pickMedia?.());
-    const paste = btn('Paste', 'Paste artwork from the clipboard', () => app.pasteMedia?.());
-    const layout = btn('Layout', 'Align and snap selected layers', () => app.openLayout?.());
+    const importMedia = menu('Import', 'Import and paste', 'import', () => [
+      { title: 'Bring in artwork' },
+      { label: 'Import files…', icon: 'import', run: () => app.pickMedia?.() },
+      { label: 'Paste from clipboard', icon: 'paste', run: () => app.pasteMedia?.() },
+    ]);
     const graph = btn('Graph', 'Edit animation curves', () => this.openGraph?.());
     const menus = row(
-      group(addLayer, importMedia, paste, assets),
-      group(graph, layer, this.anchors.button, this.effectsBtn, layout),
-      group(tools, presets, view),
+      group(addLayer, importMedia, assets),
+      group(graph, layer, this.anchors.button, this.effectsBtn),
+      group(tools, view),
     );
     menus.classList.add('motion-menus'); menus.setAttribute('role', 'group'); menus.setAttribute('aria-label', 'Motion commands');
-    decorate(importMedia, 'import');
-    decorate(paste, 'paste');
     decorate(assets, 'folder');
-    decorate(layout, 'layout');
     decorate(graph, 'graph');
-    decorate(presets, 'save');
     decorate(this.effectsBtn, 'fx');
     const filter = el('input', { type: 'search', class: 'motion-search', placeholder: 'Find a layer…', 'aria-label': 'Find Motion layers', 'data-own-keys': '' });
     filter.addEventListener('input', () => { this.filter = filter.value.trim().toLowerCase(); this.signature = ''; this.update(); });
@@ -1189,7 +1186,8 @@ export class MotionPanel {
     return [
       { title: 'Curves and paths' },
       { label: 'Graph editor…', icon: 'graph', run: () => this.openGraph?.() },
-      { label: ed.pathEditing ? 'Done editing motion path' : 'Edit motion path on canvas', checked: ed.pathEditing, run: () => ed.setPathEditing(!ed.pathEditing) },
+      { label: 'Motion and Effects presets…', icon: 'save', disabled: !this.openPresets, run: () => this.openPresets?.() },
+      { label: ed.pathEditing ? 'Done editing motion path' : 'Edit motion path on canvas', icon: 'editpoints', checked: ed.pathEditing, run: () => ed.setPathEditing(!ed.pathEditing) },
       { label: 'Smooth motion path', run: () => ed.changePath(true) },
       { label: 'Straight motion path', run: () => ed.changePath(false) },
       { label: 'Link motion path handles', checked: ed.pathLinked, run: () => { ed.pathLinked = !ed.pathLinked; } },
@@ -1260,12 +1258,16 @@ export class MotionPanel {
       } },
       { label: 'Anchor', icon: 'centrecross', disabled: l.kind === 'camera' || l.locked || !l.visible || l.kind === 'drawings' && !!l.adjust,
         run: () => { if (ed.primary?.id !== l.id) ed.select(l.id); ed.setAnchorEditing(true); this.app.focusCanvas(); } },
+      { label: 'Align and snap…', icon: 'layout', disabled: !this.app.openLayout, run: () => {
+        if (!ed.selected.includes(l.id)) ed.select(l.id);
+        this.app.openLayout?.();
+      } },
       ...(l.kind === 'drawings' || l.kind === 'comp' ? [{ label: 'Effects', icon: 'fx', run: () => this.app.openEffects?.(l.id) }] : []),
       { label: 'Graph', icon: 'graph', run: () => { if (ed.primary?.id !== l.id) ed.select(l.id); this.openGraph?.(); } },
       ...(l.kind === 'comp' ? [{ label: 'Edit Clip', icon: 'time', run: () => this.editClip(l.id) }] : []),
-      ...(l.kind === 'drawings' && !l.adjust && !l.guide && !l.notes && !l.title ? [{
-        label: 'Tween vector points', icon: 'editpoints', checked: !!l.tweenVectors, disabled: l.locked,
-        run: () => ed.setVectorTween(l.id, !l.tweenVectors),
+      ...(l.kind === 'drawings' && l.tweenVectors ? [{
+        label: 'Remove vector tweening', icon: 'editpoints', disabled: l.locked,
+        run: () => ed.setVectorTween(l.id, false),
       }] : []),
       ...(asset && this.clipPlayback ? [
         { title: 'Clip playback' },

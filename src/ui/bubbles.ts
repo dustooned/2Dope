@@ -75,7 +75,7 @@ const ACTION_KEYS = new Set(['play', 'onion', 'prevdraw', 'nextdraw', 'insert', 
 /** Canvas view switches a bar can carry (Motion has them by default). */
 const VIEW_TOOLS: [ToolKey, string, string][] = [['safeareas', 'Title safe', 'safearea'], ['centrecross', 'Centre cross', 'centrecross'], ['overscan', 'Overscan', 'overscan']];
 const PANEL_HELP: Partial<Record<string, string>> = {
-  color: 'Opens the colour panel; drag it onto the canvas to fill an area', layers: 'Opens the layer list', reference: 'Opens the reference window', more: 'Opens every tool for this mode and Edit workspace',
+  color: 'Opens the colour panel; drag it onto the canvas to fill an area', layers: 'Opens the layer list', reference: 'Opens the reference window', more: 'Browse tools by task',
 };
 const SECOND_TAP: Partial<Record<string, string>> = { brush: 'Tap again for brushes', smudge: 'Tap again for brushes', pen: 'Tap again for brushes', eraser: 'Tap again for brushes', assets: 'Tap again (or Done) to go back to drawing' };
 
@@ -95,7 +95,6 @@ export class Bubbles {
   private readonly ctx = el('div', { class: 'bub-ctx', role: 'toolbar', 'aria-label': 'Options' });
   private readonly extraTools = el('section', { class: 'bub-tool-drawer', 'aria-label': 'More tools', hidden: '' });
   private readonly levelBtn = el('button', { type: 'button', class: 'bub bub-level' });
-  private readonly modeName = el('span', { class: 'bub-name' });
   level: UiLevel = 'simple';
   private sig = '';
   /** The Layers bubble shows this cel's linked layers in the context bar. */
@@ -139,7 +138,6 @@ export class Bubbles {
       share.addEventListener('click', () => hooks.share!.show());
       this.modes.append(share);
     }
-    this.modes.append(this.modeName);
     // the interface level: a small menu that says what each choice shows (not a blind cycle)
     const menu = el('div', { class: 'bub-levelmenu', role: 'menu', hidden: '' });
     const choices: [UiLevel, string, string][] = [
@@ -292,7 +290,8 @@ export class Bubbles {
     this.level = l;
     this.app.interfaceLevel = l;
     for (const x of LEVELS) document.body.classList.toggle(`ui-${x}`, x === l);
-    this.levelBtn.textContent = l === 'clean' ? '○' : l === 'simple' ? '◐' : '●';
+    this.levelBtn.textContent = 'Interface';
+    decorate(this.levelBtn, 'layout');
     this.levelBtn.title = `Interface: ${l === 'clean' ? 'Focus' : l === 'simple' ? 'Simple' : 'Full'}. Tap to choose how much shows; hold to reset the screen.`;
     this.levelBtn.setAttribute('aria-label', this.levelBtn.title);
     if (remember) {
@@ -503,9 +502,16 @@ export class Bubbles {
     const a = this.app;
     const arranging = a.arrangingAssets;
     const transforming = a.transforming;
-    if (k === 'assets') { a.setArrangeAssets(!a.arrangingAssets); return; }
+    if (k === 'assets') { this.moreTools = false; a.setArrangeAssets(!a.arrangingAssets); this.update(); return; }
     if (a.arrangingAssets && ['brush', 'pen', 'eraser', 'smudge', 'fill', 'select', 'adjust'].includes(k)) a.setArrangeAssets(false);
-    if (k === 'more') { this.moreTools = !this.moreTools; this.sig = ''; this.update(); return; }
+    if (k === 'more') {
+      this.moreTools = !this.moreTools;
+      this.update();
+      const target = this.moreTools ? this.extraTools.querySelector<HTMLButtonElement>('[data-extra-tool]:not(:disabled)')
+        : this.tools.querySelector<HTMLButtonElement>('[data-tool-key="more"]');
+      target?.focus({ preventScroll: true });
+      return;
+    }
     this.moreTools = false;
     if (a.transforming && ['brush', 'eraser', 'pen', 'smudge', 'fill', 'select', 'adjust'].includes(k)) a.applyTransform();
     if (a.adjusting && k !== 'adjust' && k !== 'color' && k !== 'layers') a.applyAdjust();
@@ -702,8 +708,7 @@ export class Bubbles {
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     const shareMode = this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]');
     if (shareMode) { shareMode.setAttribute('aria-pressed', String(sharing)); shareMode.hidden = ws === 'board' && !!this.hooks.story?.controlsInPanel && !sharing; }
-    this.modeName.textContent = sharing ? 'Share' : { animate: 'Animate', draw: 'Draw', time: 'Timing', motion: 'Motion', board: 'Story' }[ws];
-    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}|${this.editingTools}|${this.transformOptions}|${a.project.layer.tweenVectors}|${a.project.layer.locked}`;
+    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}|${this.editingTools}|${this.transformOptions}`;
     if (paintingSig === this.sig) return;
     this.sig = paintingSig;
 
@@ -751,22 +756,42 @@ export class Bubbles {
       this.tools.append(b);
     }
     this.extraTools.id = 'workspace-extra-tools'; this.extraTools.hidden = !this.moreTools;
-    this.extraTools.replaceChildren(el('strong', {}, 'More tools'), el('p', { class: 'bub-drawer-hint' }, 'Tap a tool to use it now. Edit tool bar drags tools onto the bar.'));
-    const allTools = this.toolsFor(ws, true);
-    let section = '';
-    for (const [k, label] of allTools) {
-      const name = ['safeareas', 'centrecross', 'overscan', 'look'].includes(k) ? 'Canvas view'
-        : ws === 'board' ? ['brush', 'eraser', 'color'].includes(k) ? 'Sketch tools' : 'Panels and sharing'
-        : ['play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'].includes(k) ? 'Animation and effects' : 'Drawing tools';
-      if (section !== name) { section = name; this.extraTools.append(el('h3', { class: 'tool-section-label' }, name)); }
-      const b = this.chip(WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label, label, k === cur, b => this.pickTool(k, b));
-      b.dataset.extraTool = k; this.extraTools.append(b);
+    this.extraTools.replaceChildren();
+    if (this.moreTools) {
+      const header = el('header', { class: 'tool-drawer-header' });
+      header.append(el('strong', {}, `${WORKSPACE_NAMES[ws]} tools`), this.chip('Close tools', 'Close additional tools', false, () => {
+        this.moreTools = false; this.update();
+        this.tools.querySelector<HTMLButtonElement>('[data-tool-key="more"]')?.focus();
+      }, 'close'));
+      this.extraTools.append(header);
+      const groups = new Map<string, HTMLElement>();
+      for (const [k, label, icon] of this.toolsFor(ws, true)) {
+        if (drawWs && STUDENT_TOOLS.some(([id]) => id === k) && !a.studentUI.tools[k as StudentTool] && k !== cur) continue;
+        const name = ['safeareas', 'centrecross', 'overscan', 'look'].includes(k) ? 'Canvas view'
+          : ws === 'board' ? ['brush', 'eraser', 'color'].includes(k) ? 'Sketch' : 'Panels and sharing'
+          : ['color', 'layers', 'reference', 'assets'].includes(k) ? 'Artwork'
+          : ACTION_KEYS.has(k) || ws === 'time' || ws === 'motion' ? 'Animation' : 'Drawing tools';
+        let group = groups.get(name);
+        if (!group) {
+          group = el('section', { class: 'tool-drawer-group', 'aria-label': name });
+          group.append(el('h3', { class: 'tool-section-label' }, name));
+          groups.set(name, group);
+          this.extraTools.append(group);
+        }
+        const b = this.chip(WORKSPACE_TOOL_NAMES[k as WorkspaceTool] ?? label, TOOL_HELP[k] ?? PANEL_HELP[k] ?? label,
+          k === cur, b => this.pickTool(k, b), icon || 'palette');
+        b.dataset.extraTool = k;
+        if (ws === 'board' && !a.board && ['brush', 'eraser', 'color'].includes(k)) b.disabled = true;
+        if (k === 'color') b.style.setProperty('--drawer-swatch', a.color);
+        group.append(b);
+      }
+      const footer = el('footer', { class: 'tool-drawer-footer' });
+      footer.append(this.chip('Edit tool bar', 'Pin and reorder your tools', false, () => this.editTools(), 'gear'));
+      if (!drawWs && this.hooks.editWorkspace) footer.append(this.chip('Edit workspace', 'Set the dock and tool labels', false, () => {
+        this.moreTools = false; this.update(); this.hooks.editWorkspace!(this.tools);
+      }, 'layout'));
+      this.extraTools.append(footer);
     }
-    this.extraTools.append(this.chip('Edit tool bar', 'Drag tools onto the bar, along it or off it', false, () => this.editTools(), 'freeform'));
-    if (this.hooks.editWorkspace) this.extraTools.append(this.chip('Edit workspace', 'Move and pin tools, add controls and restore defaults', false, () => {
-      this.moreTools = false; this.sig = ''; this.update(); this.hooks.editWorkspace!(this.tools);
-    }, 'gear'));
-    this.extraTools.append(this.chip('Close tools', 'Close additional tools', false, () => { this.moreTools = false; this.sig = ''; this.update(); }, 'close'));
 
     // context: only what the chosen tool needs, and only in the workspace it belongs to
     this.ctx.replaceChildren();
@@ -873,12 +898,6 @@ export class Bubbles {
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
       add(...this.cmd('paint.editpoints'), ...this.cmd('paint.objects'), ...this.cmd('paint.svg'), ...this.cmd('paint.rasterize'), this.customizeChip('paint'));
-      const layer = a.project.layer;
-      if (ws === 'animate' && a.tool === 'pen' && !layer.locked && !layer.adjust && !layer.guide && !layer.notes && !layer.title && a.drawing.vectors.length) {
-        add(this.chip('Tween vector points', 'Interpolate matching vector points between drawings', !!layer.tweenVectors,
-          () => a.editor.setVectorTween(layer.id, !layer.tweenVectors)));
-        if (layer.tweenVectors) add(this.chip('Duplicate vector pose', 'Copy this drawing and its editable points to the next pose', false, () => a.duplicateFrame(), 'copy'));
-      }
     } else if (row === 'fill') {
       add(...this.gradChips());
       add(

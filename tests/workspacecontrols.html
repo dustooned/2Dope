@@ -92,6 +92,16 @@
     await wait(300);
     app.setWorkspace('motion');
     app.editor.select(app.project.layer.id);
+    const modes = [...doc.querySelectorAll('.bub-modes button')].filter(b => !b.hidden);
+    const nav = doc.querySelector('.bub-modes').getBoundingClientRect();
+    expect(modes.length === 6 && modes.every(b => {
+      const label = b.querySelector('.lbl'), rect = b.getBoundingClientRect();
+      return icon(b) && label?.getClientRects().length && rect.left >= nav.left && rect.right <= nav.right;
+    }), 'The phone toolbar does not show all six mode icons and names');
+    const importMenu = button('Import and paste', doc.querySelector('#motion'));
+    importMenu.click();
+    expect(!!icon(button('Paste from clipboard', doc.querySelector('.ctxmenu'))), 'Clipboard action is missing from Import');
+    win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     const graph = button('Graph', doc.querySelector('#motion'));
     expect(graph.getBoundingClientRect().right <= win.innerWidth, 'Graph scrolled out of the initial toolbar');
     graph.click();
@@ -112,7 +122,7 @@
     const bounds = row.getBoundingClientRect();
     for (const mode of ['Uniform', 'Freeform', 'Distort', 'Warp']) {
       const b = button(mode, row), r = b.getBoundingClientRect();
-      expect(r.height >= 44 && r.left >= bounds.left && r.right <= bounds.right, mode + ' falls outside the compact options');
+      expect(icon(b) && b.querySelector('.lbl')?.getClientRects().length && r.height >= 44 && r.left >= bounds.left && r.right <= bounds.right, mode + ' falls outside the compact options');
     }
     button('Cancel', row).click();
     frame.style.width = '100vw';

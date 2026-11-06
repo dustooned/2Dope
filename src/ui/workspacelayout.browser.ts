@@ -38,14 +38,17 @@ function check(name: string, ok: boolean) { const li = document.createElement('l
 try {
   refresh(); await settle();
   const project = app.project, frame = app.frame, history = app.history.peekUndo();
-  check('Draw starts with compact painting tools and recoverable extras', !!tool('brush') && !!tool('smudge') && !!tool('transform') && !tool('pen') && !!tool('more'));
+  check('Draw starts with core painting tools and recoverable extras', !!tool('brush') && !tool('smudge') && !!tool('transform') && !tool('pen') && !!tool('more'));
   const sketchSlots = ['brush', 'eraser', 'color'].map(k => tool(k)!.getBoundingClientRect().left);
   check('Navigation, tools and asset actions occupy separate reachable regions', !overlap(document.querySelector('.bub-modes')!, document.querySelector('.bub-tools')!) && !overlap(document.querySelector('.painting-header')!, document.querySelector('.bub-tools')!));
   check('Painting controls and source tools fit without crossing navigation', !overlap(document.querySelector('.bub-modes')!, document.querySelector('.bub-tools')!) && !overlap(document.querySelector('.painting-header')!, document.querySelector('.bub-tools')!));
   check('Settings and mode actions have reachable touch targets', hit(find('Edit workspace')) && hit(find('Toggle tool settings')) && hit(find('Animate', document.querySelector('.bub-modes')!)));
   check('More remains reachable when pinned tools exceed a narrow row', hit(tool('more')!));
   click('More tools'); await settle(); const drawer = document.querySelector<HTMLElement>('.bub-tool-drawer')!;
-  check('More opens a separate tool drawer without growing the pinned row', !drawer.hidden && !!drawer.querySelector('[data-extra-tool="pen"]') && document.querySelectorAll('.bub-tools button').length === 9);
+  check('More groups tools with icons and names without growing the pinned row', !drawer.hidden &&
+    !!drawer.querySelector('[aria-label="Drawing tools"] [data-extra-tool="pen"] svg') &&
+    drawer.querySelector('[data-extra-tool="pen"] .lbl')?.textContent === 'Vector' &&
+    !!drawer.querySelector('[data-extra-tool="smudge"] svg') && document.querySelectorAll('.bub-tools button').length === 8);
   click('Vector', drawer); await settle(); check('Picking an extra tool keeps it visible while active and closes the drawer', app.tool === 'pen' && !!tool('pen') && drawer.hidden);
   click('Brush', document.querySelector('.bub-tools')!); check('An unpinned tool steps aside when no longer active', !tool('pen'));
   click('Edit workspace'); toggle('Pin Vector'); click('Move Vector up'); select('Tool dock', 'left'); select('Brush controls edge', 'right'); click('Cancel');

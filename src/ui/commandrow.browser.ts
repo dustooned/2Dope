@@ -12,8 +12,6 @@ import { Bubbles } from './bubbles';
 import { AppSettingsUI } from './settings';
 import { closeContextMenu, showContextMenu } from './contextmenu';
 import { frameMenu } from './framemenu';
-import { frameContent } from '../core/comp';
-import { tweenStrokes } from '../core/vectortween';
 
 const PASS_KEY = 'commandrow.pass';
 const second = sessionStorage.getItem(PASS_KEY) === '2';
@@ -307,21 +305,8 @@ try {
     pointer('pointerdown', 26, 50);
     for (let x = 30; x <= 90; x += 4) pointer('pointermove', x, 50);
     pointer('pointerup', 90, 50); await settle();
-    const poseA = app.drawing, strokeA = poseA.vectors[0]!;
-    chip('Tween vector points')!.click(); await settle();
-    app.changeHold(3);
-    chip('Duplicate vector pose')!.click(); await settle();
-    const poseB = app.drawing;
-    chip('Edit points')!.click(); await settle();
-    const first = strokeA.points[0]!;
-    drag(first.x, first.y, first.x, first.y + 18); await settle();
-    chip('Done')!.click(); await settle();
-    const strokeB = poseB.vectors[0]!, middle = tweenStrokes(poseA.vectors, poseB.vectors, 0.5)[0]!;
-    const content = frameContent(app.project.comps, app.project.comp, 2);
-    check('A duplicated pose can move its own points and interpolate without editing the source pose',
-      poseB.id !== poseA.id && strokeB.id === strokeA.id && strokeB.points[0]!.y > first.y + 10 &&
-      poseA.vectors[0] === strokeA && middle.points[0]!.y === (first.y + strokeB.points[0]!.y) / 2 &&
-      content.drawings.has(poseA.id) && content.drawings.has(poseB.id), { a: first.y, b: strokeB.points[0]!.y, middle: middle.points[0]!.y, frame: app.frame });
+    check('Animate keeps vector point editing with no pose setup controls',
+      app.drawing.vectors.length > 0 && !!chip('Edit points') && !chip('Tween vector points') && !chip('Duplicate vector pose'), labels());
   }
 } catch (e) {
   check(String(e), false);

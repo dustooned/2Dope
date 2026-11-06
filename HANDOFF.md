@@ -2,6 +2,21 @@
 
 ## Current state (2026-11-05) — read this first
 
+### Classroom interface
+
+The shared mode bar keeps icon labels in compact layouts. More tools groups named icons by
+task and respects the active student profile in Draw and Animate. Untouched toolbars get the
+revised defaults. Draw moves Smudge into More tools and Animate pins Transform next to Select.
+Transform modes use distinct icons with text. Motion groups clipboard actions under Import,
+alignment under Layer, and presets under Animation. Share puts four common exports first
+and puts additional formats under More formats.
+
+Animate and Motion no longer offer vector pose setup. Existing project tweens still render.
+Motion's Layer menu offers Remove vector tweening on a layer that already uses it.
+
+The production build, 754 unit tests (one skipped), and 12 targeted Chromium fixtures passed.
+Responsive fixtures covered phones, tablets and landscape. Physical iPad testing is pending.
+
 ### Transform precision, vector poses and temporal effects
 
 Draw and Animate keep the four Transform modes and Apply/Cancel at the top of the options row.
