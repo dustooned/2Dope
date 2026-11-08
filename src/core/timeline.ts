@@ -428,3 +428,32 @@ export function snapPanelLength(len: number, fps: number, slop: number): number 
   const target = Math.max(1, Math.round(k * half));
   return Math.abs(target - n) <= slop ? target : n;
 }
+
+/**
+ * Repeat a cycle (a walk, a flag, a blink): the listed exposures, in order and with their holds,
+ * shown again right after the last of them, reusing the same drawings. `times` counts the extra
+ * repeats; with `fill` set, repeats run until the layer is `fill` frames long (the last one cut short).
+ */
+export function repeatCycle(ex: Exposure[], indices: number[], times: number, fill?: number): Edit {
+  const idx = uniqueSorted(indices, ex.length);
+  if (!idx.length) return { ex, frame: 0 };
+  const cycle = idx.map((i) => ({ ...ex[i]! }));
+  const cycleLen = totalFrames(cycle);
+  const at = idx[idx.length - 1]! + 1;
+  const items: Exposure[] = [];
+  if (fill !== undefined) {
+    let room = fill - totalFrames(ex);
+    while (room > 0 && items.length < 4000) {
+      for (const e of cycle) {
+        if (room <= 0) break;
+        const length = Math.min(e.length, room);
+        items.push({ ...e, length });
+        room -= length;
+      }
+    }
+  } else for (let k = 0; k < Math.max(0, Math.min(99, Math.round(times))); k++) items.push(...cycle.map((e) => ({ ...e })));
+  if (!items.length || !cycleLen) return { ex, frame: startOf(ex, idx[0]!) };
+  const out = ex.slice();
+  out.splice(at, 0, ...items);
+  return { ex: out, frame: startOf(out, at), selection: items.map((_, i) => at + i) };
+}

@@ -12,6 +12,8 @@ import { Bubbles } from './bubbles';
 import { AppSettingsUI } from './settings';
 import { closeContextMenu, showContextMenu } from './contextmenu';
 import { frameMenu } from './framemenu';
+import { frameContent } from '../core/comp';
+import { tweenStrokes } from '../core/vectortween';
 
 const PASS_KEY = 'commandrow.pass';
 const second = sessionStorage.getItem(PASS_KEY) === '2';
@@ -305,8 +307,25 @@ try {
     pointer('pointerdown', 26, 50);
     for (let x = 30; x <= 90; x += 4) pointer('pointermove', x, 50);
     pointer('pointerup', 90, 50); await settle();
-    check('Animate keeps vector point editing with no pose setup controls',
-      app.drawing.vectors.length > 0 && !!chip('Edit points') && !chip('Tween vector points') && !chip('Duplicate vector pose'), labels());
+    const poseA = app.drawing, strokeA = poseA.vectors[0]!;
+    const undoDepth = () => (app.history as unknown as { done: unknown[] }).done.length;
+    const depthBefore = undoDepth();
+    check('Animate offers one Next pose action and no tween setup toggles',
+      !!chip('Next pose') && !chip('Tween vector points') && !chip('Duplicate vector pose'), labels());
+    chip('Next pose')!.click(); await settle();
+    const poseB = app.drawing;
+    check('Next pose turns tweening on, gives the first pose room and opens Edit points on the copy in one Undo step',
+      poseB.id !== poseA.id && !!(app.project.layer as { tweenVectors?: boolean }).tweenVectors && app.project.exposures[0]!.length >= 2 &&
+      !!app.pointStroke && undoDepth() === depthBefore + 1 && app.history.peekUndo()?.label === 'Next pose', { a: poseA.id, b: poseB.id, holds: app.project.exposures.map(e => e.length), depth: [depthBefore, undoDepth()] });
+    const first = strokeA.points[0]!;
+    drag(first.x, first.y, first.x, first.y + 18); await settle();
+    chip('Done')!.click(); await settle();
+    const strokeB = poseB.vectors[0]!, middle = tweenStrokes(poseA.vectors, poseB.vectors, 0.5)[0]!;
+    const content = frameContent(app.project.comps, app.project.comp, 2);
+    check('The new pose moves its own points and the frames between interpolate without changing the first pose',
+      strokeB.id === strokeA.id && strokeB.points[0]!.y > first.y + 10 &&
+      poseA.vectors[0] === strokeA && middle.points[0]!.y === (first.y + strokeB.points[0]!.y) / 2 &&
+      content.drawings.has(poseA.id), { a: first.y, b: strokeB.points[0]!.y, middle: middle.points[0]!.y, frame: app.frame });
   }
 } catch (e) {
   check(String(e), false);

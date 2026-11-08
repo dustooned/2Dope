@@ -708,7 +708,7 @@ export class Bubbles {
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     const shareMode = this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]');
     if (shareMode) { shareMode.setAttribute('aria-pressed', String(sharing)); shareMode.hidden = ws === 'board' && !!this.hooks.story?.controlsInPanel && !sharing; }
-    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}|${this.editingTools}|${this.transformOptions}`;
+    const paintingSig = `${sig}|${a.inkPaint.enabled}|${a.inkPaint.ink}|${a.autoPaintSupported}|${JSON.stringify(a.studentUI)}|${JSON.stringify(layout)}|${this.moreTools}|${this.editingTools}|${this.transformOptions}|${ws === 'animate' && a.tool === 'pen' ? a.nextPoseBlocked ?? 'pose' : ''}`;
     if (paintingSig === this.sig) return;
     this.sig = paintingSig;
 
@@ -897,7 +897,7 @@ export class Bubbles {
       );
       if (a.studentUI.controls.symmetry) add(this.symmetryChip());
       if (a.studentUI.controls.guides || a.guideEdit) add(...this.guideChips());
-      add(...this.cmd('paint.editpoints'), ...this.cmd('paint.objects'), ...this.cmd('paint.svg'), ...this.cmd('paint.rasterize'), this.customizeChip('paint'));
+      add(...(ws === 'animate' && a.tool === 'pen' ? this.cmd('paint.nextpose') : []), ...this.cmd('paint.editpoints'), ...this.cmd('paint.objects'), ...this.cmd('paint.svg'), ...this.cmd('paint.rasterize'), this.customizeChip('paint'));
     } else if (row === 'fill') {
       add(...this.gradChips());
       add(

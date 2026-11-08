@@ -312,8 +312,8 @@ await check('Vector tween draws a new pose between matching shapes and survives 
     for (const drawing of pinned) app.residency.unpin(drawing);
   }
   expect(planBlender(p, 'Tween').renders.some(r => r.frame === 2), 'Blender plan omitted the in-between frame');
-  const remove = motion.layerItems(loaded.layer).find(item => 'label' in item && item.label === 'Remove vector tweening');
-  expect(remove && 'run' in remove, 'older projects have no way to remove tweening');
+  const remove = motion.layerItems(loaded.layer).find(item => 'label' in item && item.label === 'Tween vector lines');
+  expect(remove && 'run' in remove && 'checked' in remove && remove.checked, 'the Layer menu does not show tweening as on');
   if (remove && 'run' in remove) remove.run();
   expect(!loaded.layer.tweenVectors && loaded.layer.exposures.length === 2, 'removing tweening changed the drawings');
   app.undo(); await wait();

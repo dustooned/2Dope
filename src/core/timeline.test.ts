@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockDropIndex, duplicateBlock, exposeAt, insertAt, moveBlock, normalize, setCaption, setNote, shiftBlock, snapPanelLength } from './timeline';
+import { blockDropIndex, duplicateBlock, repeatCycle, exposeAt, insertAt, moveBlock, normalize, setCaption, setNote, shiftBlock, snapPanelLength } from './timeline';
 import { frameLabel, isSecondBoundary } from './timecode';
 import {
   addAfter,
@@ -318,5 +318,21 @@ describe('snapPanelLength', () => {
   it('keeps at least one frame and ignores a bad rate', () => {
     expect(snapPanelLength(0, 24, 3)).toBe(1);
     expect(snapPanelLength(5, 0, 3)).toBe(5);
+  });
+});
+
+describe('repeat cycle', () => {
+  const walk = [{ drawing: 'a', length: 2 }, { drawing: 'b', length: 2 }, { drawing: 'c', length: 2 }, { drawing: 'x', length: 1 }];
+  it('repeats the selected drawings after the cycle, reusing the same drawings', () => {
+    const r = repeatCycle(walk, [0, 1, 2], 2);
+    expect(r.ex.map((e) => `${e.drawing}${e.length}`)).toEqual(['a2', 'b2', 'c2', 'a2', 'b2', 'c2', 'a2', 'b2', 'c2', 'x1']);
+    expect(r.frame).toBe(6);
+    expect(r.selection).toEqual([3, 4, 5, 6, 7, 8]);
+    expect(walk).toHaveLength(4);
+  });
+  it('fills to a length, cutting the last repeat short', () => {
+    const r = repeatCycle(walk.slice(0, 3), [0, 1, 2], 0, 11);
+    expect(r.ex.map((e) => `${e.drawing}${e.length}`)).toEqual(['a2', 'b2', 'c2', 'a2', 'b2', 'c1']);
+    expect(repeatCycle(walk, [0], 0, 3).ex).toBe(walk);
   });
 });

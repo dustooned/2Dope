@@ -1,6 +1,46 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-05) — read this first
+## Current state (2026-11-08) — read this first
+
+### Cleanup, faster start, Next pose and cycles (2026-11-08)
+
+- **Research docs** are committed (`52327c5`); `.rea-work/` (25 MB of REA scratch output) is ignored.
+- **app.ts split.** Selection Transform's geometry, drag maths, preview painting and handle drawing
+  moved to `src/drawtransform.ts`; art Copy/Cut/Paste pixel work moved to `src/artclip.ts`. App
+  keeps the session, History steps and notices, and its public Transform API is unchanged.
+- **Code splitting.** `main.ts` loads Share, video export, hand-in bundle, symbols, vector objects,
+  layout, presets, camera moves, titles, Story Present and the Reference window on first use
+  (`lazy()` retries after a failed load and reports it as a notice). Main chunk 1,251 → 921 kB
+  (gzip 405 → 293 kB). The chunk warning remains; the rest is the editor core.
+- **Flipbook zoom** no longer rebuilds the strip. Cels are placed by `--s`/`--n` × `--flip-cell`
+  (`style.css`), and `FlipMode.relayout()` redoes only the ruler and sizes. The `railperf` fixture
+  (1,000 frames × 8 tracks, 4,000 thumbnails; drawings shrunk to 1 px so the test measures the
+  strip) reports a zoom median of 62–90 ms here (it was about 840 ms). Its threshold is a 150 ms regression guard. 60 fps zoom
+  needs a virtualized strip (not built).
+- **Next pose** (Animate, Vector tool, `paint.nextpose`): copies the drawing with its line ids,
+  holds a one-frame pose for `App.POSE_HOLD` (6) frames, turns on `tweenVectors` and opens Edit points
+  on the copy. It is one Undo step. Motion → Layer → **Tween vector lines** is now an on/off toggle
+  (previously Remove only).
+- **Auto-matched tweens** (`core/vectortween.ts`): when two poses share no line ids, pen lines pair
+  nearest-centre first, a reversed partner is flipped, and both are resampled by arc length to
+  the same point count. Poses that share ids behave exactly as before, so existing projects are unchanged. There is no schema change.
+- **Repeat as a cycle** (frame menu ×2/×3/×4/To end, `timeline.repeatCycle`, `App.repeatSelection`):
+  the repeats show the same drawings. To end cuts the last repeat short. Each is one Undo step.
+- **Layer groups**: not built. They already exist as Draw Layers → Group (a folder backed by a
+  nested comp), so the brief's optional `group` id would duplicate them.
+- Manual and `UPDATES` were updated.
+
+Checks: 758 unit tests passed (1 skipped) and the production build passed. Fixtures run this pass:
+railperf, flipbooksource, commandrow (60, including Next pose, one Undo step and the interpolated middle),
+and importeffects (25, including the Tween vector lines toggle).
+
+Three fixtures that already failed on `d39288a` were fixed in their test code, with no app change:
+`paintingplanes` now opens Smudge from More tools, where the classroom pass moved it. In `precision` and
+`precision-responsive`, the "asset dropped curves" check compared `readArtwork`'s schema with 7. Reading
+always migrates to the current reader, and the 2026-11-05 temporal-effects work raised that to 8. The check
+now confirms that the reopened artwork keeps its curved position keys and still needs only reader 7.
+After this, 758 unit tests passed (1 skipped), the build passed and **all 71 browser fixtures passed**. Physical
+iPad/Pencil remain unverified. Nothing beyond `52327c5` is committed or pushed.
 
 ### Classroom interface
 

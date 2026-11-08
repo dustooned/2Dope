@@ -1,19 +1,15 @@
-import { VectorObjectsUI } from './ui/vectorobjects';
 import { GraphUI } from './ui/graph';
-import { LayoutUI } from './ui/layout';
-import { BundleUI } from './ui/bundle';
-import { SymbolUI } from './ui/symbols';
-import { CameraMoveUI } from './ui/cameramove';
-import { TitlesUI } from './ui/titles';
 import { setEffectCacheBudget } from './view/effects';
 import { PaintingWorkspaceUI } from './ui/paintingworkspace';
 import { CanvasViewUI } from './ui/canvasview';
 import { ArtworkAssetsUI } from './ui/artworkassets';
-import { PresetLibraryUI } from './ui/presets';
 import { EffectsPanel, loadFxPreview } from './ui/effectspanel';
 import { setFxPreview } from './view/effects';
 import { scrollArrows } from './ui/scrollarrows';
 import './style.css';
+import type { ShareKind, ShareView } from './ui/share';
+import type { StoryPresent } from './ui/present';
+import type { ReferenceWindow } from './ui/reference';
 import { AudioPlayback } from './audio';
 import { AudioTracks } from './ui/audiotracks';
 import { mediaPicker } from './ui/media';
@@ -27,8 +23,6 @@ import { saveMode, type DeviceMode } from './core/device';
 import { buildPanel } from './ui/panel';
 import { openStore } from './io/persist';
 import { ExportUI } from './ui/exportdialog';
-import { VideoExportUI } from './ui/videoexport';
-import { ShareView } from './ui/share';
 import { FileUI } from './ui/files';
 import { Gallery } from './ui/gallery';
 import { pickBox } from './ui/dialogs';
@@ -43,12 +37,10 @@ import { Quick } from './ui/quick';
 import { QuickMenu } from './ui/quickmenu';
 import { LayerCards } from './ui/layercards';
 import { FlipMode } from './ui/flipmode';
-import { ReferenceWindow } from './ui/reference';
 import { Bubbles } from './ui/bubbles';
 import { TracksSheet } from './ui/sheet';
 import { Strip } from './ui/strip';
 import { XSheet } from './ui/xsheet';
-import { StoryPresent } from './ui/present';
 import { applyIcons } from './ui/icons';
 import { Sidebar } from './ui/sidebar';
 import { drawRailState } from './ui/rails';
@@ -351,16 +343,22 @@ drawRailState.onChange = () => { layersPop.update(); strip.update(); };
 $('#tab-xsheet').prepend(strip.timingBar);
 const motion = new MotionPanel(app, $('#motion'));
 // Story's Export opens Share on the story formats (Storyboard, or Animatic when that was picked last)
-const exportStory = (): void => share.show(share.lastKind === 'animatic' ? 'animatic' : 'board');
-const board = new BoardPanel(app, $('#board'), () => exportStory(), () => present.start());
-// Story → Present: the page fills the screen above the caption and controls
-const present = new StoryPresent(app, $('#stage'), () => {
-  if (!present.active) { app.fit(); return; }
-  const bar = document.querySelector<HTMLElement>('.present-layer .present-bar');
-  app.view.fit(app.docW, app.docH, app.viewW, app.viewH, 16, 0, (bar?.offsetHeight ?? 60) + 90);
-  app.requestRender();
-});
-app.onFrameChange = chain(app.onFrameChange, () => present.update());
+const exportStory = (): void => { void loadShare().then(s => s.show(s.lastKind === 'animatic' ? 'animatic' : 'board'), loadFailed); };
+// Story → Present: the page fills the screen above the caption and controls (loaded on first use)
+let present: StoryPresent | null = null;
+const startPresent = (): void => {
+  void import('./ui/present').then(({ StoryPresent }) => {
+    present ??= new StoryPresent(app, $('#stage'), () => {
+      if (!present?.active) { app.fit(); return; }
+      const bar = document.querySelector<HTMLElement>('.present-layer .present-bar');
+      app.view.fit(app.docW, app.docH, app.viewW, app.viewH, 16, 0, (bar?.offsetHeight ?? 60) + 90);
+      app.requestRender();
+    });
+    present.start();
+  }, loadFailed);
+};
+const board = new BoardPanel(app, $('#board'), () => exportStory(), () => startPresent());
+app.onFrameChange = chain(app.onFrameChange, () => present?.update());
 const audioPlayback = new AudioPlayback(app);
 motion.sounds = audioPlayback.bank;
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
@@ -523,16 +521,33 @@ sheet.update();
 // Quick Animate (a lighter view of the same project)
 let files: FileUI | null = null;
 let exporter: ExportUI | null = null;
-const videoExporter = new VideoExportUI(app, (message) => files?.toast(message), audioPlayback.bank);
+/** Panels that open on request load their code the first time (a smaller first download). */
+const lazy = <T>(load: () => Promise<T>): (() => Promise<T>) => {
+  let pending: Promise<T> | null = null;
+  return () => (pending ??= load().catch((e: unknown) => { pending = null; throw e; }));
+};
+const loadFailed = (e: unknown): void => app.onNotice?.(`That panel could not load. Check the connection and try again. (${(e as Error).message})`);
+const loadVideoExport = lazy(async () => new (await import('./ui/videoexport')).VideoExportUI(app, (message) => files?.toast(message), audioPlayback.bank));
 // Share: the last mode (preview the movie, check it, make it, save or send it)
 let onShareChange = (): void => {};
 const timelapse = new TimeLapse(app);
-const share = new ShareView(app, {
-  timelapse: () => timelapse.show(),
-  sounds: audioPlayback.bank,
-  backup: () => void files?.exportProject(),
-  onOpenChange: () => onShareChange(),
+let shareView: ShareView | null = null;
+const loadShare = lazy(async () => {
+  const { ShareView } = await import('./ui/share');
+  shareView = new ShareView(app, {
+    timelapse: () => timelapse.show(),
+    sounds: audioPlayback.bank,
+    backup: () => void files?.exportProject(),
+    onOpenChange: () => onShareChange(),
+  });
+  shareView.onBundle = comp => void loadBundle().then(b => b.show(comp), loadFailed);
+  return shareView;
 });
+const share = {
+  get open(): boolean { return shareView?.open ?? false; },
+  show(kind?: ShareKind): void { void loadShare().then(s => s.show(kind), loadFailed); },
+  close(): void { shareView?.close(); },
+};
 const quick = new Quick(app, $('#quickbar'), {
   exportPng: () => void app.exportPNG(),
   saveFile: () => void files?.exportProject(),
@@ -624,7 +639,7 @@ const menuActions: Record<string, () => void> = {
   // one place to make files: Share (the menu item and the Share mode open the same screen)
   'export-hub': () => share.show(),
   'export-seq': () => exporter?.open(),
-  'export-video': () => videoExporter.open(),
+  'export-video': () => void loadVideoExport().then(v => v.open(), loadFailed),
   blender: () => share.show('blender'),
 };
 
@@ -665,7 +680,12 @@ app.onToolChange = chain(app.onToolChange, () => quick.update());
 // Draw's flipbook (Procreate Dreams style): frames as pages on tracks under the canvas; Draw's default view.
 const flipMode = new FlipMode(app, $('#stage'));
 // Reference (Procreate style): a floating window of pictures to draw from, or the whole canvas
-const reference = new ReferenceWindow(app);
+// the Reference window (a second view of the work) loads the first time it opens
+let referenceWindow: ReferenceWindow | null = null;
+const reference = {
+  toggle(): void { void import('./ui/reference').then(({ ReferenceWindow }) => (referenceWindow ??= new ReferenceWindow(app)).toggle(), loadFailed); },
+  refresh(): void { referenceWindow?.refresh(); },
+};
 app.onFrameChange = chain(app.onFrameChange, () => reference.refresh());
 // Bubbles: mode and tool bubbles plus a context bar; the level button steps clean / simple / full.
 const layerCards = new LayerCards(app);
@@ -706,27 +726,26 @@ app.importAssetArchive = (file, frame) => artworkUI.importArchive(file, frame);
 motion.makeClip = save => void artworkUI.makeClip(save);
 motion.clipPlayback = (id, mode) => artworkUI.assets.setClipPlayback(id, mode);
 motion.removeClip = id => { if (artworkUI.assets.removePlacement(id)) app.onNotice?.('Removed placement. Undo restores it.'); };
-const symbols = new SymbolUI(app, artworkUI.assets, source => artworkUI.openSource(source));
-app.openSymbol = id => symbols.show(id); motion.openSymbol = id => symbols.show(id);
-const bundleUI = new BundleUI(app, () => share.show('video'));
-share.onBundle = comp => bundleUI.show(comp);
-const vectorObjects = new VectorObjectsUI(app);
-app.openVectorObjects = id => { void vectorObjects.show(id).catch(e => app.onNotice?.((e as Error).message)); };
+const loadSymbols = lazy(async () => new (await import('./ui/symbols')).SymbolUI(app, artworkUI.assets, source => artworkUI.openSource(source)));
+app.openSymbol = id => void loadSymbols().then(s => s.show(id), loadFailed); motion.openSymbol = app.openSymbol;
+const loadBundle = lazy(async () => new (await import('./ui/bundle')).BundleUI(app, () => share.show('video')));
+const loadVectorObjects = lazy(async () => new (await import('./ui/vectorobjects')).VectorObjectsUI(app));
+app.openVectorObjects = id => { void loadVectorObjects().then(v => v.show(id)).catch(e => app.onNotice?.((e as Error).message)); };
 const graphUI = new GraphUI(app, $('.workspace'));
 motion.openGraph = () => graphUI.show();
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => graphUI.close());
 app.onFrameChange = chain(app.onFrameChange, () => graphUI.update());
 app.editor.onChange = chain(app.editor.onChange, () => graphUI.update());
-const layoutUI = new LayoutUI(app);
-app.openLayout = () => layoutUI.show();
-const presetLibrary = new PresetLibraryUI(app);
-const cameraMoves = new CameraMoveUI(app);
-motion.openCameraMove = () => { effectsPanel.close(); cameraMoves.show(); };
-const titles = new TitlesUI(app);
-app.editTitle = id => titles.show(id);
-app.convertTitle = id => void titles.convert(id);
-motion.openPresets = () => presetLibrary.show('motion');
-effectsPanel.onPresets = layer => { effectsPanel.close(); presetLibrary.show('effects', layer); };
+const loadLayout = lazy(async () => new (await import('./ui/layout')).LayoutUI(app));
+app.openLayout = () => void loadLayout().then(l => l.show(), loadFailed);
+const loadPresets = lazy(async () => new (await import('./ui/presets')).PresetLibraryUI(app));
+const loadCameraMoves = lazy(async () => new (await import('./ui/cameramove')).CameraMoveUI(app));
+motion.openCameraMove = () => { effectsPanel.close(); void loadCameraMoves().then(c => c.show(), loadFailed); };
+const loadTitles = lazy(async () => new (await import('./ui/titles')).TitlesUI(app));
+app.editTitle = id => void loadTitles().then(t => t.show(id), loadFailed);
+app.convertTitle = id => void loadTitles().then(t => t.convert(id), loadFailed);
+motion.openPresets = () => void loadPresets().then(p => p.show('motion'), loadFailed);
+effectsPanel.onPresets = layer => { effectsPanel.close(); void loadPresets().then(p => p.show('effects', layer), loadFailed); };
 motion.openAssets = opener => artworkUI.showAssets(opener);
 motion.createAsset = () => void artworkUI.createFromSelection();
 paintingUI.onReset = () => artworkUI.resetLayout();

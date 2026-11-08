@@ -25,6 +25,8 @@ export function frameMenu(app: App, extra: CtxItem[] = []): CtxItem[] {
     { sep: true },
     { title: '⏱ Show for (frames)' },
     { chips: [...holds, { label: '−1', title: 'One frame shorter', run: () => app.changeHold(-1) }, { label: '+1', title: 'One frame longer', run: () => app.changeHold(1) }] },
+    { title: n > 1 ? `🔁 Repeat these ${n} as a cycle` : '🔁 Repeat as a cycle' },
+    { chips: [1, 2, 3].map((k) => ({ label: `×${k + 1}`, title: `Show ${n > 1 ? 'these drawings' : 'this drawing'} ${k + 1} times in a row (same drawings)`, run: () => app.repeatSelection(k) })).concat([{ label: 'To end', title: 'Repeat until the end of the shot', run: () => app.repeatSelection('end') }]) },
     { title: 'Mark' },
     { chips: roles },
     { sep: true },

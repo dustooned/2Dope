@@ -825,7 +825,7 @@ export class CompEditor {
     });
   }
 
-  setVectorTween(id: string, on: boolean): void {
+  setVectorTween(id: string, on: boolean, quiet = false): void {
     const l = this.layer(id);
     if (!l || l.kind !== 'drawings' || l.locked || l.adjust || l.guide || l.notes || l.title || !!l.tweenVectors === on) return;
     this.edit(on ? 'Enable vector tweening' : 'Disable vector tweening', c => {
@@ -834,7 +834,7 @@ export class CompEditor {
       if (on) layer.tweenVectors = true;
       else delete layer.tweenVectors;
     });
-    if (on) this.app.onNotice?.('Duplicate a vector drawing, move its points, and give the first pose a hold to tween across.');
+    if (on && !quiet) this.app.onNotice?.('Use Next pose in Animate to copy a vector drawing and move its points.');
   }
 
   deleteLayers(ids = this.selected): void {

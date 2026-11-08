@@ -195,24 +195,8 @@ export class FlipMode {
     const app = this.app;
     const p = app.project;
     this.grid.replaceChildren(this.playhead);
-    this.grid.style.width = `${LABEL + len * this.cell + this.cell}px`;
-    // a ruler: frame numbers every frame, seconds stand out
-    const ruler = el('div', { class: 'flip-ruler', 'aria-hidden': 'true' });
-    const fps = app.project.fps || 24;
-    // zoomed far out the numbers thin out (every 2, 3, 6... frames, then whole seconds) so they
-    // never overlap; the steps divide a second, so the seconds always keep their number
-    const steps = [...Array.from({ length: fps }, (_, k) => k + 1).filter((n) => fps % n === 0), fps * 2, fps * 5, fps * 10];
-    const every = steps.find((n) => n * this.cell >= 26) ?? fps * 20;
-    for (let f = 0; f < len; f++) {
-      if (f % every) continue;
-      const t = el('span', { class: f % fps === 0 ? 'sec' : '' }, String(f + 1));
-      t.style.left = `${LABEL + f * this.cell}px`;
-      t.style.width = `${Math.max(this.cell, 22)}px`;
-      ruler.append(t);
-    }
-    this.grid.append(ruler);
-    this.grid.classList.toggle('thin', this.cell < 24);
-    this.playhead.style.width = `${this.cell}px`;
+    this.grid.append(this.ruler(len));
+    this.size(len);
     for (const l of tracks) {
       const row = el('div', { class: `flip-track${l.id === p.activeLayer ? ' active' : ''}${l.visible ? '' : ' off'}`, 'data-id': l.id });
       const eye = el('button', { type: 'button', class: 'flip-eye', 'aria-pressed': String(l.visible), title: `${l.name}: tap to ${l.visible ? 'hide' : 'show'}, hold for track options`, 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}` });
@@ -227,8 +211,8 @@ export class FlipMode {
       let start = l.start;
       l.exposures.forEach((e, i) => {
         const c = el('div', { class: 'flip-cel', 'data-i': String(i), 'data-start': String(start), 'data-len': String(e.length) });
-        c.style.left = `${start * this.cell}px`;
-        c.style.width = `${e.length * this.cell - 3}px`;
+        c.style.setProperty('--s', String(start));
+        c.style.setProperty('--n', String(e.length));
         const d = p.drawing(e.drawing);
         const t = d.thumb;
         if (t) {
@@ -253,12 +237,46 @@ export class FlipMode {
     this.scroll.style.setProperty('--flip-tracks-height', `${24 + Math.min(3, Math.max(1, tracks.length)) * ROW}px`);
   }
 
+  /** Everything that follows the zoom: cels are placed by --flip-cell, so a zoom touches one property. */
+  private size(len: number): void {
+    this.grid.style.width = `${LABEL + len * this.cell + this.cell}px`;
+    this.grid.style.setProperty('--flip-cell', `${this.cell}px`);
+    this.grid.classList.toggle('thin', this.cell < 24);
+    this.playhead.style.width = `${this.cell}px`;
+  }
+
+  /** A new zoom on the strip already built: resize and renumber without rebuilding every cel. */
+  private relayout(): void {
+    const len = Math.max(1, this.app.compEnd);
+    this.grid.querySelector('.flip-ruler')?.replaceWith(this.ruler(len));
+    this.size(len);
+  }
+
+  private ruler(len: number): HTMLElement {
+    const app = this.app;
+    // a ruler: frame numbers every frame, seconds stand out
+    const ruler = el('div', { class: 'flip-ruler', 'aria-hidden': 'true' });
+    const fps = app.project.fps || 24;
+    // zoomed far out the numbers thin out (every 2, 3, 6... frames, then whole seconds) so they
+    // never overlap; the steps divide a second, so the seconds always keep their number
+    const steps = [...Array.from({ length: fps }, (_, k) => k + 1).filter((n) => fps % n === 0), fps * 2, fps * 5, fps * 10];
+    const every = steps.find((n) => n * this.cell >= 26) ?? fps * 20;
+    for (let f = 0; f < len; f++) {
+      if (f % every) continue;
+      const t = el('span', { class: f % fps === 0 ? 'sec' : '' }, String(f + 1));
+      t.style.left = `${LABEL + f * this.cell}px`;
+      t.style.width = `${Math.max(this.cell, 22)}px`;
+      ruler.append(t);
+    }
+    return ruler;
+  }
+
   /** Zoom the strip: `cell` px per frame, keeping `frame` (default the playhead) where it is on screen. */
   zoomTo(cell: number, frame = this.app.frame): void {
     const s = this.scroll;
     const before = LABEL + frame * this.cell - s.scrollLeft;
     this.cell = Math.max(CELL_MIN, Math.min(CELL_MAX, cell));
-    this.sig = '';
+    this.relayout();
     this.update();
     s.scrollLeft = Math.max(0, LABEL + frame * this.cell - before);
   }
@@ -267,7 +285,7 @@ export class FlipMode {
   zoomFit(): void {
     const len = Math.max(1, this.app.compEnd);
     this.cell = Math.max(CELL_MIN, Math.min(CELL_MAX, (this.scroll.clientWidth - LABEL - 12) / len));
-    this.sig = '';
+    this.relayout();
     this.update();
     this.scroll.scrollLeft = 0;
   }
