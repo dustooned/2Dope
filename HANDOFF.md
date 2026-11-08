@@ -21,7 +21,8 @@ handle with pointer events: parent via the row, or via the artwork on landscape 
 refused; Esc and an empty drop change nothing and leave no overlay; following a line; the same-layer explanation; the tap menu;
 touch-action none; no whip on unselected rows. motionassets and motionfinish passed. The Browser pane showed the
 whip on the selected row and readable names. Unit tests and the build passed, and the full browser suite passed **71 of 71**
-(run alone). A physical iPad drag has not been tested. This work is not yet committed.
+(run alone). A physical iPad drag has not been tested. Committed as `6a37c0f` and deployed; the live Motion file
+was confirmed to contain the pick whip.
 
 ### Tween ease, tween onion ghosts, routes from existing lines (2026-11-08)
 
