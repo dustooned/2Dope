@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import { parseDialogue } from '../core/dialogue';
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, text = '') => { const n = document.createElement(tag); n.textContent = text; return n; };
+import { elText as el } from './dom';
 
 /** Small panel navigator. Only visible thumbnail canvases allocate pixels. */
 export class StoryNavigator {

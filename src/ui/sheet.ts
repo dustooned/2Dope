@@ -1,15 +1,10 @@
 import type { App } from '../app';
 import { autoIcon } from './icons';
 import { isPaintingWorkspace } from '../core/workspace';
+import { el } from './dom';
 
 export type SheetState = 'peek' | 'half' | 'full';
 
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = '') => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text) e.textContent = text;
-  return e;
-};
 
 /**
  * The tracks sheet: a touch-first handle bar on top of the timeline (Draw and Time). Tap the bar

@@ -8,6 +8,7 @@ import type { App } from '../app';
 import { soundStart, type SoundClip } from '../core/audio';
 import { bake, bandEnvelope, MAX_REACT_FRAMES, monoMix, REACTORS, type BakeOptions, type OscShape, type Reactor } from '../core/audioreact';
 import type { SoundBank } from '../io/sound';
+import { el } from './dom';
 
 const KEY = '2dope.audioreact';
 
@@ -64,13 +65,6 @@ export async function clipEnvelope(app: App, bank: SoundBank, clip: SoundClip, f
   if (cache.size > 24) cache.delete(cache.keys().next().value!);
   cache.set(key, env);
   return { env, capped };
-}
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
 }
 
 /** Open the dialog for the selected property rows; Bake writes the keys (one undo step). */

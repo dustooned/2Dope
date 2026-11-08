@@ -3,11 +3,11 @@ import type { PropKey } from '../compedit';
 import { CURVES, curveSides, HOLD, LINEAR, progress, valueAt, type Prop, type Vec2 } from '../core/anim';
 import { editTiming, timingHandles, validateProperty } from '../core/precision';
 import { decorate } from './icons';
+import { elText as el } from './dom';
 
 const TRANSFORM_CHANNELS = ['position', 'rotation', 'scale', 'anchor', 'opacity', 'zoom'] as const;
 const CHANNEL_COLORS = ['#69cbff', '#ffc575', '#c1a3ff', '#ff9eac', '#8fddaa', '#f9dd79'];
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = '') { const n = document.createElement(tag); n.textContent = text; return n; }
 /** Detached property editor: preview is local; Apply writes one history command. */
 export class GraphUI {
   private panel: HTMLElement | null = null;

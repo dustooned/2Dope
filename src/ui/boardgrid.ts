@@ -3,6 +3,7 @@ import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick } from '.
 import { frameMenu } from './framemenu';
 import { parseDialogue } from '../core/dialogue';
 import { MOVE_STICKERS, parseShot, sceneColour, scenesOf, stickersOf } from '../core/scenes';
+import { el } from './dom';
 
 /**
  * Story → Grid: the board as a wall of pictures (the panels' order at a glance). Each tile shows its
@@ -10,12 +11,6 @@ import { MOVE_STICKERS, parseShot, sceneColour, scenesOf, stickersOf } from '../
  * (or right-click) opens its menu, drag reorders. Size (− / +), pinch or Ctrl + wheel sets how many
  * fit per row, remembered on this device. The same panels as every other view: nothing is copied.
  */
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text) e.textContent = text;
-  return e;
-};
 
 const COLS_KEY = '2dope.board.gridcols';
 export const GRID_COLS = { min: 2, max: 8, default: 4 };

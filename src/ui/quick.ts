@@ -4,15 +4,9 @@ import { autoIcon, setLabel } from './icons';
 import { onionHold } from './onionpop';
 import { FPS_PRESETS } from '../core/project';
 import type { Tool } from '../core/stroke';
+import { el } from './dom';
 
 const KEY = '2dope.m1.quick';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 /**
  * Quick Animate: the same project in a stripped-down view. Big canvas, a slim flipbook strip, and

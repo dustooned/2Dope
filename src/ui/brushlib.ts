@@ -12,6 +12,7 @@ import { drawVectorStroke } from '../brush/vector';
 import { attachContextMenu } from './contextmenu';
 import { askText, confirmBox } from './dialogs';
 import { decorate, iconSvg } from './icons';
+import { el } from './dom';
 
 const MINE_KEY = '2dope.brushes.mine';
 const CAT_KEY = '2dope.brushes.category';
@@ -20,13 +21,6 @@ const SETS_KEY = '2dope.brushes.sets';
 const RECENT = '$recent', FAVORITES = '$favorites';
 const PW = 220;
 const PH = 54;
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 /**
  * The brush library (Procreate Dreams style): categories on the left, brushes as cards with a

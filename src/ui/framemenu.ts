@@ -1,5 +1,6 @@
 import type { App } from '../app';
 import { locate } from '../core/timeline';
+import { ROLES } from '../core/project';
 import { lastMenuPoint, type CtxItem } from './contextmenu';
 import { showCustomize } from './customize';
 
@@ -10,7 +11,7 @@ import { showCustomize } from './customize';
  */
 export function frameMenu(app: App, extra: CtxItem[] = []): CtxItem[] {
   const n = app.targets.length;
-  const roles = (['key', 'breakdown', 'inbetween'] as const).map((r) => ({ label: r === 'key' ? 'Key' : r === 'breakdown' ? 'Breakdown' : 'In-between', title: `Mark as ${r}`, run: () => app.setRole(r) }));
+  const roles = ROLES.map((r) => ({ label: r === 'key' ? 'Key' : r === 'breakdown' ? 'Breakdown' : 'In-between', title: `Mark as ${r}`, run: () => app.setRole(r) }));
   const holds = [1, 2, 3, 4, 6, 8].map((k) => ({ label: `${k}`, title: `Show for ${k} frame${k > 1 ? 's' : ''}`, run: () => app.setExposure(k) }));
   // splitting needs the playhead inside a held drawing (not on its first frame)
   const here = n === 1 ? locate(app.project.exposures, app.lf) : null;

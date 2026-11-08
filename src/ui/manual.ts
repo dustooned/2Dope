@@ -1,15 +1,9 @@
 import { iconSvg } from './icons';
 import { FIGURES, glyphSvg } from './manualfigs';
 import { MANUAL, UPDATES, type Block } from './manualtext';
+import { el } from './dom';
 
 const SEEN_KEY = '2dope.updates.seen';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function block(b: Block): HTMLElement {
   if (typeof b === 'string') return el('p', {}, b);

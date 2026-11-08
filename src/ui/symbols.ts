@@ -3,8 +3,8 @@ import type { ArtworkAssets } from '../core/assets';
 import { layerEnd, type CompLayer } from '../core/comp';
 import type { PropKey } from '../compedit';
 import { CompDraftPreview } from '../view/compdraft';
+import { elText as el } from './dom';
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = '') { const n = document.createElement(tag); n.textContent = text; return n; }
 function button(name: string, run: () => void) { const b = el('button', name); b.type = 'button'; b.onclick = run; return b; }
 export class SymbolUI {
   private cleanup: (() => void) | null = null;

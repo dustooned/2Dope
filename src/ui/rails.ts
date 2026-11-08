@@ -5,6 +5,7 @@ import { decorate } from './icons';
 import { assetLabel } from '../core/assetlabels';
 import { attachContextMenu } from './contextmenu';
 import { askText, confirmBox } from './dialogs';
+import { el } from './dom';
 
 /**
  * Draw's rails (Procreate Dreams style): every layer of the shot as a row on one timeline, in
@@ -21,13 +22,6 @@ export const ACTIVE_H = 80;
 export const PART_H = 22;
 
 const OPEN_KEY = '2dope.rails.open';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 /** Which rows are folded open (layer ids for groups, `id#parts` for Line / Fill). Remembered per device. */
 export class RailState {

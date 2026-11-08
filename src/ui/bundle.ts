@@ -3,8 +3,8 @@ import { compLength, exportComp } from '../core/comp';
 import { BUNDLE_STEPS, planBundle, prepareBundle, type BundleOptions, type BundleSession, type BundleStep } from '../io/bundle';
 import { planVideo, VIDEO_LITE_MAX_BYTES, VIDEO_MAX_BYTES } from '../io/videoplan';
 import { videoSupport } from '../io/exportvideo';
+import { elText as el } from './dom';
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = '') { const n = document.createElement(tag); n.textContent = text; return n; }
 const labels: Record<BundleStep | 'zip', string> = { video: 'MP4 video with sound', poster: 'Transparent PNG poster', gif: 'Looping GIF excerpt', project: 'Editable .2dope project', zip: 'Package ZIP' };
 export class BundleUI {
   private cleanup: (() => void) | null = null;

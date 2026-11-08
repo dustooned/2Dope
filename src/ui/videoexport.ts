@@ -3,14 +3,9 @@ import type { SoundBank } from '../io/sound';
 import { exportVideo, videoSupport } from '../io/exportvideo';
 import { sanitizeName } from '../io/exportplan';
 import { planVideo, videoOptions, VIDEO_LITE_MAX_BYTES, VIDEO_MAX_BYTES, type VideoOptions } from '../io/videoplan';
+import { el } from './dom';
 
 const KEY = '2dope.video-export';
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) e.setAttribute(key, value);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 function load(): VideoOptions {
   try { return videoOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null')); }
   catch { return videoOptions(null); }

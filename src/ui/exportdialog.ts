@@ -2,15 +2,9 @@ import type { App } from '../app';
 import { DEFAULT_EXPORT, framesToExport, PASSES, sanitizeName, scaledSize, type ExportOptions, type Pass } from '../io/exportplan';
 import { exportSequence } from '../io/exportseq';
 import { compLength, isPlainFlipbook } from '../core/comp';
+import { el } from './dom';
 
 const KEY = '2dope.m1.export';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function load(): ExportOptions {
   try {

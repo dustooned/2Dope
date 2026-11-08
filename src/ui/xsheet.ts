@@ -4,15 +4,9 @@ import { FRAME_FORMATS, frameLabel, isSecondBoundary, type FrameFormat } from '.
 import { blockDropIndex, commonHold, startOf, totalFrames } from '../core/timeline';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick } from './contextmenu';
 import { frameMenu } from './framemenu';
+import { el } from './dom';
 
 const FORMAT_KEY = '2dope.m1.framefmt';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function loadFormat(): FrameFormat {
   try {

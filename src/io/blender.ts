@@ -1,5 +1,4 @@
-import { valueAt } from '../core/anim';
-import { blenderHandles, LINEAR, staticProp, type Prop, type Value, type Vec2 } from '../core/anim';
+import { blenderHandles, LINEAR, staticProp, valueAt, type Prop, type Value, type Vec2 } from '../core/anim';
 import { activeEffects, temporalEffect } from '../core/effects';
 import { compLength, exportComp, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type DrawingsLayer, type Layer, partsActive, rotationAt, skippedInExport, type Transform } from '../core/comp';
 

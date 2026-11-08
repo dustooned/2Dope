@@ -6,18 +6,12 @@
  */
 
 import { SAMPLES, type SampleId } from '../io/samples';
+import { el } from './dom';
 
 const DONE_KEY = '2dope.firstrun.done';
 
 export type FirstRunStart = 'blank' | SampleId;
 export type FirstRunLevel = 'simple' | 'full';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 export const FIRST_RUN_TIPS: { icon: string; title: string; text: string }[] = [
   { icon: '🎬', title: 'Five modes, one project', text: 'Story plans the shots, Draw paints, Animate draws frames, Timing holds them, Motion moves layers. Switch at the top; everything stays in one project.' },

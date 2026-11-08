@@ -3,6 +3,7 @@ import { harmony, HARMONY_MODES, hexToHsv, hsvToHex, normalizeHex, paletteFromPi
 import { attachContextMenu, showContextMenu, type CtxItem } from './contextmenu';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
+import { el } from './dom';
 
 const RECENT_KEY = '2dope.color.recent';
 const PALETTE_KEY = '2dope.color.palette';
@@ -37,13 +38,6 @@ const BASICS = [
   '#264653',
   '#7b2cbf',
 ];
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function load<T>(key: string, fallback: T): T {
   try {

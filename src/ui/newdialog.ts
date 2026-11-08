@@ -1,14 +1,8 @@
 import { ASPECTS, clampFps, clampSide, framesFor, FPS_NAMES, LENGTHS, planeBytes, readNewSettings, fitPixels, sizeFor, sizeNote, TIERS, type NewSettings } from '../core/newproject';
 import type { NewProjectOptions } from './files';
+import { el } from './dom';
 
 const KEY = '2dope.m2.new';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function load(): NewSettings {
   try {

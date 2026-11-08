@@ -6,6 +6,7 @@ import { strokeLength } from '../core/stroke';
 import { dabsForStroke } from '../brush/dabs';
 import { RasterEngine } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
+import { el } from './dom';
 
 type NumKey = {
   [K in keyof BrushSettings]-?: NonNullable<BrushSettings[K]> extends number ? K : never;
@@ -90,13 +91,6 @@ const SECTIONS: {
 
 const DYN_LABEL: Record<DynKey, string> = { sizeDyn: 'Size', opacityDyn: 'Opacity', flowDyn: 'Flow' };
 const CONTROLS: Control[] = ['off', 'pressure', 'tilt', 'speed'];
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function fmt(v: number, step: number, unit = ''): string {
   const d = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;

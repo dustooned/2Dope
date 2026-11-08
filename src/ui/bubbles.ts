@@ -14,6 +14,7 @@ import { attachContextMenu } from './contextmenu';
 import { onionHold } from './onionpop';
 import type { BoardView } from './board';
 import { defaultWorkspaceLayout, WORKSPACE_NAMES, WORKSPACE_TOOLS, WORKSPACE_TOOL_NAMES, type WorkspaceTool } from '../core/workspacelayout';
+import { el } from './dom';
 
 /** Option rows whose actions the user can reorder (their command context has the same name). */
 const ORDERED_ROWS: string[] = ['select', 'transform', 'time', 'fill', 'smudge', 'paint', 'points'];
@@ -22,12 +23,6 @@ export type UiLevel = 'clean' | 'simple' | 'full';
 const LEVEL_KEY = '2dope.ui.level';
 const LEVELS: UiLevel[] = ['clean', 'simple', 'full'];
 
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text) e.textContent = text;
-  return e;
-};
 
 export interface BubbleHooks {
   brushLibrary(anchor: HTMLElement): void;

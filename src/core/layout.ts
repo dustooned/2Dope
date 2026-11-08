@@ -22,7 +22,7 @@ export function distribution(items: LayoutItem[], axis: Distribution): Map<strin
 }
 export interface SnapPrefs { on: boolean; canvas: boolean; layers: boolean; grid: boolean; size: number }
 export const DEFAULT_SNAP: SnapPrefs = { on: false, canvas: true, layers: true, grid: false, size: 16 };
-export function readSnap(value: unknown): SnapPrefs { const p = value && typeof value === 'object' ? value as Partial<SnapPrefs> : {}; return { on: p.on === true, canvas: p.canvas !== false, layers: p.layers !== false, grid: p.grid === true, size: typeof p.size === 'number' && Number.isFinite(p.size) ? Math.max(1, Math.min(1024, Math.round(p.size))) : 16 }; }
+export function readSnap(value: unknown): SnapPrefs { const p = value && typeof value === 'object' ? value as Partial<SnapPrefs> : {}, d = DEFAULT_SNAP; return { on: typeof p.on === 'boolean' ? p.on : d.on, canvas: typeof p.canvas === 'boolean' ? p.canvas : d.canvas, layers: typeof p.layers === 'boolean' ? p.layers : d.layers, grid: typeof p.grid === 'boolean' ? p.grid : d.grid, size: typeof p.size === 'number' && Number.isFinite(p.size) ? Math.max(1, Math.min(1024, Math.round(p.size))) : d.size }; }
 export interface SnapGuide { axis: 'x' | 'y'; value: number }
 /** Find one nearest edge/centre alignment per axis, in composition space. */
 export function snapBox(box: LayoutBox, targets: LayoutBox[], tolerance: number, grid = 0): { delta: Vec2; guides: SnapGuide[] } {

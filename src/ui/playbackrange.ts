@@ -1,11 +1,7 @@
 import type { App } from '../app';
 import { decorate, setLabel } from './icons';
+import { el } from './dom';
 
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) e.setAttribute(key, value);
-  e.textContent = text; return e;
-};
 
 /** The same range control follows the shared clock in Flipbook, Clips/Timing and Motion. */
 export class PlaybackRangeControl {

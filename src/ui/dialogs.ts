@@ -1,11 +1,5 @@
+import { el } from './dom';
 /** Small dialogs that work the same on iPad and desktop (window.prompt is awkward on touch). */
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 /**
  * A modal with a title, a body and a footer. `done(value)` answers once: it resolves the promise

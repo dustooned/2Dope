@@ -4,8 +4,8 @@ import { planeCanvas, type Drawing } from '../core/project';
 import { defaultTitle, paintTitle, readTitle, type TitleSpec } from '../core/title';
 import { newId } from '../io/persist';
 import { confirmBox } from './dialogs';
+import { elText as el } from './dom';
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = '') { const n = document.createElement(tag); n.textContent = text; return n; }
 /** Text drafts have no project pixels or History until Apply. Saved pixels survive font changes. */
 export class TitlesUI {
   private dialog: HTMLDialogElement | null = null;

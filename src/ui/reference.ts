@@ -2,13 +2,8 @@ import type { App } from '../app';
 import { compLength } from '../core/comp';
 import { drawComp } from '../view/composite';
 import { decorate } from './icons';
+import { el } from './dom';
 
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text) e.textContent = text;
-  return e;
-};
 
 const PLACE_KEY = '2dope.ref.place';
 const MODE_KEY = '2dope.ref.mode';

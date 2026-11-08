@@ -2,8 +2,8 @@ import type { App } from '../app';
 import { cameraMove, type CameraMove } from '../core/cameramove';
 import { activeCamera, compLength, type CameraLayer } from '../core/comp';
 import { CompDraftPreview } from '../view/compdraft';
+import { elText as el } from './dom';
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = '') { const n = document.createElement(tag); n.textContent = text; return n; }
 export class CameraMoveUI {
   private cleanup: (() => void) | null = null;
   close(): void { this.cleanup?.(); this.cleanup = null; }

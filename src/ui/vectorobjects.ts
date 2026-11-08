@@ -5,7 +5,7 @@ import { parsePath, pathPoints, writePath, type PathNode } from '../core/pathgeo
 import { readVectorShape } from '../core/vectorshape';
 import { apply, invert } from '../core/comp';
 import type { Vec2 } from '../core/anim';
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = '') { const n = document.createElement(tag); n.textContent = text; return n; }
+import { elText as el } from './dom';
 /** Exact imported paths, edited on a detached drawing until Apply. */
 export class VectorObjectsUI {
   private dialog: HTMLDialogElement | null = null;

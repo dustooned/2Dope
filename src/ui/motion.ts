@@ -16,6 +16,7 @@ import type { SoundBank } from '../io/sound';
 import { attachContextMenu, lastMenuPoint, showContextMenu, type CtxItem } from './contextmenu';
 import { rulerStep } from '../core/timecode';
 import { startWhip } from './pickwhip';
+import { el } from './dom';
 
 const ZOOM_KEY = '2dope.m3.mcell';
 const ROW_KEY = '2dope.m3.mrow';
@@ -30,13 +31,6 @@ const blendName = (b: BlendMode) => `${b[0]!.toUpperCase()}${b.slice(1)}`;
 type LayerAct = 'rename' | 'up' | 'down' | 'parent' | 'lock' | 'colour' | 'play' | 'delete' | 'enter' | 'ungroup' | 'dup' | 'unique' | 'effects' | 'blend' | 'clip' | 'mask' | 'editmask' | 'unmask';
 
 const KIND_ICON: Record<Layer['kind'], string> = { drawings: '✎', comp: '▣', camera: '🎥', null: '✛' };
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function loadNum(key: string, def: number, lo: number, hi: number): number {
   try {

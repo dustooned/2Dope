@@ -6,18 +6,12 @@ import { drawingAt } from '../core/timeline';
 import { isPaintingWorkspace } from '../core/workspace';
 import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
+import { el } from './dom';
 
 /** Whether a layer's extra actions (This drawing, Layer) are shown. Device-only, like the fold state. */
 const MORE_KEY = '2dope.layers.more';
 function loadMoreOpen(): boolean { try { return localStorage.getItem(MORE_KEY) === '1'; } catch { return false; } }
 function saveMoreOpen(open: boolean): void { try { localStorage.setItem(MORE_KEY, open ? '1' : '0'); } catch { /* private mode: stays as it is this session */ } }
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 const THUMB_W = 72;
 const THUMB_H = 48;

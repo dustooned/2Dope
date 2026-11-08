@@ -229,8 +229,3 @@ export function onCommandPrefsChange(f: () => void): () => void {
   listeners.add(f);
   return () => listeners.delete(f);
 }
-
-/** Forget the cached set so the next read comes from storage (a page that rebuilds the app). */
-export function reloadCommandPrefs(): void {
-  prefs = null;
-}

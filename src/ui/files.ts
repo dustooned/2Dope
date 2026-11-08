@@ -8,18 +8,12 @@ import { sampleProject, type SampleId } from '../io/samples';
 import { parseProjectFile, SchemaError, stringifyProjectFile, type ProjectFile } from '../io/schema';
 import { readZip, writeZip, ZipError } from '../io/zip';
 import { projectPreview } from '../view/projectpreview';
+import { el } from './dom';
 
 const BACKUP_AFTER_MS = 30 * 60_000;
 const BACKUP_MIN_CHANGES = 15;
 const RISKY_VERSION_GAP_MS = 30_000;
 const LAST_PROJECT = 'lastProject';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function bytes(n: number): string {
   if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;

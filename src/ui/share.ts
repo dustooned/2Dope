@@ -17,6 +17,7 @@ import { DEFAULT_STORYBOARD, type StoryboardOptions } from '../io/storyboard';
 import { storyboardPdf, storyboardPngs } from '../io/storyboardexport';
 import { drawComp, releaseScratch, setExportStamp } from '../view/composite';
 import { decorate } from './icons';
+import { el } from './dom';
 
 const VIDEO_KEY = '2dope.video-export';
 const KIND_KEY = '2dope.share.kind';
@@ -31,12 +32,6 @@ const ANIMATIC_KEY = '2dope.share.animatic';
 const BOARD_KEY = '2dope.board.export';
 const BLENDER_KEY = '2dope.share.blender';
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 /** "1 frame", "2 frames". */
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const fileSize = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);

@@ -7,13 +7,7 @@ import { blockDropIndex, snapPanelLength, startOf } from '../core/timeline';
 import { rulerStep } from '../core/timecode';
 import { attachContextMenu, showContextMenu, swallowNextClick, HOLD_MS, type CtxItem } from './contextmenu';
 import { frameMenu } from './framemenu';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
+import { el } from './dom';
 
 const ZOOM_KEY = '2dope.board.zoom';
 

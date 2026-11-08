@@ -9,16 +9,10 @@ import type { App } from '../app';
 import type { Project } from '../core/project';
 import { gifFrame, gifHeader } from '../io/gif';
 import { drawComp } from '../view/composite';
+import { el } from './dom';
 
 const OFF_KEY = '2dope.timelapse.off';
 const SIDE = 360, MAX = 600, IDLE_MS = 700;
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 /** Keep at most `max` items by dropping every other one (the whole history stays, at half the rate). */
 export function thinOut<T>(list: T[], max: number): T[] {

@@ -2,7 +2,7 @@ import type { App } from '../app';
 import { frameContent } from '../core/comp';
 import type { Drawing } from '../core/project';
 import type { Alignment, Distribution } from '../core/layout';
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = '') { const n = document.createElement(tag); n.textContent = text; return n; }
+import { elText as el } from './dom';
 /** One-step layout actions, shared by Motion and Animate's explicit placement tool. */
 export class LayoutUI {
   private dialog: HTMLDialogElement | null = null;

@@ -13,6 +13,7 @@ import { AssetClipDrag } from './assetclipdrag';
 import { AssetClipPreviews } from './assetclippreviews';
 import { PlaybackRangeControl, markPlaybackRange } from './playbackrange';
 import { PlaybackRangeGesture } from './playbackrangegesture';
+import { el } from './dom';
 
 const THUMB_W = 56;
 const THUMB_H = 32;
@@ -22,13 +23,6 @@ const ZOOM_KEY = '2dope.m1.cell';
 
 const ROLE_LETTER: Record<Role, string> = { key: 'K', breakdown: 'B', inbetween: 'I' };
 const ROLE_NAME: Record<Role, string> = { key: 'Key', breakdown: 'Breakdown', inbetween: 'Inbetween' };
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function loadCell(): number {
   try {

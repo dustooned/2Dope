@@ -4,13 +4,7 @@ import { askText, confirmBox } from './dialogs';
 import { decorate } from './icons';
 import { drawRailState } from './rails';
 import { partOf, PART_LABEL } from '../core/comp';
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
+import { el } from './dom';
 
 /**
  * The Draw view's layer list: drawings and precomps, top first, sharing folding with the rails.

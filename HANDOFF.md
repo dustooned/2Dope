@@ -2,6 +2,21 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Code cleanup (2026-11-08)
+
+- `ui/dom.ts` holds the shared `el(tag, attrs, text)` and `elText(tag, text)`. 41 panels dropped
+  identical local copies (33 attrs-style; 8 text-only, imported as `el`). Call sites are unchanged.
+  Seven helpers with different, class-name signatures remain local (artworklibrary, contextmenu,
+  baredit, presets, audiotracks, pensettings, settings).
+- Dead code removed: `isSticker` and its `MOVE_SET` (core/scenes) and `reloadCommandPrefs` (ui/commands).
+  `readSnap` now takes its defaults from `DEFAULT_SNAP`, with the same results, and the frame menu
+  builds its role chips from `ROLES`. `io/blender.ts` has one import line from `core/anim` instead of two.
+- The local storage helpers in app.ts, colorpanel.ts and share.ts were left as they are. share.ts merges
+  objects and stores strings raw, so merging the helpers could change saved settings.
+- About 170 exports are used only inside their own file. They are harmless and were left exported.
+
+Checks: unit tests passed (764, 1 skipped), the build passed and the full browser suite passed 71 of 71. Not committed.
+
 ### Pick whip for parenting and paths (2026-11-08)
 
 - `ui/pickwhip.ts` (`whipTarget`, `startWhip`) and `MotionPanel.whipButton`. The selected,

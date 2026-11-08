@@ -4,6 +4,7 @@ import { askText, confirmBox, pickBox } from './dialogs';
 import { iconSvg } from './icons';
 import type { FileUI } from './files';
 import { SAMPLES, type SampleId } from '../io/samples';
+import { el } from './dom';
 
 const SORT_KEY = '2dope.m2.sort';
 
@@ -14,13 +15,6 @@ const SORTS: [Sort, string][] = [
   ['created', 'Newest first'],
   ['name', 'Name'],
 ];
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 function ago(t: number): string {
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));

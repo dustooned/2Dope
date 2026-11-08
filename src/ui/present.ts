@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { locate } from '../core/timeline';
 import { decorate } from './icons';
+import { el } from './dom';
 
 /**
  * Story → Present: the board full screen for pitching to the class. Panels play at their timing on
@@ -8,12 +9,6 @@ import { decorate } from './icons';
  * Tap the picture to play or pause, swipe or ← → for the previous / next panel, Escape or Done to
  * leave. Viewing only: it never draws on the board or changes the project.
  */
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text) e.textContent = text;
-  return e;
-};
 
 const SWIPE = 50;
 

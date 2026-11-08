@@ -2,13 +2,8 @@ import type { App } from '../app';
 import { overviewEntries, type CanvasView } from '../core/canvasview';
 import { isPaintingWorkspace } from '../core/workspace';
 import { decorate } from './icons';
+import { el } from './dom';
 
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text) e.textContent = text;
-  return e;
-};
 
 const OPTIONS: [keyof CanvasView, string, string][] = [
   ['transparency', 'Transparency grid', 'Show transparent page pixels as a checkerboard. Screen only; imported PNG alpha and exports stay unchanged.'],

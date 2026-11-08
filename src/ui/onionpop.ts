@@ -1,17 +1,12 @@
 import type { App } from '../app';
 import { HOLD_MS, swallowNextClick } from './contextmenu';
+import { el } from './dom';
 
 /**
  * Onion skin settings, one press-and-hold away: tap an Onion button to switch onion skin on or off
  * as before; hold it (or right-click) for how many drawings before and after it shows, how strong,
  * colours and keys only. Device settings (App.onion), never document History.
  */
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text) e.textContent = text;
-  return e;
-};
 
 let pop: HTMLElement | null = null;
 let opener: HTMLElement | null = null;

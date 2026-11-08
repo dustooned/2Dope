@@ -31,7 +31,6 @@ export const MOVE_STICKERS = [
 ] as const;
 
 const SHOT_SET = new Set<string>(SHOT_STICKERS.map(([k]) => k));
-const MOVE_SET = new Set<string>(MOVE_STICKERS.map(([k]) => k.toLowerCase()));
 const SEP = ' · ';
 
 const tokens = (camera: string | undefined) => (camera ?? '').split(/\s*·\s*/).map((t) => t.trim()).filter(Boolean);
@@ -57,11 +56,6 @@ export function toggleMove(camera: string | undefined, move: string): string {
   const t = tokens(camera);
   const on = t.some((x) => x.toLowerCase() === move.toLowerCase());
   return (on ? t.filter((x) => x.toLowerCase() !== move.toLowerCase()) : [...t, move]).join(SEP);
-}
-
-/** True when a token is a sticker (the rest of the Camera field is the person's own words). */
-export function isSticker(token: string): boolean {
-  return SHOT_SET.has(token.toUpperCase()) || MOVE_SET.has(token.toLowerCase());
 }
 
 const SC = /^\s*Sc\.?\s*(\d+)\s*(?:·\s*Sh\.?\s*(\d+))?\s*(?:·\s*)?(.*)$/i;
