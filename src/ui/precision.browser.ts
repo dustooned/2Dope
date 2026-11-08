@@ -166,5 +166,15 @@ await check('Pick whip: drag to a layer row or its artwork to parent, to a line 
   closeMenus();
   expect(getComputedStyle(whip(aId)).touchAction === 'none' && whip(aId).getBoundingClientRect().width >= 26 && !whip(bId), 'whip is not touch ready, or shows on an unselected layer');
 });
+await check('Motion → New layer → Sound wave adds one layer with the effect, in one Undo step', async () => {
+  app.loadProject(new Project(320, 180)); app.setWorkspace('motion'); refresh(); app.history.clear();
+  const n = app.project.comp.layers.length;
+  app.editor.addSoundWaveLayer(); await wait(40);
+  const l = app.editor.primary!;
+  expect(app.project.comp.layers.length === n + 1 && l.name === 'Sound wave' && l.effects?.[0]?.type === 'soundwave', 'no sound wave layer');
+  expect(app.history.peekUndo()?.label === 'Add sound wave layer' && notices.at(-1)?.includes('Add a sound'), 'not one Undo step, or no hint without sound');
+  app.undo(); await wait(120);
+  expect(app.project.comp.layers.length === n, 'Undo did not remove it');
+});
 await check('No uncaught browser errors', () => expect(!errors.length, errors.join('; ')));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

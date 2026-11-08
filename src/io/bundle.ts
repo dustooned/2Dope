@@ -1,3 +1,5 @@
+import { soundReady } from '../view/effects';
+import { captionFontsReady } from '../view/captionfonts';
 import { effectsPad } from '../core/effects';
 import { effectCacheBudget, setEffectCacheBudget } from '../view/effects';
 import { Project, type Drawing } from '../core/project';
@@ -94,6 +96,9 @@ export function bundleRenderBytes(project: Pick<Project, 'comps' | 'width' | 'he
 export interface BundleSession { queue: BundleQueue; dispose(): void }
 /** Freeze metadata and PNGs before making any files. Snapshot residency never touches the editor pool. */
 export async function prepareBundle(owner: Project, options: BundleOptions, lite: boolean, budget: number, source: AssetSource, signal: AbortSignal): Promise<BundleSession> {
+  // Sound wave effects need their sound decoded before frames render
+  await soundReady();
+  await captionFontsReady(owner);
   check(signal); const plan = planBundle(owner, options, lite), scope = plan.comp, currentBytes = [...owner.drawings.values()].reduce((n, d) => n + residentBytes(d), 0);
   const initialScratch = bundleRenderBytes(owner, plan.comp, plan.width, plan.height), audioBytes = [...owner.sounds.values()].reduce((n, s) => n + s.duration * 48000 * 8, 0);
   const captureLimit = Math.min(plan.cap, Math.floor((budget - currentBytes - initialScratch - audioBytes) / 2)) - 65536;

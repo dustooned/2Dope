@@ -5,7 +5,9 @@ import { syncCelGroups } from './core/cellink';
 import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
 import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
 import { loopKeys, smoothKeys, staggerOffsets, wiggle, type LoopMode, type StaggerOrder, type WiggleOptions } from './core/keytools';
-import { effectDef, keyableSettings, plainName, stillSetting, temporalEffect } from './core/effects';
+import { effectDef, keyableSettings, newEffect, plainName, stillSetting, temporalEffect } from './core/effects';
+import { newSeed } from './core/rng';
+import { CAPTION_KEYS, captionValue, type CaptionKey, type CaptionTrack } from './lettering/spec';
 import {
   apply,
   cameraLayer,
@@ -91,7 +93,10 @@ function setPropOn(l: Layer, n: PropName, p: Prop): void {
 }
 
 /** A property row: a layer's own property, or `pin:<layerId>:<prop>` on a precomp layer (a pinned property of its comp). */
-export type PropKey = PropName | `pin:${string}` | `fx:${string}`;
+export type PropKey = PropName | `pin:${string}` | `fx:${string}` | `cap:${string}`;
+
+/** A caption setting row: `cap:<setting>` (Reveal, Balloon, opacities...), keyed in layer time. */
+export const isCap = (k: string): k is `cap:${string}` => k.startsWith('cap:');
 
 /** An effect setting row: `fx:<effect id>:<setting>` (Amount, Size or a numeric extra), keyed in layer time. */
 export const isFx = (k: string): k is `fx:${string}` => k.startsWith('fx:');
@@ -266,6 +271,10 @@ export class CompEditor {
 
   /** A property of a layer, including pinned properties of a precomp (this instance's value). */
   getProp(l: Layer, n: PropKey): Prop {
+    if (isCap(n)) {
+      const key = n.slice(4) as CaptionKey, c = l.kind === 'drawings' ? l.caption : undefined;
+      return c ? ((c.keys?.[key] as unknown as Prop | undefined) ?? staticProp(captionValue(c, key))) : staticProp(0);
+    }
     if (isFx(n)) {
       const { id, key } = fxParts(n), e = l.kind === 'drawings' || l.kind === 'comp' ? l.effects?.find((x) => x.id === id) : undefined;
       return e ? (e.keys?.[key] ?? staticProp(stillSetting(e, key))) : staticProp(0);
@@ -284,6 +293,13 @@ export class CompEditor {
   }
 
   private setProp(l: Layer, n: PropKey, p: Prop): void {
+    if (isCap(n)) {
+      if (l.kind !== 'drawings' || !l.caption) return;
+      const key = n.slice(4) as CaptionKey, q = p as Prop<number>, c = { ...l.caption, keys: { ...l.caption.keys }, values: { ...l.caption.values } };
+      if (q.keys.length) c.keys[key] = q as unknown as CaptionTrack; else { delete c.keys[key]; c.values[key] = q.value; }
+      l.caption = c;
+      return;
+    }
     if (isFx(n)) {
       const { id, key } = fxParts(n), e = l.kind === 'drawings' || l.kind === 'comp' ? l.effects?.find((x) => x.id === id) : undefined;
       if (!e) return;
@@ -306,6 +322,8 @@ export class CompEditor {
   /** The rows a layer shows: its own properties, then a precomp's pinned ones. */
   rowsOf(l: Layer): PropKey[] {
     const rows: PropKey[] = [...propsOf(l)];
+    // a caption shows its own settings, ready to key
+    if (l.kind === 'drawings' && l.caption) for (const k of CAPTION_KEYS) rows.push(`cap:${k.key}`);
     // effect settings show once they have keys (a ◆ on the Effects card starts them)
     if (l.kind === 'drawings' || l.kind === 'comp') for (const e of l.effects ?? []) for (const k of Object.keys(e.keys ?? {})) rows.push(`fx:${e.id}:${k}`);
     if (l.kind === 'comp') {
@@ -317,6 +335,7 @@ export class CompEditor {
 
   /** "★ Ball Position" for a pin row, "Position" otherwise. */
   rowLabel(l: Layer, n: PropKey): string {
+    if (isCap(n)) return `\u{1F4AC} ${CAPTION_KEYS.find(k => k.key === n.slice(4))?.label ?? n.slice(4)}`;
     if (isFx(n)) {
       const { id, key } = fxParts(n), e = l.kind === 'drawings' || l.kind === 'comp' ? l.effects?.find((x) => x.id === id) : undefined;
       return e ? `\u2728 ${plainName(effectDef(e.type))} ${keyableSettings(e.type).find((s) => s.key === key)?.label ?? key}` : '\u2728 ?';
@@ -330,7 +349,7 @@ export class CompEditor {
   /** The value kind of a row (for formatting and the value editor). */
   rowProp(n: PropKey): PropName {
     // an effect setting is a plain number (it scrubs and formats like rotation; Motion shows its own unit)
-    if (isFx(n)) return 'rotation';
+    if (isFx(n) || isCap(n)) return 'rotation';
     const name = isPin(n) ? (n.split(':')[2] as PropName) : n;
     // part rows format like the layer's own opacity / position
     if (isPartProp(name)) return name.endsWith('opacity') ? 'opacity' : 'position';
@@ -778,6 +797,22 @@ export class CompEditor {
 
   /** A new layer above the selected one (or on top). */
   /** A new layer; an adjustment layer is always its own layer, placed right above `above` (default: on top). */
+  /** A layer that shows the shot's sound (an empty drawing with a Sound wave effect). One Undo step. */
+  addSoundWaveLayer(): void {
+    const before = this.app.history.peekUndo();
+    this.addLayer('drawings', this.primary?.id);
+    const l = this.primary;
+    if (!l || this.app.history.peekUndo() === before) return;
+    this.edit('Sound wave', c => {
+      const x = c.layers.find(y => y.id === l.id);
+      if (!x || x.kind !== 'drawings') return;
+      x.name = 'Sound wave';
+      x.effects = [...(x.effects ?? []), newEffect('soundwave', `fx${Date.now().toString(36)}`, newSeed())];
+    });
+    this.app.history.combine(2, 'Add sound wave layer');
+    if (!(this.comp.audio ?? []).length) this.app.onNotice?.('Add a sound to this shot to see its wave. Effects you add after Sound wave act on the wave.');
+  }
+
   addLayer(kind: 'drawings' | 'null' | 'camera' | 'adjustment', above?: string): void {
     const c = this.comp;
     const p = this.app.project;

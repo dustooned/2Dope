@@ -9,10 +9,10 @@ export function paintingView(w: PaintingWorkspace, saved: string | null): Painti
 }
 
 /** What the bubble options row shows. */
-export type OptionsRow = 'assets' | 'points' | 'time' | 'layers' | 'transform' | 'adjust' | 'smudge' | 'paint' | 'fill' | 'select' | 'board' | 'motion' | 'none';
+export type OptionsRow = 'assets' | 'points' | 'time' | 'layers' | 'transform' | 'adjust' | 'smudge' | 'paint' | 'fill' | 'select' | 'board' | 'motion' | 'letter' | 'none';
 
 /** The tool bubble that is lit: an adjustment or the smudge brush beats the tool under it. */
-export type ToolChoice = 'assets' | 'adjust' | 'smudge' | 'select' | 'brush' | 'eraser' | 'pen' | 'fill';
+export type ToolChoice = 'assets' | 'adjust' | 'smudge' | 'select' | 'brush' | 'eraser' | 'pen' | 'fill' | 'letter';
 
 export interface OptionsState {
   workspace: Workspace;
@@ -26,11 +26,14 @@ export interface OptionsState {
   arranging: boolean;
   /** The quick Layers chips (Draw, Animate, Timing). */
   layersOpen: boolean;
+  /** The Letter tool (captions). */
+  lettering?: boolean;
 }
 
 export function toolChoice(s: OptionsState): ToolChoice {
   if (s.arranging) return 'assets';
   if (s.adjusting) return 'adjust';
+  if (s.lettering) return 'letter';
   if (s.tool === 'fill') return s.fillMode === 'lasso' ? 'select' : 'fill';
   if (s.tool === 'brush' && s.smudging) return 'smudge';
   return s.tool;
@@ -52,6 +55,7 @@ export function optionsRow(s: OptionsState): OptionsRow {
   if (painting && s.transforming) return 'transform';
   if (painting && t === 'adjust') return 'adjust';
   if (painting && t === 'smudge') return 'smudge';
+  if (painting && t === 'letter') return 'letter';
   if (painting && (t === 'brush' || t === 'pen' || t === 'eraser')) return 'paint';
   if (painting && t === 'fill') return 'fill';
   if (painting && t === 'select') return 'select';

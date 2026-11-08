@@ -1,5 +1,7 @@
 import { activeEffects, effectsPad, temporalEffect, temporalSamples } from '../core/effects';
 import { drawEffected, fxPreview, fxPreviewScale, releaseEffectScratch } from './effects';
+import { paintCaption } from './caption';
+import { captionSignature } from '../core/comp';
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { valueAt } from '../core/anim';
@@ -191,6 +193,8 @@ interface PartsCtx {
 }
 
 function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions, parts?: PartsCtx): void {
+  // a caption layer draws its balloon and lettering live instead of the drawing's pixels
+  if (parts?.layer.kind === 'drawings' && parts.layer.caption) { paintCaption(g, parts.layer.caption, parts.lf, planes === 'all' ? 'all' : planes); return; }
   if (d.parked) return; // the caller pins what a frame needs; never draw a packed-away drawing
   const src: DrawingSource = opt?.source?.(d) ?? { line: d.line, fill: d.fill };
   const paint = (t: CanvasRenderingContext2D, name: PartName) => {
@@ -438,7 +442,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     // while you work effects can be faster (half size) or off; exports always render them in full
     const fxScale = opt.export ? 1 : fxPreviewScale();
     const drawing = d;
-    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, drawing, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}${tweenKey}:${l.parts ? JSON.stringify(l.parts) : ''}`, c.fps, fxScale) : null;
+    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, drawing, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}${tweenKey}:${l.parts ? JSON.stringify(l.parts) : ''}${l.caption ? captionSignature(l.caption, lf) : ''}`, c.fps, fxScale) : null;
     if (alpha >= 1 && l.blend === 'normal' && !masked && !fx && !poses) direct = d;
     else {
       // effects that reach past the art (shadow, glow) come back on a grown page

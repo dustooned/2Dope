@@ -1,5 +1,7 @@
-import { readEffectStyleOrigin, temporalEffect, type EffectStyleOrigin } from '../core/effects';
+import { FORMAT10_EFFECTS, readEffectStyleOrigin, temporalEffect, type EffectStyleOrigin } from '../core/effects';
 import { readTitle, type TitleSpec } from '../core/title';
+import { readCaption, type CaptionSpec } from '../lettering/spec';
+import { MAX_PROJECT_FONTS } from '../lettering/fonts';
 import { readEffects, type LayerEffect } from '../core/effects';
 import type { Interp, Key, Prop, Side, Value, Vec2 } from '../core/anim';
 import { PRESETS, sanitizeBrushExtras, type BrushSettings } from '../core/brush';
@@ -38,7 +40,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 9;
+export const SCHEMA = 10;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -103,6 +105,8 @@ export interface PartFile {
 export interface LayerFile {
   anchorFixed?: boolean;
   title?: TitleSpec;
+  /** A live caption (format 10). */
+  caption?: CaptionSpec;
   id: string;
   name: string;
   kind: 'drawings' | 'comp' | 'camera' | 'null';
@@ -183,6 +187,8 @@ export interface DrawingFile {
 
 /** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
 export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comps?: Record<string, CompFile>): number {
+  if (comps && Object.values(comps).some(c => c.layers.some(l => l.caption))) return 10;
+  if (comps && Object.values(comps).some(c => c.layers.some(l => l.effects?.some(e => FORMAT10_EFFECTS.includes(e.type)) || l.styleOrigin?.effects.some(e => FORMAT10_EFFECTS.includes(e.type))))) return 10;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.transform.orient || l.transform.position.even || ('exposures' in l && l.exposures?.some(e => e.ease))))) return 9;
   if (comps && Object.values(comps).some(c => c.layers.some(l =>
     l.tweenVectors || l.effects?.some(e => temporalEffect(e.type)) || l.styleOrigin?.effects.some(e => temporalEffect(e.type))))) return 8;
@@ -195,6 +201,8 @@ export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comp
 
 export interface ProjectFile {
   sounds?: Record<string, { name: string; path: string; duration: number }>;
+  /** Fonts embedded for captions (format 10). */
+  fonts?: Record<string, { name: string; path: string }>;
   format: typeof FORMAT;
   schema: number;
   /** The app version that wrote the file. */
@@ -226,6 +234,7 @@ export const MAX_LAYERS = 1000;
 const MAX_KEYS = 100_000;
 export const ASSET_PATH = /^assets\/[A-Za-z0-9_.-]{1,120}\.png$/;
 export const SOUND_PATH = /^assets\/[A-Za-z0-9_.-]{1,120}\.wav$/;
+export const FONT_PATH = /^assets\/[A-Za-z0-9_.-]{1,120}\.(ttf|otf|woff2?)$/;
 const TOOLS: Tool[] = ['brush', 'eraser', 'pen', 'fill'];
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -500,11 +509,15 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
     try { out.styleOrigin = readEffectStyleOrigin(v.styleOrigin); } catch (e) { throw new SchemaError(`${what}: ${String(e)}`); }
   }
   if (v.title !== undefined && kind !== 'drawings') throw new SchemaError(`${what}: titles must be drawing layers`);
+  if (v.caption !== undefined && kind !== 'drawings') throw new SchemaError(`${what}: captions must be drawing layers`);
   if (kind === 'drawings') {
     if (v.tweenVectors === true && !out.adjust && !out.guide && !out.notes && !v.title) out.tweenVectors = true;
     out.exposures = exposureList(v.exposures, what, drawings);
     if (!out.exposures.length) throw new SchemaError(`${what} has no frames`);
     timing(v, out, what);
+    if (v.caption !== undefined) {
+      try { out.caption = readCaption(v.caption); } catch (e) { throw new SchemaError(`${what}: ${String(e)}`); }
+    }
     if (v.title !== undefined) {
       try { out.title = readTitle(v.title); } catch (e) { throw new SchemaError(`${what}: ${String(e)}`); }
       if (out.exposures.length !== 1 || !out.still || out.adjust || out.guide || out.cel) throw new SchemaError(`${what}: title must be an independent still drawing`);
@@ -566,6 +579,7 @@ export function migrate(input: unknown): Record<string, unknown> {
   if ((raw.schema as number) < 7) raw = { ...raw, schema: 7 };
   if ((raw.schema as number) < 8) raw = { ...raw, schema: 8 };
   if ((raw.schema as number) < 9) raw = { ...raw, schema: 9 };
+  if ((raw.schema as number) < 10) raw = { ...raw, schema: 10 };
   return raw;
 }
 
@@ -586,6 +600,14 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     for (const [id, sound] of Object.entries(raw.sounds)) {
       if (!ID.test(id) || !isObj(sound) || typeof sound.path !== 'string' || !SOUND_PATH.test(sound.path)) throw new SchemaError('an audio asset has an invalid path or id');
       sounds[id] = { name: str(sound.name, 'audio name'), path: sound.path, duration: num(sound.duration, 'audio duration', 0.001, 120) };
+    }
+  }
+  const fonts: NonNullable<ProjectFile['fonts']> = {};
+  if (raw.fonts !== undefined) {
+    if (!isObj(raw.fonts) || Object.keys(raw.fonts).length > MAX_PROJECT_FONTS) throw new SchemaError('the project has too many fonts');
+    for (const [id, font] of Object.entries(raw.fonts)) {
+      if (!ID.test(id) || !isObj(font) || typeof font.path !== 'string' || !FONT_PATH.test(font.path)) throw new SchemaError('a font has an invalid path or id');
+      fonts[id] = { name: str(font.name, 'font name'), path: font.path };
     }
   }
   let vectorTotal = 0;
@@ -709,6 +731,7 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     folders,
     drawings,
     ...(Object.keys(sounds).length ? { sounds } : {}),
+    ...(Object.keys(fonts).length ? { fonts } : {}),
   };
 }
 
@@ -730,6 +753,7 @@ export function assetPaths(p: ProjectFile): Set<string> {
     if (d.fill) s.add(d.fill);
   }
   for (const sound of Object.values(p.sounds ?? {})) s.add(sound.path);
+  for (const font of Object.values(p.fonts ?? {})) s.add(font.path);
   return s;
 }
 
@@ -807,7 +831,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
       };
       const timed = { play: l.play ?? (l.loop ? 'loop' : 'once'), speed: l.speed ?? 1, single: l.single ?? 0, timeRemap: l.timeRemap ? propOf(l.timeRemap) : null } as const;
       if (l.kind === 'drawings') {
-        const layer: DrawingsLayer = { ...base, ...(l.title ? { title: structuredClone(l.title) } : {}), kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
+        const layer: DrawingsLayer = { ...base, ...(l.title ? { title: structuredClone(l.title) } : {}), ...(l.caption ? { caption: structuredClone(l.caption) } : {}), kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
         if (l.parts) {
           layer.parts = {};
           for (const n of PART_NAMES) {
@@ -895,7 +919,7 @@ export function compFile(c: Comp): CompFile {
         if (l.timeRemap?.keys.length) timed.timeRemap = propFile(l.timeRemap);
       }
       if (l.kind === 'drawings') {
-        const out: LayerFile = { ...base, ...(l.title ? { title: readTitle(l.title) } : {}), exposures: l.exposures.map((e) => ({ ...e })), ...timed };
+        const out: LayerFile = { ...base, ...(l.title ? { title: readTitle(l.title) } : {}), ...(l.caption ? { caption: readCaption(l.caption) } : {}), exposures: l.exposures.map((e) => ({ ...e })), ...timed };
         const parts: Partial<Record<PartName, PartFile>> = {};
         for (const n of PART_NAMES) {
           const pt = l.parts?.[n];

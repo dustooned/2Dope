@@ -5,6 +5,13 @@ import { drawingsLayer, newComp, type BinFolder, type Comp, type DrawingsLayer }
 import { drawingAt, totalFrames, type Exposure } from './timeline';
 import type { SoundAsset } from './audio';
 
+/** A font file embedded in the project (captions name it `custom:<id>`). */
+export interface FontAsset {
+  name: string;
+  path: string;
+  bytes: Uint8Array | null;
+}
+
 /** What a drawing is for in the animation: a key pose, a breakdown between keys, or an inbetween. */
 export type Role = 'key' | 'breakdown' | 'inbetween';
 export const ROLES: Role[] = ['key', 'breakdown', 'inbetween'];
@@ -97,6 +104,8 @@ export class Project {
   readonly drawings = new Map<string, Drawing>();
   readonly comps = new Map<string, Comp>();
   readonly sounds = new Map<string, SoundAsset>();
+  /** Fonts students imported for captions. */
+  readonly fonts = new Map<string, FontAsset>();
   folders: BinFolder[] = [];
   /** The comp that is "the shot" (what export and Blender take by default). */
   main = 'c1';

@@ -458,7 +458,10 @@ export class BoardPanel {
       decorate(del, 'close');
       who.value = line.who;
       say.value = line.text;
-      r.append(who, say, el('span', { class: 'btime hint', title: 'How long this line shows in the animatic' }), del);
+      const toCaption = el('button', { type: 'button', class: 'bline-cap icon-only', title: 'Make a caption from this line, timed like the animatic' }, '\u{1F4AC}');
+      toCaption.setAttribute('aria-label', 'Make caption from this line');
+      toCaption.addEventListener('click', () => { commit(); app.captionFromDialogue(i, who.value, say.value); });
+      r.append(who, say, el('span', { class: 'btime hint', title: 'How long this line shows in the animatic' }), toCaption, del);
       for (const f of [who, say] as HTMLElement[]) {
         f.addEventListener('focus', () => {
           focusPanel();

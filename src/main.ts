@@ -1,5 +1,8 @@
 import { GraphUI } from './ui/graph';
-import { setEffectCacheBudget } from './view/effects';
+import { setEffectCacheBudget, setSoundPreload, setSoundSource } from './view/effects';
+import { preloadShotSounds, shotSoundSource } from './ui/soundsource';
+import { setCaptionFontHooks } from './view/captionfonts';
+import { CaptionEditor } from './ui/captioneditor';
 import { PaintingWorkspaceUI } from './ui/paintingworkspace';
 import { CanvasViewUI } from './ui/canvasview';
 import { ArtworkAssetsUI } from './ui/artworkassets';
@@ -409,6 +412,9 @@ const board = {
 }
 app.onFrameChange = chain(app.onFrameChange, () => present?.update());
 const audioPlayback = new AudioPlayback(app);
+// Sound wave effects read the shot's mixed sound
+setSoundSource(shotSoundSource(app, audioPlayback.bank));
+setSoundPreload(() => preloadShotSounds(app, audioPlayback.bank));
 motion.set(m => { m.sounds = audioPlayback.bank; });
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 // In the tracks sheet, sounds are rows under the layers; their settings open in a floating card.
@@ -906,6 +912,11 @@ app.fit();
 // Local autosave, versions, recovery. If browser storage is unavailable we still run (memory only).
 const { store, persistent } = await openStore();
 audioPlayback.bank.source = (path) => store.getAsset(path);
+// caption fonts: redraw when a face arrives; project fonts come from the project store
+setCaptionFontHooks({ redraw: () => app.requestRender(), source: (path) => store.getAsset(path), project: () => app.project });
+// the Letter tool opens the caption editor (new captions and double-taps)
+const captionEditor = new CaptionEditor(app);
+app.letters.onEdit = (id, isNew) => captionEditor.open(id, isNew);
 files = new FileUI(app, store, persistent);
 artworkUI.library.openProject = file => files!.importFile(file);
 app.onDocChanged = chain(app.onDocChanged, () => audioPlayback.invalidate());

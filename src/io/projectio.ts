@@ -55,6 +55,9 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
     if (!sound) throw new Error(`Audio asset ${id} is missing.`);
     return { id, ...sound };
   });
+  // fonts the captions use (only those travel with the project)
+  const usedFonts = new Set([...project.comps.values()].flatMap(c => c.layers.flatMap(l => (l.kind === 'drawings' && l.caption?.font.startsWith('custom:') ? [l.caption.font.slice(7)] : []))));
+  const fontJobs = [...usedFonts].flatMap(id => { const font = project.fonts.get(id); return font ? [{ id, ...font }] : []; });
   const main = project.comps.has(project.main) ? project.main : [...project.comps.keys()][0]!;
   const base = {
     name: project.name,
@@ -115,6 +118,16 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
           putAsset(sound.path, bytes);
         }
       }
+      const fonts: NonNullable<ProjectFile['fonts']> = {};
+      for (const font of fontJobs) {
+        fonts[font.id] = { name: font.name, path: font.path };
+        if (font.bytes) putAsset(font.path, font.bytes);
+        else if (opt.mode === 'archive') {
+          const bytes = await opt.source?.(font.path);
+          if (!bytes) throw new Error(`Font ${font.name} is missing. The project was not exported.`);
+          putAsset(font.path, bytes);
+        }
+      }
       const keys: { d: Drawing; rev: number; line: string | null; fill: string | null }[] = [];
       for (const p of planes) {
         const line = await keyOf(p.line);
@@ -136,6 +149,7 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
         folders,
         drawings,
         ...(soundJobs.length ? { sounds } : {}),
+        ...(fontJobs.length ? { fonts } : {}),
       };
       return {
         file,
@@ -170,6 +184,7 @@ export function loadProjectFile(file: ProjectFile): Loaded {
   project.main = file.main;
   project.activeComp = file.main;
   for (const [id, sound] of Object.entries(file.sounds ?? {})) project.sounds.set(id, { ...sound, bytes: null });
+  for (const [id, font] of Object.entries(file.fonts ?? {})) project.fonts.set(id, { ...font, bytes: null });
   const ref = (key: string | null): PlaneRef | null => (key ? { key, bytes: null } : null);
   for (const [id, f] of Object.entries(file.drawings)) {
     const d = project.adopt(id, f.num, f.vectors, f.role ?? null, { rev: 0, line: ref(f.line), fill: ref(f.fill) });

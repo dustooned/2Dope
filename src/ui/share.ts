@@ -1,3 +1,5 @@
+import { soundReady } from '../view/effects';
+import { captionFontsReady } from '../view/captionfonts';
 import type { App, Workspace } from '../app';
 import { compLength, frameContent, exportComp } from '../core/comp';
 import { soundStart } from '../core/audio';
@@ -696,6 +698,9 @@ export class ShareView {
     let extra: { blob: Blob; file: string } | undefined;
     let notes: string[] = [];
     try {
+      // Sound wave effects need their sound decoded before the first frame renders
+      await soundReady();
+      await captionFontsReady(this.app.project);
       let blob: Blob, file: string;
       if (this.kind === 'animatic') {
         const pic = animaticPicture(this.app.project, this.animatic);

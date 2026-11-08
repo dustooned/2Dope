@@ -29,6 +29,8 @@ import { editPoint, rippleComp, rippleExposures } from './core/ripple';
 import { durationLabel, frameLabel, type FrameFormat } from './core/timecode';
 import { compLayer, compLength, drawingsLayer, frameContent, invert, newComp, opacityAt, partOf, PART_LABEL, vectorTweenAt, worldMatrix, type BlendMode, type Comp, type CompLayer, type DrawingsLayer, type Layer, type PartName } from './core/comp';
 import { tweenStrokes } from './core/vectortween';
+import { LetterTool } from './lettertool';
+import { captionValue, MAX_CAPTION_CHARS, type BalloonStyle, type CaptionKey, type CaptionSpec, type CaptionTrack } from './lettering/spec';
 import { artClipCanvas, artClipMask, clearedPixels, stampArtClip, type ArtClip } from './artclip';
 import { beginTransformDrag, dragTransform, drawTransformHandles, fitParams, paintTransform, patchParams, restoreTransform, transformChange, transformFrame, transformGrab, transformedPoints, transformSize, type TransformFrame, type TransformOptions, type TransformState } from './drawtransform';
 import { MAX_COMPS, MAX_DRAWINGS, MAX_FRAMES, MAX_LAYERS } from './io/schema';
@@ -38,7 +40,8 @@ import { FINGER_PAINT_KEY, STUDENT_UI_KEY, readStudentUI, type StudentUI, type I
 import { WORKSPACE_LAYOUT_KEY, readWorkspaceLayouts, type WorkspaceLayouts } from './core/workspacelayout';
 import { canvasCursorCss, ERASER_BUTTONS, mapPressure, PEN_PREFS_KEY, PenProbe, readPenPrefs, type PenPrefs, type PenSample } from './core/pen';
 import { BRUSH_PREFS_KEY, readBrushPreferences, rememberBrush, recalledBrush, usedBrush, favoriteBrush, forgetBrush, renameBrush } from './core/brushprefs';
-import { staticProp, valueAt } from './core/anim';
+import { setKey, staticProp, valueAt, type Prop } from './core/anim';
+import { boardCues } from './core/dialogue';
 import { HOLD_MS, HOLD_SLOP, showContextMenu, swallowNextClick, type CtxItem } from './ui/contextmenu';
 import { showCustomize } from './ui/customize';
 import { decorate } from './ui/icons';
@@ -527,7 +530,98 @@ export class App {
     this.needsRender = true;
   }
 
+  /** The Letter tool is on (captions: tap, draw balloons and tails, move, edit). */
+  lettering = false;
+  readonly letters = new LetterTool(this);
+
+  /** The caption on the active layer, if it is a caption layer. */
+  get selectedCaption(): CaptionSpec | null {
+    const l = this.project.isPlaceholder ? null : this.project.layer;
+    return l?.kind === 'drawings' && l.caption ? l.caption : null;
+  }
+
+  /** Change the selected caption's balloon style (sound effects drop their tails). One undo step. */
+  setCaptionStyle(style: BalloonStyle): void {
+    const id = this.project.activeLayer;
+    this.editor.edit('Caption style', c => {
+      const l = c.layers.find(x => x.id === id);
+      if (l?.kind !== 'drawings' || !l.caption) return;
+      const next = { ...l.caption, style };
+      if (style === 'sfx') next.tails = [];
+      if (style !== 'custom') delete next.path;
+      l.caption = next;
+    });
+    this.onToolChange();
+  }
+
+  /** Animate the selected caption from the playhead: Fade in, Pop in, Type on, or Fade out (ending here). Keys show in Motion. One undo step. */
+  captionPreset(kind: 'fadeIn' | 'popIn' | 'typeOn' | 'fadeOut'): void {
+    const id = this.project.activeLayer, layer = this.project.comp.layers.find(x => x.id === id);
+    if (layer?.kind !== 'drawings' || !layer.caption) return;
+    const lf = Math.max(0, this.frame - layer.start), chars = [...layer.caption.text].length;
+    const track = (c: CaptionSpec, key: CaptionKey, pairs: [number, number][]) => {
+      let p = (c.keys?.[key] ?? { value: captionValue(c, key), keys: [] }) as unknown as Prop<number>;
+      for (const [f, v] of pairs) p = setKey(p, Math.max(0, f), v, 'linear');
+      return p as unknown as CaptionTrack;
+    };
+    const label = { fadeIn: 'Fade caption in', popIn: 'Pop caption in', typeOn: 'Type caption on', fadeOut: 'Fade caption out' }[kind];
+    this.editor.edit(label, c => {
+      const l = c.layers.find(x => x.id === id);
+      if (l?.kind !== 'drawings' || !l.caption) return;
+      const cap = structuredClone(l.caption), keys = { ...cap.keys };
+      if (kind === 'fadeIn') { keys.textOpacity = track(cap, 'textOpacity', [[lf, 0], [lf + 8, 100]]); keys.balloonOpacity = track(cap, 'balloonOpacity', [[lf, 0], [lf + 8, 100]]); }
+      else if (kind === 'fadeOut') { keys.textOpacity = track(cap, 'textOpacity', [[lf - 8, 100], [lf, 0]]); keys.balloonOpacity = track(cap, 'balloonOpacity', [[lf - 8, 100], [lf, 0]]); }
+      else if (kind === 'popIn') keys.balloon = track(cap, 'balloon', [[lf, 0], [lf + 6, 112], [lf + 9, 100]]);
+      else keys.reveal = track(cap, 'reveal', [[lf, 0], [lf + Math.max(6, Math.round(chars * 1.2)), 100]]);
+      cap.keys = keys;
+      l.caption = cap;
+    });
+    this.onNotice?.(`${label}: the keys are on the caption's rows in Motion.`);
+  }
+
+  /**
+   * A caption from a Story dialogue line: from the line's start to its end on the animatic
+   * clock, fading in and out with it (keys on the caption's own rows). One Undo step.
+   */
+  captionFromDialogue(panel: number, who: string, text: string): string | null {
+    const b = this.board;
+    if (!b?.exposures) return null;
+    const words = text.trim(), name = who.trim();
+    const cue = boardCues(b.exposures, b.start).find(c => c.panel === panel && c.text.trim() === words && c.who.trim() === name);
+    if (!words || !cue) { this.onNotice?.('Write the line first, then make its caption.'); return null; }
+    this.setFrame(cue.start);
+    const id = this.letters.create({ x: this.project.width / 2, y: this.project.height * 0.72 }, 'speech', true, false);
+    if (!id) return null;
+    const len = Math.max(2, cue.end - cue.start), fade = Math.min(4, Math.floor(len / 3));
+    const track = (pairs: [number, number][]) => pairs.reduce((q, [f, v]) => setKey(q, f, v), staticProp(100) as Prop<number>) as unknown as CaptionTrack;
+    const pairs: [number, number][] = fade > 0 ? [[0, 0], [fade, 100], [len - fade, 100], [len, 0]] : [[0, 100], [len - 1, 100], [len, 0]];
+    this.editor.edit('Caption from dialogue', c => {
+      const l = c.layers.find(x => x.id === id);
+      if (l?.kind !== 'drawings' || !l.caption) return;
+      l.name = `Caption · ${name || words}`.slice(0, 60);
+      l.caption = { ...l.caption, text: words.slice(0, MAX_CAPTION_CHARS), keys: { ...l.caption.keys, textOpacity: track(pairs), balloonOpacity: track(pairs) } };
+    });
+    this.history.combine(2, 'Caption from dialogue');
+    this.onNotice?.(`Caption added for ${name || 'this line'}, showing frames ${cue.start + 1}–${cue.end}. Use the Letter tool to move it or aim its tail.`);
+    return id;
+  }
+
+  setLettering(on: boolean): void {
+    if (on) {
+      if (this.xf) this.applyTransform();
+      if (this.arrangingAssets) this.setArrangeAssets(false);
+      if (this.adjusting) this.applyAdjust();
+      if (this.ve) this.exitPointEdit();
+      if (this.eyedropArmed) this.armEyedropper(false);
+      this.smudging = false;
+    }
+    this.lettering = on;
+    this.onToolChange();
+    this.requestRender();
+  }
+
   setTool(t: Tool): void {
+    this.lettering = false;
     if (this.xf) this.applyTransform();
     if (this.arrangingAssets) this.setArrangeAssets(false);
     if (this.adjusting) this.applyAdjust();
@@ -1229,6 +1323,7 @@ export class App {
   private smudgeClip: HTMLCanvasElement | null = null;
 
   setSmudging(on: boolean): void {
+    if (on) this.lettering = false;
     if (on && this.xf) this.applyTransform();
     this.smudging = on;
     if (on && this.tool !== 'brush') this.setTool('brush');
@@ -2862,6 +2957,8 @@ export class App {
 
   /** The lasso or leftover path while the pen is down (document space, on top of the drawing). */
   private drawFillPath(g: CanvasRenderingContext2D): void {
+    // the Letter tool's stroke and tail handles (document space)
+    if (this.lettering) this.letters.drawOverlay(g);
     const selected = this.spatialSelection ? this.spatial : null;
     if (selected?.exact && !this.fillG && !this.xf) this.drawSelectionTint(g, selected.area);
     let f = this.fillG ?? (selected ? { mode: 'lasso', points: this.transformedPoints() ?? selected.points } : null);
@@ -5451,7 +5548,7 @@ export class App {
     // outside the page, iPadOS dropping it): catch it anywhere, so a stroke never stays open.
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
-      if (this.motionPointer === e.pointerId) { this.onUp(e, cancelled); return; }
+      if (this.motionPointer === e.pointerId || this.letters.pointer === e.pointerId) { this.onUp(e, cancelled); return; }
       if ((this.live && e.pointerId === this.live.pointerId) || (this.waiting && e.pointerId === this.waiting.id) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.wandG && e.pointerId === this.wandG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
@@ -5499,6 +5596,21 @@ export class App {
       const c = this.sampleScreen(e.clientX, e.clientY);
       if (c) this.setColor(c);
       this.armEyedropper(false);
+      return;
+    }
+    if (this.lettering && (this.workspace === 'draw' || this.workspace === 'animate') && !this.playing) {
+      if (e.pointerType === 'touch') {
+        // a second finger navigates the canvas: drop the caption gesture in progress
+        const p = this.local(e);
+        this.touches.set(e.pointerId, { ...p, sx: p.x, sy: p.y });
+        if (this.touches.size > 1) {
+          if (this.letters.pointer !== null) this.letters.up(this.letters.pointer, true);
+          this.startPinchIfNeeded();
+          return;
+        }
+      }
+      const p = this.toPoint(e, e.timeStamp);
+      this.letters.down(e.pointerId, { x: p.x, y: p.y });
       return;
     }
     this.veValid();
@@ -5967,6 +6079,7 @@ export class App {
 
   private onMove(e: PointerEvent): void {
     if (e.pointerType === 'pen') this.notePen(e);
+    if (this.letters.pointer === e.pointerId) { const p = this.toPoint(e, e.timeStamp); this.letters.move(e.pointerId, { x: p.x, y: p.y }); return; }
     if (this.gradEdit?.drag && e.pointerId === this.gradEdit.drag.id) return this.moveGradDrag(e);
     if (this.tscrub && e.pointerId === this.tscrub.id) return this.moveTimeScrub(e);
     if (this.guideDrag && e.pointerId === this.guideDrag.id) return this.moveGuideDrag(e);
@@ -6087,6 +6200,7 @@ export class App {
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
     if (e.pointerType === 'pen' && this.penProbe.endStroke()) this.penNoPressure();
+    if (this.letters.pointer === e.pointerId) { this.touches.delete(e.pointerId); this.letters.up(e.pointerId, cancelled); return; }
     if (this.gradEdit?.drag && e.pointerId === this.gradEdit.drag.id) {
       this.gradEdit.drag = null;
       this.residency.updateThumb(this.gradEdit.d);

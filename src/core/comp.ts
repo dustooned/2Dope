@@ -1,4 +1,5 @@
 import type { TitleSpec } from './title';
+import type { CaptionSpec } from '../lettering/spec';
 import { effectsKey, temporalSamples, type EffectStyleOrigin, type LayerEffect } from './effects';
 import { easingSides, progress, staticProp, travelAngle, valueAt, type Prop, type Vec2 } from './anim';
 import { drawingAt, locate, totalFrames, type Exposure } from './timeline';
@@ -28,6 +29,13 @@ export interface Transform {
 }
 
 /** Rotation in degrees at a layer frame, including Orient along path. */
+/** What a caption shows at a layer frame (its data and keyed values), for frame keys and caches. */
+export function captionSignature(c: CaptionSpec, f: number): string {
+  const { keys, ...rest } = c;
+  const now = keys ? Object.entries(keys).map(([k, t]) => `${k}=${t && t.keys.length ? valueAt(t as unknown as Prop<number>, f).toFixed(3) : ''}`).join(',') : '';
+  return `#${JSON.stringify(rest)}|${now}`;
+}
+
 export function rotationAt(t: Transform, f: number): number {
   return valueAt(t.rotation, f) + (t.orient ? travelAngle(t.position, f) : 0);
 }
@@ -116,6 +124,8 @@ interface Timed {
 /** Frame-by-frame drawings, timed by exposures (what the strip and X-sheet edit). */
 export interface DrawingsLayer extends LayerBase, Timed {
   title?: TitleSpec;
+  /** A live caption (balloon and lettering), drawn instead of the drawing's pixels. Format 10. */
+  caption?: CaptionSpec;
   kind: 'drawings';
   exposures: Exposure[];
   /** Interpolate matching authored vectors over the hold before the next drawing. */
@@ -676,7 +686,9 @@ export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | 
       const tween = vectorTweenAt(l, frame);
       if (tween) drawings.add(tween.next);
       const pk = partsKey(l, frame - l.start);
-      return `${l.id}:${id}${tween ? `>${tween.next}:${tween.t}` : ''}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}${pk ? `<${pk}>` : ''}@${look}`;
+// a caption draws live: its words, look and animated values at this frame are part of what shows
+const cap = l.kind === 'drawings' && l.caption ? captionSignature(l.caption, frame - l.start) : '';
+      return `${l.id}:${id}${cap}${tween ? `>${tween.next}:${tween.t}` : ''}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}${pk ? `<${pk}>` : ''}@${look}`;
     }
     const n = comps.get(l.comp);
     const nf = n ? nestedFrame(l, frame, c.fps, n, comps) : null;

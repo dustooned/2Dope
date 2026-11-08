@@ -13,6 +13,7 @@ import { BarEditor } from './baredit';
 import { attachContextMenu } from './contextmenu';
 import { onionHold } from './onionpop';
 import type { BoardView } from './board';
+import type { BalloonStyle } from '../lettering/spec';
 import { defaultWorkspaceLayout, WORKSPACE_NAMES, WORKSPACE_TOOLS, WORKSPACE_TOOL_NAMES, type WorkspaceTool } from '../core/workspacelayout';
 import { el } from './dom';
 
@@ -75,7 +76,7 @@ const PANEL_HELP: Partial<Record<string, string>> = {
 const SECOND_TAP: Partial<Record<string, string>> = { brush: 'Tap again for brushes', smudge: 'Tap again for brushes', pen: 'Tap again for brushes', eraser: 'Tap again for brushes', assets: 'Tap again (or Done) to go back to drawing' };
 
 type ToolKey = 'assets' | 'more' | 'transform' | 'brush' | 'pen' | 'eraser' | 'fill' | 'select' | 'color' | 'onion' | 'layers'
-  | 'smudge' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look'
+  | 'smudge' | 'letter' | 'adjust' | 'insert' | 'fx' | 'flipbook' | 'reference' | 'panel' | 'images' | 'dup' | 'del' | 'play' | 'export' | 'addlayer' | 'camera' | 'group' | 'split' | 'autokey' | 'look'
   | 'prevdraw' | 'nextdraw' | 'eyedrop' | 'safeareas' | 'centrecross' | 'overscan';
 
 /**
@@ -461,7 +462,7 @@ export class Bubbles {
     const a = this.app;
     return {
       workspace: a.workspace, tool: a.tool, fillMode: a.fillMode, smudging: a.smudging, adjusting: !!a.adjusting,
-      transforming: a.transforming, pointEditing: a.pointEditing, arranging: a.arrangingAssets, layersOpen: this.layersOpen,
+      transforming: a.transforming, pointEditing: a.pointEditing, arranging: a.arrangingAssets, layersOpen: this.layersOpen, lettering: a.lettering,
     };
   }
 
@@ -474,8 +475,23 @@ export class Bubbles {
     return !!this.hooks.flip?.on() && (this.app.workspace === 'draw' || this.app.workspace === 'animate');
   }
 
+  /** The Letter tool's row: balloon styles (what a tap makes; restyles the selected caption), edit, and In/Out presets. */
+  private letterChips(): HTMLElement[] {
+    const a = this.app, cap = a.selectedCaption;
+    const styles: [BalloonStyle, string, string][] = [['speech', 'Speech', 'Oval with a tail'], ['thought', 'Thought', 'Cloud with bubbles'], ['shout', 'Shout', 'Jagged burst'], ['whisper', 'Whisper', 'Dashed outline'], ['box', 'Box', 'Narration box'], ['sfx', 'Sound effect', 'Big lettering, no balloon']];
+    const out: HTMLElement[] = styles.map(([s, label, title]) => this.chip(label, `${title}. Tap the canvas to add one${cap ? '; restyles the selected caption' : ''}`, (cap?.style ?? a.letters.style) === s, () => { a.letters.style = s; if (cap) a.setCaptionStyle(s); else a.onToolChange(); }, 'text'));
+    if (cap) {
+      out.push(this.chip('Edit caption', 'Words, font, size and colours (or double-tap the balloon)', false, () => a.letters.onEdit?.(a.project.activeLayer, false), 'text'));
+      out.push(this.chip('Fade in', 'Fade the caption in from the playhead', false, () => a.captionPreset('fadeIn'), 'play'));
+      out.push(this.chip('Pop in', 'The balloon pops in from its tail', false, () => a.captionPreset('popIn'), 'play'));
+      out.push(this.chip('Type on', 'Letters appear one at a time', false, () => a.captionPreset('typeOn'), 'text'));
+      out.push(this.chip('Fade out', 'Fade the caption out, ending at the playhead', false, () => a.captionPreset('fadeOut'), 'play'));
+    } else out.push(el('span', { class: 'bub-hint' }, "Tap to add a caption, or draw a balloon shape. Draw out from a balloon's edge for its tail."));
+    return out;
+  }
+
   private toolsFor(ws: Workspace, expanded = false): [ToolKey, string, string][] {
-    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['eyedrop', 'Eyedropper', 'eyedrop'], ['fill', 'Bucket fill', 'fill'], ['select', 'Select', 'lasso'], ['transform', 'Transform', 'transform'], ['adjust', 'Adjustments', 'adjust']];
+    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['eyedrop', 'Eyedropper', 'eyedrop'], ['fill', 'Bucket fill', 'fill'], ['select', 'Select', 'lasso'], ['transform', 'Transform', 'transform'], ['adjust', 'Adjustments', 'adjust'], ['letter', 'Letter (captions)', 'text']];
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
@@ -557,6 +573,7 @@ export class Bubbles {
         break;
       }
       case 'eyedrop': a.armEyedropper(); break;
+      case 'letter': a.setLettering(!a.lettering); break;
       case 'safeareas': a.setCanvasView({ safeAreas: !a.canvasView.safeAreas }); break;
       case 'centrecross': a.setCanvasView({ centre: !a.canvasView.centre }); break;
       case 'overscan': a.setCanvasView({ overscan: !a.canvasView.overscan }); break;
@@ -868,6 +885,8 @@ export class Bubbles {
     } else if (row === 'adjust') {
       add(el('span', { class: 'bub-hint adjustment-scope' }, a.adjusting?.mask ? 'Adjust: selected area · current drawing' : 'Adjust: current drawing · ink + colour'));
       add(...this.adjustControls());
+    } else if (row === 'letter') {
+      add(...this.letterChips());
     } else if (row === 'smudge') {
       add(
         this.chip('Ink target', 'Smudge the Ink', a.plane === 'line', () => { a.setPlane('line'); a.setSmudging(true); }, 'lineplane'),

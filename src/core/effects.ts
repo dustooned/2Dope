@@ -11,7 +11,10 @@
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
-export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave';
+
+/** Effects added in format 10: older readers drop unknown effect types, so saving one needs reader 10. */
+export const FORMAT10_EFFECTS: readonly EffectType[] = ['fill', 'outline', 'blinds', 'kaleido', 'soundwave'];
 export type EffectTarget = 'line' | 'fill' | 'layer';
 export const MAX_LAYER_EFFECTS = 16;
 export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
@@ -83,6 +86,8 @@ export interface EffectDef {
   extras?: ExtraDef[];
   /** How far the effect can reach past the art, in document pixels (the layer is padded by it). */
   pad?: (e: LayerEffect) => number;
+  /** The result changes from frame to frame even without keys (colour cycling, spin, sound). */
+  frameDependent?: (e: LayerEffect) => boolean;
 }
 
 export const EFFECT_TYPES: EffectDef[] = [
@@ -179,7 +184,94 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'tb', label: 'Blue threshold', kind: 'range', min: -100, max: 100, step: 1, unit: '', def: 0 },
       { key: 'hard', label: 'Hard edges', kind: 'toggle', def: false },
     ] },
+  { id: 'fill', label: 'Fill', hint: 'Recolour everything visible, keeping its shape and soft edges (fill)', target: 'layer', amount: 100, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Opacity', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false, seeded: false,
+    extras: [
+      { key: 'color', label: 'Colour', kind: 'color', def: '#e24b4a' },
+      { key: 'mode', label: 'Mode', kind: 'choice', options: [{ id: 'replace', label: 'Replace' }, { id: 'tint', label: 'Tint (keep shading)' }, { id: 'multiply', label: 'Multiply' }], def: 'replace' },
+    ] },
+  { id: 'outline', label: 'Outline', hint: 'Coloured lines around the edge of the art: one, or many that repeat and cycle colours (stroke)', target: 'layer', amount: 4, size: 0, hold: 1, amountRange: [0, 60], sizeRange: [0, 20], amountLabel: 'Width', sizeLabel: 'Softness', amountUnit: ' px', sizeUnit: ' px', animated: false, seeded: false,
+    extras: [
+      { key: 'color', label: 'Colour', kind: 'color', def: '#000000' },
+      { key: 'position', label: 'Position', kind: 'choice', options: [{ id: 'outside', label: 'Outside' }, { id: 'centre', label: 'Centre' }, { id: 'inside', label: 'Inside' }], def: 'outside' },
+      { key: 'count', label: 'Lines', kind: 'range', min: 1, max: 24, step: 1, unit: '', def: 1 },
+      { key: 'gap', label: 'Gap', kind: 'range', min: 0, max: 60, step: 1, unit: ' px', def: 4 },
+      { key: 'taper', label: 'Taper', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
+      { key: 'fade', label: 'Fade out', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
+      { key: 'palette', label: 'Colours', kind: 'choice', options: [{ id: 'one', label: 'One colour' }, { id: 'rainbow', label: 'Rainbow' }, { id: 'fire', label: 'Fire' }, { id: 'neon', label: 'Neon' }, { id: 'mono', label: 'Mono' }, { id: 'custom', label: 'Custom (4)' }], def: 'one' },
+      { key: 'color2', label: 'Colour 2', kind: 'color', def: '#ffffff' },
+      { key: 'color3', label: 'Colour 3', kind: 'color', def: '#378add' },
+      { key: 'color4', label: 'Colour 4', kind: 'color', def: '#e24b4a' },
+      { key: 'cycle', label: 'Cycle', kind: 'range', min: -20, max: 20, step: 0.5, unit: ' lines/s', def: 0 },
+      { key: 'shift', label: 'Colour offset', kind: 'range', min: 0, max: 24, step: 0.1, unit: '', def: 0 },
+      { key: 'paint', label: 'Paint', kind: 'choice', options: [{ id: 'solid', label: 'Solid' }, { id: 'gradient', label: 'Gradient' }, { id: 'hatch', label: 'Hatch' }, { id: 'dots', label: 'Dots' }, { id: 'weave', label: 'Canvas' }], def: 'solid' },
+      { key: 'paintScale', label: 'Paint size', kind: 'range', min: 2, max: 64, step: 1, unit: ' px', def: 6 },
+      { key: 'corners', label: 'Corners', kind: 'choice', options: [{ id: 'round', label: 'Round' }, { id: 'square', label: 'Square' }], def: 'round' },
+      { key: 'blend', label: 'Blend', kind: 'choice', options: [{ id: 'normal', label: 'Normal' }, { id: 'add', label: 'Add' }, { id: 'screen', label: 'Screen' }, { id: 'multiply', label: 'Multiply' }], def: 'normal' },
+      { key: 'only', label: 'Outline only', kind: 'toggle', def: false },
+    ],
+    pad: (e) => outlineReach(e) + e.size + 2,
+    frameDependent: (e) => Number(param<number>(e, 'cycle')) !== 0 && (Math.round(Number(param<number>(e, 'count'))) > 1 || param<string>(e, 'palette') !== 'one') },
+  { id: 'blinds', label: 'Venetian blinds', hint: 'Slats close across the layer to hide it or open to reveal it (Venetian blinds)', target: 'layer', amount: 0, size: 30, hold: 1, amountRange: [0, 100], sizeRange: [2, 400], amountLabel: 'Completion', sizeLabel: 'Slat width', amountUnit: '%', sizeUnit: ' px', animated: false, seeded: true,
+    extras: [
+      { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 1, unit: '°', def: 0 },
+      { key: 'feather', label: 'Feather', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
+      { key: 'style', label: 'Style', kind: 'choice', options: [{ id: 'wipe', label: 'Wipe' }, { id: 'split', label: 'Split' }, { id: 'iris', label: 'Iris' }], def: 'wipe' },
+      { key: 'stagger', label: 'Stagger', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
+      { key: 'order', label: 'Order', kind: 'choice', options: [{ id: 'forward', label: 'Forward' }, { id: 'reverse', label: 'Reverse' }, { id: 'middle', label: 'Middle out' }, { id: 'random', label: 'Random' }], def: 'forward' },
+      { key: 'scroll', label: 'Scroll', kind: 'range', min: -100, max: 100, step: 1, unit: '%', def: 0 },
+      { key: 'shade', label: 'Shade', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
+      { key: 'reveal', label: 'Closed slats show colour', kind: 'toggle', def: false },
+      { key: 'color', label: 'Slat colour', kind: 'color', def: '#222222' },
+      { key: 'invert', label: 'Invert', kind: 'toggle', def: false },
+    ] },
+  { id: 'kaleido', label: 'Kaleidoscope', hint: 'Mirrored slices turn the picture into a kaleidoscope pattern (kaleida)', target: 'layer', amount: 6, size: 100, hold: 1, amountRange: [2, 32], sizeRange: [10, 400], amountLabel: 'Segments', sizeLabel: 'Size', amountUnit: '', sizeUnit: '%', animated: false, seeded: false,
+    extras: [
+      { key: 'style', label: 'Style', kind: 'choice', options: [{ id: 'flower', label: 'Flower' }, { id: 'wheel', label: 'Wheel' }, { id: 'starlish', label: 'Starlish' }, { id: 'unfold', label: 'Unfold' }, { id: 'triangles', label: 'Triangles' }], def: 'flower' },
+      { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'rotation', label: 'Rotation', kind: 'range', min: -360, max: 360, step: 1, unit: '°', def: 0 },
+      { key: 'source', label: 'Source angle', kind: 'range', min: 0, max: 360, step: 1, unit: '°', def: 0 },
+      { key: 'spin', label: 'Spin', kind: 'range', min: -180, max: 180, step: 1, unit: '°/s', def: 0 },
+      { key: 'mix', label: 'Mix with original', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
+    ],
+    frameDependent: (e) => Number(param<number>(e, 'spin')) !== 0 },
+  { id: 'soundwave', label: 'Sound wave', hint: 'Draws the shot’s sound as a moving wave or spectrum bars; effects after it act on the wave (audio waveform, audio spectrum)', target: 'layer', amount: 80, size: 3, hold: 1, amountRange: [0, 1000], sizeRange: [0.5, 60], amountLabel: 'Height', sizeLabel: 'Thickness', amountUnit: ' px', sizeUnit: ' px', animated: false, seeded: false,
+    extras: [
+      { key: 'type', label: 'Type', kind: 'choice', options: [{ id: 'waveform', label: 'Waveform' }, { id: 'spectrum', label: 'Spectrum' }], def: 'waveform' },
+      { key: 'shape', label: 'Shape', kind: 'choice', options: [{ id: 'line', label: 'Line' }, { id: 'circle', label: 'Circle' }], def: 'line' },
+      { key: 'x1', label: 'Start across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 10 },
+      { key: 'y1', label: 'Start down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'x2', label: 'End across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 90 },
+      { key: 'y2', label: 'End down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'radius', label: 'Radius', kind: 'range', min: 1, max: 100, step: 1, unit: '%', def: 25 },
+      { key: 'detail', label: 'Detail', kind: 'range', min: 8, max: 1024, step: 1, unit: '', def: 128 },
+      { key: 'softness', label: 'Softness', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
+      { key: 'look', label: 'Look', kind: 'choice', options: [{ id: 'bars', label: 'Bars' }, { id: 'lines', label: 'Lines' }, { id: 'dots', label: 'Dots' }], def: 'lines' },
+      { key: 'sides', label: 'Sides', kind: 'choice', options: [{ id: 'up', label: 'Up' }, { id: 'down', label: 'Down' }, { id: 'both', label: 'Both' }], def: 'both' },
+      { key: 'window', label: 'Window', kind: 'range', min: 10, max: 1000, step: 1, unit: ' ms', def: 80 },
+      { key: 'offsetMs', label: 'Offset', kind: 'range', min: -2000, max: 2000, step: 1, unit: ' ms', def: 0 },
+      { key: 'low', label: 'Low', kind: 'range', min: 20, max: 20000, step: 1, unit: ' Hz', def: 40 },
+      { key: 'high', label: 'High', kind: 'range', min: 20, max: 20000, step: 1, unit: ' Hz', def: 4000 },
+      { key: 'smoothing', label: 'Smoothing', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
+      { key: 'color', label: 'Inside colour', kind: 'color', def: '#ffffff' },
+      { key: 'color2', label: 'Outside colour', kind: 'color', def: '#378add' },
+      { key: 'over', label: 'Over original', kind: 'toggle', def: false },
+    ],
+    pad: (e) => (param<string>(e, 'shape') === 'circle' ? e.amount + e.size : 0),
+    frameDependent: () => true },
 ];
+
+/** Outline's lines reach at most this far (document pixels), whatever the count. */
+export const OUTLINE_MAX_REACH = 480;
+
+/** How far Outline's lines reach past the art (all lines, before softness), capped so a high count cannot flood the shot. */
+export function outlineReach(e: LayerEffect): number {
+  const count = Math.max(1, Math.round(Number(param<number>(e, 'count')) || 1));
+  const w = Math.max(0, e.amount), gap = Math.max(0, Number(param<number>(e, 'gap')) || 0);
+  return Math.min(OUTLINE_MAX_REACH, count * w + (count - 1) * gap);
+}
 
 export const EFFECT_LIMITS = { hold: [1, 8] as const };
 
@@ -389,7 +481,7 @@ export function temporalSamples(l: { id: string; in: number; start: number; effe
 /** A short signature of what effects do at a frame (frame keys, caches). */
 export function effectsKey(l: { id: string; effects?: LayerEffect[] }, frame: number): string {
   const fx = activeEffects(l);
-  return fx.length ? fx.map((e) => effectAt(e, frame)).map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${e.params ? `:${JSON.stringify(e.params)}` : ''}`).join(',') : '';
+  return fx.length ? fx.map((e) => effectAt(e, frame)).map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${effectDef(e.type).frameDependent?.(e) ? `@${frame}` : ''}${e.params ? `:${JSON.stringify(e.params)}` : ''}`).join(',') : '';
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 # Comic lettering and captions: design direction
 
-2026-11-08 · proposal, not yet implemented. Recommended next step: phase 1 below. A roadmap here
-does not authorise building the whole plan; see `AGENTS.md`.
+2026-11-08 · proposal. **Phase 1 is built (not yet committed); see "Phase 1 as built" below.** A
+roadmap here does not authorise building the whole plan; see `AGENTS.md`.
 
 ## Goal
 
@@ -339,6 +339,46 @@ and toggle, and they target Line, Fill or the whole layer.
 - Checks needed: a pixel test (an outline of width w on a disc covers exactly the expected ring at
   each position), keyed width, Outline only, and a speed check at 1080p within the effect cache budget.
 
+#### Repeated outlines (part of Outline)
+Outline gains a **Count**, where 1 is a plain outline, so there is one effect to learn. More than one
+line gives the repeated, colour-cycling outline look:
+
+| Setting | What it does | Keyable |
+|---|---|---|
+| **Count** | How many outlines, 1–24 (8 on Lite devices) | yes, stepped |
+| **Width** / **Gap** | Thickness of each line and the space between them; optional **Taper** (thinner further out) | yes |
+| **Mode** | **Around**: rings around the current frame. **Trail**: an outline of each earlier frame, so a moving or changing drawing leaves outlines behind it | — |
+| **Trail spacing** | Trail only: frames between each traced copy (1 = every frame) | yes |
+| **Colours** | A list of 2–12 colours, each editable. Presets: Rainbow, Fire, Neon, Mono, and the project's swatches. Each line takes the next colour | — |
+| **Cycle** | Colours move outward (or inward) by this many lines per second. 0 holds still. **Offset** keys the position by hand | yes (Offset) |
+| **Fade out** | Lines get more transparent further out | yes |
+| **Paint** | Per line, or all lines: **Solid**, **Gradient** (blends between list colours), **Texture** (the existing Paper, Hatch, Dots, Canvas weave patterns, with scale), or **Image** (an image from the project's Assets, tiled or stretched, with scale, offset and an optional scroll over time) | scale, offset |
+| **Per-line override** | Tap a line in the list to give it its own colour, paint or width | — |
+| **Blend** | Normal, Add, Screen, Multiply for how lines mix with what is behind | — |
+| **Outline only** | Hide the original art and keep just the lines | — |
+
+- **Timing comes from the frame number, never the clock.** The same frame looks identical in the
+  canvas, Share preview, exports and Blender bakes. Cycle and Trail are deterministic.
+- **Cost stays flat.** Around mode needs **one** distance field per frame however many lines there
+  are: each pixel's distance picks its line, and the line picks its colour. Trail mode needs one
+  silhouette per traced frame. It reuses the Echo effect's sampling of earlier frames (format 8),
+  caches by frame, and is limited to Count ≤ 8 by default (12 in Full).
+- **Hard limits**: total outline reach (Count × (Width + Gap)) is capped at a share of the frame
+  (25% by default), so a high count cannot flood the shot or the effect cache. Image paints use
+  the asset at its stored resolution and never re-import it.
+- **Storage**: the colour list, per-line overrides and image asset references are new kinds of effect
+  setting (today effect extras hold single numbers, colours, choices and toggles). They need a
+  project-format addition (alongside captions), validated in `io/schema.ts`. An image asset in use
+  cannot be deleted from Assets, the same rule as placements.
+
+**Mockup** (shown in chat, 2026-11-08): an interactive canvas with Around and Trail modes,
+palettes, Solid, Stripes and Dots paint, and sliders for count, width, gap, cycle and fade.
+- Around: a single two-pass distance field coloured by line index, recoloured each frame.
+- Trail: a cached outline sprite of the shape stamped at earlier positions and tinted per line.
+- This was enough to judge the look. The real effect needs an exact Euclidean distance transform
+  (the mockup's chamfer distance gives slightly octagonal rings). Trail needs real per-frame
+  silhouettes, because drawings change shape from frame to frame, not only position.
+
 These two effects are independent of captions and can ship before them. Captions keep their own
 ink and fill settings, because those are vector-exact and set the text-fitting padding. The Fill
 and Outline effects are the pixel tools for everything else.
@@ -369,7 +409,37 @@ and Outline effects are the pixel tools for everything else.
 - **Titles**: phase 1 can treat an existing title as a caption with no balloon. That leaves one text
   system and keeps old projects readable (convert on edit, never silently).
 
-## Decisions needed from the owner
+## Phase 1 as built (2026-11-08)
+
+Owner decisions: bundle popular free comic and webcomic fonts, allow importing fonts (changeable at
+any time), and **keep Titles separate and simple**. Captions are their own system; Titles are unchanged.
+
+- **Fonts** (`public/fonts/`, licences beside them): Comic Neue (4 faces), Bangers, Patrick Hand,
+  Architects Daughter, Indie Flower, Bubblegum Sans (OFL), Luckiest Guy and Permanent Marker
+  (Apache 2.0). Imported TTF/OTF/WOFF/WOFF2 fonts (4 MB, 16 per project) are saved in the project like
+  sounds. Missing bold or italic faces fall back to synthetic ones. Exports wait for fonts.
+- **Portable core** (`src/lettering/`, no app imports, enforced by a test): `spec.ts` (CaptionSpec,
+  sizes as page fractions Small 2.6%, Body 3.4%, Big 6%, keyable settings, a forgiving reader),
+  `fonts.ts`, and `geometry.ts` (balanced line-breaking, balloon outlines, merged/seam/bubble/lightning
+  tails, and shape detection).
+- **Letter tool** (`lettertool.ts`, Draw and Animate): tap to add; draw a loop to get a recognised
+  speech, box, thought or shout balloon (or keep it as drawn); press on a balloon's **edge** and draw out
+  for its tail (a zigzag makes a lightning tail); drag inside to move; drag the tip to re-aim;
+  double-tap to edit. Each gesture is one Undo step. New captions open in Motion.
+- **Caption editor** (`ui/captioneditor.ts`): words, font (bundled, project, Import font…), size,
+  balloon, align, Bold/Italic/ALL CAPS, fill, ink, text colour, letter outline, ink width and tail join.
+  Live preview; Apply is one Undo step; Cancel restores (and removes an empty new caption).
+- **Motion**: rows Reveal, Balloon, Text opacity, Balloon opacity, Ink length, Tracking and Line
+  spacing (`cap:` keys) appear automatically. Chips: Fade in, Pop in, Type on, Fade out.
+- **Story**: each dialogue line has a 💬 button that makes a caption timed to that line in the animatic,
+  fading in and out (`App.captionFromDialogue`).
+- **Format**: reader 10 (shared with the five new effects) is needed only when a caption exists.
+
+Not built yet: a Tail tip Motion row and pick-whipping a tail to a speaker; colour fill underneath the
+balloon and ink start; converting vector or pixel layers to captions; joined balloons; kerning and
+inline styling; sound effects on a path; Shake/Wave/Jitter; phase 3 vector letters.
+
+## Decisions needed from the owner (answered 2026-11-08 for fonts and Titles)
 
 - Which 4–6 Open Font License fonts to bundle, and whether students may import their own.
 - Whether Caption replaces Titles (recommended: a title is a caption without a balloon) or sits

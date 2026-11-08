@@ -2,6 +2,76 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Comic captions, lettering phase 1 (2026-11-08, format 10)
+
+Design and as-built notes: `docs/LETTERING-DESIGN.md` ("Phase 1 as built"). Owner decisions: bundle
+free comic fonts, allow importing fonts, keep Titles separate (Titles code is unchanged).
+- `public/fonts/`: 8 families (OFL and Apache 2.0, licences and `README.md` beside them), served from
+  `BASE_URL/fonts/`.
+- `src/lettering/` is portable (a test fails if it imports app code): `spec.ts`, `fonts.ts`,
+  `geometry.ts`, `lettering.test.ts`.
+- A caption is `DrawingsLayer.caption` (a still, looping drawings layer). `core/comp.ts` adds
+  `captionSignature` to the frame-content key; `view/composite.ts` `paintPlanes` paints captions
+  (`view/caption.ts`) on the fill and line planes and adds them to the effect cache key.
+  `view/captionfonts.ts` loads fonts with `FontFace`; Share and bundles await `captionFontsReady`.
+- `project.fonts` holds imported fonts; `io/schema.ts`, `io/persist.ts` and `io/projectio.ts` save,
+  validate and reload them like sounds. Reader 10 only when a caption exists.
+- `lettertool.ts` (`App.letters`, `App.setLettering`): tap, drawn loops (detected style), a press on a
+  balloon's edge draws its tail, drag inside moves, tip drag, double-tap edits. `ui/captioneditor.ts`.
+  Tool row chips in `ui/bubbles.ts`; Motion `cap:` rows in `compedit.ts` and `ui/motion.ts`;
+  `App.captionPreset`; Story 💬 button per dialogue line → `App.captionFromDialogue`.
+- Found and fixed while testing: pressing inside a balloon always moved it, so drawn tails were
+  unreachable (now the edge draws a tail); a long flat oval was detected as a box (box now also needs
+  to fill its bounding rectangle); the starting tail now scales with the page.
+
+Checks: `lettering.test.ts` 8 tests. New `captions` fixture, 13 checks: tap → editor → one Undo step,
+Cancel removes an empty caption, pixels for fill, letters and tail, size tied to page height, live font
+change, Motion rows and a row edit, Fade in and Type on keys over time, drawn box and oval, drawn tail
+and tip re-aim, Story line → timed caption, archive with an imported font (reader 10, reload, a
+newer caption format refused). 200 layouts take about 100–140 ms.
+
+Full checks: unit tests 779 passed (1 skipped), build passed, full browser suite **72 of 72** (run alone).
+
+Not built: Tail tip row and pick-whipped tails, under-fill and ink start, convert layers to captions,
+joined balloons, kerning and inline styles, phase 3. Not tested on iPad or with a pen. Committed with the five effects and pushed to main (deploy), 2026-11-08.
+
+### Five new effects: Fill, Outline, Venetian blinds, Kaleidoscope, Sound wave (2026-11-08, format 10)
+
+Design: `docs/MOTION-EFFECTS-2026-11.md`; Fill and Outline also in `docs/LETTERING-DESIGN.md`.
+- `core/effects.ts`: five definitions; `FORMAT10_EFFECTS`; `EffectDef.frameDependent`, which adds the
+  frame to the effect cache key; `outlineReach` and `OUTLINE_MAX_REACH` (480 px).
+- `view/fxextra.ts`: the renderers and an exact distance transform (Felzenszwalb, with Chebyshev for
+  square corners). `applyEffect` now receives the layer id.
+  - **Outline** runs only in the art's box grown by its reach, and measures inside and outside
+    distance.
+  - **Kaleidoscope** Flower and Wheel use a canvas transform and clip per slice. Starlish, Unfold and
+    Triangles map pixels.
+- **Sound wave**: `ui/soundsource.ts` mixes the shot's clips (via `soundWindow`) to mono at 22,050 Hz,
+  cached by clips and decoded sounds; undecoded sounds load in the background. `setSoundSource` and
+  `setSoundPreload` are wired in `main.ts`. Share `make()` and `prepareBundle` await `soundReady()`.
+  Motion → New layer → **Sound wave** (`CompEditor.addSoundWaveLayer`) is one Undo step and gives a
+  hint when the shot has no sound.
+- Effects panel categories gained Outline and fill, Transitions and Generate.
+- `io/schema.ts`: SCHEMA 10. Reader 10 is needed only when one of the five effects is saved (older
+  readers would silently drop them).
+- Manual and `UPDATES` updated.
+
+Checks:
+- `view/fxextra.test.ts` (7 tests): exact and square distance, palettes, reach cap, per-frame cache key
+  only when moving, settings clamped when read, a 1 kHz tone in the right spectrum band, waveform
+  signs and silence, and the format-10 gate.
+- `effects` fixture: 36 checks in real Chromium. Fill colour, soft edge and opacity; Outline ring position, three
+  coloured lines with gaps, cycling at frame 24, Inside and Outline only; blinds coverage at 0, 50
+  and 100%, Split, Stagger and colour reveal; kaleidoscope copies, mirroring and Spin; Sound wave
+  from a test tone, flat without sound, spectrum bars and Over original.
+- Speed at 1920×1080 per frame: Outline (6 lines) 74 ms, Kaleidoscope 14 ms, Venetian blinds 38–54 ms.
+  First versions were 205 ms and 380 ms before the box and canvas fast paths.
+- `precision` 21 (Sound wave layer and Undo). Unit tests passed (91 files), build passed. Full browser suite **71 of 71** (run alone).
+
+Not built: Outline Trail mode, image paint, per-line overrides, a free-length colour list; captions
+(lettering phase 1 waits on owner decisions about fonts and Caption vs Titles). Not tested on iPad.
+Committed with captions and pushed to main (deploy), 2026-11-08.
+
 ### Code cleanup (2026-11-08)
 
 - `ui/dom.ts` holds the shared `el(tag, attrs, text)` and `elText(tag, text)`. 41 panels dropped
@@ -15,7 +85,7 @@
   objects and stores strings raw, so merging the helpers could change saved settings.
 - About 170 exports are used only inside their own file. They are harmless and were left exported.
 
-Checks: unit tests passed (764, 1 skipped), the build passed and the full browser suite passed 71 of 71. Not committed.
+Checks: unit tests passed (764, 1 skipped), the build passed and the full browser suite passed 71 of 71. Committed as 7a989bd.
 
 ### Pick whip for parenting and paths (2026-11-08)
 

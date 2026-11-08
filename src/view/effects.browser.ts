@@ -5,7 +5,7 @@ import { drawingsLayer } from '../core/comp';
 import { Project, planeCanvas } from '../core/project';
 import { EffectsPanel } from '../ui/effectspanel';
 import { drawComp, drawEditingLayer, releaseScratch } from './composite';
-import { drawEffected } from './effects';
+import { drawEffected, setSoundSource } from './effects';
 
 /** The effects you can add: they sit on the card's "+ Add effect" tab. */
 function addButtons(root: HTMLElement): HTMLButtonElement[] {
@@ -444,6 +444,94 @@ for (const [label, effect] of [['none', null], ['Roughen edges 3 (default)', fx(
   for (let i = 3; i < plain.length; i += 4) { a += plain[i]!; b += rough[i]!; }
   note(`thin 1.5 px line keeps ${Math.round((100 * b) / a)}% of its ink at Roughen edges 3`);
   check('Roughen edges at its default keeps a thin 1.5 px line together (at least 55% of its ink)', () => (b / a >= 0.55) || `kept ${Math.round((100 * b) / a)}%`);
+}
+
+
+// --- November 2026 effects: Fill, Outline, Venetian blinds, Kaleidoscope, Sound wave -----------
+{
+  const disc = dot(32, 32, 12);
+  const ringAt = (px: Uint8ClampedArray, d: number) => at(px, 32 + Math.round(d), 32);
+  check('Fill replaces the colour and keeps the soft edge', () => {
+    const plain = run([], disc), filled = run([fx('fill', { params: { color: '#00ff00' } })], disc);
+    const c = at(filled, 32, 32), edgeX = [...Array(W).keys()].find(x => { const a = at(plain, x, 32)[3]!; return a > 0 && a < 255; })!;
+    return (c[0] === 0 && c[1] === 255 && c[2] === 0 && c[3] === 255 && at(filled, edgeX, 32)[3] === at(plain, edgeX, 32)[3] && at(filled, 2, 2)[3] === 0) || JSON.stringify({ c, edge: [at(plain, edgeX, 32), at(filled, edgeX, 32)] });
+  });
+  check('Fill Tint keeps shading and Opacity 50% mixes', () => {
+    const half = at(run([fx('fill', { amount: 50, params: { color: '#000000' } })], disc), 32, 32);
+    return (Math.abs(half[0]! - RED[0] / 2) <= 2 && half[3] === 255) || JSON.stringify(half);
+  });
+  check('Outline puts a ring of the chosen width outside the edge and keeps the art', () => {
+    const px = run([fx('outline', { amount: 4, params: { color: '#0000ff' } })], disc);
+    const ring = ringAt(px, 14), out = ringAt(px, 18), mid = at(px, 32, 32);
+    return (ring[2]! > 200 && ring[3] === 255 && out[3] === 0 && mid[0] === RED[0]) || JSON.stringify({ ring, out, mid });
+  });
+  check('Repeated outlines: three lines with gaps, each its own colour, cycling over frames', () => {
+    const e = fx('outline', { amount: 4, params: { count: 3, gap: 2, palette: 'custom', color: '#ff0000', color2: '#00ff00', color3: '#0000ff', color4: '#ffff00', cycle: 1 } });
+    const f0 = run([e], disc, null, 0), f24 = run([e], disc, null, 24);
+    const c = (px: Uint8ClampedArray, d: number) => ringAt(px, d).slice(0, 4).join(',');
+    const want0 = [c(f0, 14), c(f0, 17), c(f0, 20), c(f0, 26)], want24 = c(f24, 14);
+    return (want0[0] === '255,0,0,255' && ringAt(f0, 17)[3] === 0 && want0[2] === '0,255,0,255' && want0[3] === '0,0,255,255' && want24 === '255,255,0,255') || JSON.stringify({ want0, want24 });
+  });
+  check('Outline Inside sits within the art and Outline only hides the art', () => {
+    const inside = run([fx('outline', { amount: 4, params: { position: 'inside', color: '#0000ff' } })], disc);
+    const only = run([fx('outline', { amount: 4, params: { only: true, color: '#0000ff' } })], disc);
+    return (ringAt(inside, 10)[2]! > 200 && ringAt(inside, 14)[3] === 0 && at(only, 32, 32)[3] === 0 && ringAt(only, 14)[3] === 255) || JSON.stringify({ in10: ringAt(inside, 10), in14: ringAt(inside, 14), mid: at(only, 32, 32) });
+  });
+  const full = rect(0, 0, W, H);
+  const cover = (px: Uint8ClampedArray) => { let a = 0; for (let i = 3; i < px.length; i += 4) a += px[i]!; return a / (255 * W * H); };
+  check('Venetian blinds hide half at 50%, all at 100%, nothing at 0%', () => {
+    const half = cover(run([fx('blinds', { amount: 50, size: 8 })], full)), all = cover(run([fx('blinds', { amount: 100, size: 8 })], full)), none = cover(run([fx('blinds', { amount: 0, size: 8 })], full));
+    return (Math.abs(half - 0.5) < 0.04 && all === 0 && none === 1) || JSON.stringify({ half, all, none });
+  });
+  check('Venetian blinds Split, Stagger and closed-slat colour', () => {
+    const split = cover(run([fx('blinds', { amount: 50, size: 8, params: { style: 'split' } })], full));
+    const stag = cover(run([fx('blinds', { amount: 50, size: 8, params: { stagger: 100 } })], full));
+    const shown = at(run([fx('blinds', { amount: 100, size: 8, params: { reveal: true, color: '#00ff00' } })], full), 10, 10);
+    return (Math.abs(split - 0.5) < 0.05 && stag > 0.2 && stag < 0.8 && shown.join(',') === '0,255,0,255') || JSON.stringify({ split, stag, shown });
+  });
+  check('Kaleidoscope Wheel repeats a dot around the centre', () => {
+    // a dot in the middle of the first slice (30°): copies every 60°
+    const a = (Math.PI * 2) / 6, mid = a / 2;
+    const px = run([fx('kaleido', { amount: 6, params: { style: 'wheel' } })], dot(32 + 12 * Math.cos(mid), 32 + 12 * Math.sin(mid), 3));
+    const hits = [0, 1, 2, 3, 4, 5].filter(k => at(px, Math.round(32 + 12 * Math.cos(mid + k * a)), Math.round(32 + 12 * Math.sin(mid + k * a)))[3]! > 128).length;
+    return hits === 6 || `${hits} of 6 copies`;
+  });
+  check('Kaleidoscope Flower mirrors across slices and Spin turns it over frames', () => {
+    const e = fx('kaleido', { amount: 4, params: { style: 'flower' } });
+    const px = run([e], dot(44, 36, 3));
+    const mirrored = at(px, 44, 28)[3]! > 128;
+    const spin = fx('kaleido', { amount: 4, params: { style: 'flower', spin: 45 } });
+    const moved = differs(run([spin], dot(44, 36, 3), null, 0), run([spin], dot(44, 36, 3), null, 12));
+    return (mirrored && moved) || JSON.stringify({ mirrored, moved });
+  });
+  {
+    // speed at full HD: Outline needs two exact distance passes; Kaleidoscope warps every pixel
+    const big = (effects: LayerEffect[]) => { const t = performance.now(); run(effects, dot(960, 540, 300), null, 0, 1920, 1080); return performance.now() - t; };
+    big([]);
+    const base = big([]), ol = big([fx('outline', { amount: 6, params: { count: 6, gap: 4, palette: 'rainbow' } })]) - base, ka = big([fx('kaleido', { amount: 8 })]) - base, bl = big([fx('blinds', { amount: 40, size: 40 })]) - base;
+    note(`1920×1080: Outline (6 lines) ${Math.round(ol)} ms, Kaleidoscope ${Math.round(ka)} ms, Venetian blinds ${Math.round(bl)} ms per frame (headless, unthrottled)`);
+  }
+  check('Sound wave draws the shot sound (a test tone), and a flat line without sound', () => {
+    const rate = 22050, samples = Float32Array.from({ length: rate * 2 }, (_, i) => Math.sin((2 * Math.PI * 30 * i) / rate) * 0.9);
+    setSoundSource((id, frame, fps) => (id === 'L' ? { samples, rate, time: frame / fps } : null));
+    const e = fx('soundwave', { amount: 20, size: 2, params: { sides: 'up', window: 100 } });
+    // the art sits below the line, where an Up wave never reaches: it is cleared (Over original is off)
+    const wave = run([e], dot(32, 50, 6), null, 12);
+    let above = 0; for (let y = 5; y < 28; y++) for (let x = 8; x < 56; x++) if (at(wave, x, y)[3]! > 0) above++;
+    const original = at(wave, 32, 50)[3];
+    setSoundSource(null);
+    const flat = run([fx('soundwave', { amount: 20, size: 3 })], null, null, 12);
+    let line = 0; for (let x = 8; x < 56; x++) if (at(flat, x, 32)[3]! > 0) line++;
+    return (above > 20 && original === 0 && line > 40) || JSON.stringify({ above, original, line });
+  });
+  check('Sound wave Spectrum bars rise for a tone, and Over original keeps the art', () => {
+    const rate = 22050, samples = Float32Array.from({ length: rate * 2 }, (_, i) => Math.sin((2 * Math.PI * 1000 * i) / rate) * 0.9);
+    setSoundSource(() => ({ samples, rate, time: 1 }));
+    const px = run([fx('soundwave', { amount: 25, size: 2, params: { type: 'spectrum', look: 'bars', sides: 'up', over: true, low: 100, high: 4000, detail: 32 } })], dot(32, 52, 6));
+    setSoundSource(null);
+    let bars = 0; for (let y = 8; y < 30; y++) for (let x = 6; x < 58; x++) if (at(px, x, y)[3]! > 0) bars++;
+    return (bars > 10 && at(px, 32, 52)[0] === RED[0]) || JSON.stringify({ bars, art: at(px, 32, 52) });
+  });
 }
 
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

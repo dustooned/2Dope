@@ -453,6 +453,7 @@ export function assetsOf(p: ProjectFile): Set<string> {
     if (d.fill) s.add(d.fill);
   }
   for (const sound of Object.values(p.sounds ?? {})) s.add(sound.path);
+  for (const font of Object.values(p.fonts ?? {})) s.add(font.path);
   return s;
 }
 

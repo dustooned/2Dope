@@ -283,7 +283,7 @@ export class EffectsPanel {
       const sections = new Map<string, HTMLElement>();
       for (const t of EFFECT_TYPES) {
         if (l.adjust && temporalEffect(t.id)) continue;
-        const category = temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'offset', 'wave'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv'].includes(t.id) ? 'Texture and retro' : 'Colour and style';
+        const category = temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'kaleido', 'offset', 'wave'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv'].includes(t.id) ? 'Texture and retro' : ['outline', 'fill'].includes(t.id) ? 'Outline and fill' : ['blinds'].includes(t.id) ? 'Transitions' : ['soundwave'].includes(t.id) ? 'Generate' : 'Colour and style';
         let section = sections.get(category);
         if (!section) { section = el('section', { class: 'fx-category' }); section.append(el('strong', {}, category)); sections.set(category, section); add.append(section); }
         const b = el('button', { type: 'button', title: t.hint, 'aria-label': `Add ${plainName(t)}`, 'data-effect': t.id });
