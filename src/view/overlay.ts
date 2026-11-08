@@ -98,6 +98,10 @@ export function drawMotionOverlay(g: CanvasRenderingContext2D, ed: CompEditor, v
     g.lineTo(a[0], a[1] + 8);
     g.stroke();
   }
+  if (ed.pathStroke && ed.pathStroke.length > 1) {
+    g.strokeStyle = '#60caff'; g.lineWidth = 3; g.setLineDash([8, 6]); g.beginPath();
+    ed.pathStroke.forEach((v, i) => { const p = scr(v); if (i) g.lineTo(...p); else g.moveTo(...p); }); g.stroke(); g.setLineDash([]);
+  }
   if (ed.pathEditing && !simple) {
     const layer = ed.primary, prop = layer?.transform.position;
     if (layer && prop && prop.keys.length >= 2 && prop.keys.length <= 1000) {

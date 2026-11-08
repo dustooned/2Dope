@@ -42,6 +42,12 @@ export interface Prop<T extends Value = Value> {
   value: T;
   /** Sorted by frame, one key per frame at most. */
   keys: Key<T>[];
+  /**
+   * Even speed (2D paths): travel along the whole path from the first key to the last at a steady
+   * speed, eased only by the first key's out and the last key's in. The keys between shape the path
+   * but no longer set its timing (After Effects' roving keys).
+   */
+  even?: boolean;
 }
 
 export const LINEAR: Side = { interp: 'linear', slope: 1, influence: 1 / 3 };
@@ -197,6 +203,7 @@ export function valueAt<T extends Value>(p: Prop<T>, f: number): T {
     if (k[mid]!.f <= f) lo = mid;
     else hi = mid;
   }
+  if (p.even && k.length > 1 && Array.isArray(first.v)) return evenAt(k as Key<Vec2>[], f) as T;
   const a = k[lo]!;
   const b = k[hi]!;
   const x = (f - a.f) / (b.f - a.f);
@@ -206,6 +213,55 @@ export function valueAt<T extends Value>(p: Prop<T>, f: number): T {
     return [bez(av[0], av[0] + out[0], bv[0] + inn[0], bv[0], t), bez(av[1], av[1] + out[1], bv[1] + inn[1], bv[1], t)] as T;
   }
   return mix(a.v, b.v, t) as T;
+}
+
+/** A point on the path between keys a and b, `u` 0..1 along the curve (the same geometry valueAt draws). */
+export function segmentPoint(a: Key<Vec2>, b: Key<Vec2>, u: number): Vec2 {
+  const av = a.v, bv = b.v;
+  if (!a.spatial && !b.spatial) return [av[0] + (bv[0] - av[0]) * u, av[1] + (bv[1] - av[1]) * u];
+  const out = a.spatial?.out ?? [(bv[0] - av[0]) / 3, (bv[1] - av[1]) / 3], inn = b.spatial?.in ?? [(av[0] - bv[0]) / 3, (av[1] - bv[1]) / 3];
+  return [bez(av[0], av[0] + out[0], bv[0] + inn[0], bv[0], u), bez(av[1], av[1] + out[1], bv[1] + inn[1], bv[1], u)];
+}
+
+const EVEN_STEPS = 48;
+
+/** Where an even-speed path is at frame f (between its first and last key). */
+function evenAt(k: Key<Vec2>[], f: number): Vec2 {
+  const first = k[0]!, last = k[k.length - 1]!;
+  // arc length, sampled along each segment
+  const pts: Vec2[] = [first.v];
+  const dist: number[] = [0];
+  for (let i = 0; i + 1 < k.length; i++)
+    for (let s = 1; s <= EVEN_STEPS; s++) {
+      const q = segmentPoint(k[i]!, k[i + 1]!, s / EVEN_STEPS), prev = pts[pts.length - 1]!;
+      dist.push(dist[dist.length - 1]! + Math.hypot(q[0] - prev[0], q[1] - prev[1]));
+      pts.push(q);
+    }
+  const total = dist[dist.length - 1]!;
+  if (total <= 0) return first.v;
+  const target = progress(first.out, last.in, (f - first.f) / (last.f - first.f)) * total;
+  let lo = 0, hi = dist.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (dist[mid]! <= target) lo = mid; else hi = mid; }
+  const span = dist[hi]! - dist[lo]!, t = span > 0 ? (target - dist[lo]!) / span : 0;
+  const a = pts[lo]!, b = pts[hi]!;
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+/**
+ * The direction of travel (degrees, 0 = to the right, clockwise on screen) of a 2D path at frame f,
+ * for Orient along path. Where the layer stands still it keeps the direction it last had.
+ */
+export function travelAngle(p: Prop<Vec2>, f: number): number {
+  const k = p.keys;
+  if (k.length < 2) return 0;
+  const lo = k[0]!.f, hi = k[k.length - 1]!.f;
+  const h = 0.25;
+  // look a little either side; at the ends (and in holds) look back or ahead for movement
+  for (const reach of [h, 1, 4, 16]) {
+    const a = valueAt(p, Math.max(lo, Math.min(hi, f) - reach)), b = valueAt(p, Math.min(hi, Math.max(lo, f) + reach));
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-6) return (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+  }
+  return 0;
 }
 
 /** Is the property animated (has at least one key)? */

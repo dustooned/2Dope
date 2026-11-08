@@ -69,6 +69,7 @@ import {
   removeIndices,
   setHolds,
   repeatCycle,
+  type TweenEase,
   shiftBlock,
   setCaption,
   startOf,
@@ -4721,6 +4722,24 @@ export class App {
     if (none) this.onNotice?.(times === 'end' ? 'These drawings already reach the end of the shot.' : 'Select the drawings of the cycle first.');
   }
 
+  /** How the selected poses' vector tweens move: even, slow start, slow end or both. One undo step. */
+  setTweenEase(ease: TweenEase | null): void {
+    if (this.titlePaintBlocked(false) || this.live) return;
+    const t = this.targets;
+    if (!t.length) return;
+    const label = ease === 'easeIn' ? 'Tween: slow start' : ease === 'easeOut' ? 'Tween: slow end' : ease === 'easeInOut' ? 'Tween: slow both' : 'Tween: even';
+    this.editTimeline(label, (ex) => {
+      if (t.every((i) => (ex[i]?.ease ?? null) === ease)) return { ex, frame: this.lf };
+      const out = ex.map((e, i) => {
+        if (!t.includes(i)) return e;
+        const next = { ...e };
+        if (ease) next.ease = ease; else delete next.ease;
+        return next;
+      });
+      return { ex: out, frame: this.lf };
+    }, true);
+  }
+
   copySelection(): number {
     const ex = this.project.exposures;
     this.clipboard = this.targets.map((i) => ({ drawing: ex[i]!.drawing, length: ex[i]!.length }));
@@ -6455,6 +6474,7 @@ export class App {
     if (this.workspace === 'motion') {
       if (e.code === 'KeyY' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); if (!e.repeat) this.editor.setAnchorEditing(!this.editor.anchorEditing); return; }
       if (e.key === 'Escape' && this.editor.anchorEditing) { e.preventDefault(); this.editor.setAnchorEditing(false); return; }
+      if (e.key === 'Escape' && this.editor.drawingPath) { e.preventDefault(); this.editor.gestureEnd(true); this.editor.setDrawingPath(false); return; }
       if (e.key === 'Escape' && this.editor.pathEditing) { e.preventDefault(); this.editor.setPathEditing(false); return; }
       if (e.code === 'Delete' || e.code === 'Backspace') {
         e.preventDefault();
@@ -7033,7 +7053,29 @@ export class App {
     // Farther ghosts first so the nearest sits on top.
     draw([...n.before].reverse(), o.beforeColor);
     draw([...n.after].reverse(), o.afterColor);
+    if (o.enabled) this.drawTweenGhosts(g);
     g.globalAlpha = 1;
+  }
+
+  /**
+   * Onion skin for vector tweens: the in-between of every frame of this pose's hold, faint, so the
+   * spacing (and its ease) shows before playing. Only while editing nothing on the canvas.
+   */
+  private drawTweenGhosts(g: CanvasRenderingContext2D): void {
+    const layer = this.project.isPlaceholder ? null : this.project.layer;
+    if (!layer || layer.kind !== 'drawings' || !layer.tweenVectors || this.live || this.ve || this.xf) return;
+    const at = locate(layer.exposures, this.lf);
+    const cur = at && layer.exposures[at.index], next = at && layer.exposures[at.index + 1];
+    if (!at || !cur || !next || cur.length < 2 || next.drawing === cur.drawing) return;
+    const a = this.project.drawings.get(cur.drawing), b = this.project.drawings.get(next.drawing);
+    if (!a || !b || b.parked || !a.vectors.length) return;
+    const start = this.frame - at.offset, steps = Math.min(cur.length - 1, 24);
+    g.globalAlpha = Math.min(0.35, this.onion.opacity * 0.6);
+    for (let k = 1; k <= steps; k++) {
+      const tw = vectorTweenAt(layer, start + Math.round((k * (cur.length - 1)) / steps));
+      if (!tw || tw.t <= 0 || tw.t >= 1) continue;
+      for (const v of tweenStrokes(a.vectors, b.vectors, tw.t)) drawVectorStroke(g, v, this.lengthOf(v));
+    }
   }
 
   private drawPixelGrid(g: CanvasRenderingContext2D): void {

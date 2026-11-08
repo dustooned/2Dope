@@ -27,6 +27,10 @@ export function frameMenu(app: App, extra: CtxItem[] = []): CtxItem[] {
     { chips: [...holds, { label: '−1', title: 'One frame shorter', run: () => app.changeHold(-1) }, { label: '+1', title: 'One frame longer', run: () => app.changeHold(1) }] },
     { title: n > 1 ? `🔁 Repeat these ${n} as a cycle` : '🔁 Repeat as a cycle' },
     { chips: [1, 2, 3].map((k) => ({ label: `×${k + 1}`, title: `Show ${n > 1 ? 'these drawings' : 'this drawing'} ${k + 1} times in a row (same drawings)`, run: () => app.repeatSelection(k) })).concat([{ label: 'To end', title: 'Repeat until the end of the shot', run: () => app.repeatSelection('end') }]) },
+    ...(app.project.layer.kind === 'drawings' && app.project.layer.tweenVectors ? [
+      { title: '〰 Tween to the next pose' },
+      { chips: ([[null, 'Even', 'The same speed all the way'], ['easeIn', 'Slow start', 'Leaves this pose slowly, then speeds up'], ['easeOut', 'Slow end', 'Settles slowly into the next pose'], ['easeInOut', 'Both', 'Slow start and slow end']] as const).map(([e, label, title]) => ({ label, title, on: (app.project.exposures[app.targets[0] ?? -1]?.ease ?? null) === e, run: () => app.setTweenEase(e) })) },
+    ] : []),
     { title: 'Mark' },
     { chips: roles },
     { sep: true },

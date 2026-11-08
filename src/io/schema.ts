@@ -22,7 +22,7 @@ import {
   type PinProp,
   type Transform,
 } from '../core/comp';
-import { CAPTION_FIELDS } from '../core/timeline';
+import { CAPTION_FIELDS, TWEEN_EASES, type TweenEase } from '../core/timeline';
 import type { SoundClip } from '../core/audio';
 import type { StrokePoint, StrokeRecord, Tool } from '../core/stroke';
 import { readVectorShape } from '../core/vectorshape';
@@ -38,7 +38,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 8;
+export const SCHEMA = 9;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -53,6 +53,8 @@ export interface ExposureFile {
   /** Storyboard shot info (added without a schema bump). */
   shot?: string;
   camera?: string;
+  /** Vector tween easing out of this pose (format 9). */
+  ease?: TweenEase;
 }
 
 /** A keyframe side (see core/anim.ts). `slope` and `influence` only matter for bezier. */
@@ -74,6 +76,8 @@ export interface KeyFile<T extends Value = Value> {
 export interface PropFile<T extends Value = Value> {
   value: T;
   keys?: KeyFile<T>[];
+  /** Even speed along a 2D path (format 9). */
+  even?: boolean;
 }
 
 export interface TransformFile {
@@ -82,6 +86,8 @@ export interface TransformFile {
   scale: PropFile<Vec2>;
   rotation: PropFile<number>;
   opacity: PropFile<number>;
+  /** Orient along path (format 9). */
+  orient?: boolean;
 }
 
 export interface PartFile {
@@ -177,6 +183,7 @@ export interface DrawingFile {
 
 /** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
 export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comps?: Record<string, CompFile>): number {
+  if (comps && Object.values(comps).some(c => c.layers.some(l => l.transform.orient || l.transform.position.even || ('exposures' in l && l.exposures?.some(e => e.ease))))) return 9;
   if (comps && Object.values(comps).some(c => c.layers.some(l =>
     l.tweenVectors || l.effects?.some(e => temporalEffect(e.type)) || l.styleOrigin?.effects.some(e => temporalEffect(e.type))))) return 8;
   const spatial = (v: unknown): boolean => !!v && typeof v === 'object' && (Array.isArray(v) ? v.some(spatial) : Object.entries(v).some(([key, value]) => key === 'spatial' && value !== undefined || spatial(value)));
@@ -396,6 +403,10 @@ function prop<T extends Value>(v: unknown, what: string, dims: 1 | 2): PropFile<
     for (let i = 1; i < keys.length; i++) if (keys[i]!.f === keys[i - 1]!.f) throw new SchemaError(`${what} has two keys on frame ${keys[i]!.f}`);
     if (keys.length) out.keys = keys;
   }
+  if (v.even !== undefined) {
+    if (typeof v.even !== 'boolean' || dims !== 2) throw new SchemaError(`${what}: invalid even speed`);
+    if (v.even) out.even = true;
+  }
   return out;
 }
 
@@ -407,6 +418,7 @@ function transform(v: unknown, what: string): TransformFile {
     scale: prop<Vec2>(v.scale, `${what} scale`, 2),
     rotation: prop<number>(v.rotation, `${what} rotation`, 1),
     opacity: prop<number>(v.opacity, `${what} opacity`, 1),
+    ...(v.orient === true ? { orient: true } : {}),
   };
 }
 
@@ -424,6 +436,10 @@ function exposureList(v: unknown, what: string, drawings: Record<string, Drawing
     for (const f of CAPTION_FIELDS) {
       const t = e[f.key];
       if (typeof t === 'string' && t.trim()) out[f.key] = t.trim().slice(0, f.max);
+    }
+    if (e.ease !== undefined) {
+      if (!TWEEN_EASES.includes(e.ease as TweenEase)) throw new SchemaError('an exposure has an unknown tween easing');
+      out.ease = e.ease as TweenEase;
     }
     return out;
   });
@@ -549,6 +565,7 @@ export function migrate(input: unknown): Record<string, unknown> {
   if ((raw.schema as number) < 6) raw = { ...raw, schema: 6 };
   if ((raw.schema as number) < 7) raw = { ...raw, schema: 7 };
   if ((raw.schema as number) < 8) raw = { ...raw, schema: 8 };
+  if ((raw.schema as number) < 9) raw = { ...raw, schema: 9 };
   return raw;
 }
 
@@ -734,7 +751,7 @@ function sideOf(f: SideFile): Side {
 }
 
 function propOf<T extends Value>(f: PropFile<T>): Prop<T> {
-  return { value: f.value, keys: (f.keys ?? []).map((k): Key<T> => ({ f: k.f, v: k.v, in: sideOf(k.in), out: sideOf(k.out), ...(k.spatial ? { spatial: structuredClone(k.spatial) } : {}) })) };
+  return { value: f.value, keys: (f.keys ?? []).map((k): Key<T> => ({ f: k.f, v: k.v, in: sideOf(k.in), out: sideOf(k.out), ...(k.spatial ? { spatial: structuredClone(k.spatial) } : {}) })), ...(f.even ? { even: true } : {}) };
 }
 
 function sideFile(s: Side): SideFile {
@@ -744,15 +761,16 @@ function sideFile(s: Side): SideFile {
 export function propFile<T extends Value>(p: Prop<T>): PropFile<T> {
   const out: PropFile<T> = { value: p.value };
   if (p.keys.length) out.keys = p.keys.map((k) => ({ f: k.f, v: k.v, in: sideFile(k.in), out: sideFile(k.out), ...(k.spatial ? { spatial: structuredClone(k.spatial) } : {}) }));
+  if (p.even) out.even = true;
   return out;
 }
 
 function transformOf(t: TransformFile): Transform {
-  return { anchor: propOf(t.anchor), position: propOf(t.position), scale: propOf(t.scale), rotation: propOf(t.rotation), opacity: propOf(t.opacity) };
+  return { anchor: propOf(t.anchor), position: propOf(t.position), scale: propOf(t.scale), rotation: propOf(t.rotation), opacity: propOf(t.opacity), ...(t.orient ? { orient: true } : {}) };
 }
 
 function transformFile(t: Transform): TransformFile {
-  return { anchor: propFile(t.anchor), position: propFile(t.position), scale: propFile(t.scale), rotation: propFile(t.rotation), opacity: propFile(t.opacity) };
+  return { anchor: propFile(t.anchor), position: propFile(t.position), scale: propFile(t.scale), rotation: propFile(t.rotation), opacity: propFile(t.opacity), ...(t.orient ? { orient: true } : {}) };
 }
 
 /** The comps of a (validated) file as model objects. */

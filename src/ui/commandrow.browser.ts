@@ -332,6 +332,21 @@ try {
     const held = shot(0), between = shot(2);
     tweening.tweenVectors = false; const untweened = shot(2); tweening.tweenVectors = true;
     check('Scrubbing onto an in-between frame shows the tweened lines, not the held pose', between !== untweened && shot(0) === held, { frame: app.frame });
+    // onion skin shows the in-betweens of the pose's hold (only on a tweening layer)
+    app.setFrame(0); app.setSelection([]);
+    const onionWas = app.onion.enabled; app.onion.enabled = true;
+    const ghosts = shot(0); tweening.tweenVectors = false; const plain = shot(0); tweening.tweenVectors = true;
+    check('Onion skin shows faint in-betweens of a tweened pose', ghosts !== plain, {});
+    // ease out of the pose from the frame menu: one Undo step, and the onion spacing changes
+    const ease = frameMenu(app).flatMap((it) => 'chips' in it ? it.chips : []).find((c) => c.label === 'Slow start');
+    check('The frame menu offers tween easing on a tweening layer', !!ease, labels());
+    ease?.run(); await settle();
+    const eased = shot(0);
+    check('Slow start eases the tween, shows in the onion spacing and is one Undo step',
+      app.project.exposures[0]!.ease === 'easeIn' && app.history.peekUndo()?.label === 'Tween: slow start' && eased !== ghosts, { ease: app.project.exposures[0]!.ease, undo: app.history.peekUndo()?.label });
+    app.undo(); await settle();
+    check('Undo puts the tween back to even', app.project.exposures[0]!.ease === undefined, {});
+    app.onion.enabled = onionWas;
   }
 } catch (e) {
   check(String(e), false);

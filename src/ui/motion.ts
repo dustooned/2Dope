@@ -10,7 +10,7 @@ import { newEffect } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { WIGGLE_DEFAULTS, type LoopMode, type StaggerOrder, type WiggleDims, type WiggleOptions } from '../core/keytools';
 import { isFx, isPartProp, isPin, keyId, PROP_LABEL, type KeyRef, type PropKey, type PropName } from '../compedit';
-import { askNumbers, askText, confirmBox, pickBox } from './dialogs';
+import { askNumbers, askPathOptions, askText, confirmBox, pickBox } from './dialogs';
 import { reactToAudio } from './audioreactdialog';
 import type { SoundBank } from '../io/sound';
 import { attachContextMenu, lastMenuPoint, showContextMenu, type CtxItem } from './contextmenu';
@@ -137,6 +137,15 @@ export class MotionPanel {
     const ed = app.editor;
     root.classList.add('motion-workflow');
     app.motionMenu = (l) => (l ? this.layerItems(l) : this.layerListItems());
+    // Animate along a path: the drawn line, then how long and how the layer travels
+    ed.onPathDrawn = (points) => {
+      const layer = ed.primary;
+      if (!layer) return;
+      const fps = app.project.comp.fps || 24;
+      void askPathOptions(2, layer.transform.position.keys.length > 0).then((o) => {
+        if (o && ed.layer(layer.id)) ed.animateAlongPath(layer.id, points, Math.max(1, Math.round(o.seconds * fps)), { even: o.even, orient: o.orient });
+      });
+    };
     const btn = (label: string, title: string, fn: () => void, cls = '') => {
       const b = el('button', { type: 'button', title, class: cls }, label);
       b.addEventListener('click', fn);
@@ -369,7 +378,7 @@ export class MotionPanel {
     this.compName.hidden = ed.crumbs().length > 1;
     this.compName.title = `${c.name} · ${c.width}×${c.height} · ${c.fps} fps`;
     const nk = ed.selectedKeys().length;
-    this.selectionInfo.textContent = ed.anchorEditing ? `Anchor · tap/drag canvas · Esc to finish` : ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : !ed.selected.length ? 'No layer selected' : `${ed.selected.length === 1 ? ed.primary?.name ?? '1 layer' : `${ed.selected.length} layers`} · ${nk} key${nk === 1 ? '' : 's'}`;
+    this.selectionInfo.textContent = ed.drawingPath ? 'Draw a path, or tap a vector line · Esc to cancel' : ed.anchorEditing ? `Anchor · tap/drag canvas · Esc to finish` : ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : !ed.selected.length ? 'No layer selected' : `${ed.selected.length === 1 ? ed.primary?.name ?? '1 layer' : `${ed.selected.length} layers`} · ${nk} key${nk === 1 ? '' : 's'}`;
     this.renderCrumbs();
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));
@@ -1187,6 +1196,9 @@ export class MotionPanel {
       { title: 'Curves and paths' },
       { label: 'Graph editor…', icon: 'graph', run: () => this.openGraph?.() },
       { label: 'Motion and Effects presets…', icon: 'save', disabled: !this.openPresets, run: () => this.openPresets?.() },
+      { label: ed.drawingPath ? 'Cancel drawing the path' : 'Animate along a path…', icon: 'draw', disabled: !ed.primary || !!ed.primary?.locked, checked: ed.drawingPath, run: () => ed.setDrawingPath(!ed.drawingPath) },
+      { label: 'Even speed on path', disabled: !ed.primary || (ed.primary.transform.position.keys.length ?? 0) < 2, checked: !!ed.primary?.transform.position.even, run: () => { const l = ed.primary; if (l) ed.setEvenSpeed(l.id, !l.transform.position.even); } },
+      { label: 'Turn along path', disabled: !ed.primary, checked: !!ed.primary?.transform.orient, run: () => { const l = ed.primary; if (l) ed.setOrient(l.id, !l.transform.orient); } },
       { label: ed.pathEditing ? 'Done editing motion path' : 'Edit motion path on canvas', icon: 'editpoints', checked: ed.pathEditing, run: () => ed.setPathEditing(!ed.pathEditing) },
       { label: 'Smooth motion path', run: () => ed.changePath(true) },
       { label: 'Straight motion path', run: () => ed.changePath(false) },

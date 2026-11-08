@@ -2,6 +2,56 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Tween ease, tween onion ghosts, routes from existing lines (2026-11-08)
+
+- **Tween ease.** The optional `Exposure.ease` (`'easeIn' | 'easeOut' | 'easeInOut'`, part of format 9)
+  shapes `vectorTweenAt`'s `t` through `progress(easingSides(e))`, so playback, scrubbing, Motion and
+  exports agree. The frame menu shows "Tween to the next pose" chips (Even, Slow start, Slow end, Both),
+  with the current choice highlighted, only on a tweening layer. `App.setTweenEase` acts on the selected
+  exposures in one Undo step. Schema validation rejects unknown values, and reader 9 is required when one is set.
+- **Tween onion ghosts.** `App.drawTweenGhosts` draws a faint in-between for each frame of the
+  current pose's hold (at most 24) when onion skin is on. It is hidden while drawing, editing points or transforming.
+- **Route from an existing line.** In draw-a-path mode, a tap (under 8 screen px of travel) finds the nearest
+  pen line within 18 screen px on another visible, non-guide drawing layer at this frame (`CompEditor.lineAt`)
+  and uses it, in stage space, as the route. An empty tap explains itself and keeps the mode open.
+- The iPad checklist has a new Animate along a path section.
+
+Checks: vectortween unit tests passed (the ease timing and saving test is new). commandrow passed 65,
+covering onion ghosts appearing only on a tweening layer, the Slow start chip, one Undo, and Undo back to even.
+precision passed 19 and precision-responsive passed 57, covering a tapped line as the route and the empty-tap notice.
+Final run, with nothing else using the test server: 763+ unit tests and the build passed, and **71 of 71** browser fixtures passed. An earlier run
+failed commandrow only because a second commandrow ran at the same time and shared its browser storage. Do not run fixtures in parallel on
+one origin. The path, ease and onion work is committed and deployed (see git log). Physical iPad testing has not been done.
+
+### Animate along a path, even speed, orient (2026-11-08, format 9)
+
+- **Animate along a path…** (Motion → Animation): `CompEditor.setDrawingPath` arms a canvas mode.
+  The next drag records a line in stage space (`pathStroke`, drawn dashed by `view/overlay.ts`).
+  Releasing calls `onPathDrawn`, and Motion then asks `askPathOptions` (`ui/dialogs.ts`: travel time
+  in seconds, Even speed default on, Turn to face the way it travels default off).
+  `animateAlongPath` maps the line through the inverse `pathMatrix` into position space and runs
+  `core/motionpath.ts` `pathProp`. That simplifies the line (≤60 keys and ≤ frames + 1), places keys
+  by distance, uses Catmull-Rom handles with corners over 50° kept sharp and closes loops smoothly.
+  The result replaces the position keys and sets or clears `transform.orient` in one Undo step. Esc
+  cancels. Status text guides the student.
+- **Even speed** (`Prop.even`, `core/anim.ts` `evenAt`). Steady arc-length travel from the first key
+  to the last, eased by the first key's out side and the last key's in side. Inner keys shape the path but not its timing.
+  Toggle with Animation → Even speed on path (`setEvenSpeed`).
+- **Orient along path** (`Transform.orient`, `rotationAt` in `core/comp.ts`). Adds `travelAngle`
+  (0° = facing right) to the rotation in `localMatrix`, so every renderer and export agrees. Toggle with
+  Animation → Turn along path (`setOrient`). Blender bakes oriented rotation and even-speed position
+  per frame.
+- **Format 9** (`io/schema.ts`, `docs/project-format.md`): optional `even` (2D properties only) and
+  `orient`. Reader 9 is required only when either is used.
+- Manual and `UPDATES` updated.
+
+Checks: 90 unit test files passed, including the new `core/motionpath.test.ts` (key placement, steady
+speed, loop closing, orientation, save/load and reader gate). The build passed. `precision` (18) and
+`precision-responsive` (54) passed. The new check draws a path through the editor's canvas gesture
+API, fills in the real dialog, and verifies keys, one Undo, steady speed, turning, reader 9 on save,
+identical values after reopening, the Blender bake and Esc cancel. The full suite passed 71 of 71 (see above). Physical
+iPad drawing of a path has not been tested.
+
 ### Follow-up: scrub tweens, virtual Flipbook, Story/Motion split, cleanup (2026-11-08)
 
 - **Scrub preview.** `App.showsTween` shows vector in-betweens while playing, scrubbing and stepping.

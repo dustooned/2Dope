@@ -1,4 +1,15 @@
-# The .2dope project format (schemas 3–8)
+# The .2dope project format (schemas 3–9)
+
+## Even speed and Orient along path (2026-11-08)
+
+Schema 9 adds two optional flags. A 2D property file may carry `even: true`. The value then travels
+the whole spatial path from its first key to its last at a steady speed, eased only by the first key's
+`out` and the last key's `in` side. The keys in between shape the path but do not set its timing. A
+layer's `transform` may carry `orient: true`. The layer then also rotates by the direction of travel of
+its position (`atan2` of the path tangent, in degrees, 0 = facing right), added to its rotation value.
+Writers require reader 9 only when a saved comp uses either flag; other captures keep their earlier
+minimum. `even` on a 1D property is rejected. Blender export bakes even-speed positions and oriented
+rotation to per-frame keys. Loading migrates every supported file to runtime schema 9.
 
 ## Vector poses and temporal effects
 

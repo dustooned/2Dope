@@ -15,7 +15,13 @@ export interface Exposure {
   /** Storyboard shot info for the hand-off (to animators, to 3D): which shot, and the camera. */
   shot?: string;
   camera?: string;
+  /** How a vector tween leaves this pose for the next (format 9). Absent = even. */
+  ease?: TweenEase;
 }
+
+/** Tween easing between two vector poses: slow start, slow end, or both. */
+export type TweenEase = 'easeIn' | 'easeOut' | 'easeInOut';
+export const TWEEN_EASES: readonly TweenEase[] = ['easeIn', 'easeOut', 'easeInOut'];
 
 /** The caption fields of an exposure (a storyboard panel), in the order they are shown. */
 export type CaptionField = 'shot' | 'camera' | 'dialogue' | 'action' | 'slug' | 'note';

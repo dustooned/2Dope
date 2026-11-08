@@ -1,4 +1,5 @@
 import { spatialHandle, smoothPath, straightPath, validateProperty } from './core/precision';
+import { pathProp } from './core/motionpath';
 import { alignment, distribution, unionBoxes, snapBox, readSnap, type Alignment, type Distribution, type LayoutBox, type SnapPrefs, type SnapGuide } from './core/layout';
 import { syncCelGroups } from './core/cellink';
 import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
@@ -26,7 +27,7 @@ import {
   type Layer,
   type Mat,
 } from './core/comp';
-import { defaultPart, localMatrix, nestedFrame, partOf, PART_LABEL, type PartGrad, type PartName } from './core/comp';
+import { defaultPart, drawingOf, localMatrix, nestedFrame, partOf, PART_LABEL, type PartGrad, type PartName } from './core/comp';
 import { rippleExposures, shiftLater } from './core/ripple';
 import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
 import { totalFrames } from './core/timeline';
@@ -171,6 +172,13 @@ export class CompEditor {
   anchorEditing = false;
   private anchorDrag: { comp: string; frame: number; layer: string; before: Layer[]; original: Layer; inverse: Mat; offset: Vec2; autoKey: boolean; moved: boolean; start: Vec2; zoom: number; fromHandle: boolean } | null = null;
   pathEditing = false;
+  /** Draw a path: the next drag on the Motion canvas records a line for Animate along a path. */
+  drawingPath = false;
+  /** The line being drawn (stage space), for the overlay. */
+  pathStroke: Vec2[] | null = null;
+  private pathZoom = 1;
+  /** Set by the UI: what to do with a finished line (stage space). */
+  onPathDrawn: ((points: Vec2[]) => void) | null = null;
   pathLinked = false;
   pathFrame: number | null = null;
   private pathView: boolean | null = null;
@@ -384,7 +392,7 @@ export class CompEditor {
   }
 
   reset(): void {
-    this.gesture = null; this.clipGesture = null; this.pathDrag = null; this.anchorDrag = null; this.anchorEditing = false;
+    this.gesture = null; this.clipGesture = null; this.pathDrag = null; this.anchorDrag = null; this.anchorEditing = false; this.drawingPath = false; this.pathStroke = null;
     if (this.pathEditing) { this.pathEditing = false; if (this.pathView !== null) this.throughCamera = this.pathView; this.pathView = null; this.pathFrame = null; }
     this.selected = [];
     this.keys.clear();
@@ -1486,6 +1494,91 @@ export class CompEditor {
     validateProperty(next); if (n === 'zoom' && [next.value, ...next.keys.map(k => k.v)].some(v => Number(v) <= 0)) throw new Error('Camera zoom must stay above zero.');
     return this.edit(label, c => { const live = c.layers.find(l => l.id === id); if (live) this.setProp(live, n, structuredClone(next)); });
   }
+  /**
+   * The vector line (drawn with Vector on another visible drawing layer, at this frame) nearest a
+   * stage point, as stage points, or null when none is within `reach`. The line runs from the end
+   * nearer the tap's start of travel: its first point.
+   */
+  private lineAt(pt: Vec2, reach: number): Vec2[] | null {
+    const c = this.comp, f = this.app.frame, view = this.view();
+    let best: Vec2[] | null = null, bestD = reach;
+    for (const l of c.layers) {
+      if (l.kind !== 'drawings' || !l.visible || l.id === this.primary?.id || l.guide || l.notes) continue;
+      const id = drawingOf(l, f), d = id ? this.app.project.drawings.get(id) : undefined;
+      if (!d) continue;
+      const m = mul(view, worldMatrix(c, l, f));
+      for (const s of d.vectors) {
+        if (s.tool !== 'pen' || s.points.length < 2) continue;
+        const pts = s.points.map(p => apply(m, [p.x, p.y]) as Vec2);
+        for (let i = 1; i < pts.length; i++) {
+          const a = pts[i - 1]!, b = pts[i]!, dx = b[0] - a[0], dy = b[1] - a[1], ll = dx * dx + dy * dy;
+          const t = ll ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / ll)) : 0;
+          const dd = Math.hypot(pt[0] - (a[0] + dx * t), pt[1] - (a[1] + dy * t));
+          if (dd < bestD) { bestD = dd; best = pts; }
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Start (or stop) drawing a path for the selected layer to travel along. */
+  setDrawingPath(on: boolean): void {
+    if (on) {
+      const layer = this.primary;
+      if (!layer || layer.locked) { this.app.onNotice?.('Select an unlocked layer to animate along a path.'); return; }
+      if (this.anchorEditing) this.setAnchorEditing(false);
+      if (this.pathEditing) this.setPathEditing(false);
+      this.app.onNotice?.(`Draw the path for “${layer.name}”, or tap a line you drew with Vector. Esc cancels.`);
+    }
+    this.pathStroke = null;
+    this.drawingPath = on;
+    this.onChange(); this.app.requestRender();
+  }
+
+  /**
+   * Animate along a path: the layer's position follows `points` (stage space, as drawn) from the
+   * playhead for `frames` frames. Replaces its position keys. One Undo step.
+   */
+  animateAlongPath(id: string, points: Vec2[], frames: number, options: { even: boolean; orient: boolean }): boolean {
+    const layer = this.layer(id);
+    if (!layer || layer.locked) return false;
+    const inv = invert(this.pathMatrix(layer));
+    if (!inv) { this.app.onNotice?.('Restore the parent scale before giving it a path.'); return false; }
+    const f0 = this.frameOf(layer);
+    const prop = pathProp(points.map(p => apply(inv, p)), f0, f0 + Math.max(1, Math.round(frames)), options.even);
+    if (!prop) { this.app.onNotice?.('That path is too short. Draw a longer line.'); return false; }
+    const made = this.edit('Animate along path', c => {
+      const l = c.layers.find(x => x.id === id);
+      if (!l) return;
+      l.transform.position = prop;
+      if (options.orient) l.transform.orient = true; else delete l.transform.orient;
+    });
+    if (made) this.app.onNotice?.('Path set. Play to watch it travel; Edit motion path reshapes it.');
+    return made;
+  }
+
+  /** Even speed on a layer's position path (on or off). One Undo step. */
+  setEvenSpeed(id: string, on: boolean): void {
+    const l = this.layer(id);
+    if (!l || l.locked || l.transform.position.keys.length < 2 || !!l.transform.position.even === on) return;
+    this.edit(on ? 'Even speed on path' : 'Key timing on path', c => {
+      const x = c.layers.find(y => y.id === id);
+      if (!x) return;
+      if (on) x.transform.position.even = true; else delete x.transform.position.even;
+    });
+  }
+
+  /** Orient along path (on or off). One Undo step. */
+  setOrient(id: string, on: boolean): void {
+    const l = this.layer(id);
+    if (!l || l.locked || !!l.transform.orient === on) return;
+    this.edit(on ? 'Orient along path' : 'Stop orienting along path', c => {
+      const x = c.layers.find(y => y.id === id);
+      if (!x) return;
+      if (on) x.transform.orient = true; else delete x.transform.orient;
+    });
+  }
+
   setPathEditing(on: boolean): void {
     if (on && this.anchorEditing) this.setAnchorEditing(false);
     this.gestureEnd(true);
@@ -1637,6 +1730,7 @@ export class CompEditor {
    */
   gestureStart(pt: Vec2, zoom: number, add = false, options: GestureOptions = {}): boolean {
     if (this.anchorEditing && this.app.workspace === 'motion') return this.anchorStart(pt, zoom);
+    if (this.drawingPath && this.app.workspace === 'motion') { this.pathStroke = [pt]; this.pathZoom = zoom; this.app.requestRender(); return true; }
     if (this.pathEditing && this.app.workspace === 'motion') return this.pathStart(pt, zoom);
     const near = (a: Vec2, b: Vec2) => Math.hypot(a[0] - b[0], a[1] - b[1]) * zoom <= HANDLE_PX;
     const sel = this.primary;
@@ -1688,6 +1782,7 @@ export class CompEditor {
   }
 
   gestureMove(pt: Vec2): void {
+    if (this.pathStroke) { const last = this.pathStroke[this.pathStroke.length - 1]!; if (Math.hypot(pt[0] - last[0], pt[1] - last[1]) >= 1.5) { this.pathStroke.push(pt); this.app.requestRender(); } return; }
     if (this.anchorDrag) { this.anchorMove(pt); return; }
     if (this.pathDrag) { this.pathMove(pt); return; }
     const g = this.gesture;
@@ -1818,6 +1913,17 @@ export class CompEditor {
 
   /** Finish (or cancel) a drag: one undo step if anything moved. */
   gestureEnd(cancel = false): void {
+    if (this.pathStroke) {
+      const line = this.pathStroke; this.pathStroke = null; this.app.requestRender();
+      if (cancel) return;
+      // a tap (not a drag) picks a vector line already drawn on another layer as the route
+      let travel = 0;
+      for (let i = 1; i < line.length; i++) travel += Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]);
+      const route = travel * this.pathZoom < 8 ? this.lineAt(line[0]!, 18 / this.pathZoom) : line.length > 1 ? line : null;
+      if (!route) { if (travel * this.pathZoom < 8) this.app.onNotice?.('No vector line there. Draw the path, or tap a line drawn with Vector.'); return; }
+      this.setDrawingPath(false); this.onPathDrawn?.(route);
+      return;
+    }
     this.anchorEnd(cancel);
     this.pathEnd(cancel);
     this.assetClipEnd(cancel);

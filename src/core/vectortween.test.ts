@@ -53,4 +53,22 @@ describe('authored vector poses', () => {
     const even = resample([{ x: 0, y: 0, pressure: 1, tiltX: 0, tiltY: 0, t: 0 }, { x: 30, y: 0, pressure: 1, tiltX: 0, tiltY: 0, t: 3 }], 4);
     expect(even.map(p => p.x)).toEqual([0, 10, 20, 30]);
   });
+
+  it('eases a tween out of a pose when the exposure asks for it, and saves the choice', async () => {
+    const { compFile, compsFromFile, minimumDrawingSchema } = await import('../io/schema');
+    const c = newComp('c1', 'Shot', 64, 64, 12);
+    const l = drawingsLayer('ink', 'Ink', [{ drawing: 'a', length: 4 }, { drawing: 'b', length: 1 }], 64, 64);
+    c.layers = [l];
+    l.tweenVectors = true;
+    expect(vectorTweenAt(l, 1)!.t).toBe(0.25);
+    l.exposures[0]!.ease = 'easeIn';
+    expect(vectorTweenAt(l, 1)!.t).toBeLessThan(0.25);
+    l.exposures[0]!.ease = 'easeOut';
+    expect(vectorTweenAt(l, 3)!.t).toBeGreaterThan(0.75);
+    l.exposures[0]!.ease = 'easeInOut';
+    expect(vectorTweenAt(l, 2)!.t).toBeCloseTo(0.5, 5);
+    const file = compFile(c);
+    expect(minimumDrawingSchema({}, { c1: file })).toBe(9);
+    expect(compsFromFile({ comps: { c1: JSON.parse(JSON.stringify(file)) } }).get('c1')!.layers[0]).toMatchObject({ exposures: [{ ease: 'easeInOut' }, {}] });
+  });
 });

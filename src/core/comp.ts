@@ -1,6 +1,6 @@
 import type { TitleSpec } from './title';
 import { effectsKey, temporalSamples, type EffectStyleOrigin, type LayerEffect } from './effects';
-import { staticProp, valueAt, type Prop, type Vec2 } from './anim';
+import { easingSides, progress, staticProp, travelAngle, valueAt, type Prop, type Vec2 } from './anim';
 import { drawingAt, locate, totalFrames, type Exposure } from './timeline';
 import { soundStart, type SoundClip } from './audio';
 
@@ -23,6 +23,13 @@ export interface Transform {
   scale: Prop<Vec2>;
   rotation: Prop<number>;
   opacity: Prop<number>;
+  /** Orient along path: the layer also turns to face the way its position is travelling (0° = facing right). */
+  orient?: boolean;
+}
+
+/** Rotation in degrees at a layer frame, including Orient along path. */
+export function rotationAt(t: Transform, f: number): number {
+  return valueAt(t.rotation, f) + (t.orient ? travelAngle(t.position, f) : 0);
 }
 
 interface LayerBase {
@@ -462,7 +469,10 @@ export function vectorTweenAt(l: DrawingsLayer, frame: number): { next: string; 
   const at = f === null ? null : locate(l.exposures, f);
   if (!at || at.offset <= 0) return null;
   const current = l.exposures[at.index]!, next = l.exposures[at.index + 1]?.drawing;
-  return current.drawing && next && next !== current.drawing ? { next, t: at.offset / current.length } : null;
+  if (!current.drawing || !next || next === current.drawing) return null;
+  const x = at.offset / current.length;
+  const e = current.ease && easingSides(current.ease);
+  return { next, t: e ? progress(e.out, e.in, x) : x };
 }
 
 const EMPTY: ReadonlyMap<string, Comp> = new Map();
@@ -512,7 +522,7 @@ export function localMatrix(l: Layer, compFrame: number): Mat {
   const [ax, ay] = valueAt(t.anchor, f);
   const [px, py] = valueAt(t.position, f);
   const [sx, sy] = valueAt(t.scale, f);
-  const rot = valueAt(t.rotation, f);
+  const rot = rotationAt(t, f);
   return mul(mul(mul(translate(px, py), rotating(rot)), scaling(sx / 100, sy / 100)), translate(-ax, -ay));
 }
 

@@ -26,6 +26,15 @@ Mark each line ✅, ❌ (add what happened) or – (not tried).
 - [ ] One Undo removes the whole Next pose step (the copy, the longer hold and tweening).
 - [ ] Draw two separate poses (no Next pose), turn on Motion → Layer → Tween vector lines, play.
 
+## Animate along a path (Motion)
+- [ ] Select a layer, choose Animation → Animate along a path…, then draw a route with the Pencil. A dashed line follows the Pencil.
+- [ ] Do the same with one finger. The page does not scroll or zoom while you draw.
+- [ ] The dialog fits on screen with the onscreen keyboard open. Change Time, tick Turn to face the way it travels, then tap Animate.
+- [ ] Play: the layer moves steadily along the route and turns to follow it. One Undo restores the layer.
+- [ ] Draw a loop that ends where it started; the layer goes around smoothly with no jolt at the join.
+- [ ] Choose Animate along a path…, then use the existing-line option on a vector line you drew earlier in Draw.
+- [ ] Start drawing a path, then press Esc on a keyboard (if one is attached) or choose Cancel drawing the path: nothing changes.
+
 ## Cycles and the Flipbook
 - [ ] Select three drawings, open the frame menu (press and hold), choose ×3 under Repeat as a cycle.
 - [ ] Edit one of the repeated drawings: every repeat shows the change.

@@ -2110,6 +2110,8 @@ body.ws-time .panel {
   width: min(100%, 560px);
 }
 
+.cfield { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.cfield input { width: 20px; height: 20px; }
 .nfield {
   display: grid;
   grid-template-columns: 56px 1fr 32px;

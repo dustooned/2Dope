@@ -1,7 +1,7 @@
 import { valueAt } from '../core/anim';
-import { blenderHandles, staticProp, type Prop, type Value, type Vec2 } from '../core/anim';
+import { blenderHandles, LINEAR, staticProp, type Prop, type Value, type Vec2 } from '../core/anim';
 import { activeEffects, temporalEffect } from '../core/effects';
-import { compLength, exportComp, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type DrawingsLayer, type Layer, partsActive, skippedInExport } from '../core/comp';
+import { compLength, exportComp, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type DrawingsLayer, type Layer, partsActive, rotationAt, skippedInExport, type Transform } from '../core/comp';
 
 /**
  * The Blender handoff (spec principle 4). 2Dope writes a package: `scene.json` (this file's
@@ -168,9 +168,20 @@ export function soloComp(c: Comp, l: DrawingsLayer, anchor: Vec2, width: number,
 }
 
 /** Turn a property into channels in comp time, with Blender Bezier handles per segment. */
+/** Orient along path baked into plain rotation keys, one per frame across the animated range. */
+function orientedRotation(t: Transform): Prop<number> {
+  const frames = [...t.position.keys, ...t.rotation.keys].map(k => k.f);
+  if (!frames.length) return t.rotation;
+  const lo = Math.min(...frames), hi = Math.max(...frames);
+  if (hi - lo > 100000) throw new Error('Orient along path exceeds the Blender bake limit. Shorten this composition.');
+  const keys = [];
+  for (let f = lo; f <= hi; f++) keys.push({ f, v: rotationAt(t, f), in: LINEAR, out: LINEAR });
+  return { value: rotationAt(t, lo), keys };
+}
+
 export function channels(p: Prop<Value>, names: [ChannelName] | [ChannelName, ChannelName], start: number, frames?: number): Partial<Record<ChannelName, Channel>> {
   const out: Partial<Record<ChannelName, Channel>> = {};
-  if (p.keys.some(k => k.spatial)) {
+  if (p.keys.some(k => k.spatial) || (p.even && p.keys.length > 1)) {
     const first = frames === undefined ? p.keys[0]!.f + start : 0, last = frames === undefined ? p.keys.at(-1)!.f + start : frames - 1;
     if (last - first > 100000) throw new Error('Curved motion exceeds the Blender bake limit. Shorten this composition.');
     names.forEach((name, dim) => { const pick = (v: Value) => Array.isArray(v) ? v[dim]! : v; const keys: ChannelKey[] = []; for (let f = first; f <= last; f++) keys.push({ frame: f, value: pick(valueAt(p, f - start)), interp: 'LINEAR', left: null, right: null }); out[name] = { value: pick(p.value), keys }; }); return out;
@@ -244,13 +255,14 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
       const t = l.transform;
       const temporal = activeEffects(l).some(e => temporalEffect(e.type));
       const anchorValue = t.anchor.keys.length ? t.anchor.keys[0]!.v : t.anchor.value;
-      if (t.position.keys.some(k => k.spatial) || t.scale.keys.some(k => k.spatial)) notes.add(`“${l.name}”: curved motion is baked to per-frame transform keys.`);
+      if (t.position.keys.some(k => k.spatial) || t.position.even || t.scale.keys.some(k => k.spatial)) notes.add(`“${l.name}”: curved or even-speed motion is baked to per-frame transform keys.`);
+      if (t.orient) notes.add(`“${l.name}”: Orient along path is baked to per-frame rotation keys.`);
       if (t.anchor.keys.length > 1) notes.add(`“${l.name}”: an animated anchor point is exported as its first value.`);
       if (l.blend !== 'normal') notes.add(`“${l.name}”: the ${l.blend} blend mode is exported as normal.`);
       const ch = {
         ...channels(t.position, ['position.x', 'position.y'], l.start, length),
         ...channels(t.scale, ['scale.x', 'scale.y'], l.start, length),
-        ...channels(t.rotation, ['rotation'], l.start),
+        ...channels(t.orient ? orientedRotation(t) : t.rotation, ['rotation'], l.start),
         ...channels(t.opacity, ['opacity'], l.start),
       };
       const end = layerEnd(l, comps, c.fps);

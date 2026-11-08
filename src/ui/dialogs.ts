@@ -164,3 +164,39 @@ export function askLongText(title: string, intro: string, placeholder: string, o
     area.focus();
   });
 }
+
+/** Animate along a path: how long the trip takes, and how the layer travels. Null when cancelled. */
+export function askPathOptions(seconds: number, replacing: boolean): Promise<{ seconds: number; even: boolean; orient: boolean } | null> {
+  return new Promise((resolve) => {
+    const { dialog, body, foot, done } = modal<{ seconds: number; even: boolean; orient: boolean } | null>('Animate along the path', null, resolve);
+    const row = el('label', { class: 'nfield' });
+    const time = el('input', { type: 'number', step: '0.25', min: '0.1', value: String(seconds), 'aria-label': 'Travel time', class: 'textbox' });
+    row.append(el('span', { class: 'name' }, 'Time'), time, el('span', { class: 'hint' }, 's'));
+    const check = (label: string, on: boolean) => {
+      const box = el('label', { class: 'cfield' });
+      const input = el('input', { type: 'checkbox', 'aria-label': label });
+      input.checked = on;
+      box.append(input, document.createTextNode(` ${label}`));
+      return { box, input };
+    };
+    const even = check('Even speed (steady all the way along)', true);
+    const orient = check('Turn to face the way it travels', false);
+    body.append(el('p', { class: 'hint' }, 'The trip starts at the playhead.'), row, even.box, orient.box);
+    if (replacing) body.append(el('p', { class: 'hint' }, 'This replaces the layer’s current position keys. Undo brings them back.'));
+    body.append(el('p', { class: 'hint' }, 'Turning assumes the artwork faces right.'));
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    const ok = el('button', { type: 'button', class: 'primary' }, 'Animate');
+    foot.append(cancel, ok);
+    const accept = () => {
+      const s = Number(time.value);
+      if (!Number.isFinite(s) || s <= 0) { time.focus(); return; }
+      done({ seconds: s, even: even.input.checked, orient: orient.input.checked });
+    };
+    cancel.addEventListener('click', () => done(null));
+    ok.addEventListener('click', accept);
+    ownKeys(time, accept);
+    dialog.showModal();
+    time.focus();
+    time.select();
+  });
+}
