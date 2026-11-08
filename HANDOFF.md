@@ -2,6 +2,33 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Follow-up: scrub tweens, virtual Flipbook, Story/Motion split, cleanup (2026-11-08)
+
+- **Scrub preview.** `App.showsTween` shows vector in-betweens while playing, scrubbing and stepping.
+  Drawing, Edit points, Transform and mask painting show the pose being edited. Residency loads
+  the next pose under the same rule. commandrow checks that an in-between frame renders differently
+  from the untweened render.
+- **Virtual Flipbook strip** (`ui/flipmode.ts`). Each track keeps its exposures, and only the cels and
+  ruler numbers within half a screen of the view are DOM elements (`renderWindow`, run on scroll and
+  zoom). `markCels` touches only those cels. Thumbnails are a data URL cached per drawing and
+  `thumbRev` (`<img>`, not a canvas per cel). `.flip-cells`/`.flip-ruler` use containment.
+  railperf (1,000 frames × 8 tracks): build 10–14 ms (it was ~500), pinch zoom step 14–19 ms
+  (it was ~840, then ~70). Headless software rendering varies, so the hard check is a 30 ms guard
+  plus "fewer than 600 cels exist".
+- **Story and Motion load lazily** (`main.ts`). Proxies record Motion hooks (`motion.set`) and
+  Story calls, build the panel when its workspace opens, and preload both at idle
+  (`requestIdleCallback`, 1.5 s timeout). Main chunk 921 → 738 kB (gzip 293 → 234 kB; 405 kB on 2026-11-07).
+- **Cleanup.** The Transform extraction left unused imports in `app.ts`. They are removed along with
+  the dead `pick` in `io/brushimport.ts` and five unused fixture imports. `tsconfig.json` now has
+  `noUnusedLocals`, so the build fails on dead imports. Motion's status reads "No layer selected" instead of
+  "0 layers · 0 keys". workspacecontrols waits for the lazily loaded Motion toolbar.
+- **iPad checklist**: `docs/testing/ipad-checklist.md`. It still needs a real device; this was not tested on one.
+
+Checks: 758 unit tests passed (1 skipped) and the build passed. Targeted fixtures passed: railperf, flipbooksource,
+painting layout/workflow, playback range (both), workspace layout (both), workspacefixes, workspacecontrols,
+storyui, storyexport, motionassets and commandrow. The final full browser suite passed **71 of 71**. A manual check in the
+Browser pane opened Motion and Story through the real entry with no console errors.
+
 ### Cleanup, faster start, Next pose and cycles (2026-11-08)
 
 - **Research docs** are committed (`52327c5`); `.rea-work/` (25 MB of REA scratch output) is ignored.

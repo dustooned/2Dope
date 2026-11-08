@@ -1,8 +1,8 @@
 import { App } from '../app';
 import { cloneBrush, dyn, NO_TILT_SHADE, PRESETS, type BrushSettings } from '../core/brush';
 import { Project } from '../core/project';
-import { strokeLength, type StrokePoint, type StrokeRecord } from '../core/stroke';
-import { DabWalker, dabsForStroke, type Dab } from './dabs';
+import { type StrokePoint, type StrokeRecord } from '../core/stroke';
+import { DabWalker, type Dab } from './dabs';
 import { ctx2d, loadGrain, loadTip, makeCanvas, putPixels, RasterEngine } from './raster';
 
 let passed = 0, failed = 0;

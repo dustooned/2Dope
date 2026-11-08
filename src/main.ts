@@ -8,6 +8,8 @@ import { setFxPreview } from './view/effects';
 import { scrollArrows } from './ui/scrollarrows';
 import './style.css';
 import type { ShareKind, ShareView } from './ui/share';
+import type { MotionPanel } from './ui/motion';
+import type { BoardPanel, BoardView } from './ui/board';
 import type { StoryPresent } from './ui/present';
 import type { ReferenceWindow } from './ui/reference';
 import { AudioPlayback } from './audio';
@@ -30,7 +32,6 @@ import { sendToProject, type SendItem, type SendWhere } from './io/sendto';
 import { firstRunPending, showFirstRun } from './ui/firstrun';
 import { TimeLapse } from './ui/timelapse';
 import type { SampleId } from './io/samples';
-import { MotionPanel } from './ui/motion';
 import { Splitter } from './ui/splitter';
 import { NewProjectUI } from './ui/newdialog';
 import { Quick } from './ui/quick';
@@ -46,7 +47,6 @@ import { Sidebar } from './ui/sidebar';
 import { drawRailState } from './ui/rails';
 import { LayersPopover } from './ui/layerspop';
 import { boardCues, cueAt } from './core/dialogue';
-import { BoardPanel } from './ui/board';
 import { ColorPanel } from './ui/colorpanel';
 import { BrushLibrary } from './ui/brushlib';
 import { showContextMenu, closeContextMenu } from './ui/contextmenu';
@@ -65,6 +65,12 @@ const chain = (prev: () => void, extra: () => void) => () => {
 };
 
 const app = new App($<HTMLCanvasElement>('#canvas'), $('#stage'));
+/** Panels that open on request load their code the first time (a smaller first download). */
+const lazy = <T>(load: () => Promise<T>): (() => Promise<T>) => {
+  let pending: Promise<T> | null = null;
+  return () => (pending ??= load().catch((e: unknown) => { pending = null; throw e; }));
+};
+const loadFailed = (e: unknown): void => app.onNotice?.(`That panel could not load. Check the connection and try again. (${(e as Error).message})`);
 // Dev-only handle for scripted checks from the console / browser tests.
 if (import.meta.env.DEV) (window as unknown as { __2dope: App }).__2dope = app;
 
@@ -341,7 +347,23 @@ const sheet = new TracksSheet(app, $('.stage-col'), $('#strip'), () => setTimeou
 drawRailState.onChange = () => { layersPop.update(); strip.update(); };
 // Timing tools (holds, marks, onion settings, layer toggles) belong to the Time workspace
 $('#tab-xsheet').prepend(strip.timingBar);
-const motion = new MotionPanel(app, $('#motion'));
+// Motion loads the first time its workspace opens. Its hooks are recorded and applied to the panel then.
+let motionPanel: MotionPanel | null = null;
+const motionHooks: ((m: MotionPanel) => void)[] = [];
+const loadMotion = lazy(async () => {
+  const { MotionPanel } = await import('./ui/motion');
+  const m = motionPanel ?? new MotionPanel(app, $('#motion'));
+  if (!motionPanel) { motionPanel = m; for (const hook of motionHooks) hook(m); }
+  m.update();
+  return m;
+});
+const motion = {
+  /** Wire the Motion panel (now, or when it loads). */
+  set(hook: (m: MotionPanel) => void): void { motionHooks.push(hook); if (motionPanel) hook(motionPanel); },
+  update(): void { if (motionPanel) motionPanel.update(); else if (app.workspace === 'motion') void loadMotion().catch(loadFailed); },
+  group(): void { void loadMotion().then(m => m.group(), loadFailed); },
+  split(): void { void loadMotion().then(m => m.split(), loadFailed); },
+};
 // Story's Export opens Share on the story formats (Storyboard, or Animatic when that was picked last)
 const exportStory = (): void => { void loadShare().then(s => s.show(s.lastKind === 'animatic' ? 'animatic' : 'board'), loadFailed); };
 // Story → Present: the page fills the screen above the caption and controls (loaded on first use)
@@ -357,15 +379,42 @@ const startPresent = (): void => {
     present.start();
   }, loadFailed);
 };
-const board = new BoardPanel(app, $('#board'), () => exportStory(), () => startPresent());
+// Story loads the first time its workspace opens.
+let boardPanel: BoardPanel | null = null;
+const loadBoard = lazy(async () => {
+  const { BoardPanel } = await import('./ui/board');
+  if (!boardPanel) {
+    const b = new BoardPanel(app, $('#board'), () => exportStory(), () => startPresent());
+    b.setAudio(audioPlayback);
+    b.setSoundMenu((id) => audioTracks.soundMenu(id));
+    b.onView = () => bubbles.update();
+    boardPanel = b;
+  }
+  boardPanel.update();
+  bubbles.update();
+  return boardPanel;
+});
+const board = {
+  update(): void { if (boardPanel) boardPanel.update(); else if (app.workspace === 'board') void loadBoard().catch(loadFailed); },
+  get currentView(): BoardView { return boardPanel?.currentView ?? 'panels'; },
+  setView(v: BoardView): void { if (boardPanel) boardPanel.setView(v); else void loadBoard().then(b => b.setView(v), loadFailed); },
+  // the file picker needs the tap itself, so it only opens once Story is loaded (it is, in Story)
+  pickImages(): void { if (boardPanel) boardPanel.pickImages(); else void loadBoard().catch(loadFailed); },
+};
+// Story and Motion stay out of the first download, then load while the app is idle so they are
+// ready before anyone switches to them.
+{
+  const idle = (run: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(run, { timeout: 1500 }) : setTimeout(run, 800));
+  idle(() => { void loadMotion().catch(() => {}); void loadBoard().catch(() => {}); });
+}
 app.onFrameChange = chain(app.onFrameChange, () => present?.update());
 const audioPlayback = new AudioPlayback(app);
-motion.sounds = audioPlayback.bank;
+motion.set(m => { m.sounds = audioPlayback.bank; });
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 // In the tracks sheet, sounds are rows under the layers; their settings open in a floating card.
 strip.audio = { active: () => sheet.active, sig: () => audioTracks.railSig(), rows: (t, x, c, w) => audioTracks.railRows(t, x, c, w) };
 // Motion lists sounds as rows too (drag to move or trim), so the old audio lane is Board's only
-motion.audio = { sig: () => audioTracks.railSig(), rows: (c, end) => audioTracks.motionRows(c, end) };
+motion.set(m => { m.audio = { sig: () => audioTracks.railSig(), rows: (c, end) => audioTracks.motionRows(c, end) }; });
 // Simple screen: the frame buttons join the tracks bar, so the timeline has one row of controls
 {
   const placeNav = () => {
@@ -404,8 +453,6 @@ installClipboard(app, $('#stage'), media.importAssets);
   addMedia.addEventListener('click', (e) => { e.stopPropagation(); app.pickMedia?.(); });
   sheet.bar.insertBefore(addMedia, sheet.bar.querySelector('.spacer'));
 }
-board.setAudio(audioPlayback);
-board.setSoundMenu((id) => audioTracks.soundMenu(id));
 // the panel's dialogue line showing now, as a subtitle under the picture (Board, and while playing
 // with a board): the same lines and timing as the animatic export
 const subtitle = $('#subtitle');
@@ -521,12 +568,6 @@ sheet.update();
 // Quick Animate (a lighter view of the same project)
 let files: FileUI | null = null;
 let exporter: ExportUI | null = null;
-/** Panels that open on request load their code the first time (a smaller first download). */
-const lazy = <T>(load: () => Promise<T>): (() => Promise<T>) => {
-  let pending: Promise<T> | null = null;
-  return () => (pending ??= load().catch((e: unknown) => { pending = null; throw e; }));
-};
-const loadFailed = (e: unknown): void => app.onNotice?.(`That panel could not load. Check the connection and try again. (${(e as Error).message})`);
 const loadVideoExport = lazy(async () => new (await import('./ui/videoexport')).VideoExportUI(app, (message) => files?.toast(message), audioPlayback.bank));
 // Share: the last mode (preview the movie, check it, make it, save or send it)
 let onShareChange = (): void => {};
@@ -714,7 +755,6 @@ const bubbles = new Bubbles(app, $('#stage'), {
 });
 // the Eyedropper tool lights while armed and goes out after its pick
 app.onEyedrop = chain(app.onEyedrop, () => bubbles.update());
-board.onView = () => bubbles.update();
 
 const paintingUI = new PaintingWorkspaceUI(app, flipMode, $('#stage'), () => {
   flipMode.update(); sheet.update(); strip.update(); bubbles.update(); app.requestRender();
@@ -723,16 +763,16 @@ paintingUI.editWorkspace = anchor => editWorkspace(anchor);
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => paintingUI.update());
 const artworkUI = new ArtworkAssetsUI(app, $('.painting-header'));
 app.importAssetArchive = (file, frame) => artworkUI.importArchive(file, frame);
-motion.makeClip = save => void artworkUI.makeClip(save);
-motion.clipPlayback = (id, mode) => artworkUI.assets.setClipPlayback(id, mode);
-motion.removeClip = id => { if (artworkUI.assets.removePlacement(id)) app.onNotice?.('Removed placement. Undo restores it.'); };
+motion.set(m => { m.makeClip = save => void artworkUI.makeClip(save); });
+motion.set(m => { m.clipPlayback = (id, mode) => artworkUI.assets.setClipPlayback(id, mode); });
+motion.set(m => { m.removeClip = id => { if (artworkUI.assets.removePlacement(id)) app.onNotice?.('Removed placement. Undo restores it.'); }; });
 const loadSymbols = lazy(async () => new (await import('./ui/symbols')).SymbolUI(app, artworkUI.assets, source => artworkUI.openSource(source)));
-app.openSymbol = id => void loadSymbols().then(s => s.show(id), loadFailed); motion.openSymbol = app.openSymbol;
+app.openSymbol = id => void loadSymbols().then(s => s.show(id), loadFailed); motion.set(m => { m.openSymbol = app.openSymbol; });
 const loadBundle = lazy(async () => new (await import('./ui/bundle')).BundleUI(app, () => share.show('video')));
 const loadVectorObjects = lazy(async () => new (await import('./ui/vectorobjects')).VectorObjectsUI(app));
 app.openVectorObjects = id => { void loadVectorObjects().then(v => v.show(id)).catch(e => app.onNotice?.((e as Error).message)); };
 const graphUI = new GraphUI(app, $('.workspace'));
-motion.openGraph = () => graphUI.show();
+motion.set(m => { m.openGraph = () => graphUI.show(); });
 app.onWorkspaceChange = chain(app.onWorkspaceChange, () => graphUI.close());
 app.onFrameChange = chain(app.onFrameChange, () => graphUI.update());
 app.editor.onChange = chain(app.editor.onChange, () => graphUI.update());
@@ -740,14 +780,14 @@ const loadLayout = lazy(async () => new (await import('./ui/layout')).LayoutUI(a
 app.openLayout = () => void loadLayout().then(l => l.show(), loadFailed);
 const loadPresets = lazy(async () => new (await import('./ui/presets')).PresetLibraryUI(app));
 const loadCameraMoves = lazy(async () => new (await import('./ui/cameramove')).CameraMoveUI(app));
-motion.openCameraMove = () => { effectsPanel.close(); void loadCameraMoves().then(c => c.show(), loadFailed); };
+motion.set(m => { m.openCameraMove = () => { effectsPanel.close(); void loadCameraMoves().then(c => c.show(), loadFailed); }; });
 const loadTitles = lazy(async () => new (await import('./ui/titles')).TitlesUI(app));
 app.editTitle = id => void loadTitles().then(t => t.show(id), loadFailed);
 app.convertTitle = id => void loadTitles().then(t => t.convert(id), loadFailed);
-motion.openPresets = () => void loadPresets().then(p => p.show('motion'), loadFailed);
+motion.set(m => { m.openPresets = () => void loadPresets().then(p => p.show('motion'), loadFailed); });
 effectsPanel.onPresets = layer => { effectsPanel.close(); void loadPresets().then(p => p.show('effects', layer), loadFailed); };
-motion.openAssets = opener => artworkUI.showAssets(opener);
-motion.createAsset = () => void artworkUI.createFromSelection();
+motion.set(m => { m.openAssets = opener => artworkUI.showAssets(opener); });
+motion.set(m => { m.createAsset = () => void artworkUI.createFromSelection(); });
 paintingUI.onReset = () => artworkUI.resetLayout();
 // a layer tapped in Animate's Layers edits the artwork right there; Edit source goes to Draw
 app.editAssetSource = (comp, layer) => artworkUI.openSource(comp, layer, app.workspace === 'animate' && layer !== undefined);

@@ -369,7 +369,7 @@ export class MotionPanel {
     this.compName.hidden = ed.crumbs().length > 1;
     this.compName.title = `${c.name} · ${c.width}×${c.height} · ${c.fps} fps`;
     const nk = ed.selectedKeys().length;
-    this.selectionInfo.textContent = ed.anchorEditing ? `Anchor · tap/drag canvas · Esc to finish` : ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : `${ed.selected.length === 1 ? ed.primary?.name ?? '1 layer' : `${ed.selected.length} layers`} · ${nk} key${nk === 1 ? '' : 's'}`;
+    this.selectionInfo.textContent = ed.anchorEditing ? `Anchor · tap/drag canvas · Esc to finish` : ed.pathEditing ? `Path · drag nodes/handles · Esc to finish` : !ed.selected.length ? 'No layer selected' : `${ed.selected.length === 1 ? ed.primary?.name ?? '1 layer' : `${ed.selected.length} layers`} · ${nk} key${nk === 1 ? '' : 's'}`;
     this.renderCrumbs();
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));

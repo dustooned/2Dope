@@ -304,15 +304,6 @@ const str = (v: unknown): string | undefined => {
   }
   return undefined;
 };
-/** The first of several possible setting names that the brush has (names differ across Procreate versions). */
-const pick = (info: Record<string, unknown> | null, keys: string[]): number | undefined => {
-  if (!info) return undefined;
-  for (const k of keys) {
-    const n = num(info[k]);
-    if (n !== undefined) return n;
-  }
-  return undefined;
-};
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
 /** A Procreate response curve ({ points: { NS.objects: ['{x, y}', …] } } or a list) as points, or null. */

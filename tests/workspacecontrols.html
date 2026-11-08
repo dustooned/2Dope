@@ -43,6 +43,8 @@
     project.comp.duration = 30;
     app.loadProject(project);
     app.setWorkspace('motion');
+    // Motion loads on first use: wait for its toolbar
+    for (let i = 0; i < 60 && !doc.querySelector('#motion .motion-menus'); i++) await wait(50);
     const layer = project.layer;
     app.editor.select(layer.id);
     const t = layer.transform;

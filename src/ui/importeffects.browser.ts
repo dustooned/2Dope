@@ -2,7 +2,7 @@ import { App } from '../app';
 import { setKey, staticProp } from '../core/anim';
 import { compLayer, drawingsLayer, frameContent, newComp } from '../core/comp';
 import { effectPreview, newEffect } from '../core/effects';
-import { Project, planeCanvas } from '../core/project';
+import { Project } from '../core/project';
 import { captureProject, loadProjectFile } from '../io/projectio';
 import { parseProjectFile, stringifyProjectFile } from '../io/schema';
 import { importVectorDocument } from '../io/vectorimport';

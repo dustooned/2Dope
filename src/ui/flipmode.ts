@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { isPaintingWorkspace, paintingView } from '../core/workspace';
 import type { BlendMode, DrawingsLayer } from '../core/comp';
+import type { Drawing } from '../core/project';
 import { attachContextMenu, HOLD_MS, showContextMenu, swallowNextClick, type CtxItem } from './contextmenu';
 import { askText, confirmBox } from './dialogs';
 import { frameMenu } from './framemenu';
@@ -40,6 +41,25 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
  * the docked track area. Everything edits
  * the same layers and timing that Timing and Motion show.
  */
+const thumbs = new WeakMap<Drawing, { rev: number; url: string }>();
+const thumbCanvas = document.createElement('canvas');
+/** A drawing's strip picture (white page, letterboxed), made once per thumbnail change and shared by every cel showing it. */
+function thumbURL(d: Drawing): string | null {
+  const t = d.thumb;
+  if (!t || !t.width || !t.height) return null;
+  const hit = thumbs.get(d);
+  if (hit && hit.rev === d.thumbRev) return hit.url;
+  thumbCanvas.width = 80; thumbCanvas.height = 60;
+  const g = thumbCanvas.getContext('2d');
+  if (!g) return null;
+  g.fillStyle = '#fff'; g.fillRect(0, 0, 80, 60);
+  const s = Math.min(80 / t.width, 60 / t.height);
+  g.drawImage(t, (80 - t.width * s) / 2, (60 - t.height * s) / 2, t.width * s, t.height * s);
+  const url = thumbCanvas.toDataURL();
+  thumbs.set(d, { rev: d.thumbRev, url });
+  return url;
+}
+
 export class FlipMode {
   readonly row = el('div', { class: 'flip-row', role: 'region', 'aria-label': 'Flipbook' });
   private views = { draw: false, animate: true };
@@ -63,6 +83,13 @@ export class FlipMode {
   private dragging = false;
   private dragged = false;
   private activeTrack = '';
+  /**
+   * The strip is virtual: every track keeps its exposures here, and only the cels (and ruler
+   * numbers) near the visible frames exist as elements. Long shots stay fast to build, zoom and play.
+   */
+  private rows: { layer: DrawingsLayer; cells: HTMLElement; items: { i: number; start: number; len: number; drawing: string }[]; shown: Map<number, HTMLElement> }[] = [];
+  private shownFrames: [number, number] = [0, -1];
+  private windowQueued = 0;
 
   constructor(private readonly app: App, stage: HTMLElement) {
     this.range = new PlaybackRangeControl(app); this.range.button.classList.add('flip-btn');
@@ -103,6 +130,7 @@ export class FlipMode {
     this.grid.append(this.playhead);
     this.scroll.id = 'flipbook-tracks';
     this.scroll.append(this.grid);
+    this.scroll.addEventListener('scroll', () => { if (!this.windowQueued) this.windowQueued = requestAnimationFrame(() => { this.windowQueued = 0; this.renderWindow(); }); }, { passive: true });
     const handle = el('div', {
       class: 'splitter flip-handle', role: 'separator', tabindex: '0', 'aria-orientation': 'horizontal',
       'aria-controls': this.scroll.id, 'aria-label': 'Resize Flipbook',
@@ -195,8 +223,10 @@ export class FlipMode {
     const app = this.app;
     const p = app.project;
     this.grid.replaceChildren(this.playhead);
-    this.grid.append(this.ruler(len));
+    this.grid.append(el('div', { class: 'flip-ruler', 'aria-hidden': 'true' }));
     this.size(len);
+    this.rows = [];
+    this.shownFrames = [0, -1];
     for (const l of tracks) {
       const row = el('div', { class: `flip-track${l.id === p.activeLayer ? ' active' : ''}${l.visible ? '' : ' off'}`, 'data-id': l.id });
       const eye = el('button', { type: 'button', class: 'flip-eye', 'aria-pressed': String(l.visible), title: `${l.name}: tap to ${l.visible ? 'hide' : 'show'}, hold for track options`, 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}` });
@@ -208,33 +238,66 @@ export class FlipMode {
       this.wireTrackDrag(eye, row, l.id);
       attachContextMenu(eye, () => this.trackMenu(l, eye));
       const cells = el('div', { class: 'flip-cells' });
+      const items: { i: number; start: number; len: number; drawing: string }[] = [];
       let start = l.start;
-      l.exposures.forEach((e, i) => {
-        const c = el('div', { class: 'flip-cel', 'data-i': String(i), 'data-start': String(start), 'data-len': String(e.length) });
-        c.style.setProperty('--s', String(start));
-        c.style.setProperty('--n', String(e.length));
-        const d = p.drawing(e.drawing);
-        const t = d.thumb;
-        if (t) {
-          const cv = el('canvas', { width: '80', height: '60' });
-          const g = cv.getContext('2d');
-          if (g) {
-            g.fillStyle = '#fff'; g.fillRect(0, 0, 80, 60);
-            const s = Math.min(80 / t.width, 60 / t.height);
-            g.drawImage(t, (80 - t.width * s) / 2, (60 - t.height * s) / 2, t.width * s, t.height * s);
-          }
-          c.append(cv);
-        } else c.classList.add('empty');
-        if (e.length > 1) c.append(el('span', { class: 'flip-hold' }, `×${e.length}`));
-        if (d.role === 'key') c.append(el('span', { class: 'flip-role', title: 'Key drawing' }, '\u25c6'));
-        cells.append(c);
-        start += e.length;
-      });
+      l.exposures.forEach((e, i) => { items.push({ i, start, len: e.length, drawing: e.drawing }); start += e.length; });
+      this.rows.push({ layer: l, cells, items, shown: new Map() });
       row.append(eye, cells);
       this.grid.append(row);
     }
     // The default shows up to three tracks. The divider overrides that height.
     this.scroll.style.setProperty('--flip-tracks-height', `${24 + Math.min(3, Math.max(1, tracks.length)) * ROW}px`);
+    this.renderWindow();
+  }
+
+  /** One cel: the drawing's thumbnail across its hold. */
+  private makeCel(item: { i: number; start: number; len: number; drawing: string }): HTMLElement {
+    const c = el('div', { class: 'flip-cel', 'data-i': String(item.i), 'data-start': String(item.start), 'data-len': String(item.len) });
+    c.style.setProperty('--s', String(item.start));
+    c.style.setProperty('--n', String(item.len));
+    const d = this.app.project.drawing(item.drawing);
+    const url = thumbURL(d);
+    if (url) c.append(el('img', { src: url, alt: '', draggable: 'false' }));
+    else c.classList.add('empty');
+    if (item.len > 1) c.append(el('span', { class: 'flip-hold' }, `×${item.len}`));
+    if (d.role === 'key') c.append(el('span', { class: 'flip-role', title: 'Key drawing' }, '◆'));
+    return c;
+  }
+
+  /** Frames on screen, with half a screen to spare either side so a swipe never shows gaps. */
+  private visibleFrames(): [number, number] {
+    const w = this.scroll.clientWidth || 1200, left = this.scroll.scrollLeft;
+    const spare = Math.max(w / 2, 300);
+    return [Math.max(0, Math.floor((left - LABEL - spare) / this.cell)), Math.ceil((left + w + spare) / this.cell)];
+  }
+
+  /** Make the cels and ruler numbers near the visible frames, and drop the ones far away. */
+  private renderWindow(force = false): void {
+    if (this.dragging && !force) return;
+    const [from, to] = this.visibleFrames();
+    const [a, b] = this.shownFrames;
+    // what is needed is already drawn: nothing to do
+    if (!force && from >= a && to <= b) return;
+    this.shownFrames = [from, to];
+    for (const r of this.rows) {
+      const keep = new Set<number>();
+      // exposures are in time order: skip to the first that ends after `from`
+      let lo = 0, hi = r.items.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; const it = r.items[m]!; if (it.start + it.len <= from) lo = m + 1; else hi = m; }
+      for (let k = lo; k < r.items.length; k++) {
+        const it = r.items[k]!;
+        if (it.start > to) break;
+        keep.add(it.i);
+        if (!r.shown.has(it.i)) {
+          const c = this.makeCel(it);
+          r.shown.set(it.i, c);
+          r.cells.append(c);
+        }
+      }
+      for (const [i, c] of r.shown) if (!keep.has(i)) { c.remove(); r.shown.delete(i); }
+    }
+    this.grid.querySelector('.flip-ruler')?.replaceWith(this.ruler(Math.max(1, this.app.compEnd), from, to));
+    this.markCels();
   }
 
   /** Everything that follows the zoom: cels are placed by --flip-cell, so a zoom touches one property. */
@@ -245,14 +308,20 @@ export class FlipMode {
     this.playhead.style.width = `${this.cell}px`;
   }
 
-  /** A new zoom on the strip already built: resize and renumber without rebuilding every cel. */
-  private relayout(): void {
+  /** After a zoom: the playhead and range marks at the new cell width (the strip itself is unchanged). */
+  private remark(): void {
+    if (!this.sig) { this.update(); return; }
     const len = Math.max(1, this.app.compEnd);
-    this.grid.querySelector('.flip-ruler')?.replaceWith(this.ruler(len));
-    this.size(len);
+    this.mark(len);
+    markPlaybackRange(this.app, this.grid, this.cell, 0, LABEL);
   }
 
-  private ruler(len: number): HTMLElement {
+  /** A new zoom on the strip already built: resize it; the caller scrolls, then draws the window. */
+  private relayout(): void {
+    this.size(Math.max(1, this.app.compEnd));
+  }
+
+  private ruler(len: number, from = 0, to = len): HTMLElement {
     const app = this.app;
     // a ruler: frame numbers every frame, seconds stand out
     const ruler = el('div', { class: 'flip-ruler', 'aria-hidden': 'true' });
@@ -261,7 +330,7 @@ export class FlipMode {
     // never overlap; the steps divide a second, so the seconds always keep their number
     const steps = [...Array.from({ length: fps }, (_, k) => k + 1).filter((n) => fps % n === 0), fps * 2, fps * 5, fps * 10];
     const every = steps.find((n) => n * this.cell >= 26) ?? fps * 20;
-    for (let f = 0; f < len; f++) {
+    for (let f = Math.max(0, from - (from % every)); f < Math.min(len, to + 1); f++) {
       if (f % every) continue;
       const t = el('span', { class: f % fps === 0 ? 'sec' : '' }, String(f + 1));
       t.style.left = `${LABEL + f * this.cell}px`;
@@ -277,8 +346,9 @@ export class FlipMode {
     const before = LABEL + frame * this.cell - s.scrollLeft;
     this.cell = Math.max(CELL_MIN, Math.min(CELL_MAX, cell));
     this.relayout();
-    this.update();
+    this.remark();
     s.scrollLeft = Math.max(0, LABEL + frame * this.cell - before);
+    this.renderWindow(true);
   }
 
   /** The whole shot on the strip (a quick pinch, Alt+0). */
@@ -286,8 +356,9 @@ export class FlipMode {
     const len = Math.max(1, this.app.compEnd);
     this.cell = Math.max(CELL_MIN, Math.min(CELL_MAX, (this.scroll.clientWidth - LABEL - 12) / len));
     this.relayout();
-    this.update();
+    this.remark();
     this.scroll.scrollLeft = 0;
+    this.renderWindow(true);
   }
 
   /** Put the playhead in the middle of the strip. */
@@ -393,9 +464,21 @@ export class FlipMode {
       this.activeTrack = activeTrack;
       this.revealActiveTrack();
     }
-    for (const row of this.grid.querySelectorAll<HTMLElement>('.flip-track')) {
-      const mine = row.dataset.id === activeId;
-      for (const c of row.querySelectorAll<HTMLElement>('.flip-cel')) {
+    this.markCels();
+    if (!this.dragging) {
+      // keep the playhead in view (centred while playing, nearest otherwise)
+      const x = LABEL + f * this.cell, w = this.scroll.clientWidth;
+      const left = this.scroll.scrollLeft;
+      if (app.playing || x < left + LABEL + this.cell || x > left + w - this.cell * 2) this.scroll.scrollLeft = Math.max(0, x - w / 2);
+    }
+  }
+
+  /** The current cel of every track: highlighted, and the active one gets its trim handle. */
+  private markCels(): void {
+    const app = this.app, f = app.frame, activeId = app.project.activeLayer;
+    for (const r of this.rows) {
+      const mine = r.layer.id === activeId;
+      for (const c of r.shown.values()) {
         const s = Number(c.dataset.start), n = Number(c.dataset.len);
         const here = f >= s && f < s + n;
         c.classList.toggle('on', here && mine && !app.blankPage);
@@ -404,12 +487,6 @@ export class FlipMode {
         if (here && mine && !app.playing) { if (!trim) c.append(this.trimHandle(c)); }
         else trim?.remove();
       }
-    }
-    if (!this.dragging) {
-      // keep the playhead in view (centred while playing, nearest otherwise)
-      const x = LABEL + f * this.cell, w = this.scroll.clientWidth;
-      const left = this.scroll.scrollLeft;
-      if (app.playing || x < left + LABEL + this.cell || x > left + w - this.cell * 2) this.scroll.scrollLeft = Math.max(0, x - w / 2);
     }
   }
 

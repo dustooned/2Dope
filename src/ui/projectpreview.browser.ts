@@ -10,7 +10,6 @@ import { projectPreview } from '../view/projectpreview';
 
 const app = new App(document.querySelector<HTMLCanvasElement>('#canvas')!, document.querySelector<HTMLElement>('#stage')!);
 const store = new MemoryStore(), files = new FileUI(app, store, false), gallery = new Gallery(files, new NewProjectUI(), document.querySelector<HTMLElement>('#gallery')!);
-const wait = () => new Promise<void>(r => setTimeout(r, 80));
 const expect = (ok: unknown, reason: string) => { if (!ok) throw new Error(reason); };
 const paint = (c: HTMLCanvasElement, color: string, width = 64) => { const g = c.getContext('2d')!; g.fillStyle = color; g.fillRect(0, 0, width, 64); };
 const pixel = async (png: Uint8Array, x = 96, y = 54) => {

@@ -326,6 +326,12 @@ try {
       strokeB.id === strokeA.id && strokeB.points[0]!.y > first.y + 10 &&
       poseA.vectors[0] === strokeA && middle.points[0]!.y === (first.y + strokeB.points[0]!.y) / 2 &&
       content.drawings.has(poseA.id), { a: first.y, b: strokeB.points[0]!.y, middle: middle.points[0]!.y, frame: app.frame });
+    const view = app as unknown as { canvas: HTMLCanvasElement; render(): void };
+    const shot = (f: number) => { app.setFrame(f); view.render(); return view.canvas.toDataURL(); };
+    const tweening = app.project.layer as { tweenVectors?: boolean };
+    const held = shot(0), between = shot(2);
+    tweening.tweenVectors = false; const untweened = shot(2); tweening.tweenVectors = true;
+    check('Scrubbing onto an in-between frame shows the tweened lines, not the held pose', between !== untweened && shot(0) === held, { frame: app.frame });
   }
 } catch (e) {
   check(String(e), false);

@@ -21,8 +21,8 @@ import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
-import { applyPoint, clipRect, IDENTITY, invert as invertSelection, isIdentity, matrixFor, overallScale, transformedRect, transformMask, transformRegion, transformVectors, unionRect, type Interpolation, type Rect, type XParams } from './core/selxform';
-import { deformation, transformNodes, validTransformNodes, type Point, type TransformMode } from './core/transformmesh';
+import { IDENTITY, isIdentity, matrixFor, transformMask, type Interpolation, type Rect, type XParams } from './core/selxform';
+import { deformation, type TransformMode } from './core/transformmesh';
 import { brushMask, DEFAULT_FILL, fillFrom, leftoverHoles, polygonMask, prepareFill, type Area, type FillMap, type FillOptions } from './fill/fill';
 import { currentProfile, type Profile } from './core/device';
 import { editPoint, rippleComp, rippleExposures } from './core/ripple';
@@ -4623,6 +4623,15 @@ export class App {
     this.editTimeline('Duplicate frame', (ex) => duplicateAt(ex, this.lf, d.id));
   }
 
+  /**
+   * The canvas shows vector in-betweens while playing and while scrubbing or stepping. Drawing,
+   * Edit points, Transform and mask painting show the pose itself, which is what they change.
+   */
+  private get showsTween(): boolean {
+    if (this.editingMask) return false;
+    return this.playing || (!this.live && !this.ve && !this.xf && !this.strokeActive);
+  }
+
   /** Why Next pose cannot run on the current drawing, or null when it can. */
   get nextPoseBlocked(): string | null {
     const layer = this.project.isPlaceholder ? null : this.project.layer;
@@ -6800,7 +6809,7 @@ export class App {
     const d = this.live && this.live.drawing !== maskD ? this.live.drawing : this.drawing;
     const base = g.getTransform();
     const active = this.project.layer;
-    const tween = this.playing && !this.editingMask && vectorTweenAt(active, this.frame);
+    const tween = active.kind === 'drawings' && this.showsTween ? vectorTweenAt(active, this.frame) : null;
     const nextPose = tween && this.project.drawings.get(tween.next);
     const source = (drawing: Drawing): DrawingSource => {
       const ink = this.live?.drawing === drawing ? this.live : null;
@@ -6939,7 +6948,7 @@ export class App {
       return [...out];
     }
     const out = new Set<Drawing>([this.live?.drawing ?? this.drawing]);
-    const tween = this.playing && vectorTweenAt(p.layer, this.frame);
+    const tween = p.layer.kind === 'drawings' && this.showsTween ? vectorTweenAt(p.layer, this.frame) : null;
     const nextPose = tween && p.drawings.get(tween.next);
     if (nextPose) out.add(nextPose);
     if (this.maskDrawing) out.add(this.maskDrawing);

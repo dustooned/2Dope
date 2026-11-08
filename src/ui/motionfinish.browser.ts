@@ -3,7 +3,7 @@ import { ShareView } from './share';
 import { SoundBank } from '../io/sound';
 import { App } from '../app';
 import { Project } from '../core/project';
-import { cameraLayer, compLayer, drawingsLayer, newComp, type CameraLayer, type CompLayer } from '../core/comp';
+import { compLayer, drawingsLayer, newComp, type CameraLayer, type CompLayer } from '../core/comp';
 import { LINEAR, staticProp } from '../core/anim';
 import { newEffect } from '../core/effects';
 import { BUILTIN_PRESETS, presetLayer } from '../core/presets';

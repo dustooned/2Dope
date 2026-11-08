@@ -4502,7 +4502,7 @@ body.ui-simple .nav-row button.playback-range-button .lbl { display: inline; }
   overscroll-behavior: contain;
 }
 .flip-grid { position: relative; min-width: 100%; padding-top: 20px; }
-.flip-ruler { position: absolute; left: 0; right: 0; top: 0; height: 18px; pointer-events: none; }
+.flip-ruler { position: absolute; left: 0; right: 0; top: 0; height: 18px; pointer-events: none; contain: layout style; }
 .flip-ruler span { position: absolute; top: 2px; width: 44px; text-align: center; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .flip-ruler span.sec { color: var(--text); font-weight: 700; }
 .flip-track { position: relative; height: 50px; display: flex; }
@@ -4512,9 +4512,9 @@ body.ui-simple .nav-row button.playback-range-button .lbl { display: inline; }
 .flip-eye[aria-pressed="true"] .flip-check { background: var(--text); color: var(--panel); border-color: var(--text); }
 .flip-track.active .flip-eye { box-shadow: inset 0 0 0 2px var(--accent); }
 .flip-name { max-width: 42px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--muted); }
-.flip-cells { position: relative; flex: 1 0 auto; }
+.flip-cells { position: relative; flex: 1 0 auto; contain: layout style; }
 .flip-cel { position: absolute; top: 3px; height: 44px; border-radius: var(--radius); overflow: hidden; background: #fff; border: 2px solid transparent; box-sizing: border-box; cursor: pointer; left: calc(var(--s, 0) * var(--flip-cell, 24px)); width: calc(var(--n, 1) * var(--flip-cell, 24px) - 3px); contain: strict; }
-.flip-cel canvas { display: block; height: 100%; width: auto; max-width: 56px; }
+.flip-cel canvas, .flip-cel img { display: block; height: 100%; width: auto; max-width: 56px; }
 .flip-cel.empty { background: #8a8a92; }
 .flip-cel.here { border-color: var(--muted); }
 .flip-cel.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
@@ -4636,7 +4636,7 @@ body.flipmode:not(.ui-full) .sidebar, body.flipmode.ui-full.bar-collapsed .sideb
 .flip-eye { touch-action: none; }
 .flip-track.lifting { z-index: 3; opacity: .9; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); transition: none; }
 /* the flipbook strip zoomed far out: no pictures in the frames, just their colour */
-.flip-grid.thin .flip-cel canvas, .flip-grid.thin .flip-hold, .flip-grid.thin .flip-role { display: none; }
+.flip-grid.thin .flip-cel canvas, .flip-grid.thin .flip-cel img, .flip-grid.thin .flip-hold, .flip-grid.thin .flip-role { display: none; }
 .flip-grid.thin .flip-cel { border-width: 1px; border-radius: var(--radius-xs); }
 .flip-ruler span { width: auto; }
 
