@@ -2,6 +2,27 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Pick whip for parenting and paths (2026-11-08)
+
+- `ui/pickwhip.ts` (`whipTarget`, `startWhip`) and `MotionPanel.whipButton`. The selected,
+  unlocked layer's row shows a whip handle in the label-dot slot, so names keep their room. Dragging
+  it draws a dashed line and a label. A drop on another layer's row, or its artwork on the canvas
+  (`hitLayer`, artwork bounds), calls `setParentOf` (one Undo; a loop is refused with a notice). A drop on
+  a Vector line (`CompEditor.lineAt`, now public, returning the line's layer) goes through
+  `MotionPanel.followRoute` to the path dialog. A line on the dragged layer itself shows
+  `SAME_LAYER_LINE`. Esc, pointer cancel, lost capture and an empty drop change nothing and remove the
+  overlay. A tap opens a menu with Parent to… and Animate along a path…; the click straight after a
+  drag (under 400 ms) is ignored. `App.stageAt` and `App.canvasElement` support canvas drops.
+- Guide layers' lines now count as routes, for both the tap mode and the whip. Notes layers still do not.
+- Manual and `UPDATES` updated.
+
+Checks: precision passed 20 and precision-responsive passed 60 (phone, tablet, landscape). The new check drags the real
+handle with pointer events: parent via the row, or via the artwork on landscape where the list is off screen; one Undo; a loop
+refused; Esc and an empty drop change nothing and leave no overlay; following a line; the same-layer explanation; the tap menu;
+touch-action none; no whip on unselected rows. motionassets and motionfinish passed. The Browser pane showed the
+whip on the selected row and readable names. Unit tests and the build passed, and the full browser suite passed **71 of 71**
+(run alone). A physical iPad drag has not been tested. This work is not yet committed.
+
 ### Tween ease, tween onion ghosts, routes from existing lines (2026-11-08)
 
 - **Tween ease.** The optional `Exposure.ease` (`'easeIn' | 'easeOut' | 'easeInOut'`, part of format 9)

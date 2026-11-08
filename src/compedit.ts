@@ -146,6 +146,9 @@ const CONTENT_PAD = 6;
  * property and key. Each edit is one undoable step (it stores the comp's layer list before and
  * after; layers are plain data, so this is small).
  */
+/** A route line inside the layer that should travel would travel with it. */
+export const SAME_LAYER_LINE = 'That line is part of this layer, so it would move along with it. In Draw, select the line and use Cut to layer, then try again.';
+
 export class CompEditor {
   /** Selected layer ids (order = selection order). */
   selected: string[] = [];
@@ -1495,15 +1498,15 @@ export class CompEditor {
     return this.edit(label, c => { const live = c.layers.find(l => l.id === id); if (live) this.setProp(live, n, structuredClone(next)); });
   }
   /**
-   * The vector line (drawn with Vector on another visible drawing layer, at this frame) nearest a
-   * stage point, as stage points, or null when none is within `reach`. The line runs from the end
-   * nearer the tap's start of travel: its first point.
+   * The vector line (drawn with Vector on a visible drawing or guide layer, at this frame) nearest a
+   * stage point, as stage points from its first drawn point, with the layer it is on; null when none
+   * is within `reach`. Notes layers are left out.
    */
-  private lineAt(pt: Vec2, reach: number): Vec2[] | null {
+  lineAt(pt: Vec2, reach: number): { points: Vec2[]; layer: string } | null {
     const c = this.comp, f = this.app.frame, view = this.view();
-    let best: Vec2[] | null = null, bestD = reach;
+    let best: { points: Vec2[]; layer: string } | null = null, bestD = reach;
     for (const l of c.layers) {
-      if (l.kind !== 'drawings' || !l.visible || l.id === this.primary?.id || l.guide || l.notes) continue;
+      if (l.kind !== 'drawings' || !l.visible || l.notes) continue;
       const id = drawingOf(l, f), d = id ? this.app.project.drawings.get(id) : undefined;
       if (!d) continue;
       const m = mul(view, worldMatrix(c, l, f));
@@ -1514,7 +1517,7 @@ export class CompEditor {
           const a = pts[i - 1]!, b = pts[i]!, dx = b[0] - a[0], dy = b[1] - a[1], ll = dx * dx + dy * dy;
           const t = ll ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / ll)) : 0;
           const dd = Math.hypot(pt[0] - (a[0] + dx * t), pt[1] - (a[1] + dy * t));
-          if (dd < bestD) { bestD = dd; best = pts; }
+          if (dd < bestD) { bestD = dd; best = { points: pts, layer: l.id }; }
         }
       }
     }
@@ -1919,7 +1922,9 @@ export class CompEditor {
       // a tap (not a drag) picks a vector line already drawn on another layer as the route
       let travel = 0;
       for (let i = 1; i < line.length; i++) travel += Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]);
-      const route = travel * this.pathZoom < 8 ? this.lineAt(line[0]!, 18 / this.pathZoom) : line.length > 1 ? line : null;
+      const tapped = travel * this.pathZoom < 8 ? this.lineAt(line[0]!, 18 / this.pathZoom) : null;
+      if (tapped && tapped.layer === this.primary?.id) { this.app.onNotice?.(SAME_LAYER_LINE); return; }
+      const route = travel * this.pathZoom < 8 ? tapped?.points ?? null : line.length > 1 ? line : null;
       if (!route) { if (travel * this.pathZoom < 8) this.app.onNotice?.('No vector line there. Draw the path, or tap a line drawn with Vector.'); return; }
       this.setDrawingPath(false); this.onPathDrawn?.(route);
       return;

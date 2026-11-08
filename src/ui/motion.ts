@@ -15,6 +15,7 @@ import { reactToAudio } from './audioreactdialog';
 import type { SoundBank } from '../io/sound';
 import { attachContextMenu, lastMenuPoint, showContextMenu, type CtxItem } from './contextmenu';
 import { rulerStep } from '../core/timecode';
+import { startWhip } from './pickwhip';
 
 const ZOOM_KEY = '2dope.m3.mcell';
 const ROW_KEY = '2dope.m3.mrow';
@@ -138,14 +139,7 @@ export class MotionPanel {
     root.classList.add('motion-workflow');
     app.motionMenu = (l) => (l ? this.layerItems(l) : this.layerListItems());
     // Animate along a path: the drawn line, then how long and how the layer travels
-    ed.onPathDrawn = (points) => {
-      const layer = ed.primary;
-      if (!layer) return;
-      const fps = app.project.comp.fps || 24;
-      void askPathOptions(2, layer.transform.position.keys.length > 0).then((o) => {
-        if (o && ed.layer(layer.id)) ed.animateAlongPath(layer.id, points, Math.max(1, Math.round(o.seconds * fps)), { even: o.even, orient: o.orient });
-      });
-    };
+    ed.onPathDrawn = (points) => this.followRoute(points);
     const btn = (label: string, title: string, fn: () => void, cls = '') => {
       const b = el('button', { type: 'button', title, class: cls }, label);
       b.addEventListener('click', fn);
@@ -614,6 +608,46 @@ export class MotionPanel {
     this.grid.append(this.playhead);
   }
 
+  /** A route for the selected layer (drawn, tapped or whipped): ask how long and how, then animate. */
+  private followRoute(points: Vec2[]): void {
+    const ed = this.ed, layer = ed.primary;
+    if (!layer) return;
+    const fps = this.app.project.comp.fps || 24;
+    void askPathOptions(2, layer.transform.position.keys.length > 0).then((o) => {
+      if (o && ed.layer(layer.id)) ed.animateAlongPath(layer.id, points, Math.max(1, Math.round(o.seconds * fps)), { even: o.even, orient: o.orient });
+    });
+  }
+
+  /** The pick whip on a layer row: drag to a layer (parent) or a line (follow it); a tap offers the same as a menu. */
+  private whipButton(l: Layer): HTMLElement {
+    const ed = this.ed;
+    const whip = el('button', { type: 'button', class: 'lwhip', 'aria-label': `Pick whip for ${l.name}: drag to a layer to parent, or to a line to follow it`, title: 'Drag to another layer to parent it, or to a vector line to travel along it' });
+    whip.innerHTML = iconSvg('whip');
+    // the click a browser sends right after a drag is not a tap
+    let draggedAt = 0;
+    whip.addEventListener('pointerdown', (e) => {
+      if (e.button > 0 || l.locked) return;
+      const x0 = e.clientX, y0 = e.clientY;
+      let moved = false;
+      const move = (ev: PointerEvent) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 6) moved = true; };
+      whip.addEventListener('pointermove', move);
+      whip.addEventListener('pointerup', () => { whip.removeEventListener('pointermove', move); if (moved) draggedAt = performance.now(); }, { once: true });
+      startWhip(this.app, l.id, whip, e, (points) => this.followRoute(points));
+    });
+    whip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (performance.now() - draggedAt < 400) { draggedAt = 0; return; }
+      const box = whip.getBoundingClientRect();
+      showContextMenu(box.left, box.bottom, [
+        { title: l.name },
+        { label: 'Parent to…', icon: 'layers', disabled: l.locked, run: () => void this.pickParent(l) },
+        { label: 'Animate along a path…', icon: 'draw', disabled: l.locked, run: () => { ed.select(l.id); ed.setDrawingPath(true); } },
+        { title: 'Or drag this handle onto a layer or a line' },
+      ]);
+    });
+    return whip;
+  }
+
   private layerRow(l: Layer, end: number): HTMLElement {
     const ed = this.ed;
     const comps = this.app.project.comps;
@@ -630,7 +664,10 @@ export class MotionPanel {
     const eye = el('button', { type: 'button', class: 'leye', 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}`, 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'data-act': 'eye' }, l.visible ? '' : '–');
     if (l.visible) eye.innerHTML = iconSvg('eye');
     const more = el('button', { type: 'button', class: 'lmore', 'aria-label': `More for ${l.name}`, 'data-act': 'more' }, '⋯');
-    left.append(chev, dot, name);
+    // the selected layer shows its pick whip where the label dot sits, so its name keeps the room
+    const whip = sel && !l.locked ? this.whipButton(l) : null;
+    if (whip) whip.style.setProperty('--tag', LABELS[l.label] ?? LABELS[0]!);
+    left.append(chev, whip ?? dot, name);
     if (l.parent) {
       const pn = ed.layer(l.parent)?.name ?? '?';
       left.append(el('button', { type: 'button', class: 'lparent', title: `Parented to ${pn}. Tap to change.`, 'data-act': 'parent' }, `⤷ ${pn}`));

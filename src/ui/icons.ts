@@ -52,6 +52,7 @@ const P: Record<string, string> = {
   freeform: '<rect x="4" y="7" width="16" height="10" rx="1"/><path d="M1 12h3M20 12h3"/>',
   distort: '<path d="M4 5l15 2 1 13-16-3z"/><path d="M4 5l16 15M19 7L4 17" opacity=".55"/>',
   warp: '<path d="M4 4q8 4 16 0v16q-8-4-16 0zM4 12q8 4 16 0M12 6v12"/>',
+  whip: '<path d="M12 12m-2 0a2 2 0 104 0a2 2 0 10-4 0M12 12c0-4 6-4 6 0s-5 7-9 4-3-11 5-10"/><path d="M18 16l3 5"/>',
   snap: '<path d="M5 5v8a7 7 0 0014 0V5h-4v8a3 3 0 01-6 0V5zM5 9h4m6 0h4"/>',
   fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   guide: '<path d="M3 18L12 6l9 12"/><path d="M3 18h18M7.5 12h9"/>',

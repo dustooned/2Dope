@@ -12,6 +12,8 @@ import { LayoutUI } from './layout';
 import { GraphUI } from './graph';
 import { VectorObjectsUI } from './vectorobjects';
 import { MotionPanel } from './motion';
+import { closeContextMenu } from './contextmenu';
+const closeMenus = () => closeContextMenu();
 export const app = new App(document.querySelector<HTMLCanvasElement>('#canvas')!, document.querySelector<HTMLElement>('#stage')!);
 export const layout = new LayoutUI(app), graph = new GraphUI(app), objects = new VectorObjectsUI(app), motion = new MotionPanel(app, document.querySelector<HTMLElement>('#motion')!);
 app.openLayout = () => layout.show(); app.openVectorObjects = id => void objects.show(id); motion.openGraph = () => graph.show();
@@ -97,6 +99,72 @@ await check('Animate along a path: a tap on a line drawn with Vector on another 
   ed.setDrawingPath(true); ed.gestureStart([5, 5], 1); ed.gestureEnd(); await wait(40);
   expect(ed.drawingPath && notices.at(-1)?.includes('No vector line there'), 'an empty tap did not explain itself');
   ed.setDrawingPath(false);
+});
+await check('Pick whip: drag to a layer row or its artwork to parent, to a line to follow it; loops, same-layer lines, Esc and empty drops change nothing', async () => {
+  app.loadProject(new Project(320, 180)); app.project.comp.duration = 60; app.setWorkspace('motion'); refresh();
+  const p = app.project, ed = app.editor, bId = p.layer.id;
+  p.layer.name = 'Road';
+  const pts = Array.from({ length: 25 }, (_, i) => ({ x: 40 + i * 10, y: 120 - i * 2, pressure: 1, tiltX: 0, tiltY: 0, t: i * 10 }));
+  p.drawing(p.layer.exposures[0]!.drawing!).vectors = [{ id: 'road', tool: 'pen', brush: structuredClone(app.brush), color: '#000000', seed: 1, points: pts }];
+  ed.addLayer('drawings'); const aId = ed.primary!.id; ed.layer(aId)!.name = 'Car'; app.setFrame(0); app.history.clear(); refresh(); await wait(60);
+  const whip = (id: string) => document.querySelector<HTMLButtonElement>(`#motion .mrow.layer[data-layer="${id}"] .lwhip`)!;
+  // the first of these drawing points that is really on screen over the canvas (small screens hide some under panels)
+  const shownOnCanvas = (layerId: string, list: { x: number; y: number }[], avoidLine = false) => {
+    for (const pt of list) { const c = onCanvas(layerId, pt.x, pt.y); if (document.elementFromPoint(c[0], c[1]) === app.canvasElement && (!avoidLine || !ed.lineAt(app.stageAt(c[0], c[1]), 18 / app.view.zoom))) return c; }
+    return null;
+  };
+  // a layer's row when it is on screen, otherwise its artwork on the canvas (what a student would drag to)
+  const layerDrop = (id: string) => { const r = rowPoint(id), u = document.elementFromPoint(r[0], r[1]); if (u?.closest(`[data-layer="${id}"]`)) return r; const grid = []; for (let y = 60; y < 140; y += 4) for (let x = 30; x < 300; x += 6) grid.push({ x, y }); for (const g of grid) { const c = onCanvas(id, g.x, g.y); if (document.elementFromPoint(c[0], c[1]) === app.canvasElement && ed.hitLayer(app.stageAt(c[0], c[1]), { allowLocked: true, accept: l => l.id === id }) && !ed.lineAt(app.stageAt(c[0], c[1]), 18 / app.view.zoom)) return c; } return r; };
+  const onCanvas = (layerId: string, x: number, y: number) => { const s = apply(ed.view(), apply(worldMatrix(p.comp, ed.layer(layerId)!, 0), [x, y])); const q = app.view.docToScreen(s[0], s[1]), r = app.canvasElement.getBoundingClientRect(); return [r.left + q.x, r.top + q.y] as Vec2; };
+  // a point on a layer's row that is on screen together with the dragged handle
+  const rowPoint = (id: string) => { const n = document.querySelector<HTMLElement>(`#motion .mrow.layer[data-layer="${id}"] .lname`)!; const r = n.getBoundingClientRect(); return [r.left + Math.min(20, r.width / 2), r.top + r.height / 2] as Vec2; };
+  const label = () => document.querySelector('.whip-label')?.textContent ?? '';
+  const drag = async (id: string, target: Vec2 | (() => Vec2), opts: { escape?: boolean } = {}) => {
+    // like a student: both rows folded and on screen before dragging between them
+    ed.select(id); ed.open.clear(); refresh(); await wait(30);
+    document.querySelector(`#motion .mrow.layer[data-layer="${bId}"]`)?.scrollIntoView({ block: 'center' });
+    const h = whip(id); expect(h, `no whip on ${id}`); h.scrollIntoView({ block: 'nearest' });
+    // measure the drop point after scrolling (the list may move); the handle last, so it is current
+    const to = typeof target === 'function' ? target() : target; const r = h.getBoundingClientRect(); const from: Vec2 = [r.left + r.width / 2, r.top + r.height / 2]; let seen = '';
+    const ev = (type: string, at: Vec2) => h.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: at[0], clientY: at[1] }));
+    ev('pointerdown', from); ev('pointermove', [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]); ev('pointermove', to); seen = label();
+    if (opts.escape) document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    ev('pointerup', to); await wait(60); return seen;
+  };
+  // parent by dropping on the other layer's row
+  let seen = await drag(aId, () => layerDrop(bId));
+  expect(seen === 'Parent to Road' && ed.layer(aId)!.parent === bId && app.history.peekUndo()?.label === 'Parent layer', 'row drop: ' + JSON.stringify({ v: [innerWidth, innerHeight], c: (() => { const r = app.canvasElement.getBoundingClientRect(); return [r.top|0, r.height|0]; })(), m: (() => { const r = document.querySelector('#motion')!.getBoundingClientRect(); return [r.top|0, r.height|0]; })(), u: (() => { const c = onCanvas(bId, 160, 90); const e = document.elementFromPoint(c[0], c[1]); return [c[1]|0, e ? e.tagName + '.' + e.className : null]; })() }) + JSON.stringify({ seen, parent: ed.layer(aId)!.parent, at: rowPoint(bId), under: (() => { const [x, y] = rowPoint(bId); const u = document.elementFromPoint(x, y); return u ? `${u.tagName}.${u.className}` : null; })(), view: [innerWidth, innerHeight], canvas: (() => { const r = app.canvasElement.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; })(), motion: (() => { const r = document.querySelector('#motion')!.getBoundingClientRect(); return [r.top, r.height]; })(), page: onCanvas(bId, 160, 90), at160: (() => { const c = onCanvas(bId, 160, 90); const u = document.elementFromPoint(c[0], c[1]); return u ? `${u.tagName}.${u.className}` : null; })() }));
+  expect(!document.querySelector('.whip-line') && !document.querySelector('.whip-label'), 'whip line left on screen');
+  app.undo(); await wait(120); expect(!ed.layer(aId)!.parent, 'Undo did not unparent'); refresh(); await wait(40);
+  // a loop is refused: Road parented to Car, then Car whipped onto Road
+  ed.setParentOf(bId, aId); refresh(); await wait(40);
+  await drag(aId, () => layerDrop(bId));
+  expect(!ed.layer(aId)!.parent && notices.at(-1)?.includes('loop'), 'a parent loop was not refused');
+  ed.setParentOf(bId, null); refresh(); await wait(40);
+  // Esc during the drag and an empty drop change nothing
+  const before = JSON.stringify(p.comp.layers);
+  await drag(aId, () => layerDrop(bId), { escape: true });
+  await drag(aId, [4, innerHeight - 4]);
+  expect(JSON.stringify(p.comp.layers) === before && !document.querySelector('.whip-line'), 'Esc or an empty drop changed the shot');
+  // drop on the road line: follow it
+  seen = await drag(aId, () => shownOnCanvas(bId, [pts[12]!, ...pts]) ?? onCanvas(bId, pts[12]!.x, pts[12]!.y));
+  expect(seen === 'Follow this line' && !!document.querySelector('dialog[open]'), 'line drop did not offer to follow: ' + seen);
+  button('Animate').click(); await wait(120);
+  const pos = ed.layer(aId)!.transform.position; expect(pos.keys.length >= 2 && Math.abs(apply(ed.pathMatrix(ed.layer(aId)!), pos.keys.at(-1)!.v)[0] - apply(ed.view(), apply(worldMatrix(p.comp, ed.layer(bId)!, 0), [pts.at(-1)!.x, pts.at(-1)!.y]))[0]) < 1.5, 'Car does not follow the road');
+  // a line inside the dragged layer itself is explained, not used
+  p.drawing(ed.layer(aId)!.kind === 'drawings' ? (ed.layer(aId) as { exposures: { drawing: string }[] }).exposures[0]!.drawing : '').vectors = [{ id: 'own', tool: 'pen', brush: structuredClone(app.brush), color: '#000000', seed: 1, points: pts.map(q => ({ ...q, y: q.y + 40 })) }];
+  ed.layer(bId)!.visible = false; refresh(); app.setFrame(0); await wait(40);
+  const own = valueAt(ed.layer(aId)!.transform.position, 0);
+  const ownLine = pts.map(q => ({ x: q.x, y: q.y + 40 }));
+  seen = await drag(aId, () => shownOnCanvas(aId, [ownLine[5]!, ...ownLine]) ?? onCanvas(aId, ownLine[5]!.x, ownLine[5]!.y));
+  expect(seen === 'This line is part of the same layer' && notices.at(-1)?.includes('Cut to layer') && JSON.stringify(valueAt(ed.layer(aId)!.transform.position, 0)) === JSON.stringify(own), 'same-layer line was not explained: ' + seen);
+  ed.layer(bId)!.visible = true; refresh(); await wait(40);
+  // a tap opens the same choices as a menu
+  ed.select(aId); refresh(); await wait(450); whip(aId).click(); await wait(40);
+  const menu = [...document.querySelectorAll('.ctx-menu button, .ctxmenu button, [role=menu] button')].map(b => b.textContent ?? '');
+  expect(menu.some(t => t.includes('Parent to')) && menu.some(t => t.includes('Animate along a path')), 'tap menu missing: ' + JSON.stringify(menu));
+  closeMenus();
+  expect(getComputedStyle(whip(aId)).touchAction === 'none' && whip(aId).getBoundingClientRect().width >= 26 && !whip(bId), 'whip is not touch ready, or shows on an unselected layer');
 });
 await check('No uncaught browser errors', () => expect(!errors.length, errors.join('; ')));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

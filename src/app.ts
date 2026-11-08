@@ -5710,6 +5710,18 @@ export class App {
   }
 
   /** Stage point (what the canvas shows) under a pointer. */
+  /** The stage point under a client (window) point, for drag-and-drop onto the canvas. */
+  stageAt(clientX: number, clientY: number): [number, number] {
+    const r = this.canvas.getBoundingClientRect();
+    const d = this.view.screenToDoc(clientX - r.left, clientY - r.top);
+    return [d.x, d.y];
+  }
+
+  /** The canvas element (for hit tests from the panels). */
+  get canvasElement(): HTMLCanvasElement {
+    return this.canvas;
+  }
+
   private stagePoint(e: PointerEvent): [number, number] {
     const p = this.local(e);
     const d = this.view.screenToDoc(p.x, p.y);
