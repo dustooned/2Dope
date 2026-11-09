@@ -5114,6 +5114,8 @@ dialog.timelapse .tl-bar input { flex: 1; }
 .lc-other { display: flex; align-items: center; gap: 6px; }
 .lc-other.off .lc-other-name { opacity: 0.55; }
 .lc-other-name { flex: 1; text-align: left; min-height: 36px; padding: 0 10px; }
+.lc-other-more { width: 36px; min-height: 36px; padding: 0; flex: 0 0 auto; }
+@media (pointer: coarse) { .lc-other-more { width: 44px; min-height: 44px; } }
 /* Full level, Motion and Timing: the top bar has no tools of theirs (drawing tools are Draw's), so
    their own tool row stays (Motion: New layer, Camera, Group, Split, Auto-key, Camera view, Effects) */
 body.ui-full.ws-motion:not(.ui-hidden):not(.quick) .bub-tools:not(:empty),

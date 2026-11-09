@@ -5,6 +5,7 @@ import type { PropKey } from '../compedit';
 import { drawingAt } from '../core/timeline';
 import { isPaintingWorkspace } from '../core/workspace';
 import { askText, confirmBox } from './dialogs';
+import { attachContextMenu, showContextMenu, type CtxItem } from './contextmenu';
 import { decorate } from './icons';
 import { el } from './dom';
 
@@ -351,20 +352,32 @@ export class LayerCards {
       if (l.kind === 'comp' && this.openGroups.has(l.id)) list.append(...this.children(l));
     }
     if (!layers.length) list.append(el('p', { class: 'hint' }, 'No layers yet. Draw, or tap +.'));
-    // the shot's other drawing layers (the list above is only the drawing you are on): name, eye,
-    // tap to draw on it, so finished work on another layer never seems to be gone
-    const elsewhere = paint && !app.project.comp.asset ? app.project.comp.layers.filter((x): x is DrawingsLayer => x.kind === 'drawings' && !x.guide && !layers.some((y) => y.id === x.id)) : [];
+    // the shot's other layers (the list above is only the drawing you are on): name, eye, tap to draw
+    // on it, and ⋯ (or hold / right-click) for the same layer actions as any card, Delete included,
+    // so finished work on another layer never seems to be gone or stuck
+    const elsewhere = paint && !app.project.comp.asset ? app.project.comp.layers.filter((x): x is DrawingsLayer | Extract<Layer, { kind: 'comp' }> => (x.kind === 'drawings' || x.kind === 'comp') && !layers.some((y) => y.id === x.id)) : [];
     if (elsewhere.length) {
       const box = el('div', { class: 'lc-elsewhere', role: 'group', 'aria-label': 'Other layers in this shot' });
       box.append(el('div', { class: 'lc-section' }, `Other layers in this shot${!app.showLayers ? ' · hidden while you draw (Others)' : ''}`));
       for (const x of elsewhere) {
         const row = el('div', { class: `lc-other${x.visible ? '' : ' off'}` });
-        const go = el('button', { type: 'button', class: 'lc-other-name', title: x.adjust ? `${x.name}: its effects change the layers below. Tap for its effects` : `Draw on ${x.name}` }, x.adjust ? `${x.name} · adjustment` : x.name);
-        go.addEventListener('click', () => { if (app.strokeActive) return; if (x.adjust) { this.close(); app.openEffects?.(x.id); return; } app.pickLayer(x.id); this.sig = ''; this.update(); });
+        const kind = x.kind === 'comp' ? (app.project.comps.get(x.comp)?.asset ? 'asset' : 'group') : x.guide ? 'board' : x.adjust ? 'adjustment' : x.caption ? 'caption' : x.title ? 'title' : '';
+        const tip = x.kind === 'drawings' && x.adjust ? `${x.name}: its effects change the layers below. Tap for its effects` : x.kind === 'comp' ? `${x.name}: tap for its actions` : `Draw on ${x.name}`;
+        const go = el('button', { type: 'button', class: 'lc-other-name', title: `${tip} · ⋯, hold or right-click for Rename, Duplicate, Delete…` }, kind ? `${x.name} · ${kind}` : x.name);
+        const menu = (at: { x: number; y: number }) => showContextMenu(at.x, at.y, this.otherItems(x));
+        go.addEventListener('click', () => {
+          if (app.strokeActive) return;
+          if (x.kind === 'comp') { const b = go.getBoundingClientRect(); menu({ x: b.left, y: b.bottom }); return; }
+          if (x.adjust) { this.close(); app.openEffects?.(x.id); return; }
+          app.pickLayer(x.id); this.sig = ''; this.update();
+        });
+        attachContextMenu(row, () => this.otherItems(x));
         const eye = el('button', { type: 'button', class: 'lc-eye', 'aria-pressed': String(x.visible), 'aria-label': x.visible ? `Hide ${x.name}` : `Show ${x.name}`, title: x.visible ? 'Hide this layer' : 'Show this layer' }, x.visible ? 'Hide' : 'Show');
         decorate(eye, 'eye');
         eye.addEventListener('click', () => { app.editor.setFlag(x.id, 'visible', !x.visible); this.sig = ''; this.update(); });
-        row.append(go, eye);
+        const more = el('button', { type: 'button', class: 'lc-other-more', 'aria-label': `More for ${x.name}`, 'aria-haspopup': 'menu', title: 'Rename, duplicate, lock or delete this layer' }, '⋯');
+        more.addEventListener('click', () => { const b = more.getBoundingClientRect(); menu({ x: b.left, y: b.bottom }); });
+        row.append(go, eye, more);
         box.append(row);
       }
       list.append(box);
@@ -379,6 +392,25 @@ export class LayerCards {
       const replacement = [...(group?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input,select') ?? [])].find(e => e.getAttribute('aria-label') === fieldName);
       replacement?.focus({ preventScroll: true });
     }
+  }
+
+  /** Actions for a layer in "Other layers in this shot": the same as its card would have. */
+  private otherItems(x: Layer): CtxItem[] {
+    const app = this.app, ed = app.editor, again = () => { this.sig = ''; this.update(); };
+    const asset = x.kind === 'comp' && app.project.comps.get(x.comp)?.asset;
+    return [
+      { title: x.name },
+      ...(x.kind === 'drawings' && !x.adjust ? [{ label: 'Draw on it', icon: 'draw', run: () => { app.pickLayer(x.id); again(); } }] : []),
+      ...(x.kind === 'comp' ? [{ label: asset ? 'Arrange it' : 'Edit inside', icon: 'layers', run: () => { if (asset) app.setArrangeAssets(true, x.id); else ed.enter(x.id); again(); } }] : []),
+      ...(x.kind === 'drawings' && x.caption ? [{ label: 'Edit caption…', icon: 'editCaption', run: () => app.editCaption(x.id) }] : []),
+      ...(x.kind === 'drawings' && x.title ? [{ label: 'Edit title…', run: () => app.editTitle?.(x.id) }] : []),
+      { label: 'Effects…', icon: 'fx', run: () => { this.close(); app.openEffects?.(x.id); } },
+      { label: 'Rename…', run: async () => { const n = await askText('Layer name', x.name, 'Rename'); if (n !== null) { ed.rename(x.id, n); again(); } } },
+      { label: 'Duplicate', icon: 'copy', run: () => { void app.duplicateLayer(x.id); again(); } },
+      { label: x.locked ? 'Unlock' : 'Lock', icon: 'lock', run: () => { ed.setFlag(x.id, 'locked', !x.locked); again(); } },
+      { sep: true },
+      { label: 'Delete layer', icon: 'trash', danger: true, run: async () => { if (await confirmBox(`Delete “${x.name}”?`, 'You can undo this.', 'Delete', true)) { ed.deleteLayers([x.id]); again(); } } },
+    ];
   }
 
   /** Tap: draw on it (or open its options if it is already the one). Hold, then drag: reorder. */

@@ -2,6 +2,24 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Delete any layer from the Layers panel (2026-11-09, uncommitted)
+
+- The problem: in Draw and Animate, the Layers panel's "Other layers in this shot" rows had only a name
+  and an eye, so those layers (and guides and groups, which were not listed at all) could not be
+  deleted there the way the drawing you are on can.
+- `ui/layercards.ts`:
+  - The rows now list every drawings and comp layer not shown above, with their kind (caption,
+    title, adjustment, board, group, asset).
+  - Each row has a ⋯ button and a hold/right-click menu (`otherItems`): Draw on it, Arrange it or
+    Edit inside, Edit caption, Edit title, Effects, Rename, Duplicate, Lock, and Delete layer
+    (confirmed, undoable).
+  - Tapping a group row opens the menu.
+- New fixture `layerdelete` (6 of 6): ⋯ on Sky, Balloon (caption) and Props (group); Delete and
+  Undo for each; and the right-click menu.
+- Other places that delete layers were already fine: the Layers cards (tap menu and swipe), the
+  layers popover (active layer), Flipbook track menus, rails (top level), and Motion.
+  - Layers inside a group are deleted after going inside.
+
 ### Inspector per layer kind, captions to vectors, exact fake bold/italic, WOFF2 outlines (2026-11-09, uncommitted)
 
 - **Inspector** (`ui/inspector.ts`) now covers all layer data:
