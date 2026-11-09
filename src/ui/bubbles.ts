@@ -480,7 +480,13 @@ export class Bubbles {
   private letterChips(): HTMLElement[] {
     const a = this.app, cap = a.selectedCaption;
     const styles: [BalloonStyle, string, string, string][] = [['speech', 'Speech', 'Oval with a tail', 'balloonSpeech'], ['thought', 'Thought', 'Cloud with bubbles', 'balloonThought'], ['shout', 'Shout', 'Jagged burst', 'balloonShout'], ['whisper', 'Whisper', 'Dashed outline', 'balloonWhisper'], ['box', 'Box', 'Narration box', 'balloonBox'], ['sfx', 'Sound effect', 'Big lettering, no balloon', 'sfx']];
-    const out: HTMLElement[] = styles.map(([s, label, title, icon]) => this.chip(label, `${title}. Tap the canvas to add one${cap ? '; restyles the selected caption' : ''}`, (cap?.style ?? a.letters.style) === s, () => { a.letters.style = s; if (cap) a.setCaptionStyle(s); else a.onToolChange(); }, icon));
+    // with a caption selected a chip restyles it; with none, it adds one in a free spot, ready to type
+    const out: HTMLElement[] = styles.map(([s, label, title, icon]) => this.chip(label, cap ? `${title}. Restyles the selected caption` : `${title}. Tap to add one in a free spot and type its words (or tap the canvas where it should go)`, (cap?.style ?? a.letters.style) === s, () => {
+      a.letters.style = s;
+      if (cap) { a.setCaptionStyle(s); return; }
+      const id = a.letters.createInFreeSpot(s);
+      if (id) a.letters.onEdit?.(id, true); else a.onToolChange();
+    }, icon));
     if (cap) {
       out.push(this.chip('Edit caption', 'Words, font, size, balloon and colours: the Caption panel (or double-tap the balloon)', false, () => a.letters.onEdit?.(a.project.activeLayer, false), 'editCaption'));
       out.push(this.chip('Fade in', 'Fade the caption in from the playhead', false, () => a.captionPreset('fadeIn'), 'fadeIn'));
@@ -491,7 +497,7 @@ export class Bubbles {
       // a drawing with a balloon drawn on it can become a live caption
       const l = a.project.isPlaceholder ? null : a.project.layer;
       if (l?.kind === 'drawings' && !l.caption && !l.locked && !l.guide && !l.notes) out.push(this.chip('Make caption', 'Turn the balloon drawn on this layer (a closed Vector line or painted shape) into a live caption with the same shape, size and tail', false, () => captionFromDrawing(a), 'letter'));
-      out.push(el('span', { class: 'bub-hint' }, "Tap to add a caption, or draw a balloon shape. Draw out from a balloon's edge for its tail."));
+      out.push(el('span', { class: 'bub-hint' }, "Tap a style to add a caption, or tap the canvas where it goes, or draw a balloon. Draw out from a balloon's edge for its tail."));
     }
     return out;
   }

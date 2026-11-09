@@ -606,6 +606,16 @@ export class App {
     return id;
   }
 
+  /** Open a caption layer to edit: select it, show its handles (Draw and Animate) and its panel. */
+  editCaption(id: string): void {
+    const l = this.project.comp.layers.find(x => x.id === id);
+    if (l?.kind !== 'drawings' || !l.caption) return;
+    if (this.project.activeLayer !== id) this.focusLayer(id);
+    this.editor.select(id);
+    if ((this.workspace === 'draw' || this.workspace === 'animate') && !this.lettering) this.setLettering(true);
+    this.letters.onEdit?.(id, false);
+  }
+
   setLettering(on: boolean): void {
     if (on) {
       if (this.xf) this.applyTransform();

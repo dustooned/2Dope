@@ -29,7 +29,7 @@ function lookKey(c: CaptionSpec): string {
 let measureCanvas: CanvasRenderingContext2D | null = null;
 
 /** The lettering size of a caption, page units. */
-export function captionSize(c: CaptionSpec, pageHeight: number): number { return LETTER_SIZE_FRACTION[c.size] * pageHeight; }
+export function captionSize(c: CaptionSpec, pageHeight: number): number { return LETTER_SIZE_FRACTION[c.size] * (c.scale ?? 1) * pageHeight; }
 
 /** Lay out a caption (cached by its text, look, size, spacing and whether its font has loaded). */
 export function captionLayout(c: CaptionSpec, frame: number, pageW: number, pageH: number): CaptionLayout {

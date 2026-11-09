@@ -1374,6 +1374,7 @@ export class MotionPanel {
         { label: 'Save as Asset…', icon: 'save', disabled: !ed.selected.length || this.app.playing, run: () => this.makeClip?.(true) },
       ] : []),
       ...(l.kind === 'comp' && this.app.project.comps.get(l.comp)?.asset ? [{ label: 'Symbol options…', disabled: !this.openSymbol, run: () => this.openSymbol?.(l.id) }] : []),
+      ...(l.kind === 'drawings' && l.caption ? [{ label: 'Edit caption…', icon: 'editCaption', run: () => this.app.editCaption(l.id) }] : []),
       ...(l.kind === 'drawings' && l.title ? [{ label: 'Edit title…', run: () => this.app.editTitle?.(l.id) }, { label: 'Convert to paint…', run: () => this.app.convertTitle?.(l.id) }] : []),
       ...(!this.makeClip && this.createAsset ? [{ label: 'Create asset from selection…', disabled: this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() }] : []),
       ...(l.kind === 'drawings' && !l.adjust && !l.guide ? [{ label: 'Edit in Flipbook', run: () => this.app.openFlipbook?.(l.id) }] : []),

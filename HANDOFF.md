@@ -2,6 +2,35 @@
 
 ## Current state (2026-11-08) — read this first
 
+### One-tap captions from the style chips; tail tip picking (2026-11-08, committed and pushed to main)
+
+The owner asked for captions that start simple without drawing, made easier in the existing UI.
+- A preset picker dialog was built first. When the owner was unsure about it, it was replaced before
+  committing: no picker, no Motion menu entry, no extra button.
+- **Style chips**: with the Letter tool on and no caption selected, tapping a style chip (Speech,
+  Thought, Shout, Whisper, Box, Sound effect) calls `LetterTool.createInFreeSpot` and opens the
+  panel. With a caption selected, a chip restyles it, as before. Tapping the canvas or drawing still
+  works.
+- **Placing it**: the first free spot is in the top row, then the bottom row, then the middle. A box
+  goes to a corner and a sound effect to the middle; on the bottom row the tail points up. It is one
+  "Add caption" Undo step, and closing the panel with no words removes it.
+- `styleForProject` (the Styles tab: a style's own font is added by its content hash) was kept from
+  the picker work.
+- **Bug**: a press near a tail tip was taken by the pick whip beside it, because whips were checked
+  first. Every handle now goes by nearest, and the whip sits 32 px from the tip instead of 24.
+- The owner asked for a pick-whip toggle, then said they had found the option; none was added.
+- **Re-editing**: a tap on a balloon with the Letter tool (no drag) opens its panel, replacing the
+  double-tap. Tapping a caption's card in Layers, or Edit caption… in Motion's layer menu, calls
+  `App.editCaption`, which selects it, turns on the Letter tool in Draw and Animate, and opens the
+  panel.
+- **Letter size**: `CaptionSpec.scale` (0.5–3) multiplies the named size and is still a share of the
+  page height (`captionSize`). It is the Letter size slider in the Letters tab, and styles save it.
+- Checks: captions fixture 27 (adds a tap to open, `editCaption`, and Letter size with Undo), covering:
+  - The style chip action adds, places, keeps one Undo step and removes an empty caption.
+  - A box goes to a corner.
+  - A press just past a tip aims the tail.
+- Full results: see below.
+
 ### Cleanup and review of this session's code (2026-11-08, committed and pushed to main)
 
 A sweep of files changed since `7a989bd`: exports used nowhere else, debug leftovers, statement hacks.

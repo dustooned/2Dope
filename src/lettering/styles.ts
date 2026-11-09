@@ -12,7 +12,7 @@ export const MAX_STYLE_BYTES = 6 * 1024 * 1024;
 export const MAX_SAVED_STYLES = 40;
 
 /** What a style changes on a caption (everything about its look). */
-const LOOK_FIELDS = ['font', 'bold', 'italic', 'caps', 'size', 'align', 'style', 'shape', 'look', 'fill', 'ink', 'inkWidth', 'textColor', 'textOutline', 'textOutlineWidth'] as const;
+const LOOK_FIELDS = ['font', 'bold', 'italic', 'caps', 'size', 'scale', 'align', 'style', 'shape', 'look', 'fill', 'ink', 'inkWidth', 'textColor', 'textOutline', 'textOutlineWidth'] as const;
 type LookFields = Pick<CaptionSpec, (typeof LOOK_FIELDS)[number]>;
 
 export interface CaptionStyleTail extends Omit<CaptionTail, 'x' | 'y' | 'bend'> { join: TailJoin }

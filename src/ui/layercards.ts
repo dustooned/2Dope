@@ -465,6 +465,8 @@ export class LayerCards {
         this.update();
         return;
       }
+      // a caption: tapping its card opens it to edit (words, look, place)
+      if (l.kind === 'drawings' && l.caption) { this.menuFor = null; this.close(); this.app.editCaption(l.id); return; }
       if (on) this.menuFor = this.menuFor === l.id ? null : l.id;
       else { this.menuFor = null; this.app.pickLayer(l.id); }
       this.sig = '';

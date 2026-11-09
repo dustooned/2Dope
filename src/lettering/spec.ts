@@ -107,6 +107,8 @@ export interface CaptionSpec {
   /** Outline behind the letters (sound effects); null = none. Width as a fraction of the lettering size. */
   textOutline: string | null;
   textOutlineWidth: number;
+  /** Letter size fine-tune: a multiple of the named size, 0.5–3 (absent = 1). Still a share of the page height. */
+  scale?: number;
   /** Balloon width as a share of the style's usual shape, 0.5–2.5 (absent = 1). */
   shape?: number;
   /** How the balloon is drawn: roundness, wobble, spikes, bumps or a custom outline. */
@@ -195,6 +197,7 @@ export function readCaption(input: unknown): CaptionSpec {
     fill: col(r.fill, '#ffffff'), ink: col(r.ink, '#111111'), inkWidth: num(r.inkWidth, 0, 0.6, 0.09),
     textColor: col(r.textColor, '#111111'), textOutline: r.textOutline === null || r.textOutline === undefined ? null : col(r.textOutline, '#111111'), textOutlineWidth: num(r.textOutlineWidth, 0, 0.6, 0.18),
     ...(typeof r.shape === 'number' && Number.isFinite(r.shape) && r.shape !== 1 ? { shape: num(r.shape, 0.5, 2.5, 1) } : {}),
+    ...(typeof r.scale === 'number' && Number.isFinite(r.scale) && r.scale !== 1 ? { scale: num(r.scale, 0.5, 3, 1) } : {}),
     ...(readLook(r.look) ? { look: readLook(r.look)! } : {}),
     ...(Array.isArray(r.minSize) && r.minSize.length === 2 && r.minSize.every(n => typeof n === 'number' && Number.isFinite(n) && n > 0) ? { minSize: [num(r.minSize[0], 1, 1e5, 1), num(r.minSize[1], 1, 1e5, 1)] as [number, number] } : {}),
     ...(Object.keys(values).length ? { values } : {}), ...(Object.keys(keys).length ? { keys } : {}),

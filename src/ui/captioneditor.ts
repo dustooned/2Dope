@@ -9,7 +9,7 @@ import type { App } from '../app';
 import { hashBytes } from '../io/hash';
 import { BUNDLED_FONTS, familyName, isFontFile, MAX_FONT_BYTES, MAX_PROJECT_FONTS } from '../lettering/fonts';
 import { CAPTION_KEYS, MAX_CAPTION_CHARS, MAX_TAILS, TAIL_JOINS, TAIL_LIMITS, type BalloonStyle, type CaptionKey, type CaptionSpec, type CaptionTail, type LetterAlign, type LetterSize, type TailJoin } from '../lettering/spec';
-import { captionAt, captionBalloon, paintCaption } from '../view/caption';
+import { captionAt, captionBalloon, captionSize as captionSizeOf, paintCaption } from '../view/caption';
 import { lookRound, lookWobble, shapeForText, turnOutline, type Pt } from '../lettering/geometry';
 import type { BalloonLook } from '../lettering/spec';
 import { captionFont } from '../view/captionfonts';
@@ -243,6 +243,10 @@ export class CaptionEditor {
     fonts.append(importBtn);
     letters.append(fonts, picker, status);
     chips<LetterSize>(letters, 'Size', [['small', 'Small'], ['body', 'Body'], ['big', 'Big']], c.size, v => change('Change caption size', { size: v }));
+    // finer than the three sizes: still a share of the picture, so captions stay in proportion
+    const px = (k: number) => Math.round(captionSizeOf({ ...c, scale: k }, app.project.height));
+    const fine = slider(letters, 'Letter size', 50, 300, 5, Math.round((c.scale ?? 1) * 100), '%', v => ({ ...this.cur, scale: v / 100 }), v => change('Change letter size', { scale: v === 100 ? undefined : v / 100 }));
+    fine.title = `${px(c.scale ?? 1)} px letters at this picture size`;
     chips<LetterAlign>(letters, 'Align', [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], c.align, v => change('Align caption', { align: v }));
     const toggles = el('div', { class: 'cap-chips' });
     for (const [key, label] of [['bold', 'Bold'], ['italic', 'Italic'], ['caps', 'ALL CAPS']] as const) {
@@ -502,21 +506,7 @@ export class CaptionEditor {
 
   /** Use a style on this caption: one Undo step. A style's own font is added to the project first. */
   private useStyle(s: CaptionStyle): void {
-    const app = this.app;
-    let style = s;
-    if (s.font && isCustomFont(s.look.font)) {
-      // the same id Import font gives these bytes, so the same font is never added twice (and two fonts never share one)
-      const bytes = fromBase64(s.font.data), id = `f${hashBytes(bytes).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)}`;
-      if (!app.project.fonts.has(id)) {
-        if (app.project.fonts.size >= 16) { app.onNotice?.('This project holds 16 fonts already; the style uses its own font.'); }
-        else app.project.fonts.set(id, { name: s.font.name, path: `assets/${id}.${s.font.ext}`, bytes });
-      }
-      if (app.project.fonts.has(id)) style = { ...s, look: { ...s.look, font: `custom:${id}` } };
-    } else if (isCustomFont(s.look.font) && !app.project.fonts.has(customFontId(s.look.font))) {
-      style = { ...s, look: { ...s.look, font: 'comic-neue' } };
-      app.onNotice?.(`“${s.name}” uses a font this project does not have, so Comic Neue stands in. Import the style file (it carries its font) or import the font.`);
-    }
-    this.commit(`Caption style: ${s.name}`, applyStyle(this.base!, style));
+    this.commit(`Caption style: ${s.name}`, applyStyle(this.base!, styleForProject(this.app, s)));
   }
 
   /** Save a style as a .2dope-style file, with its imported font inside (so it opens the same anywhere). */
@@ -550,6 +540,24 @@ const PANEL_ICONS: Record<string, string> = {
   'Centre in picture': 'centrecross', 'Straighten and reset size': 'resetrotation',
   Export: 'download', Delete: 'trash', 'Save this style…': 'save', 'Import style…': 'import',
 };
+
+/** A style ready for this project: a font it carries is added (by content), a missing one stands in as Comic Neue. */
+export function styleForProject(app: App, s: CaptionStyle): CaptionStyle {
+  if (s.font && isCustomFont(s.look.font)) {
+    // the same id Import font gives these bytes, so the same font is never added twice (and two fonts never share one)
+    const bytes = fromBase64(s.font.data), id = `f${hashBytes(bytes).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)}`;
+    if (!app.project.fonts.has(id)) {
+      if (app.project.fonts.size >= MAX_PROJECT_FONTS) app.onNotice?.(`This project holds ${MAX_PROJECT_FONTS} fonts already, so Comic Neue stands in for “${s.font.name}”.`);
+      else app.project.fonts.set(id, { name: s.font.name, path: `assets/${id}.${s.font.ext}`, bytes });
+    }
+    return app.project.fonts.has(id) ? { ...s, look: { ...s.look, font: `custom:${id}` } } : { ...s, look: { ...s.look, font: 'comic-neue' } };
+  }
+  if (isCustomFont(s.look.font) && !app.project.fonts.has(customFontId(s.look.font))) {
+    app.onNotice?.(`“${s.name}” uses a font this project does not have, so Comic Neue stands in. Import the style file (it carries its font) or import the font.`);
+    return { ...s, look: { ...s.look, font: 'comic-neue' } };
+  }
+  return s;
+}
 
 const STYLES_KEY = '2dope.captionStyles';
 /** The caption styles saved on this device (bad entries are skipped). */

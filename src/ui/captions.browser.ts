@@ -447,6 +447,66 @@ await check('Make caption from a drawing: a vector balloon with a tail, and a pa
   app.focusLayer(first);
 });
 
+const captionsBefore = new Set<string>();
+await check('A style chip adds a caption in a free spot with the panel ready; empty and closed means gone', async () => {
+  app.setWorkspace('draw'); app.setFrame(10); app.history.clear();
+  const before = captions().length;
+  for (const l of captions()) captionsBefore.add(l.id);
+  // what tapping the Shout chip does with no caption selected
+  const id = app.letters.createInFreeSpot('shout')!; app.letters.onEdit!(id, true); await wait();
+  expect(id && captions().length === before + 1 && !!dialog(), 'the chip did not add a caption and open it');
+  const c = cap(id);
+  expect(c.style === 'shout' && app.history.peekUndo()?.label === 'Add caption', 'not a shout, or not one Add caption step: ' + app.history.peekUndo()?.label);
+  const t = inDialog<HTMLTextAreaElement>('Caption words'); t.value = 'BOOM!'; t.dispatchEvent(new Event('input'));
+  footer('Apply').click(); await wait();
+  expect(cap(id).text === 'BOOM!' && app.history.peekUndo()?.label === 'Add caption', 'words not kept in the same step');
+  // the next one goes to another free spot, and a narration box to a corner
+  const second = app.letters.createInFreeSpot('speech')!; app.letters.onEdit!(second, true); await wait();
+  expect(Math.hypot(cap(second).x - c.x, cap(second).y - c.y) > 60, 'the second caption landed on the first');
+  footer('Apply').click(); await wait();
+  expect(!captions().some(l => l.id === second), 'an empty new caption was kept');
+  const box = app.letters.createInFreeSpot('box')!;
+  const bx = cap(box).x / 640, by = cap(box).y / 360;
+  expect((bx < 0.3 || bx > 0.7) && (by < 0.2 || by > 0.8) && cap(box).tails.length === 0, `the narration box is not in a corner: ${bx.toFixed(2)}, ${by.toFixed(2)}`);
+  app.undo(); await wait(); app.undo(); await wait();
+  expect(!captions().some(l => l.id === id || l.id === box), 'Undo did not remove the added captions');
+});
+
+await check('A press just past a tail tip still grabs the tip, not the pick whip beside it', () => {
+  app.setLettering(true); app.focusLayer(first); app.setFrame(10);
+  const l = app.project.comp.layers.find(x => x.id === first)!;
+  if (l.kind !== 'drawings') throw new Error('not drawings');
+  const h = app.letters.handles(l)!, tip = h.tips[0]!, w = h.whips[0]!, d = Math.hypot(w.x - tip.x, w.y - tip.y);
+  const press = { x: tip.x + ((w.x - tip.x) / d) * 8, y: tip.y + ((w.y - tip.y) / d) * 8 };
+  app.letters.down(12, press); app.letters.move(12, { x: press.x - 30, y: press.y }); app.letters.up(12, false);
+  expect(app.history.peekUndo()?.label === 'Aim caption tail', 'the press went to: ' + app.history.peekUndo()?.label);
+  app.undo();
+});
+
+await check('Re-edit a caption with one tap (or from Layers and Motion), and fine-tune its letter size', async () => {
+  app.setWorkspace('draw'); app.setLettering(true); app.setFrame(10);
+  editor.close();
+  const c = cap(first), l = app.project.comp.layers.find(x => x.id === first)!;
+  const at = apply(app.editor.matrixOf(l), [c.x, c.y]);
+  app.letters.down(13, { x: at[0], y: at[1] }); app.letters.up(13, false); await wait();
+  expect(!!dialog() && editor.openLayer === first, 'one tap on the balloon did not open it');
+  footer('Apply').click();
+  // from anywhere else (the Layers panel card, Motion's layer menu)
+  app.focusLayer(app.project.comp.layers.find(x => x.id !== first && !(x.kind === 'drawings' && x.caption))?.id ?? first);
+  app.setLettering(false);
+  app.editCaption(first); await wait();
+  expect(app.project.activeLayer === first && app.lettering && editor.openLayer === first, 'editCaption did not select, show handles and open the panel');
+  // letter size: finer than Small / Body / Big, still tied to the picture height
+  const before = captionLayout(cap(first), 0, 640, 360).size;
+  const s = inDialog<HTMLInputElement>('Letter size'); s.value = '150'; s.dispatchEvent(new Event('input')); s.dispatchEvent(new Event('change'));
+  const after = captionLayout(cap(first), 0, 640, 360).size;
+  expect(cap(first).scale === 1.5 && Math.abs(after / before - 1.5) < 1e-6 && app.history.peekUndo()?.label === 'Change letter size', 'letter size not applied: ' + JSON.stringify({ before, after, scale: cap(first).scale }));
+  expect(Math.abs(captionSize(cap(first), 720) / captionSize(cap(first), 360) - 2) < 1e-9, 'letter size no longer follows the picture height');
+  app.undo(); await wait();
+  expect(!cap(first).scale, 'Undo did not restore the letter size');
+  footer('Apply').click();
+});
+
 await check('Motion shows the caption settings as rows, ready to key', () => {
   const l = app.project.comp.layers.find(x => x.id === first)!;
   const rows = app.editor.rowsOf(l).filter(r => r.startsWith('cap:'));

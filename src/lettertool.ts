@@ -6,7 +6,7 @@
  * - Drag inside a balloon: move it (tails keep pointing where they point). Drag the tail tip: re-aim it.
  * - The selected caption shows handles: the tail tip, the tail's bend (double-tap to straighten)
  *   and the balloon's width (drag sideways for fewer, longer lines or more, shorter ones).
- * - Double-tap a balloon: edit its words and look.
+ * - Tap a balloon: edit its words and look (in the Caption panel).
  * Every finished gesture is one Undo step; drags preview live.
  */
 import type { App } from './app';
@@ -108,7 +108,7 @@ export class LetterTool {
     return { outline: shapes.outline, tips, bends, width: sizable ? { x: c.x + lay.fit.a, y: c.y } : null,
       turn: { x: c.x, y: c.y - lay.fit.b - 34 / (z * sc) }, scale: { x: c.x + lay.fit.a * 0.92 + 10 / (z * sc), y: c.y + lay.fit.b * 0.92 + 10 / (z * sc) },
       // a pick whip beside each tip, on the side away from the balloon
-      whips: c.tails.map(t => { const dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1, r = 24 / (z * sc); return { x: t.x + (dx / d) * r, y: t.y + (dy / d) * r }; }) };
+      whips: c.tails.map(t => { const dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1, r = 32 / (z * sc); return { x: t.x + (dx / d) * r, y: t.y + (dy / d) * r }; }) };
   }
 
   /** How much a layer is scaled on screen (its own scale and its parents'), for handle sizes. */
@@ -151,20 +151,21 @@ export class LetterTool {
         const [lx, ly] = apply(m, [stage.x, stage.y]), local = { x: lx, y: ly }, close = (p: Pt) => Math.hypot(p.x - lx, p.y - ly) < near;
         const start = (kind: 'tip' | 'bend' | 'width', tail: number) => { this.drag = { id, kind, layer: active.id, tail, start: local, before: structuredClone(active.caption!), moved: false }; };
         // turning and scaling the whole caption
-        const stageNear = (p: Pt) => { const q = apply(app.editor.matrixOf(active), [p.x, p.y]); return Math.hypot(q[0] - stage.x, q[1] - stage.y) < near; };
         const transformFrom = (kind: 'turn' | 'scale') => {
           const c = active.caption!, q = apply(app.editor.matrixOf(active), [c.x, c.y]);
           this.drag = { id, kind, layer: active.id, startStage: stage, centre: { x: q[0], y: q[1] }, before: structuredClone(active.transform), moved: false };
         };
-        const whip = h.whips.findIndex(stageNear);
-        if (whip >= 0) { const q = apply(app.editor.matrixOf(active), [h.tips[whip]!.x, h.tips[whip]!.y]); this.drag = { id, kind: 'whip', layer: active.id, tail: whip, from: { x: q[0], y: q[1] }, to: stage, target: null }; return; }
-        if (stageNear(h.turn)) { transformFrom('turn'); return; }
-        if (stageNear(h.scale)) { transformFrom('scale'); return; }
-        // the nearest handle wins (a short tail's bend sits close to its tip)
-        const all = [...h.tips.map((p, i) => ({ p, kind: 'tip' as const, i })), ...h.bends.map((p, i) => ({ p, kind: 'bend' as const, i })), ...(h.width ? [{ p: h.width, kind: 'width' as const, i: -1 }] : [])];
+        // the nearest handle wins: a tail's tip, its bend and its pick whip sit close together
+        const all = [
+          ...h.tips.map((p, i) => ({ p, kind: 'tip' as const, i })), ...h.bends.map((p, i) => ({ p, kind: 'bend' as const, i })),
+          ...(h.width ? [{ p: h.width, kind: 'width' as const, i: -1 }] : []), ...h.whips.map((p, i) => ({ p, kind: 'whip' as const, i })),
+          { p: h.turn, kind: 'turn' as const, i: -1 }, { p: h.scale, kind: 'scale' as const, i: -1 },
+        ];
         const pick = all.filter(x => close(x.p)).sort((u, v) => Math.hypot(u.p.x - lx, u.p.y - ly) - Math.hypot(v.p.x - lx, v.p.y - ly))[0];
         if (pick?.kind === 'tip') { start('tip', pick.i); return; }
         if (pick?.kind === 'width') { start('width', -1); return; }
+        if (pick?.kind === 'turn' || pick?.kind === 'scale') { transformFrom(pick.kind); return; }
+        if (pick?.kind === 'whip') { const q = apply(app.editor.matrixOf(active), [h.tips[pick.i]!.x, h.tips[pick.i]!.y]); this.drag = { id, kind: 'whip', layer: active.id, tail: pick.i, from: { x: q[0], y: q[1] }, to: stage, target: null }; return; }
         const bend = pick?.kind === 'bend' ? pick.i : -1;
         if (bend >= 0) {
           const now = performance.now();
@@ -187,7 +188,6 @@ export class LetterTool {
     const hit = found.find(c => inside(c.outline, c.local));
     if (hit) {
       const now = performance.now();
-      if (this.lastTap.kind === 'move' && this.lastTap.layer === hit.layer.id && now - this.lastTap.time < 350) { this.lastTap = { layer: '', time: 0, kind: '' }; this.onEdit?.(hit.layer.id, false); return; }
       this.lastTap = { layer: hit.layer.id, time: now, kind: 'move' };
       if (app.project.activeLayer !== hit.layer.id) app.focusLayer(hit.layer.id);
       this.drag = { id, kind: 'move', layer: hit.layer.id, tail: -1, start: hit.local, before: structuredClone(hit.layer.caption!), moved: false };
@@ -282,6 +282,8 @@ export class LetterTool {
       l.caption = d.before;
       // a bend grip pressed without moving is a tap (two make a double-tap that straightens)
       if (!cancelled && !d.moved && d.kind === 'bend') this.lastTap = { layer: d.layer, time: performance.now(), kind: `bend${d.tail}` };
+      // a tap on a balloon (no drag) opens it to edit
+      if (!cancelled && !d.moved && d.kind === 'move') { app.requestRender(); this.onEdit?.(d.layer, false); return; }
       if (cancelled || !d.moved) { app.requestRender(); return; }
       app.editor.edit(d.kind === 'tip' ? 'Aim caption tail' : d.kind === 'bend' ? 'Bend caption tail' : d.kind === 'width' ? 'Change balloon width' : d.kind === 'shape' ? 'Reshape balloon' : 'Move caption', c => { const x = c.layers.find(y => y.id === d.layer); if (x?.kind === 'drawings') x.caption = after; });
       return;
@@ -400,6 +402,30 @@ export class LetterTool {
     app.focusLayer(made.id);
     if (edit) this.onEdit?.(made.id, true);
     return made.id;
+  }
+
+  /**
+   * A caption of a style in a free spot of the frame (no tap or drawing needed): top middle, top
+   * left, top right, then the bottom row, then the middle; a narration box goes to a corner and a
+   * sound effect to the middle. A tail on the bottom row points up. One Undo step ("Add caption").
+   */
+  createInFreeSpot(kind: BalloonStyle): string | null {
+    const app = this.app, W = app.project.width, H = app.project.height, comp = app.project.comp;
+    const taken = comp.layers.flatMap(l => {
+      if (l.kind !== 'drawings' || !l.caption || !l.visible) return [];
+      const [x, y] = apply(worldMatrix(comp, l, app.frame), [l.caption.x, l.caption.y]);
+      return [{ x, y }];
+    });
+    const spots: [number, number][] = kind === 'box' ? [[0.24, 0.12], [0.76, 0.12], [0.24, 0.88], [0.76, 0.88]] : kind === 'sfx' ? [[0.5, 0.5], [0.3, 0.45], [0.7, 0.45]] : [[0.5, 0.2], [0.27, 0.2], [0.73, 0.2], [0.5, 0.8], [0.27, 0.8], [0.73, 0.8], [0.5, 0.5]];
+    const free = spots.find(([fx, fy]) => taken.every(t => Math.hypot(t.x - fx * W, t.y - fy * H) > Math.min(W, H) * 0.22)) ?? spots[0]!;
+    const at = { x: Math.round(free[0] * W), y: Math.round(free[1] * H) };
+    const id = this.create(at, kind, kind !== 'box' && kind !== 'sfx', false);
+    if (id && free[1] > 0.6) {
+      // on the bottom row the tail points up, toward the picture
+      const l = comp.layers.find(x => x.id === id);
+      if (l?.kind === 'drawings' && l.caption) l.caption = { ...l.caption, tails: l.caption.tails.map(t => ({ ...t, y: at.y - (t.y - at.y) })) };
+    }
+    return id;
   }
 
   /** The live stroke and the active caption's tail handles. */
