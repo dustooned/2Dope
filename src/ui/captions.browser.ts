@@ -148,7 +148,7 @@ await check('The panel previews the caption and its sliders commit one Undo step
   expect(top > 0 && body2.scrollTop === top && !dialog()!.querySelector<HTMLElement>('.cap-pane[aria-label=Balloon]')!.hidden, `panel jumped after a change: ${top} → ${body2.scrollTop}`);
   app.undo(); await wait();
   tab('Tails').click();
-  button('+ Add tail').click();
+  button('Add tail').click();
   expect(cap(first).tails.length === 2 && app.history.peekUndo()?.label === 'Add caption tail', 'Add tail failed');
   expect(dialog()!.querySelectorAll('.cap-tail').length === 2, 'panel did not list the new tail');
   app.undo(); await wait();
@@ -250,8 +250,8 @@ await check('Each tail style shows its own settings in the Tails tab', async () 
   const labels = () => [...pane().querySelectorAll('input[type=range]')].map(i => i.getAttribute('aria-label'));
   expect(JSON.stringify(labels()) === '["Base width","Taper","Tip"]', 'joined tail settings: ' + labels().join());
   [...pane().querySelectorAll<HTMLButtonElement>('[role=radio]')].find(b => b.textContent === 'Bubbles')!.click();
-  expect(JSON.stringify(labels()) === '["Spread","Bubbles","Bubble size","Shrink"]', 'bubble settings: ' + labels().join());
-  const count = inDialog<HTMLInputElement>('Bubbles'); count.value = '5'; count.dispatchEvent(new Event('input')); count.dispatchEvent(new Event('change'));
+  expect(JSON.stringify(labels()) === '["Spread","Bubble count","Bubble size","Shrink"]', 'bubble settings: ' + labels().join());
+  const count = inDialog<HTMLInputElement>('Bubble count'); count.value = '5'; count.dispatchEvent(new Event('input')); count.dispatchEvent(new Event('change'));
   expect(cap(first).tails[0]!.count === 5 && captionBalloon(cap(first), 0, 640, 360).shapes.bubbles.length === 5, 'bubble count not applied');
   [...pane().querySelectorAll<HTMLButtonElement>('[role=radio]')].find(b => b.textContent === 'Lightning')!.click();
   expect(JSON.stringify(labels()) === '["Base width","Zigs","Zig width"]', 'lightning settings: ' + labels().join());

@@ -14,7 +14,7 @@ import { lookRound, lookWobble, shapeForText, turnOutline, type Pt } from '../le
 import type { BalloonLook } from '../lettering/spec';
 import { captionFont } from '../view/captionfonts';
 import { el } from './dom';
-import { iconSvg } from './icons';
+import { decorate, iconSvg } from './icons';
 import { askText } from './dialogs';
 import { applyStyle, BUILTIN_STYLES, captureStyle, MAX_SAVED_STYLES, MAX_STYLE_BYTES, readStyle, type CaptionStyle } from '../lettering/styles';
 import { defaultCaption } from '../lettering/spec';
@@ -359,7 +359,7 @@ export class CaptionEditor {
         };
         if (t.join !== 'none') slider(box, t.join === 'bubbles' ? 'Spread' : 'Base width', 30, 400, 5, Math.round(t.width * 100), '%', v => ({ ...this.cur, tails: this.cur.tails.map((x, j) => (j === i ? { ...x, width: v / 100 } : x)) }), v => setTail('Change tail width', { width: v / 100 }));
         if (t.join === 'merged' || t.join === 'seam') { tailSlider('Taper', 'taper', 100, '%', 'Change tail taper'); tailSlider('Tip', 'tip', 100, '%', 'Change tail tip'); }
-        if (t.join === 'bubbles') { tailSlider('Bubbles', 'count', 1, '', 'Change bubble count'); tailSlider('Bubble size', 'size', 100, '%', 'Change bubble size'); tailSlider('Shrink', 'shrink', 100, '%', 'Change bubble shrink'); }
+        if (t.join === 'bubbles') { tailSlider('Bubble count', 'count', 1, '', 'Change bubble count'); tailSlider('Bubble size', 'size', 100, '%', 'Change bubble size'); tailSlider('Shrink', 'shrink', 100, '%', 'Change bubble shrink'); }
         if (t.join === 'lightning') { tailSlider('Zigs', 'zigs', 1, '', 'Change lightning zigs'); tailSlider('Zig width', 'amp', 100, '%', 'Change lightning width'); }
         const acts = el('div', { class: 'cap-chips' });
         if (t.bend) { const s = el('button', { type: 'button' }, 'Straighten'); s.addEventListener('click', () => change('Straighten caption tail', { tails: this.base!.tails.map((x, j) => { if (j !== i) return x; const { bend: _b, ...rest } = x; return rest; }) })); acts.append(s); }
@@ -464,6 +464,11 @@ export class CaptionEditor {
     acts.append(save, imp);
     styles.append(acts, pick, cards);
 
+    // every control gets its own icon (by its label), like the tool rows
+    for (const b of p.querySelectorAll<HTMLButtonElement>('button:not([role=tab]):not(.cap-style-use)')) {
+      const icon = PANEL_ICONS[(b.textContent ?? '').trim()];
+      if (icon && !b.classList.contains('has-ico')) decorate(b, icon);
+    }
     if (![...tabs.children].some(t => t.getAttribute('aria-selected') === 'true')) (tabs.firstElementChild as HTMLButtonElement | null)?.click();
     body.scrollTop = keepTop;
     this.drawPreview();
@@ -511,6 +516,21 @@ export class CaptionEditor {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 }
+
+/** The Caption panel's controls and their icons (by label). */
+export const PANEL_ICONS: Record<string, string> = {
+  Done: 'check', 'Import font…': 'import',
+  Small: 'sizeSmall', Body: 'sizeBody', Big: 'sizeBig', Left: 'alignLeft', Centre: 'alignCenter', Right: 'alignRight',
+  Bold: 'bold', Italic: 'italic', 'ALL CAPS': 'caps',
+  Speech: 'balloonSpeech', Thought: 'balloonThought', Shout: 'balloonShout', Whisper: 'balloonWhisper', Box: 'balloonBox', 'Sound effect': 'sfx', 'As drawn': 'balloonCustom',
+  Classic: 'lookClassic', Oval: 'lookOval', 'Soft box': 'lookSoftbox', 'Hand-drawn': 'lookHand',
+  'Draw shape': 'drawShape', 'Use SVG shape…': 'svgShape', 'Edit shape': 'editpoints', 'Turn 90°': 'turn90', Mirror: 'fliph', 'Clear shape': 'close',
+  Joined: 'tailJoined', Seam: 'tailSeam', Bubbles: 'tailBubbles', Lightning: 'tailLightning', Hidden: 'tailNone',
+  Straighten: 'straighten', 'Remove tail': 'trash', '+ Add tail': 'plus',
+  'Fade in': 'fadeIn', 'Pop in': 'popIn', 'Type on': 'typeOn', 'Fade out': 'fadeOut',
+  'Centre in picture': 'centrecross', 'Straighten and reset size': 'resetrotation',
+  Export: 'download', Delete: 'trash', 'Save this style…': 'save', 'Import style…': 'import',
+};
 
 const STYLES_KEY = '2dope.captionStyles';
 /** The caption styles saved on this device (bad entries are skipped). */

@@ -2,6 +2,32 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Caption panel icons (2026-11-08, committed and pushed to main)
+
+The owner reported that not all icons were made yet. Every control in the Caption panel was still
+text-only: size, align, emphasis, balloon shapes, looks, tail joins, shape tools, presets and styles.
+Also, the Styles tab shared Favorite's star, and the Letter tool icon nearly matched Speech.
+- `ui/icons.ts`: 26 new icons:
+  - `balloonCustom`, and the looks `lookClassic`, `lookOval`, `lookSoftbox`, `lookHand`.
+  - Tail joins: `tailJoined`, `tailSeam`, `tailBubbles`, `tailLightning`, `tailNone`.
+  - Sizes, alignments, `bold`, `italic`, `caps`.
+  - `drawShape`, `svgShape`, `turn90`, `straighten`.
+  - A new `captionStyles`, and `letter` with an A in its balloon.
+- `ui/captioneditor.ts`: `PANEL_ICONS` (label → icon) decorates the panel's controls after each build.
+- The bubble-count slider is now named Bubble count, so it no longer shares a name with the Bubbles
+  join chip.
+- New `ui/icons.test.ts`:
+  - Every icon name asked for in `bubbles.ts`, `captioneditor.ts`, `motion.ts`, `effectspanel.ts`
+    and `commands.ts` exists.
+  - The panel map covers its controls.
+  - No two icons share a drawing.
+- Checked by eye in the browser pane:
+  - All 124 icons in one grid.
+  - Each panel tab with its icons.
+  - Style cards with live previews.
+
+Checks: unit tests 801 passed (1 skipped), build passed, full browser suite 72 of 72 (run alone).
+
 ### Captions round 3, keyframe stretching and fixes (2026-11-08, committed and pushed to main)
 
 Owner requests in this round: multi-select and scale key timing; cleaner caption UI; fix panels

@@ -5762,3 +5762,6 @@ body.ws-board.ui-full:not(.ui-hidden):not(.presenting) .bub-modes, body.ws-board
 .caption-panel .cap-style-use canvas { width: 100%; aspect-ratio: 180 / 96; border-radius: 6px; }
 .caption-panel .cap-style-acts { display: flex; gap: 2px; }
 .caption-panel .cap-style-acts button { flex: 1; min-height: 28px; font-size: 11px; padding: 0 4px; }
+.caption-panel button.has-ico { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.caption-panel button.has-ico svg.ico { width: 17px; height: 17px; flex: none; }
+.caption-panel .cap-head button.has-ico svg.ico { width: 16px; height: 16px; }
