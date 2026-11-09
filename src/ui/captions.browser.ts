@@ -762,6 +762,46 @@ await check('Write on draws each letter outline then fills it, in order; the SVG
   }
 });
 
+await check('WOFF2 fonts give letter outlines; faked italic slants them; a caption converts to vector shapes in one Undo step', async () => {
+  app.setWorkspace('draw'); app.setFrame(10); editor.close();
+  const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);
+  const bytes = new Uint8Array(await (await fetch('./fixtures/bangers-subset.woff2')).arrayBuffer());
+  app.project.fonts.set('w2test', { name: 'Bangers WOFF2', path: 'fonts/w2test.woff2', bytes });
+  const { glyphFontReady, glyphOf } = await import('../view/captionglyphs');
+  try {
+    const set = (patch: Record<string, unknown>) => app.editor.edit('vec', cc => { const l = cc.layers.find(x => x.id === first); if (l?.kind === 'drawings' && l.caption) l.caption = { ...l.caption, text: 'BOOM', values: {}, ...patch }; });
+    set({ font: 'custom:w2test', italic: false, bold: false });
+    const f = await glyphFontReady(app.project, 'custom:w2test', false, false);
+    expect(f, 'the WOFF2 font gave no outlines');
+    const b = glyphOf(f!, 'w2', 'B', 40);
+    expect(b.contours.length >= 2 && b.length > 100 && b.advance > 10, `B outline looks wrong (${b.contours.length} contours, ${b.length.toFixed(0)} long)`);
+    // a faked italic leans right as it rises (the top of the letter moves right of the upright one)
+    const lean = glyphOf(f!, 'w2', 'B', 40, 0.25);
+    const top = (g: typeof b) => g.contours.flat().reduce((m, p) => (p.y < m.y ? p : m));
+    expect(top(lean).x > top(b).x + 5, 'faked italic does not slant');
+    const { syntheticFace } = await import('../view/captionglyphs');
+    expect(syntheticFace('custom:w2test', true, true).skew === 0.25 && syntheticFace('custom:w2test', true, false).embolden === 1, 'a project font is not faked for bold and italic');
+    expect(syntheticFace('comic-neue', true, true).skew === 0 && syntheticFace('bangers', false, true).skew === 0.25, 'bundled faces faked wrongly');
+    // to vectors: the caption goes, the drawing gains the balloon and each letter, Undo brings it back
+    const layer = () => app.project.comp.layers.find(x => x.id === first)!;
+    app.focusLayer(first);
+    const before = app.drawing.vectors.length;
+    app.history.clear();
+    expect(await app.convertCaptionToVectors(first), 'conversion refused');
+    const l = layer();
+    expect(l.kind === 'drawings' && !l.caption, 'still a caption after converting');
+    const added = app.drawing.vectors.length - before;
+    expect(added >= 5 && app.drawing.vectors.slice(before).every(v => v.shape), `vector shapes added: ${added}`);
+    expect(app.history.peekUndo()?.label === 'Convert caption to vector lines', 'not one undo step');
+    app.undo(); await wait();
+    const back = layer();
+    expect(back.kind === 'drawings' && back.caption?.text === 'BOOM' && app.drawing.vectors.length === before, 'Undo did not bring the caption back');
+  } finally {
+    app.editor.edit('Restore test caption', cc => { const i = cc.layers.findIndex(x => x.id === first); if (i >= 0) cc.layers[i] = structuredClone(saved); });
+    app.project.fonts.delete('w2test');
+  }
+});
+
 await check('Captions after transforming: Motion selects and sizes them; scaled and turned ones keep their handles; Delete works', async () => {
   app.setWorkspace('draw'); app.setFrame(10); editor.close();
   const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);

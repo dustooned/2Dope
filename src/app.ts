@@ -631,6 +631,36 @@ export class App {
     this.onNotice?.('Caption exported as SVG: the balloon and the letters as shapes.');
   }
 
+  /**
+   * Turn a caption into vector paths on its drawing (balloon, tails and every letter as shapes
+   * you can select, move and recolour), drawn as it looks at the playhead. It stops being a live
+   * caption: one Undo step brings it back.
+   */
+  async convertCaptionToVectors(id: string): Promise<boolean> {
+    const c = this.project.comp, l = c.layers.find(x => x.id === id);
+    if (l?.kind !== 'drawings' || !l.caption || l.locked || this.strokeActive || this.playing) return false;
+    const caption = l.caption;
+    const [{ captionSvg }, { importVectorDocument }] = await Promise.all([import('./io/captionsvg'), import('./io/vectorimport')]);
+    const text = await captionSvg(this.project, caption, this.frame - l.start, { forVectors: true });
+    const missing = Number(/data-missing-letters="(\d+)"/.exec(text)?.[1] ?? 0);
+    let strokes: StrokeRecord[];
+    try { strokes = importVectorDocument(text).strokes; } catch (e) { this.onNotice?.(`This caption could not become vector lines: ${(e as Error).message}`); return false; }
+    // the caption may have changed while its fonts loaded
+    const live = this.project.comp.layers.find(x => x.id === id);
+    if (this.project.comp !== c || live?.kind !== 'drawings' || live.caption !== caption) return false;
+    if (this.project.activeLayer !== id) this.focusLayer(id);
+    const d = this.drawing, before = d.vectors, after = [...before, ...strokes];
+    try { assertVectorBudget([...this.project.drawings.values()].flatMap(x => x === d ? after : x.vectors)); } catch (e) { this.onNotice?.((e as Error).message); return false; }
+    this.editor.edit('Convert caption to vector lines', cc => { const x = cc.layers.find(y => y.id === id); if (x?.kind === 'drawings') delete x.caption; });
+    const apply = (lines: StrokeRecord[]) => { d.vectors = lines; this.touch(d); };
+    apply(after);
+    this.history.push({ label: 'Convert caption to vector lines', drawings: [d], do: () => apply(after), undo: () => apply(before) });
+    this.history.combine(2, 'Convert caption to vector lines');
+    this.onDocChanged(); this.requestRender(); this.onToolChange();
+    this.onNotice?.(`The caption is now ${strokes.length} vector shapes on “${live.name}”. Undo brings the live caption back.${missing ? ` ${missing} letter${missing === 1 ? '' : 's'} in a font whose shapes could not be read were left out.` : ''}`);
+    return true;
+  }
+
   editCaption(id: string): void {
     const l = this.project.comp.layers.find(x => x.id === id);
     if (l?.kind !== 'drawings' || !l.caption) return;

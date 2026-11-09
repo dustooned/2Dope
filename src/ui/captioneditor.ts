@@ -138,7 +138,9 @@ export class CaptionEditor {
     del.addEventListener('click', () => { const id = this.layerId; this.isNew = false; this.panel?.remove(); this.panel = null; this.preview = null; this.base = null; app.deleteCaption(id); });
     const svg = el('button', { type: 'button', title: 'Save this caption as an SVG file: the balloon and the letters as shapes, for any vector app', 'aria-label': 'Export caption as SVG' }, 'SVG');
     svg.addEventListener('click', () => void app.exportCaptionSvg(this.layerId));
-    head.append(el('h2', {}, this.isNew ? 'New caption' : 'Caption'), svg, del, done);
+    const vec = el('button', { type: 'button', title: 'Turn this caption into vector shapes on its drawing, to reshape by hand (Undo brings the live caption back)', 'aria-label': 'Convert caption to vector lines' }, 'To vectors');
+    vec.addEventListener('click', () => { const id = this.layerId; this.isNew = false; this.panel?.remove(); this.panel = null; this.preview = null; this.base = null; void app.convertCaptionToVectors(id); });
+    head.append(el('h2', {}, this.isNew ? 'New caption' : 'Caption'), svg, vec, del, done);
 
     // live preview
     const view = el('div', { class: 'cap-preview' });

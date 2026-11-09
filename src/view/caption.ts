@@ -8,7 +8,7 @@ import { alongPath, balloonOutline, balloonProfile, balloonShapes, fitCaption, p
 import { CAPTION_KEYS, captionValue, LETTER_SIZE_FRACTION, type CaptionKey, type CaptionSpec } from '../lettering/spec';
 import { freshState, hasBold, runsOf, stripMarkup } from '../lettering/markup';
 import { captionFont, captionFontReady, captionProject } from './captionfonts';
-import { baselineOffset, glyphFont, glyphOf } from './captionglyphs';
+import { baselineOffset, emboldenWidth, glyphFont, glyphOf, syntheticFace } from './captionglyphs';
 import { familyName } from '../lettering/fonts';
 
 /** A caption's keyable setting at a layer frame (keys win over the still value), clamped to its range. */
@@ -253,9 +253,11 @@ function paintLetters(g: CanvasRenderingContext2D, c: CaptionSpec, size: number,
       fillA = Math.max(0, Math.min(1, (u - 0.55) / 0.45));
       if (f) {
         // the pen draws the letter's outline, then the letter fills in
-        const gl = glyphOf(f, familyName(c.font, l.bold, l.italic), l.ch, size);
+        // a face the font has no file for is faked (slanted, bolder) the way the browser fakes it
+        const fake = syntheticFace(c.font, l.bold, l.italic);
+        const gl = glyphOf(f, familyName(c.font, l.bold, l.italic), l.ch, size, fake.skew);
         g.strokeStyle = c.textOutline && c.textOutlineWidth > 0 ? c.textOutline : (l.color ?? c.textColor);
-        g.lineWidth = Math.max(1, size * 0.04); g.lineJoin = 'round'; g.lineCap = 'round';
+        g.lineWidth = Math.max(1, size * 0.04) + (fake.embolden ? emboldenWidth(size) : 0); g.lineJoin = 'round'; g.lineCap = 'round';
         traceContours(g, gl.contours, gl.length, trace, l.centred ? -gl.advance / 2 : 0, baselineOffset(f, size));
       } else {
         // outlines not ready (or a font with none to read): the letter wipes on from the left

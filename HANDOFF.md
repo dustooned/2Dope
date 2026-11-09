@@ -2,6 +2,56 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Inspector per layer kind, captions to vectors, exact fake bold/italic, WOFF2 outlines (2026-11-09, uncommitted)
+
+- **Inspector** (`ui/inspector.ts`) now covers all layer data:
+  - Every layer has Layer, Timing and Transform tabs.
+    - Layer: name, visible, locked, colour label, blend, parent, Duplicate. Drawing layers add
+      clipping, alpha lock, reference, adjustment, guide "Include in exports", and add, edit or delete
+      mask.
+    - Timing: start, in, out or "Ends with its content" through `setTiming`; play mode and speed
+      through `setPlay`; the held frame; the Show frame (`remap`) row; and Stop picking frames.
+  - A tab of the layer's own kind:
+    - Drawing: frame count, Tween vector lines, and the Ink and Colour parts (show, opacity, offset,
+      recolour, gradient style, second colour, angle).
+    - Caption: words, font (bundled and project fonts), size and fine-tune, bold, italic, capitals,
+      align, text colour, letter outline; balloon style, width, fill, ink and ink width; every
+      animating key; Caption panel, SVG and To vectors.
+    - Title: read-only facts, with Edit and Convert to paint.
+    - Clip: what it holds and how often it is used, Asset playback, pinned properties with reset, Go
+      inside, Edit clip, Symbol options, Make unique, Ungroup.
+    - Camera: through camera, Camera move.
+  - Parenting, Path, Trail and Effects appear as before. Effects gained Works on (target), texture
+    look, retro-pixel colours, dots and grey, Asset pickers, Changes (hold), New pattern and Remove.
+  - The header shows the layer kind.
+  - Motion passes itself as `InspectorHost`; `editClip` is now public.
+- **Captions to vector lines** (`App.convertCaptionToVectors`):
+  - `captionSvg(..., { forVectors: true })` keeps to what `importVectorDocument` reads: no mask, dash
+    or group opacity. Shared outlines are inked 2× under the fill, and opacity goes on each shape.
+  - The importer's strokes (imported-shape records) are appended to the caption's drawing at the
+    playhead, and the caption is removed: one combined Undo step.
+  - Offered from the Caption panel (To vectors), the Inspector and Motion's layer menu.
+  - In the pane, the converted shapes landed within 1 px of the live caption render (96.5% of pixels,
+    centroid within 0.5 px).
+  - Letters from an unreadable font are left out, with a notice.
+- **Fake bold and italic**:
+  - `syntheticFace` follows `bundledFile(...).synthetic`; a project font is always faked.
+  - Write on traces and SVG letters slant by skewX 0.25 (Skia's fake italic). Fake bold adds Skia's
+    embolden width (size/24 down to size/32), as a wider trace or an SVG stroke in the letter colour.
+- **WOFF2**:
+  - `captionglyphs` reads `wOF2` files (or anything opentype.js cannot parse) with fontkit 2.0.4,
+    added exactly and lazy in its own chunk, wrapped to opentype's `getPath` and `getAdvanceWidth`.
+  - The SVG letter outline is now a separate path behind the letter instead of `paint-order`.
+- **Test font**: `tests/fixtures/bangers-subset.woff2` is the OFL Bangers face, subset with fontTools
+  from the scratchpad; notes are in `tests/fixtures/README.md`.
+- Checks (2026-11-09):
+  - Unit tests 826 passed (1 skipped); `tsc` clean; build passed.
+  - Inspector fixture 7 of 7. New check: Drawing recolour, Timing play/speed/in point, colour label,
+    Caption words, font and style, the Write on row, Camera tab, an anchor with no kind tab, Clip tab.
+  - Captions fixture 35 of 35. New check: WOFF2 outlines, faked italic lean, `syntheticFace` rules,
+    and convert to vectors with Undo.
+  - Full browser suite: 73 of 73 (run alone).
+
 ### Motion Inspector, moving letters, Write on, caption SVG, Story imports (2026-11-09, uncommitted)
 
 - **Motion Inspector** (`ui/inspector.ts`, owned by `MotionPanel.inspector`):

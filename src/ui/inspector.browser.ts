@@ -37,7 +37,8 @@ await check('The Inspector button opens it on the right; it shows the selected l
   expect(b, 'no Inspector button'); b!.click(); await wait();
   expect(!panel().hidden && b!.getAttribute('aria-pressed') === 'true', 'did not open');
   ed.select(id); motion.update(); await wait();
-  expect(tabs().join() === 'Layer,Transform', `tabs: ${tabs()}`);
+  expect(tabs().join() === 'Layer,Timing,Transform,Drawing', `tabs: ${tabs()}`);
+  expect(panel().querySelector('.mi-kind')?.textContent === 'Drawing', 'kind not shown');
   expect(panel().querySelector('.mi-title')?.textContent === layer().name, 'not this layer');
 });
 
@@ -101,6 +102,54 @@ await check('Tabs appear as they apply: Parenting, Path, Trail, Effects, Caption
   await openTab('Caption');
   await change(input('input[data-val="cap:shake"]'), '50');
   expect(ed.valueNow(layer(), 'cap:shake') === 50, 'caption setting not set');
+});
+
+await check('Each kind of layer has its own tab: Drawing parts, Timing, Caption words and font, Camera, Clip', async () => {
+  ed.addLayer('drawings');
+  const plain = ed.comp.layers.find(l => l.kind === 'drawings' && l.id !== id && !l.caption)!.id;
+  const pl = () => ed.layer(plain)!;
+  ed.select(plain); await wait();
+  await openTab('Drawing');
+  const recolour = [...panel().querySelectorAll('.mi-field')].find(f => f.textContent?.startsWith('Recolour'))!.querySelector('input')!;
+  await change(recolour, true);
+  const l0 = pl();
+  expect(l0.kind === 'drawings' && l0.parts?.line?.tint, 'recolour did not reach the Ink part');
+  await openTab('Timing');
+  await change(panel().querySelector<HTMLSelectElement>('select[aria-label="Plays"]')!, 'loop');
+  await change(input('input[aria-label="Speed"]'), '0.5');
+  const l1 = pl();
+  expect(l1.kind === 'drawings' && l1.play === 'loop' && l1.speed === 0.5, 'playback not set');
+  expect(panel().querySelector('[data-val="remap"]'), 'no Show frame row in Timing');
+  await change(input('input[aria-label="Shows from frame"]'), '5');
+  expect(pl().in === 4, `in point: ${pl().in}`);
+  await openTab('Layer');
+  await change(panel().querySelector<HTMLSelectElement>('select[aria-label="Colour label"]')!, '3');
+  expect(pl().label === 3, 'label colour not set');
+  ed.select(id); await wait();
+  // a caption: words, font and balloon colours from the Caption tab
+  await openTab('Caption');
+  const words = panel().querySelector<HTMLTextAreaElement>('textarea.mi-words')!;
+  words.value = 'Hi there'; words.dispatchEvent(new Event('change')); await wait();
+  await change(panel().querySelector<HTMLSelectElement>('select[aria-label="Font"]')!, 'bangers');
+  await change(panel().querySelector<HTMLSelectElement>('select[aria-label="Style"]')!, 'shout');
+  const c = layer();
+  expect(c.kind === 'drawings' && c.caption?.text === 'Hi there' && c.caption.font === 'bangers' && c.caption.style === 'shout', 'caption settings not set');
+  expect(panel().querySelector('[data-val="cap:writeOn"]'), 'no Write on row');
+  // a camera
+  ed.addLayer('camera'); const cam = ed.comp.layers.find(l => l.kind === 'camera')!.id; ed.select(cam); await wait();
+  expect(tabs().includes('Camera') && !tabs().includes('Drawing'), `camera tabs: ${tabs()}`);
+  await openTab('Camera');
+  expect([...panel().querySelectorAll('.mi-field')].some(f => f.textContent?.includes('Look through')), 'no camera options');
+  // an anchor has no tab of its own
+  const nul = ed.comp.layers.find(l => l.kind === 'null')!.id; ed.select(nul); await wait();
+  expect(tabs().join() === 'Layer,Timing,Transform,Parenting', `anchor tabs: ${tabs()}`);
+  // a clip
+  ed.addLayer('drawings'); const loose = ed.comp.layers.find(l => l.kind === 'drawings' && l.id !== id && l.id !== plain)!.id;
+  const clip = ed.group([loose], 'Walk'); ed.select(clip!); await wait();
+  expect(tabs().includes('Clip'), `clip tabs: ${tabs()}`);
+  await openTab('Clip');
+  expect(panel().textContent?.includes('Walk') && [...panel().querySelectorAll('.mi-btn')].some(b => b.textContent === 'Go inside'), 'clip tab incomplete');
+  ed.select(id); await wait();
 });
 
 await check('Typing keeps its place; it hides outside Motion and closes with ✕', async () => {

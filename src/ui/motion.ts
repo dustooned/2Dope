@@ -213,7 +213,7 @@ export class MotionPanel {
       { label: 'Paste from clipboard', icon: 'paste', run: () => app.pasteMedia?.() },
     ]);
     const graph = btn('Graph', 'Edit animation curves', () => this.openGraph?.());
-    this.inspector = new MotionInspector(app, root.closest<HTMLElement>('.workspace') ?? document.body);
+    this.inspector = new MotionInspector(app, root.closest<HTMLElement>('.workspace') ?? document.body, this);
     this.inspectorBtn = btn('Inspector', 'Show or hide the Inspector: every setting of the selected layer, on the right', () => this.inspector.toggle());
     this.inspectorBtn.setAttribute('aria-pressed', String(this.inspector.isOpen));
     decorate(this.inspectorBtn, 'panel');
@@ -1387,7 +1387,7 @@ export class MotionPanel {
         { label: 'Save as Asset…', icon: 'save', disabled: !ed.selected.length || this.app.playing, run: () => this.makeClip?.(true) },
       ] : []),
       ...(l.kind === 'comp' && this.app.project.comps.get(l.comp)?.asset ? [{ label: 'Symbol options…', disabled: !this.openSymbol, run: () => this.openSymbol?.(l.id) }] : []),
-      ...(l.kind === 'drawings' && l.caption ? [{ label: 'Edit caption…', icon: 'editCaption', run: () => this.app.editCaption(l.id) }, { label: 'Export caption as SVG', icon: 'export', run: () => void this.app.exportCaptionSvg(l.id) }] : []),
+      ...(l.kind === 'drawings' && l.caption ? [{ label: 'Edit caption…', icon: 'editCaption', run: () => this.app.editCaption(l.id) }, { label: 'Export caption as SVG', icon: 'export', run: () => void this.app.exportCaptionSvg(l.id) }, { label: 'Convert caption to vector lines', icon: 'editpoints', disabled: l.locked, run: () => void this.app.convertCaptionToVectors(l.id) }] : []),
       ...(l.kind === 'drawings' && l.title ? [{ label: 'Edit title…', run: () => this.app.editTitle?.(l.id) }, { label: 'Convert to paint…', run: () => this.app.convertTitle?.(l.id) }] : []),
       ...(!this.makeClip && this.createAsset ? [{ label: 'Create asset from selection…', disabled: this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() }] : []),
       ...(l.kind === 'drawings' && !l.adjust && !l.guide ? [{ label: 'Edit in Flipbook', run: () => this.app.openFlipbook?.(l.id) }] : []),
@@ -1406,7 +1406,7 @@ export class MotionPanel {
     ];
   }
 
-  private editClip(id: string): void {
+  editClip(id: string): void {
     if (this.app.strokeActive || this.ed.dragging) return;
     if (this.app.playing) this.app.togglePlay();
     if (this.ed.enter(id, true)) this.app.focusCanvas();
