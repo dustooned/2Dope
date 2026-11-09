@@ -68,7 +68,15 @@ export function captionFont(c: CaptionSpec, px: number): string {
 /** Wait until every caption's font in the project has loaded (or failed): exports call this first. */
 export async function captionFontsReady(project: Project): Promise<void> {
   const jobs: Promise<void>[] = [];
-  for (const c of project.comps.values()) for (const l of c.layers) if (l.kind === 'drawings' && l.caption) jobs.push(load(project, l.caption.font, l.caption.bold, l.caption.italic));
+  for (const c of project.comps.values()) for (const l of c.layers) {
+    const cap = l.kind === 'drawings' ? l.caption : undefined;
+    if (!cap) continue;
+    jobs.push(load(project, cap.font, cap.bold, cap.italic));
+    // marked-up words use the bold and italic faces too
+    const words = [cap.text, ...(cap.links ?? []).map(k => k.text)].join(' ');
+    if (words.includes('*')) jobs.push(load(project, cap.font, true, cap.italic), load(project, cap.font, true, true));
+    if (words.includes('_')) jobs.push(load(project, cap.font, cap.bold, true), load(project, cap.font, true, true));
+  }
   await Promise.all(jobs);
 }
 

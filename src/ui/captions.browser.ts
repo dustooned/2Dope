@@ -1,5 +1,7 @@
 import { App } from '../app';
 import { captionFromDrawing } from '../captionconvert';
+import { stripMarkup } from '../lettering/markup';
+const stripWords = (lay: { fit: { lines: { text: string }[] } }) => stripMarkup(lay.fit.lines.map(x => x.text).join(' '));
 import { newEffect } from '../core/effects';
 import { apply } from '../core/comp';
 import { Project } from '../core/project';
@@ -585,6 +587,71 @@ await check('Touch and pen: finger-sized reach and handles spread apart; a mouse
   app.letters.down(33, { x: -999, y: -999 }, 'mouse'); app.letters.up(33, true);
   for (const x of hidden) { const live = app.project.comp.layers.find(y => y.id === x.id); if (live) live.visible = true; }
   app.setLettering(false);
+});
+
+await check('Under-fill, Ink start, joined balloons and per-word styling', async () => {
+  app.setWorkspace('draw'); app.setLettering(true); app.focusLayer(first); app.setFrame(10); editor.close();
+  const hidden = app.project.comp.layers.filter(x => x.id !== first && x.kind === 'drawings' && x.caption && x.visible);
+  for (const x of hidden) x.visible = false;
+  const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);
+  try {
+    const set = (label: string, patch: Partial<CaptionSpec>) => app.editor.edit(label, cc => { const l = cc.layers.find(x => x.id === first); if (l?.kind === 'drawings' && l.caption) l.caption = { ...l.caption, ...patch }; });
+    const count = (test: (r: number, g: number, b: number) => boolean) => { const d = lg.getImageData(0, 0, 640, 360).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 200 && test(d[i]!, d[i + 1]!, d[i + 2]!)) n++; return n; };
+    // under-fill: a blue block shows down and right of the balloon
+    render(10); const noBlue = count((r, g, b) => b > 150 && r < 80);
+    set('Add under-fill', { underFill: { color: '#2040e0', dx: 0.5, dy: 0.5 } });
+    render(10); const blue = count((r, g, b) => b > 150 && r < 80);
+    expect(noBlue === 0 && blue > 100, 'under-fill not drawn: ' + blue);
+    // ink start: starting the outline half way round leaves less ink
+    set('Plain', { underFill: undefined, text: '' });
+    render(10); const fullInk = count((r, g, b) => r < 80 && g < 80 && b < 80);
+    app.editor.setValue(first, 'cap:inkStart', 50, 'Change ink start');
+    render(10); const halfInk = count((r, g, b) => r < 80 && g < 80 && b < 80);
+    expect(cap(first).values?.inkStart === 50 && halfInk < fullInk * 0.7 && halfInk > fullInk * 0.3, `ink start not applied: ${fullInk} → ${halfInk}`);
+    app.undo(); app.undo(); app.undo(); await wait();
+    // joined balloon from the panel: its own words, one shared outline (no ink inside where they meet)
+    app.letters.onEdit!(first, false);
+    button('Joined balloon').click(); await wait();
+    expect(cap(first).links?.length === 1 && app.history.peekUndo()?.label === 'Add joined balloon', 'no joined balloon added');
+    const t2 = inDialog<HTMLTextAreaElement>('Joined balloon 2 words'); t2.value = 'AND FAST!'; t2.dispatchEvent(new Event('input')); t2.dispatchEvent(new Event('change'));
+    expect(cap(first).links![0]!.text === 'AND FAST!', 'joined balloon words not kept');
+    footer('Apply').click();
+    const c = cap(first), k = c.links![0]!;
+    render(10);
+    // halfway between the two centres lies inside the neck: fill, not ink
+    const mid = lg.getImageData(Math.round((c.x + k.x) / 2), Math.round((c.y + k.y) / 2), 1, 1).data;
+    expect(mid[0]! > 240 && mid[1]! > 240 && mid[3]! > 240, 'the joined balloons do not share one outline: ' + [...mid]);
+    // a press inside the joined balloon moves only it; moving the main balloon takes it along
+    const l = app.project.comp.layers.find(x => x.id === first)!;
+    app.letters.down(50, { x: k.x, y: k.y }, 'mouse'); app.letters.move(50, { x: k.x + 30, y: k.y }); app.letters.up(50, false);
+    expect(Math.abs(cap(first).links![0]!.x - (k.x + 30)) < 0.5 && Math.abs(cap(first).x - c.x) < 0.5 && app.history.peekUndo()?.label === 'Move joined balloon', 'joined balloon did not move alone: ' + JSON.stringify({ label: app.history.peekUndo()?.label, link: [cap(first).links![0]!.x - k.x, cap(first).links![0]!.y - k.y], main: [cap(first).x - c.x, cap(first).y - c.y] }));
+    app.letters.down(51, { x: c.x, y: c.y }, 'mouse'); app.letters.move(51, { x: c.x - 20, y: c.y }); app.letters.up(51, false);
+    expect(Math.abs(cap(first).x - (c.x - 20)) < 0.5 && Math.abs(cap(first).links![0]!.x - (k.x + 10)) < 0.5, 'the joined balloon did not come along');
+    void l;
+    // per-word styling: select a word, tap Colour words; the word renders in that colour
+    app.letters.onEdit!(first, false);
+    const words = () => inDialog<HTMLTextAreaElement>('Caption words');
+    const t = words(); t.value = 'RUN NOW'; t.dispatchEvent(new Event('input')); t.dispatchEvent(new Event('change')); await wait();
+    // the panel rebuilt after that change: work with the words box as it is now
+    words().focus(); words().setSelectionRange(4, 7);
+    inDialog<HTMLInputElement>('Colour for selected words').value = '#e02020';
+    button('Colour words').click(); await wait();
+    expect(cap(first).text === 'RUN [#e02020]NOW[/]', 'colour markup not added: ' + cap(first).text);
+    // the rebuilt box keeps the cursor on the coloured word
+    expect(document.activeElement === words() && words().selectionStart! > 4, 'the words box lost its selection after styling');
+    words().focus(); words().setSelectionRange(0, 3); button('Bold words').click(); await wait();
+    expect(cap(first).text === '*RUN* [#e02020]NOW[/]', 'bold markup not added: ' + cap(first).text);
+    footer('Apply').click();
+    render(10);
+    expect(count((r, g, b) => r > 180 && g < 70 && b < 70) > 30, 'the coloured word is not drawn in colour');
+    const lay = captionLayout(cap(first), 0, 640, 360);
+    expect(lay.fit.lines.map(x => x.text).join(' ').includes('*RUN*') && stripWords(lay) === 'RUN NOW', 'markup leaked into the words');
+  } finally {
+    editor.close();
+    // put the caption back as it was (later checks use it)
+    app.editor.edit('Restore test caption', cc => { const i = cc.layers.findIndex(x => x.id === first); if (i >= 0) cc.layers[i] = structuredClone(saved); });
+    for (const x of hidden) { const live = app.project.comp.layers.find(y => y.id === x.id); if (live) live.visible = true; }
+  }
 });
 
 await check('Motion shows the caption settings as rows, ready to key', () => {

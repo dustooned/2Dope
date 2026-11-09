@@ -68,12 +68,13 @@ export const LOOK_LIMITS = { round: [2, 8], wobble: [0, 1], spikes: [4, 40], spi
 export const MAX_OUTLINE_POINTS = 400;
 
 /** Keyable caption settings: Motion shows them as Caption rows. */
-export type CaptionKey = 'reveal' | 'balloon' | 'textOpacity' | 'balloonOpacity' | 'inkEnd' | 'tracking' | 'leading';
+export type CaptionKey = 'reveal' | 'balloon' | 'textOpacity' | 'balloonOpacity' | 'inkStart' | 'inkEnd' | 'tracking' | 'leading';
 export const CAPTION_KEYS: { key: CaptionKey; label: string; min: number; max: number; def: number; unit: string }[] = [
   { key: 'reveal', label: 'Reveal', min: 0, max: 100, def: 100, unit: '%' },
   { key: 'balloon', label: 'Balloon', min: 0, max: 150, def: 100, unit: '%' },
   { key: 'textOpacity', label: 'Text opacity', min: 0, max: 100, def: 100, unit: '%' },
   { key: 'balloonOpacity', label: 'Balloon opacity', min: 0, max: 100, def: 100, unit: '%' },
+  { key: 'inkStart', label: 'Ink start', min: 0, max: 100, def: 0, unit: '%' },
   { key: 'inkEnd', label: 'Ink length', min: 0, max: 100, def: 100, unit: '%' },
   { key: 'tracking', label: 'Tracking', min: -100, max: 300, def: 0, unit: '' },
   { key: 'leading', label: 'Line spacing', min: 80, max: 200, def: 115, unit: '%' },
@@ -107,6 +108,10 @@ export interface CaptionSpec {
   /** Outline behind the letters (sound effects); null = none. Width as a fraction of the lettering size. */
   textOutline: string | null;
   textOutlineWidth: number;
+  /** A colour block behind the balloon, offset like a print shadow (offsets in lettering sizes). */
+  underFill?: { color: string; dx: number; dy: number };
+  /** Joined balloons: more balloons in the same look, each with its words, attached to this one. */
+  links?: CaptionLink[];
   /** Letter size fine-tune: a multiple of the named size, 0.5–3 (absent = 1). Still a share of the page height. */
   scale?: number;
   /** Balloon width as a share of the style's usual shape, 0.5–2.5 (absent = 1). */
@@ -123,6 +128,10 @@ export interface CaptionSpec {
 
 export const MAX_CAPTION_CHARS = 600;
 export const MAX_TAILS = 4;
+export const MAX_LINKS = 3;
+
+/** A joined balloon: its words and its centre (page units). */
+export interface CaptionLink { text: string; x: number; y: number }
 
 const COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -199,6 +208,8 @@ export function readCaption(input: unknown): CaptionSpec {
     ...(typeof r.shape === 'number' && Number.isFinite(r.shape) && r.shape !== 1 ? { shape: num(r.shape, 0.5, 2.5, 1) } : {}),
     ...(typeof r.scale === 'number' && Number.isFinite(r.scale) && r.scale !== 1 ? { scale: num(r.scale, 0.5, 3, 1) } : {}),
     ...(readLook(r.look) ? { look: readLook(r.look)! } : {}),
+    ...(r.underFill && typeof r.underFill === 'object' ? (() => { const u = r.underFill as Record<string, unknown>; return { underFill: { color: col(u.color, '#111111'), dx: num(u.dx, -3, 3, 0.3), dy: num(u.dy, -3, 3, 0.3) } }; })() : {}),
+    ...(Array.isArray(r.links) && r.links.length ? { links: (r.links as unknown[]).slice(0, MAX_LINKS).flatMap((k): CaptionLink[] => { const q = k as Record<string, unknown> | null; return q && typeof q.x === 'number' && typeof q.y === 'number' && Number.isFinite(q.x) && Number.isFinite(q.y) ? [{ text: typeof q.text === 'string' ? q.text.replace(/\r\n?/g, '\n').slice(0, MAX_CAPTION_CHARS) : '', x: num(q.x, -1e6, 1e6, 0), y: num(q.y, -1e6, 1e6, 0) }] : []; }) } : {}),
     ...(Array.isArray(r.minSize) && r.minSize.length === 2 && r.minSize.every(n => typeof n === 'number' && Number.isFinite(n) && n > 0) ? { minSize: [num(r.minSize[0], 1, 1e5, 1), num(r.minSize[1], 1, 1e5, 1)] as [number, number] } : {}),
     ...(Object.keys(values).length ? { values } : {}), ...(Object.keys(keys).length ? { keys } : {}),
   };

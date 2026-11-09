@@ -15,7 +15,7 @@ import { isAnimated, setKey, valueAt, type Prop, type Vec2 } from './core/anim';
 import { newId } from './io/persist';
 import { detectBalloon, inside, reshapeOutline, shapeForText, type Pt } from './lettering/geometry';
 import { defaultCaption, LETTER_SIZE_FRACTION, type BalloonStyle, type CaptionSpec } from './lettering/spec';
-import { captionBalloon, captionLayout } from './view/caption';
+import { captionBalloon, captionLayout, captionLinks } from './view/caption';
 
 /** Distance from a point to a closed outline. */
 function edgeDistance(outline: Pt[], p: Pt): number {
@@ -30,14 +30,14 @@ function edgeDistance(outline: Pt[], p: Pt): number {
 
 type Drag =
   | { id: number; kind: 'stroke'; points: Pt[] }
-  | { id: number; kind: 'move' | 'tip' | 'bend' | 'width' | 'shape'; layer: string; tail: number; start: Pt; before: CaptionSpec; moved: boolean }
+  | { id: number; kind: 'move' | 'tip' | 'bend' | 'width' | 'shape' | 'link'; layer: string; tail: number; start: Pt; before: CaptionSpec; moved: boolean }
   /** Turn or scale the whole caption (its layer's rotation and scale, around the balloon's centre). */
   | { id: number; kind: 'turn' | 'scale' | 'slide'; layer: string; startStage: Pt; centre: Pt; before: Layer['transform']; moved: boolean }
   /** Pick whip from a tail tip: let go on a layer and the tip follows it. */
   | { id: number; kind: 'whip'; layer: string; tail: number; from: Pt; to: Pt; target: string | null };
 
-type CaptionEdit = Extract<Drag, { kind: 'move' | 'tip' | 'bend' | 'width' | 'shape' }>;
-const isCaptionEdit = (d: Drag): d is CaptionEdit => d.kind === 'move' || d.kind === 'tip' || d.kind === 'bend' || d.kind === 'width' || d.kind === 'shape';
+type CaptionEdit = Extract<Drag, { kind: 'move' | 'tip' | 'bend' | 'width' | 'shape' | 'link' }>;
+const isCaptionEdit = (d: Drag): d is CaptionEdit => d.kind === 'move' || d.kind === 'tip' || d.kind === 'bend' || d.kind === 'width' || d.kind === 'shape' || d.kind === 'link';
 
 /** A caption's on-canvas handles, in its layer's page units. */
 export interface CaptionHandles { outline: Pt[]; tips: Pt[]; bends: Pt[]; width: Pt | null; turn: Pt; scale: Pt; whips: Pt[] }
@@ -71,7 +71,7 @@ export class LetterTool {
   get stroke(): Pt[] | null { return this.drag?.kind === 'stroke' ? this.drag.points : null; }
 
   /** Caption layers visible at this frame, front first, with a stage point mapped into each one's page. */
-  private captionsAt(stage: Pt): { layer: DrawingsLayer; local: Pt; outline: Pt[]; tips: Pt[] }[] {
+  private captionsAt(stage: Pt): { layer: DrawingsLayer; local: Pt; outline: Pt[]; tips: Pt[]; links: Pt[][] }[] {
     const app = this.app, comp = app.project.comp, out = [];
     for (const l of comp.layers) {
       if (l.kind !== 'drawings' || !l.caption || !l.visible || l.locked || app.frame < l.in) continue;
@@ -79,7 +79,7 @@ export class LetterTool {
       if (!m) continue;
       const [lx, ly] = apply(m, [stage.x, stage.y]), lf = app.frame - l.start;
       const shown = this.shown(l), { shapes } = captionBalloon(shown, lf, app.project.width, app.project.height);
-      out.push({ layer: l, local: { x: lx, y: ly }, outline: shapes.outline, tips: shown.tails.map(t => ({ x: t.x, y: t.y })) });
+      out.push({ layer: l, local: { x: lx, y: ly }, outline: shapes.outline, tips: shown.tails.map(t => ({ x: t.x, y: t.y })), links: captionLinks(shown, lf, app.project.width, app.project.height).map(k => k.outline) });
     }
     return out;
   }
@@ -170,7 +170,10 @@ export class LetterTool {
     if (active?.kind === 'drawings' && active.caption && active.visible && !active.locked) {
       const m = invert(app.editor.matrixOf(active)), h = this.handles(active);
       if (m && h) {
-        const [lx, ly] = apply(m, [stage.x, stage.y]), local = { x: lx, y: ly }, close = (p: Pt) => Math.hypot(p.x - lx, p.y - ly) < near;
+        const [lx, ly] = apply(m, [stage.x, stage.y]), local = { x: lx, y: ly };
+        // inside a joined balloon a handle takes the press only when it is right on it (the balloon wins otherwise)
+        const inLink = captionLinks(this.shown(active), app.frame - active.start, app.project.width, app.project.height).some(k => inside(k.outline, local));
+        const reachHere = inLink ? Math.min(near, 12 / zoom) : near, close = (p: Pt) => Math.hypot(p.x - lx, p.y - ly) < reachHere;
         const start = (kind: 'tip' | 'bend' | 'width', tail: number) => { this.drag = { id, kind, layer: active.id, tail, start: local, before: structuredClone(active.caption!), moved: false }; };
         // turning and scaling the whole caption
         const transformFrom = (kind: 'turn' | 'scale') => {
@@ -207,6 +210,13 @@ export class LetterTool {
     const rim = (this.pointerKind === 'touch' ? 26 : 16) / zoom, found = this.captionsAt(stage);
     // pressing on a balloon's edge draws its tail; deeper inside moves it
     if (found.some(c => edgeDistance(c.outline, c.local) < rim)) { this.drag = { id, kind: 'stroke', points: [stage] }; return; }
+    for (const c of found) {
+      const k = c.links.findIndex(o => inside(o, c.local));
+      if (k < 0) continue;
+      if (app.project.activeLayer !== c.layer.id) app.focusLayer(c.layer.id);
+      this.drag = { id, kind: 'link', layer: c.layer.id, tail: k, start: c.local, before: structuredClone(c.layer.caption!), moved: false };
+      return;
+    }
     const hit = found.find(c => inside(c.outline, c.local));
     if (hit) {
       const now = performance.now();
@@ -265,7 +275,12 @@ export class LetterTool {
       const shape = Math.min(2.5, Math.max(0.5, (d.before.shape ?? 1) * to / from));
       if (Math.abs(shape - 1) < 0.03) delete c.shape; else c.shape = Math.round(shape * 100) / 100;
     }
-    else { c.x += dx; c.y += dy; }
+    else if (d.kind === 'link') { const k = c.links?.[d.tail]; if (k) { k.x += dx; k.y += dy; } }
+    else {
+      // moving the main balloon takes its joined balloons along
+      c.x += dx; c.y += dy;
+      if (c.links) c.links = c.links.map(k => ({ ...k, x: k.x + dx, y: k.y + dy }));
+    }
     this.preview(d.layer, c);
   }
 
@@ -305,9 +320,9 @@ export class LetterTool {
       // a bend grip pressed without moving is a tap (two make a double-tap that straightens)
       if (!cancelled && !d.moved && d.kind === 'bend') this.lastTap = { layer: d.layer, time: performance.now(), kind: `bend${d.tail}` };
       // a tap on a balloon (no drag) opens it to edit
-      if (!cancelled && !d.moved && d.kind === 'move') { app.requestRender(); this.onEdit?.(d.layer, false); return; }
+      if (!cancelled && !d.moved && (d.kind === 'move' || d.kind === 'link')) { app.requestRender(); this.onEdit?.(d.layer, false); return; }
       if (cancelled || !d.moved) { app.requestRender(); return; }
-      app.editor.edit(d.kind === 'tip' ? 'Aim caption tail' : d.kind === 'bend' ? 'Bend caption tail' : d.kind === 'width' ? 'Change balloon width' : d.kind === 'shape' ? 'Reshape balloon' : 'Move caption', c => { const x = c.layers.find(y => y.id === d.layer); if (x?.kind === 'drawings') x.caption = after; });
+      app.editor.edit(d.kind === 'tip' ? 'Aim caption tail' : d.kind === 'bend' ? 'Bend caption tail' : d.kind === 'width' ? 'Change balloon width' : d.kind === 'shape' ? 'Reshape balloon' : d.kind === 'link' ? 'Move joined balloon' : 'Move caption', c => { const x = c.layers.find(y => y.id === d.layer); if (x?.kind === 'drawings') x.caption = after; });
       return;
     }
     app.requestRender();
@@ -412,7 +427,7 @@ export class LetterTool {
     const app = this.app, c = l.caption ? this.shown(l) : undefined;
     if (!c) return null;
     const { lay, shapes } = captionBalloon(c, app.frame - l.start, app.project.width, app.project.height);
-    const pts = [...shapes.outline, ...shapes.seams.flat(), ...shapes.zigzags.flat(), ...shapes.bubbles.flatMap(b => [{ x: b.x - b.r, y: b.y - b.r }, { x: b.x + b.r, y: b.y + b.r }])];
+    const pts = [...shapes.outline, ...shapes.seams.flat(), ...shapes.zigzags.flat(), ...shapes.bubbles.flatMap(b => [{ x: b.x - b.r, y: b.y - b.r }, { x: b.x + b.r, y: b.y + b.r }]), ...captionLinks(c, app.frame - l.start, app.project.width, app.project.height).flatMap(k => k.outline)];
     const pad = lay.size * (c.inkWidth + 0.15);
     const xs = pts.map(p => p.x), ys = pts.map(p => p.y), x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
     const m = app.editor.matrixOf(l), at = (x: number, y: number) => { const [sx, sy] = apply(m, [x, y]); return { x: sx, y: sy }; };

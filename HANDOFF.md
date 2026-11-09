@@ -2,6 +2,41 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Joined balloons, per-word styling, under-fill and ink start (2026-11-09, committed and pushed to main)
+
+- **Under-fill**: `CaptionSpec.underFill { color, dx, dy }`, with offsets in lettering sizes (±3). The
+  fill plane draws every balloon piece offset in that colour first. It is in the Balloon tab
+  (checkbox, colour, across and down), and styles keep it.
+- **Ink start**: a new caption key `inkStart` (0–100%, a Motion row). The outline is dashed from Ink
+  start to Ink length with `lineDashOffset`; it is drawn only when the end is past the start.
+- **Joined balloons**: `CaptionSpec.links` holds up to three `{ text, x, y }`, validated in
+  `readCaption`.
+  - `captionLinks` lays each one out as a caption in the same look (`linkCaption`) and adds a waisted
+    neck to the main balloon.
+  - One shared outline: every piece is stroked twice as wide, clipped to outside all of them (one
+    even-odd clip per piece), so no ink shows where they meet.
+  - The words of all balloons reveal in order.
+  - Letter tool: a press inside a joined balloon moves only it ("Move joined balloon"); a handle takes
+    the press there only within 12 px. A tap opens the caption. Moving the main balloon takes them
+    along. The Transform box surrounds them.
+  - Panel: "+ Joined balloon" (placed clear of the corner handles), a words box per balloon, Remove.
+- **Per-word styling**: `lettering/markup.ts` (portable).
+  - Markup is `*bold*`, `_italic_` and `[#rrggbb]…[/]`. The style carries across lines.
+  - Measuring strips markup and uses the wider bold letters when there is bold, so words always fit.
+  - `drawWords` draws each run in its own face and colour and aligns lines by their real width.
+  - Panel: Bold words, Italic words and Colour words wrap the selection (the selection is kept).
+    `captionFontsReady` loads the bold and italic faces when the words use them.
+- Found while testing: a new joined balloon could sit under the main balloon's corner scale handle,
+  which took the press. Fixed by the 12 px rule and wider placement.
+- Checks:
+  - `markup.test.ts`: 4 (runs, carry-over, wrapping, spec round trip and styles).
+  - Captions fixture 30: under-fill pixels, half the ink at Ink start 50%, a joined balloon added
+    from the panel with no ink where it meets the main one, moving it alone and along, Colour words
+    and Bold words markup with the selection kept, and the coloured word drawn red.
+  - Checked by eye with a pane overlay: bold and red words, a yellow under-fill, and a joined
+    balloon with italic words in one outline.
+  - Full results: unit tests 818 passed (1 skipped), build passed, browser suite 72 of 72 (run alone).
+
 ### Touch and pen pass (2026-11-09, committed and pushed to main)
 
 There was no real iPad. The pass emulated one: a 768×1024 tablet view in the pane (which reports a

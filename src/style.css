@@ -5795,3 +5795,7 @@ body.form-tablet .caption-panel .cap-tabs [role=tab], body.form-phone .caption-p
 body.form-tablet .caption-panel .cap-head button, body.form-phone .caption-panel .cap-head button { min-height: 44px; }
 body.form-tablet .caption-panel input[type=color], body.form-phone .caption-panel input[type=color] { width: 44px; height: 40px; }
 body.form-tablet .caption-panel .cap-fonts button, body.form-phone .caption-panel .cap-fonts button { min-height: 64px; }
+.caption-panel .cap-marks { margin: 4px 0; }
+.caption-panel .cap-link { display: grid; grid-template-columns: 1fr auto; gap: 4px 6px; align-items: start; margin: 6px 0; padding: 6px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.caption-panel .cap-link .cap-tail-n { grid-column: 1 / -1; }
+.caption-panel .cap-link textarea { min-height: 44px; }

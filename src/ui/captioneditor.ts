@@ -8,7 +8,8 @@
 import type { App } from '../app';
 import { hashBytes } from '../io/hash';
 import { BUNDLED_FONTS, familyName, isFontFile, MAX_FONT_BYTES, MAX_PROJECT_FONTS } from '../lettering/fonts';
-import { CAPTION_KEYS, MAX_CAPTION_CHARS, MAX_TAILS, TAIL_JOINS, TAIL_LIMITS, type BalloonStyle, type CaptionKey, type CaptionSpec, type CaptionTail, type LetterAlign, type LetterSize, type TailJoin } from '../lettering/spec';
+import { wrapMarkup } from '../lettering/markup';
+import { CAPTION_KEYS, MAX_CAPTION_CHARS, MAX_LINKS, MAX_TAILS, TAIL_JOINS, TAIL_LIMITS, type BalloonStyle, type CaptionKey, type CaptionSpec, type CaptionTail, type LetterAlign, type LetterSize, type TailJoin } from '../lettering/spec';
 import { captionAt, captionBalloon, captionSize as captionSizeOf, paintCaption } from '../view/caption';
 import { lookRound, lookWobble, shapeForText, turnOutline, type Pt } from '../lettering/geometry';
 import type { BalloonLook } from '../lettering/spec';
@@ -207,7 +208,59 @@ export class CaptionEditor {
     text.value = c.text;
     text.addEventListener('input', () => this.live({ ...this.cur, text: text.value }));
     text.addEventListener('change', () => this.commitWords(text.value));
-    words.append(text, el('p', { class: 'hint' }, 'Press Enter for your own line breaks; otherwise the words wrap to fit the balloon.'));
+    words.append(text);
+    // per-word styling: select words in any words box, then Bold, Italic or a colour
+    let lastBox: HTMLTextAreaElement = text;
+    text.addEventListener('focus', () => { lastBox = text; });
+    const style = (kind: 'bold' | 'italic' | { color: string }) => {
+      const box = lastBox, s0 = box.selectionStart ?? 0, s1 = box.selectionEnd ?? 0;
+      if (s0 === s1) { app.onNotice?.('Select some words in the words box first, then tap Bold, Italic or Colour.'); return; }
+      const r = wrapMarkup(box.value, s0, s1, kind);
+      box.value = r.text;
+      box.dispatchEvent(new Event('input'));
+      box.dispatchEvent(new Event('change'));
+      box.focus(); box.setSelectionRange(r.start, r.end);
+    };
+    const marks = el('div', { class: 'cap-chips cap-marks', role: 'group', 'aria-label': 'Style selected words' });
+    const bBtn = el('button', { type: 'button', title: 'Make the selected words bold (adds *…*)' }, 'Bold words');
+    const iBtn = el('button', { type: 'button', title: 'Make the selected words italic (adds _…_)' }, 'Italic words');
+    const wordColour = el('input', { type: 'color', value: '#e02020', 'aria-label': 'Colour for selected words' }) as HTMLInputElement;
+    const cBtn = el('button', { type: 'button', title: 'Colour the selected words (adds [#colour]…[/])' }, 'Colour words');
+    // keep the words box's selection when a button is pressed
+    for (const b of [bBtn, iBtn, cBtn]) b.addEventListener('pointerdown', e => e.preventDefault());
+    bBtn.addEventListener('click', () => style('bold'));
+    iBtn.addEventListener('click', () => style('italic'));
+    cBtn.addEventListener('click', () => style({ color: wordColour.value }));
+    marks.append(bBtn, iBtn, cBtn, wordColour);
+    words.append(marks, el('p', { class: 'hint' }, 'Enter makes your own line breaks; otherwise the words wrap to fit. Select words to make them bold, italic or a colour.'));
+    // joined balloons: more balloons in this look, attached to this one, each with its own words
+    (c.links ?? []).forEach((k, i) => {
+      const box = el('div', { class: 'cap-link' });
+      const t = el('textarea', { class: 'cap-words textbox', rows: '2', 'aria-label': `Joined balloon ${i + 2} words`, maxlength: String(MAX_CAPTION_CHARS), placeholder: 'What they say next' }) as HTMLTextAreaElement;
+      t.value = k.text;
+      t.addEventListener('focus', () => { lastBox = t; });
+      const withText = (v: string, base = this.cur) => ({ ...base, links: (base.links ?? []).map((x, j) => (j === i ? { ...x, text: v } : x)) });
+      t.addEventListener('input', () => this.live(withText(t.value)));
+      t.addEventListener('change', () => this.commit('Edit joined balloon words', withText(t.value, this.base!)));
+      const del = el('button', { type: 'button', title: 'Remove this joined balloon' }, 'Remove');
+      del.addEventListener('click', () => { const links = (this.base!.links ?? []).filter((_, j) => j !== i); const { links: _l, ...rest } = this.base!; this.commit('Remove joined balloon', links.length ? { ...rest, links } : rest); });
+      box.append(el('span', { class: 'cap-tail-n' }, `Balloon ${i + 2}`), t, del);
+      words.append(box);
+    });
+    if (c.style !== 'sfx' && (c.links?.length ?? 0) < MAX_LINKS) {
+      const add = el('button', { type: 'button', class: 'cap-add', title: 'Add another balloon joined to this one, for the next thing they say' }, '+ Joined balloon');
+      add.addEventListener('click', () => {
+        const b = this.base!, { lay } = captionBalloon(b, 0, app.project.width, app.project.height), n = b.links?.length ?? 0;
+        // below and to the side, staying in the picture
+        // clear of the main balloon and its corner handles, however small it is
+        const dx = Math.max(lay.fit.a * 1.15, lay.size * 5), dy = Math.max(lay.fit.b * 2, lay.size * 5);
+        const x = Math.min(app.project.width * 0.92, Math.max(app.project.width * 0.08, b.x + (n % 2 ? -1 : 1) * dx));
+        const y = Math.min(app.project.height * 0.92, b.y + dy * (1 + n * 0.8));
+        this.commit('Add joined balloon', { ...b, links: [...(b.links ?? []), { text: '', x, y }] });
+        this.panel?.querySelector<HTMLTextAreaElement>(`[aria-label="Joined balloon ${n + 2} words"]`)?.focus();
+      });
+      words.append(add);
+    }
 
     // Lettering
     const letters = section('Letters', 'Aa', 'Font, size, emphasis, colour and spacing of the words.');
@@ -347,7 +400,19 @@ export class CaptionEditor {
       );
       row(balloon, 'Colours', cols);
       slider(balloon, 'Ink width', 0, 30, 1, Math.round(c.inkWidth * 100), '%', v => ({ ...this.cur, inkWidth: v / 100 }), v => change('Balloon ink width', { inkWidth: v / 100 }));
+      keyable(balloon, 'inkStart');
       keyable(balloon, 'inkEnd');
+      // under-fill: a colour block behind the balloon, offset like a print shadow
+      const under = el('input', { type: 'checkbox', 'aria-label': 'Under-fill' }) as HTMLInputElement;
+      under.checked = !!c.underFill;
+      const underColour = colour('Under-fill colour', c.underFill?.color ?? '#111111', (v, final) => { if (!this.cur.underFill) return; const u = { ...this.cur.underFill, color: v }; if (final) change('Under-fill colour', { underFill: { ...this.base!.underFill!, color: v } }); else this.live({ ...this.cur, underFill: u }); });
+      under.addEventListener('change', () => { const { underFill: _u, ...rest } = this.base!; this.commit(under.checked ? 'Add under-fill' : 'Remove under-fill', under.checked ? { ...rest, underFill: { color: underColour.value, dx: 0.35, dy: 0.35 } } : rest); });
+      row(balloon, 'Under-fill', under, underColour);
+      if (c.underFill) {
+        const off = (label: string, key: 'dx' | 'dy') => slider(balloon, label, -150, 150, 5, Math.round(c.underFill![key] * 100), '%', v => ({ ...this.cur, underFill: { ...this.cur.underFill!, [key]: v / 100 } }), v => change('Move under-fill', { underFill: { ...this.base!.underFill!, [key]: v / 100 } }));
+        off('Under-fill across', 'dx');
+        off('Under-fill down', 'dy');
+      }
       keyable(balloon, 'balloonOpacity');
     }
     keyable(balloon, 'textOpacity');
@@ -529,6 +594,7 @@ export class CaptionEditor {
 /** The Caption panel's controls and their icons (by label). */
 const PANEL_ICONS: Record<string, string> = {
   Done: 'check', 'Import font…': 'import', 'Fit to words': 'fit',
+  'Bold words': 'bold', 'Italic words': 'italic', 'Colour words': 'palette', '+ Joined balloon': 'plus', Remove: 'trash',
   Small: 'sizeSmall', Body: 'sizeBody', Big: 'sizeBig', Left: 'alignLeft', Centre: 'alignCenter', Right: 'alignRight',
   Bold: 'bold', Italic: 'italic', 'ALL CAPS': 'caps',
   Speech: 'balloonSpeech', Thought: 'balloonThought', Shout: 'balloonShout', Whisper: 'balloonWhisper', Box: 'balloonBox', 'Sound effect': 'sfx', 'As drawn': 'balloonCustom',
