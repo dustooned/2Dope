@@ -6621,6 +6621,7 @@ export class App {
     // the caption Transform box: Esc or Enter finishes
     if ((e.key === 'Escape' || e.key === 'Enter') && this.letters.transforming && !(e.target as HTMLElement | null)?.closest?.('input, textarea, select')) { e.preventDefault(); this.letters.setTransforming(null); return; }
     // Draw shape (captions): Esc stops waiting for the loop
+    if (e.key === 'Escape' && this.letters.pathTarget) { e.preventDefault(); this.letters.armPath(null); this.onNotice?.('Stopped drawing a text path.'); return; }
     if (e.key === 'Escape' && this.letters.shapeTarget) { e.preventDefault(); this.letters.armShape(null); this.onNotice?.('Stopped drawing a balloon shape.'); return; }
     if (this.workspace === 'motion') {
       if (e.code === 'KeyY' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); if (!e.repeat) this.editor.setAnchorEditing(!this.editor.anchorEditing); return; }

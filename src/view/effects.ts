@@ -4,7 +4,7 @@ import { applyBlur } from '../core/adjust';
 import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
 import { blindsEffect, fillEffect, kaleidoEffect, outlineEffect, soundwaveEffect } from './fxextra';
-export { setSoundPreload, setSoundSource, soundReady } from './fxextra';
+export { setOutlinePictureSource, setSoundPreload, setSoundSource, soundReady } from './fxextra';
 
 /**
  * Drawing a layer with its effects: the Fill and the Line are painted on their own so an effect can

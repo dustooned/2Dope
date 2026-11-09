@@ -4,7 +4,7 @@
  * Colour plane; ink, tails and letters on the Ink plane, so Ink/Colour effect targets work.
  */
 import { valueAt, type Prop } from '../core/anim';
-import { balloonOutline, balloonProfile, balloonShapes, fitCaption, type Fit, type Pt } from '../lettering/geometry';
+import { alongPath, balloonOutline, balloonProfile, balloonShapes, fitCaption, pathBand, pathLength, textPath, type Fit, type Pt } from '../lettering/geometry';
 import { CAPTION_KEYS, captionValue, LETTER_SIZE_FRACTION, type CaptionKey, type CaptionSpec } from '../lettering/spec';
 import { freshState, hasBold, runsOf, stripMarkup } from '../lettering/markup';
 import { captionFont, captionFontReady, captionProject } from './captionfonts';
@@ -66,8 +66,18 @@ const lengthOf = (pts: Pt[]) => { let n = 0; for (let i = 0; i < pts.length; i++
 export function captionBalloon(c: CaptionSpec, frame: number, pageW: number, pageH: number) {
   const lay = captionLayout(c, frame, pageW, pageH);
   const seed = [...c.text].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
-  const outline = balloonOutline(c.style, lay.fit.a, lay.fit.b, seed, c.path, c.look);
+  // a sound effect on a path: its area is a band along the path
+  const curved = curvePath(c, lay);
+  const outline = curved ? pathBand(curved, lay.size * 0.8) : balloonOutline(c.style, lay.fit.a, lay.fit.b, seed, c.path, c.look);
   return { lay, outline, shapes: balloonShapes(outline, c.style === 'sfx' ? [] : c.tails, c.x, c.y, lay.size) };
+}
+
+/** The path a sound effect's letters follow (around its centre), or null for straight lettering. */
+export function curvePath(c: CaptionSpec, lay: CaptionLayout): Pt[] | null {
+  if (c.style !== 'sfx' || !c.curve) return null;
+  const span = lay.fit.lines.reduce((n, l) => n + l.width, 0) + lay.size * 0.3 * Math.max(0, lay.fit.lines.length - 1);
+  const p = textPath(c.curve, Math.max(span, lay.size), lay.size);
+  return p.length >= 2 ? p : null;
 }
 
 /** A joined balloon as a caption of its own (same look, its words and place, no tails). */
@@ -168,6 +178,8 @@ export function paintCaption(g: CanvasRenderingContext2D, c: CaptionSpec, frame:
 
 /** Draw one balloon's words (styled runs), at most `budget` letters. Returns the letters left. */
 function drawWords(g: CanvasRenderingContext2D, c: CaptionSpec, lay: CaptionLayout, budget: number): number {
+  const curved = curvePath(c, lay);
+  if (curved) return drawOnPath(g, c, lay, curved, budget);
   const size = lay.size, state = freshState();
   g.textBaseline = 'middle';
   // measure each line as it will be drawn (runs in their own fonts), for alignment
@@ -204,5 +216,39 @@ function drawWords(g: CanvasRenderingContext2D, c: CaptionSpec, lay: CaptionLayo
       x += r.w;
     }
   }
+  return budget;
+}
+
+/** A sound effect's letters along its path, each turned to follow it, centred on the path. */
+function drawOnPath(g: CanvasRenderingContext2D, c: CaptionSpec, lay: CaptionLayout, path: Pt[], budget: number): number {
+  const size = lay.size, state = freshState();
+  g.textBaseline = 'middle'; g.textAlign = 'center';
+  // every letter with its own font (styled words) and width, the lines run together
+  const letters: { ch: string; font: string; color: string | null; w: number }[] = [];
+  lay.fit.lines.forEach((line, i) => {
+    if (i) letters.push({ ch: ' ', font: lay.font, color: null, w: size * 0.3 });
+    for (const r of runsOf(line.text, state)) {
+      const font = r.bold || r.italic ? captionFont({ ...c, bold: c.bold || r.bold, italic: c.italic || r.italic }, size) : lay.font;
+      g.font = font;
+      for (const ch of r.text) letters.push({ ch, font, color: r.color, w: g.measureText(ch).width + lay.tracking });
+    }
+  });
+  const total = letters.reduce((n, l) => n + l.w, 0);
+  let d = (pathLength(path) - total) / 2;
+  for (const l of letters) {
+    if (budget <= 0) break;
+    const at = alongPath(path, d + l.w / 2);
+    d += l.w;
+    if (l.ch === ' ') { budget--; continue; }
+    budget--;
+    g.save();
+    g.translate(c.x + at.x, c.y + at.y); g.rotate(at.angle);
+    g.font = l.font;
+    if (c.textOutline && c.textOutlineWidth > 0) { g.strokeStyle = c.textOutline; g.lineWidth = c.textOutlineWidth * size * 2; g.lineJoin = 'round'; g.strokeText(l.ch, 0, 0); }
+    g.fillStyle = l.color ?? c.textColor;
+    g.fillText(l.ch, 0, 0);
+    g.restore();
+  }
+  g.textAlign = 'start';
   return budget;
 }

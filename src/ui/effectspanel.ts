@@ -473,6 +473,15 @@ export class EffectsPanel {
           seg.append(b);
         }
         row.append(seg);
+      } else if (x.kind === 'asset') {
+        // one of the project's Assets (its first frame)
+        const pick = el('select', { 'aria-label': x.label }) as HTMLSelectElement;
+        pick.append(el('option', { value: '' }, 'Choose an asset…'));
+        for (const cp of this.app.project.comps.values()) if (cp.asset) pick.append(el('option', { value: cp.id }, cp.name));
+        pick.value = param<string>(e, x.key);
+        if (pick.options.length === 1) { pick.disabled = true; pick.title = 'Make or import an asset first (Assets): its first frame becomes the paint'; }
+        pick.addEventListener('change', () => setParam(x.key, pick.value, x.label));
+        row.append(pick);
       } else if (x.kind === 'color') {
         const input = el('input', { type: 'color', 'aria-label': x.label });
         input.value = param<string>(e, x.key);

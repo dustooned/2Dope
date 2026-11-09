@@ -7,8 +7,8 @@ describe('layer effects', () => {
       { ...newEffect('echo', 'echo', 1), amount: 50, size: 5, params: { spacing: 2 } },
       { ...newEffect('motionblur', 'blur', 1), amount: 100, size: 3 },
     ] };
-    expect(temporalSamples(l, 8)).toEqual({ echoes: [{ frame: 4, alpha: 0.25 }, { frame: 6, alpha: 0.5 }], poses: [7, 7.5, 8] });
-    expect(temporalSamples(l, 3)).toEqual({ echoes: [], poses: [3, 3, 3] });
+    expect(temporalSamples(l, 8)).toEqual({ echoes: [{ frame: 4, alpha: 0.25 }, { frame: 6, alpha: 0.5 }], poses: [7, 7.5, 8], trails: [] });
+    expect(temporalSamples(l, 3)).toEqual({ echoes: [], poses: [3, 3, 3], trails: [] });
   });
   it('makes a line boil with its defaults, aimed at the Line', () => {
     const e = newEffect('boil', 'fx1', 7);
@@ -117,5 +117,17 @@ describe('keyframed effect settings', () => {
     expect(Object.keys(e!.keys!).sort()).toEqual(['amount', 'intensity']);
     expect(e!.keys!.amount!.keys).toHaveLength(2);
     expect(readEffects([{ type: 'glow', keys: 'nope' }])![0]!.keys).toBeUndefined();
+  });
+  it('samples Outline Trail frames oldest first, one line each in the next colour, fading, inside the trim', () => {
+    const e = { ...newEffect('outline', 'o1', 1), params: { mode: 'trail', count: 4, every: 2, fade: 60, shift: 0 } };
+    const l = { id: 'L', in: 2, start: 0, effects: [e] };
+    const { trails } = temporalSamples(l, 8);
+    expect(trails.map(t => [t.frame, t.index])).toEqual([[2, 3], [4, 2], [6, 1]]);
+    expect(trails.every(t => t.effect.params?.count === 1 && t.effect.params?.only === true && t.effect.params?.mode === 'around')).toBe(true);
+    expect(trails.map(t => t.effect.params?.shift)).toEqual([3, 2, 1]);
+    expect(trails[0]!.alpha).toBeCloseTo(0.4, 6);
+    // before the layer starts there is nothing to trail
+    expect(temporalSamples(l, 3).trails).toEqual([]);
+    expect(temporalSamples({ ...l, effects: [{ ...e, params: { ...e.params, mode: 'around' } }] }, 8).trails).toEqual([]);
   });
 });

@@ -110,6 +110,11 @@ export interface CaptionSpec {
   textOutlineWidth: number;
   /** A colour block behind the balloon, offset like a print shadow (offsets in lettering sizes). */
   underFill?: { color: string; dx: number; dy: number };
+  /**
+   * Sound effects on a path: the letters follow an arc, a wave or a drawn line (offsets from the
+   * caption's centre, page units). `bend` is the arc's or wave's strength, -1 to 1.
+   */
+  curve?: TextCurve;
   /** Joined balloons: more balloons in the same look, each with its words, attached to this one. */
   links?: CaptionLink[];
   /** Letter size fine-tune: a multiple of the named size, 0.5–3 (absent = 1). Still a share of the page height. */
@@ -129,6 +134,9 @@ export interface CaptionSpec {
 export const MAX_CAPTION_CHARS = 600;
 export const MAX_TAILS = 4;
 export const MAX_LINKS = 3;
+
+export type TextCurve = { kind: 'arc' | 'wave'; bend: number } | { kind: 'drawn'; points: [number, number][] };
+export const MAX_CURVE_POINTS = 200;
 
 /** A joined balloon: its words and its centre (page units). */
 export interface CaptionLink { text: string; x: number; y: number }
@@ -164,6 +172,15 @@ export function readLook(input: unknown): BalloonLook | null {
   const o = r.outline;
   if (Array.isArray(o) && o.length >= 8 && o.length <= MAX_OUTLINE_POINTS && o.every(p => Array.isArray(p) && p.length === 2 && p.every(n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1.5))) out.outline = (o as [number, number][]).map(([x, y]) => [x, y]);
   return Object.keys(out).length ? out : null;
+}
+
+/** A text path read back safely (or null). */
+export function readCurve(input: unknown): TextCurve | null {
+  if (!input || typeof input !== 'object') return null;
+  const r = input as Record<string, unknown>;
+  if ((r.kind === 'arc' || r.kind === 'wave') && typeof r.bend === 'number' && Number.isFinite(r.bend)) return { kind: r.kind, bend: Math.max(-1, Math.min(1, r.bend)) };
+  if (r.kind === 'drawn' && Array.isArray(r.points) && r.points.length >= 2 && r.points.length <= MAX_CURVE_POINTS && r.points.every(p => Array.isArray(p) && p.length === 2 && p.every(n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e5))) return { kind: 'drawn', points: (r.points as [number, number][]).map(([x, y]) => [x, y]) };
+  return null;
 }
 
 export function readCaption(input: unknown): CaptionSpec {
@@ -208,6 +225,7 @@ export function readCaption(input: unknown): CaptionSpec {
     ...(typeof r.shape === 'number' && Number.isFinite(r.shape) && r.shape !== 1 ? { shape: num(r.shape, 0.5, 2.5, 1) } : {}),
     ...(typeof r.scale === 'number' && Number.isFinite(r.scale) && r.scale !== 1 ? { scale: num(r.scale, 0.5, 3, 1) } : {}),
     ...(readLook(r.look) ? { look: readLook(r.look)! } : {}),
+    ...(readCurve(r.curve) ? { curve: readCurve(r.curve)! } : {}),
     ...(r.underFill && typeof r.underFill === 'object' ? (() => { const u = r.underFill as Record<string, unknown>; return { underFill: { color: col(u.color, '#111111'), dx: num(u.dx, -3, 3, 0.3), dy: num(u.dy, -3, 3, 0.3) } }; })() : {}),
     ...(Array.isArray(r.links) && r.links.length ? { links: (r.links as unknown[]).slice(0, MAX_LINKS).flatMap((k): CaptionLink[] => { const q = k as Record<string, unknown> | null; return q && typeof q.x === 'number' && typeof q.y === 'number' && Number.isFinite(q.x) && Number.isFinite(q.y) ? [{ text: typeof q.text === 'string' ? q.text.replace(/\r\n?/g, '\n').slice(0, MAX_CAPTION_CHARS) : '', x: num(q.x, -1e6, 1e6, 0), y: num(q.y, -1e6, 1e6, 0) }] : []; }) } : {}),
     ...(Array.isArray(r.minSize) && r.minSize.length === 2 && r.minSize.every(n => typeof n === 'number' && Number.isFinite(n) && n > 0) ? { minSize: [num(r.minSize[0], 1, 1e5, 1), num(r.minSize[1], 1, 1e5, 1)] as [number, number] } : {}),

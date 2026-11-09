@@ -2,6 +2,45 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Outline extras and sound effects on a path (2026-11-09, committed and pushed to main)
+
+- **Outline Trail** (`mode: 'trail'`, `every`):
+  - `temporalSamples` also returns `trails`: earlier frames, oldest first. Each one carries a copy of
+    the effect set to one line, Outline only, and colour shift +i, with Fade applied.
+  - `drawTimedLayer` draws them into the temporal plate before the current frame.
+  - The frame-content key records them like Echo.
+  - In Trail mode the current frame draws one line.
+- **Changed line** (`accent`, `accentEvery`, `accentColor`, `accentWidth`): one line, or every Nth
+  from it, gets its own colour and width. `outlineReach` counts the extra width.
+- **Picture paint** (`paint: 'picture'`, `picture`, `pictureSize`): a new `asset` kind of effect
+  setting.
+  - The panel offers a menu of the project's Assets, validated as an id.
+  - `setOutlinePictureSource` is wired to `assetPicture` (`ui/soundsource.ts`), which draws the
+    asset's first frame (up to 1024 px), kept until its drawings change.
+  - Limit: the effect cache keys on the asset id, not its content, so an outline already cached may
+    keep the old picture until something else changes.
+- **Sound effects on a path**:
+  - `CaptionSpec.curve` is an arc or wave with a bend, or drawn points around the centre; it is
+    validated by `readCurve`.
+  - `geometry.ts` has `textPath`, `alongPath`, `pathLength` and `pathBand`.
+  - `caption.ts`: `curvePath` and `drawOnPath` draw each letter along the path, turned to follow it
+    and centred, with styled words supported. The caption's area is a band along the path, for
+    selecting, moving and the Transform box.
+  - Letters tab, for sound effects only: Text path (Straight, Arc, Wave, plus Drawn when drawn),
+    Bend, and Draw path (`LetterTool.armPath`: the next line drawn becomes the path, and Esc stops).
+- Checks:
+  - Unit tests: Trail sampling (frames, copies, shifts, fade, trim); path geometry and `readCurve` (3);
+    the Echo test expectations gained `trails: []`.
+  - Effects fixture 39: changed line colour and width, Picture paint from a fake asset, and Trail on
+    a moving disc (current blue, one frame back green, two back yellow, no old art).
+  - Captions fixture 31: an arc lifts the middle letters, Draw path follows a falling line with the
+    area along the path, and Straight goes back.
+  - Checked by eye with a pane overlay in a throwaway project: a rainbow trail behind a moving ball,
+    and WHOOOOSH! on an arc.
+  - Full results: unit tests 822 passed (1 skipped), build passed, browser suite 72 of 72 (run alone).
+- The demo caption from the previous round had come back in the pane's local project (a reload
+  before the autosave). It was removed again and confirmed gone after a reload.
+
 ### Joined balloons, per-word styling, under-fill and ink start (2026-11-09, committed and pushed to main)
 
 - **Under-fill**: `CaptionSpec.underFill { color, dx, dy }`, with offsets in lettering sizes (±3). The

@@ -541,3 +541,52 @@ export function readBalloon(raw: Pt[]): ReadBalloon | null {
     ...(tail ? { tail } : {}),
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Sound effects on a path
+
+/**
+ * The path the letters follow, as points around the caption's centre (page units). Arcs and
+ * waves are made to the words' length (`span`); a drawn path is used as drawn.
+ */
+export function textPath(curve: { kind: 'arc' | 'wave'; bend: number } | { kind: 'drawn'; points: [number, number][] }, span: number, size: number): Pt[] {
+  if (curve.kind === 'drawn') return curve.points.map(([x, y]) => ({ x, y }));
+  const n = 48, half = (span * 1.04) / 2, out: Pt[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, x = -half + 2 * half * t;
+    // an arc bulges up for a positive bend; a wave swings one and a half times along the words
+    const y = curve.kind === 'arc' ? -curve.bend * span * 0.45 * (1 - (2 * t - 1) ** 2) + curve.bend * span * 0.225 : -curve.bend * size * 1.4 * Math.sin(Math.PI * 3 * t);
+    out.push({ x, y });
+  }
+  return out;
+}
+
+/** Where along a path a distance falls: the point and the direction (radians). Past either end it carries on straight. */
+export function alongPath(path: Pt[], d: number): { x: number; y: number; angle: number } {
+  const seg = (i: number) => ({ a: path[i]!, b: path[i + 1]! });
+  if (path.length < 2) return { x: path[0]?.x ?? 0, y: path[0]?.y ?? 0, angle: 0 };
+  if (d <= 0) { const { a, b } = seg(0), l = dist(a, b) || 1; return { x: a.x + ((b.x - a.x) / l) * d, y: a.y + ((b.y - a.y) / l) * d, angle: Math.atan2(b.y - a.y, b.x - a.x) }; }
+  let walked = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const { a, b } = seg(i), l = dist(a, b);
+    if (walked + l >= d || i === path.length - 2) {
+      const t = l ? (d - walked) / l : 0;
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, angle: Math.atan2(b.y - a.y, b.x - a.x) };
+    }
+    walked += l;
+  }
+  return { x: path[0]!.x, y: path[0]!.y, angle: 0 };
+}
+
+export function pathLength(path: Pt[]): number { let n = 0; for (let i = 1; i < path.length; i++) n += dist(path[i - 1]!, path[i]!); return n; }
+
+/** A closed band around a path, `r` either side (the caption's area for selecting and moving it). */
+export function pathBand(path: Pt[], r: number): Pt[] {
+  if (path.length < 2) return [];
+  const left: Pt[] = [], right: Pt[] = [];
+  path.forEach((p, i) => {
+    const a = path[Math.max(0, i - 1)]!, b = path[Math.min(path.length - 1, i + 1)]!, t = norm(sub(b, a)), nr = { x: -t.y, y: t.x };
+    left.push(add(p, mul(nr, r))); right.push(add(p, mul(nr, -r)));
+  });
+  return [...left, ...right.reverse()];
+}

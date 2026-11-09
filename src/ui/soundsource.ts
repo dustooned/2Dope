@@ -6,7 +6,8 @@
  */
 import type { App } from '../app';
 import { soundWindow } from '../core/audio';
-import { compLength, type Comp } from '../core/comp';
+import { compLength, frameContent, type Comp } from '../core/comp';
+import { drawComp } from '../view/composite';
 import type { SoundBank } from '../io/sound';
 import type { SoundAt, SoundSource } from '../view/fxextra';
 
@@ -66,5 +67,28 @@ export function shotSoundSource(app: App, bank: SoundBank): SoundSource {
     // layer time back to shot time (normal speed; a retimed layer reads its own frame)
     const time = (layer.start + layerFrame) / Math.max(1, comp.fps || fps);
     return { samples: mix(comp), rate: RATE, time };
+  };
+}
+
+/**
+ * Outline's Picture paint: the first frame of a project Asset, drawn at its own size and kept
+ * until the asset's drawings change.
+ */
+export function assetPicture(app: App): (id: string) => HTMLCanvasElement | null {
+  const kept = new Map<string, { key: string; canvas: HTMLCanvasElement }>();
+  return (id: string) => {
+    const p = app.project, comp = p.comps.get(id);
+    if (!comp?.asset) return null;
+    const key = frameContent(p.comps, comp, 0).key;
+    const hit = kept.get(id);
+    if (hit && hit.key === key) return hit.canvas;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.min(1024, comp.width)); canvas.height = Math.max(1, Math.min(1024, comp.height));
+    const g = canvas.getContext('2d')!;
+    g.scale(canvas.width / comp.width, canvas.height / comp.height);
+    drawComp(g, p, comp, 0, { export: true });
+    if (kept.size > 8) kept.delete(kept.keys().next().value!);
+    kept.set(id, { key, canvas });
+    return canvas;
   };
 }

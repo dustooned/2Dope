@@ -110,20 +110,43 @@ function patternLevel(paint: string, x: number, y: number, s: number): number {
   return 1;
 }
 
+/** Where Outline's Picture paint comes from: the first frame of a project Asset (set by the app). */
+let pictureSource: (id: string) => HTMLCanvasElement | null = () => null;
+export function setOutlinePictureSource(f: (id: string) => HTMLCanvasElement | null): void { pictureSource = f; }
+const pictures = new Map<string, { w: number; h: number; k: number; data: Uint8ClampedArray }>();
+function outlinePicture(id: string, k: number) {
+  if (!id) return null;
+  const c = pictureSource(id);
+  if (!c || !c.width || !c.height) return null;
+  const key = `${id}:${c.width}x${c.height}:${k}`, hit = pictures.get(key);
+  if (hit) return hit;
+  const data = c.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, c.width, c.height).data;
+  const out = { w: c.width, h: c.height, k, data };
+  if (pictures.size > 8) pictures.delete(pictures.keys().next().value!);
+  pictures.set(key, out);
+  return out;
+}
+
 export function outlineEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number, fps: number, pad: number): void {
   const w = c.width, h = c.height, width = Math.max(0, e.amount);
   if (width <= 0) return;
-  const count = Math.max(1, Math.min(24, Math.round(Number(param<number>(e, 'count')) || 1)));
+  // in Trail mode the current frame has one line; the earlier frames' lines are drawn behind it
+  const count = param<string>(e, 'mode') === 'trail' ? 1 : Math.max(1, Math.min(24, Math.round(Number(param<number>(e, 'count')) || 1)));
   const gap = Math.max(0, Number(param<number>(e, 'gap')) || 0), taper = clamp01(Number(param<number>(e, 'taper')) / 100), fade = clamp01(Number(param<number>(e, 'fade')) / 100);
   const soft = Math.max(0.75, e.size), position = param<string>(e, 'position'), paint = param<string>(e, 'paint');
   const scale = Math.max(2, Number(param<number>(e, 'paintScale')) || 6), colours = outlineColours(e);
+  // one line (or every Nth from it) can have its own colour and width
+  const accent = Math.round(Number(param<number>(e, 'accent')) || 0), accentEvery = Math.round(Number(param<number>(e, 'accentEvery')) || 0);
+  const isAccent = (i: number) => accent > 0 && (accentEvery > 0 ? i + 1 >= accent && (i + 1 - accent) % accentEvery === 0 : i + 1 === accent);
+  const accentRGB = hex(param<string>(e, 'accentColor')), accentWidth = Math.max(0.25, Number(param<number>(e, 'accentWidth')) / 100 || 1);
+  const picture = paint === 'picture' ? outlinePicture(param<string>(e, 'picture'), Math.max(0.05, Number(param<number>(e, 'pictureSize')) / 100 || 1)) : null;
   const phase = (Number(param<number>(e, 'cycle')) || 0) * (frame / Math.max(1, fps)) - (Number(param<number>(e, 'shift')) || 0);
   // the lines: their start and end along the distance, outward from the edge
   const page = Math.max(w, h) - 2 * pad, cap = Math.min(OUTLINE_MAX_REACH, outlineReach(e), page * 0.25 + width);
   const bands: { from: number; to: number; i: number }[] = [];
   let at = position === 'centre' ? -width / 2 : 0;
   for (let i = 0; i < count; i++) {
-    const lw = width * (1 - (count > 1 ? (taper * i) / (count - 1) : 0));
+    const lw = width * (1 - (count > 1 ? (taper * i) / (count - 1) : 0)) * (isAccent(i) ? accentWidth : 1);
     if (lw <= 0 || at >= cap) break;
     bands.push({ from: at, to: Math.min(cap, at + lw), i });
     at += lw + gap;
@@ -159,7 +182,13 @@ export function outlineEffect(c: HTMLCanvasElement, e: LayerEffect, frame: numbe
       if (cover <= 0) break;
       const idx = b.i - phase, n = colours.length;
       let col: RGB;
-      if (paint === 'gradient' && n > 1) {
+      if (isAccent(b.i)) col = accentRGB;
+      else if (picture) {
+        // the picture, tiled across the lines at its size
+        const px = ((Math.floor(x / picture.k) % picture.w) + picture.w) % picture.w, py = ((Math.floor(y / picture.k) % picture.h) + picture.h) % picture.h, q = (py * picture.w + px) * 4;
+        col = [picture.data[q]!, picture.data[q + 1]!, picture.data[q + 2]!];
+        cover *= picture.data[q + 3]! / 255;
+      } else if (paint === 'gradient' && n > 1) {
         const t = ((idx % n) + n) % n, i0 = Math.floor(t), f = t - i0, a = colours[i0]!, bb = colours[(i0 + 1) % n]!;
         col = [a[0] + (bb[0] - a[0]) * f, a[1] + (bb[1] - a[1]) * f, a[2] + (bb[2] - a[2]) * f];
       } else col = colours[(((Math.floor(idx + 1e-9)) % n) + n) % n]!;

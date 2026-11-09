@@ -1,6 +1,6 @@
 import { GraphUI } from './ui/graph';
-import { setEffectCacheBudget, setSoundPreload, setSoundSource } from './view/effects';
-import { preloadShotSounds, shotSoundSource } from './ui/soundsource';
+import { setEffectCacheBudget, setOutlinePictureSource, setSoundPreload, setSoundSource } from './view/effects';
+import { assetPicture, preloadShotSounds, shotSoundSource } from './ui/soundsource';
 import { setCaptionFontHooks } from './view/captionfonts';
 import { CaptionEditor } from './ui/captioneditor';
 import { PaintingWorkspaceUI } from './ui/paintingworkspace';
@@ -415,6 +415,7 @@ const audioPlayback = new AudioPlayback(app);
 // Sound wave effects read the shot's mixed sound
 setSoundSource(shotSoundSource(app, audioPlayback.bank));
 setSoundPreload(() => preloadShotSounds(app, audioPlayback.bank));
+setOutlinePictureSource(assetPicture(app));
 motion.set(m => { m.sounds = audioPlayback.bank; });
 const audioTracks = new AudioTracks(app, audioPlayback, $('.stage-col'));
 // In the tracks sheet, sounds are rows under the layers; their settings open in a floating card.

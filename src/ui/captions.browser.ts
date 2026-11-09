@@ -654,6 +654,54 @@ await check('Under-fill, Ink start, joined balloons and per-word styling', async
   }
 });
 
+await check('Sound effects on a path: an arc lifts the middle letters; Draw path follows a drawn line; Straight goes back', async () => {
+  app.setWorkspace('draw'); app.setLettering(true); app.setFrame(10); editor.close();
+  const hidden = app.project.comp.layers.filter(x => x.kind === 'drawings' && x.caption && x.visible);
+  for (const x of hidden) x.visible = false;
+  let id = '';
+  try {
+    id = app.letters.createInFreeSpot('sfx')!;
+    app.editor.edit('sfx words', cc => { const l = cc.layers.find(x => x.id === id); if (l?.kind === 'drawings' && l.caption) l.caption = { ...l.caption, text: 'KABOOOOM', x: 320, y: 180 }; });
+    await captionFontsReady(app.project);
+    // where the letters are: the top of the ink in a narrow column at the first letter, the middle and the last letter
+    const tops = () => {
+      render(10);
+      const d = lg.getImageData(0, 0, 640, 360).data, half = captionLayout(cap(id), 0, 640, 360).fit.lines[0]!.width / 2;
+      return [320 - half + 6, 320, 320 + half - 6].map(cx => { for (let y = 0; y < 360; y++) for (let x = Math.round(cx) - 2; x <= Math.round(cx) + 2; x++) if (d[(y * 640 + x) * 4 + 3]! > 200) return y; return 999; });
+    };
+    const flat = tops();
+    expect(Math.abs(flat[0]! - flat[1]!) < 4, 'straight letters are not level: ' + flat);
+    app.letters.onEdit!(id, false);
+    const pathChip = (name: string) => [...dialog()!.querySelectorAll<HTMLButtonElement>('[role=radiogroup][aria-label="Text path"] button')].find(b => b.textContent?.includes(name))!;
+    pathChip('Arc').click(); await wait();
+    expect(cap(id).curve?.kind === 'arc' && app.history.peekUndo()?.label === 'Letters on an arc', 'Arc not applied');
+    const arc = tops();
+    expect(arc[1]! < arc[0]! - 8 && arc[1]! < arc[2]! - 8, 'the arc does not lift the middle letters: ' + arc);
+    // Draw path: a line drawn on the canvas, falling to the right
+    button('Draw path').click();
+    expect(app.letters.pathTarget === id, 'Draw path did not arm');
+    const line = Array.from({ length: 30 }, (_, i) => ({ x: 200 + i * 8, y: 120 + i * 4 }));
+    stroke(line);
+    const c = cap(id);
+    expect(c.curve?.kind === 'drawn' && Math.abs(c.x - 316) < 4 && Math.abs(c.y - 178) < 4 && app.history.peekUndo()?.label === 'Draw text path', 'the drawn line did not become the path: ' + JSON.stringify({ x: c.x, y: c.y, kind: c.curve?.kind }));
+    // the letters now fall to the right: the first third sits higher than the last
+    render(10);
+    const d = lg.getImageData(0, 0, 640, 360).data, inkAt = (x0: number) => { for (let y = 0; y < 360; y++) for (let x = x0 - 6; x < x0 + 6; x++) if (d[(y * 640 + x) * 4 + 3]! > 200) return y; return 999; };
+    expect(inkAt(292) < inkAt(340) - 12 && inkAt(340) < 999, `letters do not follow the drawn line: ${inkAt(292)} vs ${inkAt(340)}`);
+    // the caption's area follows the path: a press on a letter selects and moves it
+    const h = app.letters.handles(app.project.comp.layers.find(x => x.id === id) as Extract<ReturnType<typeof app.project.comp.layers.find>, { kind: 'drawings' }>)!;
+    expect(inside(h.outline, { x: 316, y: 178 }), 'the caption’s area does not follow its path');
+    await wait();
+    pathChip('Straight').click(); await wait();
+    expect(!cap(id).curve, 'Straight did not go back');
+    footer('Apply').click();
+  } finally {
+    editor.close();
+    if (id) app.editor.edit('Remove sfx test', cc => { cc.layers = cc.layers.filter(x => x.id !== id); });
+    for (const x of hidden) { const live = app.project.comp.layers.find(y => y.id === x.id); if (live) live.visible = true; }
+  }
+});
+
 await check('Motion shows the caption settings as rows, ready to key', () => {
   const l = app.project.comp.layers.find(x => x.id === first)!;
   const rows = app.editor.rowsOf(l).filter(r => r.startsWith('cap:'));

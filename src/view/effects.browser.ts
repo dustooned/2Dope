@@ -5,7 +5,7 @@ import { drawingsLayer } from '../core/comp';
 import { Project, planeCanvas } from '../core/project';
 import { EffectsPanel } from '../ui/effectspanel';
 import { drawComp, drawEditingLayer, releaseScratch } from './composite';
-import { drawEffected, setSoundSource } from './effects';
+import { drawEffected, setOutlinePictureSource, setSoundSource } from './effects';
 
 /** The effects you can add: they sit on the card's "+ Add effect" tab. */
 function addButtons(root: HTMLElement): HTMLButtonElement[] {
@@ -471,6 +471,39 @@ for (const [label, effect] of [['none', null], ['Roughen edges 3 (default)', fx(
     const c = (px: Uint8ClampedArray, d: number) => ringAt(px, d).slice(0, 4).join(',');
     const want0 = [c(f0, 14), c(f0, 17), c(f0, 20), c(f0, 26)], want24 = c(f24, 14);
     return (want0[0] === '255,0,0,255' && ringAt(f0, 17)[3] === 0 && want0[2] === '0,255,0,255' && want0[3] === '0,0,255,255' && want24 === '255,255,0,255') || JSON.stringify({ want0, want24 });
+  });
+  check('Outline: one line (or every Nth) can have its own colour and width', () => {
+    // lines are 4 px with 2 px gaps: line 1 at 12–16, line 2 at 18–22, line 3 at 24–28 from the centre
+    const e = fx('outline', { amount: 4, params: { count: 3, gap: 2, color: '#0000ff', accent: 2, accentColor: '#00ff00', accentWidth: 100 } });
+    const px = run([e], disc), one = ringAt(px, 14), two = ringAt(px, 20), three = ringAt(px, 26);
+    const wide = run([fx('outline', { amount: 4, params: { count: 2, gap: 2, color: '#0000ff', accent: 2, accentColor: '#00ff00', accentWidth: 200 } })], disc);
+    return (one[2]! > 200 && two[1]! > 200 && two[2]! < 60 && three[2]! > 200 && ringAt(wide, 24)[1]! > 200 && ringAt(px, 24)[1]! < 60) || JSON.stringify({ one, two, three, wide24: ringAt(wide, 24) });
+  });
+  check('Outline Picture paint takes its colours from an Asset picture', () => {
+    const pic = document.createElement('canvas'); pic.width = pic.height = 8;
+    const pg = pic.getContext('2d')!; pg.fillStyle = '#ff00ff'; pg.fillRect(0, 0, 8, 8);
+    setOutlinePictureSource(id => (id === 'asset1' ? pic : null));
+    const px = run([fx('outline', { amount: 4, params: { paint: 'picture', picture: 'asset1', color: '#0000ff' } })], disc);
+    const none = run([fx('outline', { amount: 4, params: { paint: 'picture', picture: '', color: '#0000ff' } })], disc);
+    setOutlinePictureSource(() => null);
+    const ring = ringAt(px, 14);
+    return (ring.slice(0, 3).join(',') === '255,0,255' && ring[3] === 255 && ringAt(none, 14)[2]! > 200) || JSON.stringify({ ring, none: ringAt(none, 14) });
+  });
+  check('Outline Trail: a moving drawing leaves outlines of where it was, in the next colours', () => {
+    const p = new Project(64, 64), l = p.layer;
+    p.comp.duration = 12;
+    l.exposures = [{ drawing: l.exposures[0]!.drawing, length: 12 }];
+    const d = p.drawing(l.exposures[0]!.drawing!), g = d.line.getContext('2d')!; g.fillStyle = 'rgb(220,40,40)'; g.beginPath(); g.arc(16, 32, 6, 0, Math.PI * 2); g.fill(); d.rev++;
+    // it moves right 10 px a frame
+    l.transform.position = { value: [32, 32], keys: [{ f: 0, v: [32, 32], in: { interp: 'linear' }, out: { interp: 'linear' } }, { f: 10, v: [132, 32], in: { interp: 'linear' }, out: { interp: 'linear' } }] } as typeof l.transform.position;
+    l.effects = [fx('outline', { amount: 3, params: { mode: 'trail', count: 3, every: 1, palette: 'custom', color: '#0000ff', color2: '#00ff00', color3: '#ffff00', color4: '#ff00ff' } })];
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const cg = c.getContext('2d', { willReadFrequently: true })!;
+    drawComp(cg, p, p.comp, 3, { export: true });
+    const px = cg.getImageData(0, 0, 64, 64).data, A = (x: number, y: number) => [...px.slice((y * 64 + x) * 4, (y * 64 + x) * 4 + 4)];
+    // now at x 46: blue ring 6–9 px out; one frame back at 36: green; two back at 26: yellow; no art behind
+    const now = A(46 + 8, 32), one = A(36, 32 - 8), two = A(26, 32 - 8), art = A(46, 32), oldArt = A(26, 32);
+    return (now[2]! > 200 && now[0]! < 60 && one[1]! > 200 && one[0]! < 60 && two[0]! > 200 && two[1]! > 200 && art[0]! > 200 && oldArt[3]! === 0) || JSON.stringify({ now, one, two, art, oldArt });
   });
   check('Outline Inside sits within the art and Outline only hides the art', () => {
     const inside = run([fx('outline', { amount: 4, params: { position: 'inside', color: '#0000ff' } })], disc);

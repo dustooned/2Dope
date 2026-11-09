@@ -724,10 +724,14 @@ const cap = l.kind === 'drawings' && l.caption ? captionSignature(captionAtFrame
     const present = describe(l, frame, temporal);
     if (present) parts.push(present);
     if (!temporal || l.adjust) continue;
-    const { echoes, poses } = temporalSamples(l, frame);
+    const { echoes, poses, trails } = temporalSamples(l, frame);
     for (const sample of echoes) {
       const past = describe(l, sample.frame, false);
       if (past) parts.push(`echo:${sample.alpha}:${past}`);
+    }
+    for (const t of trails) {
+      const past = describe(l, t.frame, false);
+      if (past) parts.push(`trail:${t.index}:${t.alpha}:${past}`);
     }
     if (poses.length) parts.push(`shutter:${poses.map(f => round(worldMatrix(c, l, f))).join('/')}`);
   }

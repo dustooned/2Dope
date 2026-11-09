@@ -75,3 +75,36 @@ describe('reading a drawn balloon', () => {
     expect(readBalloon([{ x: 0, y: 0 }, { x: 50, y: 5 }, { x: 100, y: 0 }, { x: 150, y: 8 }, { x: 200, y: 0 }, { x: 250, y: 4 }, { x: 300, y: 0 }, { x: 350, y: 2 }])).toBeNull();
   });
 });
+
+import { alongPath, pathBand, pathLength, textPath } from './geometry';
+import { readCurve } from './spec';
+
+describe('sound effects on a path', () => {
+  it('makes an arc and a wave to the words’ length, centred, bending the way asked', () => {
+    const up = textPath({ kind: 'arc', bend: 0.8 }, 300, 30), down = textPath({ kind: 'arc', bend: -0.8 }, 300, 30);
+    const mid = (p: Pt[]) => p[Math.floor(p.length / 2)]!;
+    expect(up[0]!.x).toBeCloseTo(-156, 0); expect(up.at(-1)!.x).toBeCloseTo(156, 0);
+    // bending up: the middle is higher (smaller y) than the ends, and the whole is centred on the caption
+    expect(mid(up).y).toBeLessThan(up[0]!.y - 50);
+    expect(mid(down).y).toBeGreaterThan(down[0]!.y + 50);
+    expect(Math.abs((Math.min(...up.map(p => p.y)) + Math.max(...up.map(p => p.y))) / 2)).toBeLessThan(2);
+    const wave = textPath({ kind: 'wave', bend: 1 }, 300, 30);
+    expect(Math.max(...wave.map(p => p.y)) - Math.min(...wave.map(p => p.y))).toBeGreaterThan(60);
+  });
+  it('finds points and directions along a path, carrying on straight past its ends', () => {
+    const p: Pt[] = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }];
+    expect(pathLength(p)).toBe(20);
+    expect(alongPath(p, 5)).toMatchObject({ x: 5, y: 0, angle: 0 });
+    const turn = alongPath(p, 15);
+    expect(turn.x).toBe(10); expect(turn.y).toBe(5); expect(turn.angle).toBeCloseTo(Math.PI / 2, 6);
+    expect(alongPath(p, -4)).toMatchObject({ x: -4, y: 0 });
+    expect(alongPath(p, 26).y).toBeCloseTo(16, 6);
+    expect(pathBand(p, 3)).toHaveLength(6);
+  });
+  it('reads text paths back safely', () => {
+    expect(readCurve({ kind: 'arc', bend: 5 })).toEqual({ kind: 'arc', bend: 1 });
+    expect(readCurve({ kind: 'drawn', points: [[0, 0], [10, 5]] })).toEqual({ kind: 'drawn', points: [[0, 0], [10, 5]] });
+    expect(readCurve({ kind: 'drawn', points: [[0, 0]] })).toBeNull();
+    expect(readCurve({ kind: 'spiral', bend: 1 })).toBeNull();
+  });
+});

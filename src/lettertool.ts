@@ -58,6 +58,8 @@ export class LetterTool {
   transforming: string | null = null;
   /** A caption whose balloon the next closed loop redraws (Draw shape in the Caption panel). */
   shapeTarget: string | null = null;
+  /** A sound effect whose letters the next stroke becomes the path of (Draw path in the Caption panel). */
+  pathTarget: string | null = null;
   /** A caption whose custom shape shows reshape handles (Edit shape in the Caption panel). */
   shapeEditing: string | null = null;
   /** How many reshape handles a custom balloon shows. */
@@ -135,6 +137,13 @@ export class LetterTool {
   }
 
   /** Draw shape: the next closed loop becomes this caption's balloon shape. */
+  /** Draw path: the next line drawn on the canvas becomes this sound effect's text path. */
+  armPath(layerId: string | null): void {
+    this.pathTarget = layerId;
+    if (layerId) { this.app.setLettering(true); this.app.onNotice?.('Draw the path for the letters: one line, from where the word starts to where it ends.'); }
+    this.app.requestRender();
+  }
+
   armShape(layerId: string | null): void {
     this.shapeTarget = layerId;
     if (layerId) { this.app.setLettering(true); this.app.onNotice?.('Draw the balloon’s new shape as one closed loop. It will stretch to fit the words.'); }
@@ -145,7 +154,7 @@ export class LetterTool {
     if (pointer === 'touch' || pointer === 'pen' || pointer === 'mouse') this.pointerKind = pointer;
     const app = this.app, zoom = app.view.zoom, near = this.reach / zoom;
     // drawing a new shape for a caption: every stroke is that drawing
-    if (this.shapeTarget) { this.drag = { id, kind: 'stroke', points: [stage] }; return; }
+    if (this.shapeTarget || this.pathTarget) { this.drag = { id, kind: 'stroke', points: [stage] }; return; }
     // the selected caption's handles come first
     const active = app.project.comp.layers.find(x => x.id === app.project.activeLayer);
     // the Transform box: corners scale, the top handle turns, inside moves; a press outside ends it
@@ -330,6 +339,22 @@ export class LetterTool {
     const pts = d.points, zoom = app.view.zoom;
     let travel = 0;
     for (let i = 1; i < pts.length; i++) travel += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+    const along = this.pathTarget;
+    if (along) {
+      // Draw path: the line becomes the letters' path, the caption centred on it
+      if (travel * zoom < 24) { app.onNotice?.('Draw a longer line for the letters to follow. Esc stops.'); return; }
+      this.pathTarget = null;
+      const owner = app.project.comp.layers.find(x => x.id === along);
+      const inv = owner?.kind === 'drawings' ? invert(app.editor.matrixOf(owner)) : null;
+      if (!inv || owner?.kind !== 'drawings') return;
+      const local = pts.map(p => { const [x, y] = apply(inv, [p.x, p.y]); return { x, y }; });
+      // even spacing, at most 60 points
+      const step = Math.max(1, Math.ceil(local.length / 60)), kept = local.filter((_, i) => i % step === 0 || i === local.length - 1);
+      const xs = kept.map(p => p.x), ys = kept.map(p => p.y), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const points = kept.map(p => [Math.round((p.x - cx) * 10) / 10, Math.round((p.y - cy) * 10) / 10] as [number, number]);
+      app.editor.edit('Draw text path', cc => { const x = cc.layers.find(y => y.id === along); if (x?.kind === 'drawings' && x.caption) x.caption = { ...x.caption, x: cx, y: cy, curve: { kind: 'drawn', points } }; });
+      return;
+    }
     const target = this.shapeTarget;
     if (target) {
       // Draw shape: a closed loop becomes the target caption's balloon (anything else is ignored)

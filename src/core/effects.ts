@@ -56,7 +56,9 @@ export type ExtraDef =
   | { key: string; label: string; kind: 'range'; min: number; max: number; step: number; unit: string; def: number }
   | { key: string; label: string; kind: 'choice'; options: { id: string; label: string }[]; def: string }
   | { key: string; label: string; kind: 'color'; def: string }
-  | { key: string; label: string; kind: 'toggle'; def: boolean };
+  | { key: string; label: string; kind: 'toggle'; def: boolean }
+  /** One of the project's Assets (its first frame), by its comp id; '' = none. */
+  | { key: string; label: string; kind: 'asset'; def: string };
 
 export const TEXTURE_STYLES: { id: TextureStyle; label: string }[] = [
   { id: 'paper', label: 'Paper' },
@@ -194,7 +196,9 @@ export const EFFECT_TYPES: EffectDef[] = [
     extras: [
       { key: 'color', label: 'Colour', kind: 'color', def: '#000000' },
       { key: 'position', label: 'Position', kind: 'choice', options: [{ id: 'outside', label: 'Outside' }, { id: 'centre', label: 'Centre' }, { id: 'inside', label: 'Inside' }], def: 'outside' },
+      { key: 'mode', label: 'Mode', kind: 'choice', options: [{ id: 'around', label: 'Around' }, { id: 'trail', label: 'Trail' }], def: 'around' },
       { key: 'count', label: 'Lines', kind: 'range', min: 1, max: 24, step: 1, unit: '', def: 1 },
+      { key: 'every', label: 'Trail spacing', kind: 'range', min: 1, max: 12, step: 1, unit: ' frames', def: 2 },
       { key: 'gap', label: 'Gap', kind: 'range', min: 0, max: 60, step: 1, unit: ' px', def: 4 },
       { key: 'taper', label: 'Taper', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
       { key: 'fade', label: 'Fade out', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
@@ -204,14 +208,20 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'color4', label: 'Colour 4', kind: 'color', def: '#e24b4a' },
       { key: 'cycle', label: 'Cycle', kind: 'range', min: -20, max: 20, step: 0.5, unit: ' lines/s', def: 0 },
       { key: 'shift', label: 'Colour offset', kind: 'range', min: 0, max: 24, step: 0.1, unit: '', def: 0 },
-      { key: 'paint', label: 'Paint', kind: 'choice', options: [{ id: 'solid', label: 'Solid' }, { id: 'gradient', label: 'Gradient' }, { id: 'hatch', label: 'Hatch' }, { id: 'dots', label: 'Dots' }, { id: 'weave', label: 'Canvas' }], def: 'solid' },
+      { key: 'paint', label: 'Paint', kind: 'choice', options: [{ id: 'solid', label: 'Solid' }, { id: 'gradient', label: 'Gradient' }, { id: 'hatch', label: 'Hatch' }, { id: 'dots', label: 'Dots' }, { id: 'weave', label: 'Canvas' }, { id: 'picture', label: 'Picture' }], def: 'solid' },
       { key: 'paintScale', label: 'Paint size', kind: 'range', min: 2, max: 64, step: 1, unit: ' px', def: 6 },
+      { key: 'picture', label: 'Picture', kind: 'asset', def: '' },
+      { key: 'pictureSize', label: 'Picture size', kind: 'range', min: 5, max: 400, step: 5, unit: '%', def: 100 },
+      { key: 'accent', label: 'Line to change', kind: 'range', min: 0, max: 24, step: 1, unit: '', def: 0 },
+      { key: 'accentEvery', label: 'Repeat every', kind: 'range', min: 0, max: 12, step: 1, unit: ' lines', def: 0 },
+      { key: 'accentColor', label: 'Its colour', kind: 'color', def: '#ffd23f' },
+      { key: 'accentWidth', label: 'Its width', kind: 'range', min: 25, max: 400, step: 5, unit: '%', def: 100 },
       { key: 'corners', label: 'Corners', kind: 'choice', options: [{ id: 'round', label: 'Round' }, { id: 'square', label: 'Square' }], def: 'round' },
       { key: 'blend', label: 'Blend', kind: 'choice', options: [{ id: 'normal', label: 'Normal' }, { id: 'add', label: 'Add' }, { id: 'screen', label: 'Screen' }, { id: 'multiply', label: 'Multiply' }], def: 'normal' },
       { key: 'only', label: 'Outline only', kind: 'toggle', def: false },
     ],
     pad: (e) => outlineReach(e) + e.size + 2,
-    frameDependent: (e) => Number(param<number>(e, 'cycle')) !== 0 && (Math.round(Number(param<number>(e, 'count'))) > 1 || param<string>(e, 'palette') !== 'one') },
+    frameDependent: (e) => Number(param<number>(e, 'cycle')) !== 0 && (Math.round(Number(param<number>(e, 'count'))) > 1 || param<string>(e, 'palette') !== 'one' || param<string>(e, 'mode') === 'trail') },
   { id: 'blinds', label: 'Venetian blinds', hint: 'Slats close across the layer to hide it or open to reveal it (Venetian blinds)', target: 'layer', amount: 0, size: 30, hold: 1, amountRange: [0, 100], sizeRange: [2, 400], amountLabel: 'Completion', sizeLabel: 'Slat width', amountUnit: '%', sizeUnit: ' px', animated: false, seeded: true,
     extras: [
       { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 1, unit: '°', def: 0 },
@@ -271,7 +281,11 @@ export const OUTLINE_MAX_REACH = 480;
 export function outlineReach(e: LayerEffect): number {
   const count = Math.max(1, Math.round(Number(param<number>(e, 'count')) || 1));
   const w = Math.max(0, e.amount), gap = Math.max(0, Number(param<number>(e, 'gap')) || 0);
-  return Math.min(OUTLINE_MAX_REACH, count * w + (count - 1) * gap);
+  // a changed line that is wider adds its extra width (counted once per line it applies to)
+  const accent = Math.round(Number(param<number>(e, 'accent')) || 0), every = Math.round(Number(param<number>(e, 'accentEvery')) || 0);
+  const k = Math.max(1, Number(param<number>(e, 'accentWidth')) / 100 || 1);
+  const changed = accent > 0 && accent <= count ? (every > 0 ? Math.floor((count - accent) / every) + 1 : 1) : 0;
+  return Math.min(OUTLINE_MAX_REACH, count * w + (count - 1) * gap + changed * w * (k - 1));
 }
 
 export const EFFECT_LIMITS = { hold: [1, 8] as const };
@@ -362,6 +376,7 @@ function readParams(def: EffectDef, v: unknown): Record<string, number | string 
     else if (x.kind === 'choice' && typeof y === 'string' && x.options.some((o) => o.id === y)) out[x.key] = y;
     else if (x.kind === 'color' && typeof y === 'string' && /^#[0-9a-f]{6}$/i.test(y)) out[x.key] = y;
     else if (x.kind === 'toggle' && typeof y === 'boolean') out[x.key] = y;
+    else if (x.kind === 'asset' && typeof y === 'string' && /^[A-Za-z0-9_:-]{0,80}$/.test(y)) out[x.key] = y;
   }
   return Object.keys(out).length ? out : undefined;
 }
@@ -456,6 +471,11 @@ export function temporalEffect(type: EffectType): boolean {
   return type === 'echo' || type === 'motionblur';
 }
 
+/** An Outline in Trail mode: outlines of earlier frames are drawn behind the current one. */
+export function outlineTrail(e: LayerEffect): boolean {
+  return e.type === 'outline' && param<string>(e, 'mode') === 'trail';
+}
+
 /** One effect of each kind keeps temporal work bounded even when past drawings contain clips. */
 export function temporalSamples(l: { id: string; in: number; start: number; effects?: LayerEffect[] }, frame: number) {
   const effects = activeEffects(l);
@@ -463,6 +483,20 @@ export function temporalSamples(l: { id: string; in: number; start: number; effe
   const blur = effects.find(e => e.type === 'motionblur');
   const echoes: { frame: number; alpha: number }[] = [];
   const poses: number[] = [];
+  // Outline Trail: earlier frames, oldest first, each drawn as its outline in the next colour
+  const trails: { frame: number; index: number; alpha: number; effect: LayerEffect }[] = [];
+  const trail = effects.find(outlineTrail);
+  if (trail) {
+    const e = effectAt(trail, frame - l.start), n = Math.max(1, Math.min(24, Math.round(Number(param<number>(e, 'count')) || 1)));
+    const every = Math.max(1, Math.round(Number(param<number>(e, 'every')) || 1)), fade = Math.max(0, Math.min(1, Number(param<number>(e, 'fade')) / 100));
+    for (let i = n - 1; i > 0; i--) {
+      const at = frame - every * i;
+      if (at < Math.max(0, l.in)) continue;
+      // a copy of the effect for that earlier frame: one line, its own colour, outline only
+      const copy: LayerEffect = { ...trail, params: { ...trail.params, mode: 'around', count: 1, only: true, shift: (Number(param<number>(e, 'shift')) || 0) + i } };
+      trails.push({ frame: at, index: i, alpha: 1 - fade * (i / Math.max(1, n - 1)), effect: copy });
+    }
+  }
   if (echo) {
     const e = effectAt(echo, frame - l.start);
     const spacing = Math.round(param<number>(e, 'spacing'));
@@ -478,7 +512,7 @@ export function temporalSamples(l: { id: string; in: number; start: number; effe
       poses.push(Math.max(0, l.in, frame - (e.amount / 100) * i / (count - 1)));
     }
   }
-  return { echoes, poses };
+  return { echoes, poses, trails };
 }
 
 /** A short signature of what effects do at a frame (frame keys, caches). */

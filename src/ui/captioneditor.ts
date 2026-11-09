@@ -55,7 +55,7 @@ export class CaptionEditor {
     this.panel.remove();
     this.panel = null; this.preview = null; this.base = null;
     // shape drawing and editing belong to the panel's caption
-    this.app.letters.shapeTarget = null; this.app.letters.shapeEditing = null;
+    this.app.letters.shapeTarget = null; this.app.letters.shapeEditing = null; this.app.letters.pathTarget = null;
     this.app.requestRender();
   }
 
@@ -301,6 +301,25 @@ export class CaptionEditor {
     const fine = slider(letters, 'Letter size', 50, 300, 5, Math.round((c.scale ?? 1) * 100), '%', v => ({ ...this.cur, scale: v / 100 }), v => change('Change letter size', { scale: v === 100 ? undefined : v / 100 }));
     fine.title = `${px(c.scale ?? 1)} px letters at this picture size`;
     chips<LetterAlign>(letters, 'Align', [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], c.align, v => change('Align caption', { align: v }));
+    if (c.style === 'sfx') {
+      // a sound effect's letters can follow an arc, a wave or a line you draw
+      const kind = c.curve?.kind ?? 'straight';
+      chips<'straight' | 'arc' | 'wave' | 'drawn'>(letters, 'Text path', [['straight', 'Straight'], ['arc', 'Arc'], ['wave', 'Wave'], ...(kind === 'drawn' ? [['drawn', 'Drawn'] as ['drawn', string]] : [])], kind, v => {
+        if (v === kind) return;
+        const { curve: _c, ...rest } = this.base!;
+        if (v === 'straight') this.commit('Straight lettering', rest);
+        else if (v === 'arc' || v === 'wave') this.commit(v === 'arc' ? 'Letters on an arc' : 'Letters on a wave', { ...rest, curve: { kind: v, bend: v === 'arc' ? 0.6 : 0.6 } });
+      });
+      if (c.curve && c.curve.kind !== 'drawn') {
+        const bendNow = Math.round(c.curve.bend * 100);
+        slider(letters, 'Bend', -100, 100, 5, bendNow, '%', v => ({ ...this.cur, curve: { kind: (this.cur.curve as { kind: 'arc' | 'wave' }).kind, bend: v / 100 } }), v => change('Bend the letters', { curve: { kind: (this.base!.curve as { kind: 'arc' | 'wave' }).kind, bend: v / 100 } }));
+      }
+      const drawPath = el('button', { type: 'button', 'aria-pressed': String(app.letters.pathTarget === this.layerId), title: 'Draw a line on the canvas: the letters follow it (Esc stops)' }, 'Draw path');
+      drawPath.addEventListener('click', () => { app.letters.armPath(app.letters.pathTarget === this.layerId ? null : this.layerId); this.build(); });
+      const pathRow = el('div', { class: 'cap-chips' });
+      pathRow.append(drawPath);
+      row(letters, '', pathRow);
+    }
     const toggles = el('div', { class: 'cap-chips' });
     for (const [key, label] of [['bold', 'Bold'], ['italic', 'Italic'], ['caps', 'ALL CAPS']] as const) {
       const b = el('button', { type: 'button', 'aria-pressed': String(c[key]) }, label);
@@ -594,6 +613,7 @@ export class CaptionEditor {
 /** The Caption panel's controls and their icons (by label). */
 const PANEL_ICONS: Record<string, string> = {
   Done: 'check', 'Import font…': 'import', 'Fit to words': 'fit',
+  'Draw path': 'drawShape', Straight: 'alignCenter', Arc: 'lookClassic', Wave: 'tailLightning', Drawn: 'editpoints',
   'Bold words': 'bold', 'Italic words': 'italic', 'Colour words': 'palette', '+ Joined balloon': 'plus', Remove: 'trash',
   Small: 'sizeSmall', Body: 'sizeBody', Big: 'sizeBig', Left: 'alignLeft', Centre: 'alignCenter', Right: 'alignRight',
   Bold: 'bold', Italic: 'italic', 'ALL CAPS': 'caps',

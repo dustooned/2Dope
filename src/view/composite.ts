@@ -396,15 +396,20 @@ function applyAdjustment(page: HTMLCanvasElement, l: DrawingsLayer, frame: numbe
 function drawTimedLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: Layer, frame: number, base: DOMMatrix, alpha: number, planes: Planes, opt: CompositeOptions, depth: number, view: Mat = IDENTITY): void {
   const now = worldMatrix(c, l, frame);
   if (!l.adjust && opt.temporal !== false && (opt.export || fxPreview !== 'off')) {
-    const { echoes, poses } = temporalSamples(l, frame);
+    const { echoes, poses, trails } = temporalSamples(l, frame);
     const motion = poses.map(at => worldMatrix(c, l, at));
     const blur = motion.some(pose => pose.some((n, i) => Math.abs(n - now[i]!) > 1e-7));
-    if (echoes.length || blur) {
+    if (echoes.length || blur || trails.length) {
       const scale = opt.export ? 1 : fxPreviewScale();
       const w = Math.max(1, Math.round(c.width * scale)), h = Math.max(1, Math.round(c.height * scale));
       const plate = fresh(`temporal${depth}`, w, h);
       const plateBase = new DOMMatrix().scale(w / c.width, h / c.height).multiply(toDom(view));
       const layer = plain(l), previous: CompositeOptions = { ...opt, temporal: false };
+      // Outline Trail: each earlier frame as its outline alone (no art), oldest first
+      for (const t of trails) {
+        const pose = plateBase.multiply(toDom(worldMatrix(c, l, t.frame)));
+        drawLayer(plate, project, c, { ...layer, effects: [t.effect] } as Layer, t.frame, pose, t.alpha, planes, previous, depth);
+      }
       for (const sample of echoes) {
         const pose = plateBase.multiply(toDom(worldMatrix(c, l, sample.frame)));
         drawLayer(plate, project, c, layer, sample.frame, pose, sample.alpha, planes, previous, depth);
