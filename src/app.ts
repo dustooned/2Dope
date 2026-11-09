@@ -640,6 +640,13 @@ export class App {
     const c = this.project.comp, l = c.layers.find(x => x.id === id);
     if (l?.kind !== 'drawings' || !l.caption || l.locked || this.strokeActive || this.playing) return false;
     const caption = l.caption;
+    // an animated caption becomes still shapes: say so first (its keys and moving letters stop)
+    const keyed = Object.values(caption.keys ?? {}).some(t => t && t.keys.length);
+    const moving = (['shake', 'wave', 'jitter'] as const).some(k => (caption.values?.[k] ?? 0) > 0);
+    if (keyed || moving) {
+      const { confirmBox } = await import('./ui/dialogs');
+      if (!(await confirmBox('Convert an animated caption?', `“${l.name}” animates (${[keyed ? 'keyframes' : '', moving ? 'moving letters' : ''].filter(Boolean).join(' and ')}). As vector shapes it keeps how it looks at this frame and stops animating. Undo brings the live caption back.`, 'Convert'))) return false;
+    }
     const [{ captionSvg }, { importVectorDocument }] = await Promise.all([import('./io/captionsvg'), import('./io/vectorimport')]);
     const text = await captionSvg(this.project, caption, this.frame - l.start, { forVectors: true });
     const missing = Number(/data-missing-letters="(\d+)"/.exec(text)?.[1] ?? 0);
@@ -6621,6 +6628,13 @@ export class App {
       // on the canvas: the whole page with marching ants; Motion and Timing pick every frame
       if (this.workspace === 'motion' || this.timingOnly) this.selectAll();
       else this.selectCanvas();
+      return;
+    }
+    // Motion: Ctrl+] / Ctrl+[ move the selected layers up / down the stack; with Shift, to the top / bottom
+    if (mod && !e.altKey && (e.code === 'BracketRight' || e.code === 'BracketLeft') && this.workspace === 'motion' && this.editor.selected.length) {
+      e.preventDefault();
+      const up = e.code === 'BracketRight';
+      if (!this.editor.restack(this.editor.selected, e.shiftKey ? (up ? 'top' : 'bottom') : up ? 'up' : 'down')) this.onNotice?.(up ? 'Already at the top of the stack.' : 'Already at the bottom of the stack.');
       return;
     }
     // Motion: Ctrl+Shift+D splits the selected layers at the playhead

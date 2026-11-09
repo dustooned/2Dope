@@ -15,6 +15,26 @@ const n = (v: number) => (Math.round(v * 100) / 100).toString();
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const poly = (pts: Pt[], close = true) => pts.length ? `M${pts.map((p) => `${n(p.x)} ${n(p.y)}`).join('L')}${close ? 'Z' : ''}` : '';
 
+/** A closed outline cut into dashes (`on` drawn, `off` skipped), each an open piece: dashes as plain shapes. */
+function dashesOf(pts: Pt[], on: number, off: number): Pt[][] {
+  const out: Pt[][] = [], ring = [...pts, pts[0]!];
+  let cur: Pt[] = [ring[0]!], drawing = true, left = on;
+  for (let i = 1; i < ring.length; i++) {
+    let a = ring[i - 1]!;
+    const b = ring[i]!;
+    let d = Math.hypot(b.x - a.x, b.y - a.y);
+    while (d > left) {
+      const t = left / d, p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      if (drawing) { cur.push(p); out.push(cur); cur = []; } else cur = [p];
+      drawing = !drawing; d -= left; a = p; left = drawing ? on : off;
+    }
+    left -= d;
+    if (drawing) cur.push(b);
+  }
+  if (drawing && cur.length > 1) out.push(cur);
+  return out;
+}
+
 /**
  * The SVG text of a caption at a layer frame (fonts are loaded first). `forVectors` keeps to what
  * 2Dope's own vector import reads (no masks, dashes or group opacity), for Convert to vector lines:
@@ -41,7 +61,10 @@ export async function captionSvg(project: Project, c: CaptionSpec, frame: number
     const union = [shapes.outline, ...shapes.joined, ...links.flatMap((k) => [k.outline, k.neck])];
     const closed = [...union, ...shapes.seams];
     const g: string[] = [], op = each(balloonA);
-    const path = (pts: Pt[], attrs: string, close = true) => `<path${attrs}${op} d="${poly(pts, close)}"/>`;
+    const plain = (pts: Pt[], attrs: string, close = true) => `<path${attrs}${op} d="${poly(pts, close)}"/>`;
+    // a whisper's dashed ink, for vectors: each dash a piece of its own (the importer reads no dash patterns)
+    const whisper = vec && c.style === 'whisper';
+    const path = (pts: Pt[], attrs: string, close = true) => (whisper && close && attrs.includes('fill="none"') ? dashesOf(pts, size * 0.45, size * 0.3).map((d) => plain(d, attrs, false)).join('') : plain(pts, attrs, close));
     if (c.underFill) {
       const dx = c.underFill.dx * size, dy = c.underFill.dy * size;
       g.push(`<g fill="${esc(c.underFill.color)}" transform="translate(${n(dx)} ${n(dy)})">${closed.map((s) => path(s, '')).join('')}${shapes.bubbles.map((b) => `<circle cx="${n(b.x)}" cy="${n(b.y)}" r="${n(b.r)}"${op}/>`).join('')}</g>`);

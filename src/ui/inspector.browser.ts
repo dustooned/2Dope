@@ -152,6 +152,32 @@ await check('Each kind of layer has its own tab: Drawing parts, Timing, Caption 
   ed.select(id); await wait();
 });
 
+await check('Stack order: ▲ ▼ on the selected row, Ctrl+] / Ctrl+[ (Shift: top / bottom) and the Inspector, each one Undo step', async () => {
+  const order = () => ed.comp.layers.map(l => l.id);
+  ed.select(id); motion.update(); await wait();
+  ed.restack([id], 'bottom'); await wait();
+  const n = order().length;
+  expect(order()[n - 1] === id, 'not at the bottom');
+  app.history.clear();
+  const up = document.querySelector<HTMLButtonElement>(`.mrow.layer[data-layer="${id}"] .lorder [data-act=up]`);
+  expect(up && !up.disabled, 'no ▲ on the selected row');
+  up!.click(); await wait();
+  expect(order()[n - 2] === id && app.history.peekUndo()?.label === 'Bring forward', `▲ did not move it up one (${order().indexOf(id)})`);
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'BracketRight', key: ']', ctrlKey: true, shiftKey: true, bubbles: true }));
+  await wait();
+  expect(order()[0] === id, 'Ctrl+Shift+] did not bring it to the front');
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'BracketLeft', key: '[', ctrlKey: true, bubbles: true }));
+  await wait();
+  expect(order()[1] === id, 'Ctrl+[ did not send it back one');
+  await openTab('Layer');
+  const btn = (t: string) => [...panel().querySelectorAll<HTMLButtonElement>('.mi-order-btn')].find(b => b.textContent === t)!;
+  expect(panel().querySelector('.mi-order')?.textContent?.includes('2 of'), 'Inspector does not show the place in the stack');
+  btn('⤓').click(); await wait();
+  expect(order()[n - 1] === id, 'Inspector ⤓ did not send it to the back');
+  app.undo(); await wait();
+  expect(order()[1] === id, 'Undo did not put it back');
+});
+
 await check('Typing keeps its place; it hides outside Motion and closes with ✕', async () => {
   await openTab('Layer');
   const name = input('input.mi-text'); name.focus();

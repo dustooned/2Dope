@@ -715,6 +715,16 @@ export class MotionPanel {
       const pn = ed.layer(l.parent)?.name ?? '?';
       left.append(el('button', { type: 'button', class: 'lparent', title: `Parented to ${pn}. Tap to change.`, 'data-act': 'parent' }, `⤷ ${pn}`));
     }
+    // the selected layer: ▲ ▼ move it up or down the stack (Ctrl+] / Ctrl+[)
+    if (sel && !l.locked) {
+      const at = ed.comp.layers.indexOf(l), n = ed.comp.layers.length;
+      const order = el('span', { class: 'lorder', role: 'group', 'aria-label': `Stack order of ${l.name}` });
+      const up = el('button', { type: 'button', 'data-act': 'up', 'aria-label': `Bring ${l.name} forward`, title: 'Up the stack, in front of the layer above (Ctrl+]; Ctrl+Shift+] to the top)' }, '▲');
+      const down = el('button', { type: 'button', 'data-act': 'down', 'aria-label': `Send ${l.name} backward`, title: 'Down the stack, behind the layer below (Ctrl+[; Ctrl+Shift+[ to the bottom)' }, '▼');
+      up.disabled = at <= 0; down.disabled = at >= n - 1;
+      order.append(up, down);
+      left.append(order);
+    }
     left.append(eye, more);
 
     const right = el('div', { class: 'mright' });
@@ -1045,6 +1055,10 @@ export class MotionPanel {
       case 'more':
         await this.layerMenu(l);
         break;
+      case 'up':
+      case 'down':
+        ed.restack(this.orderIds(l), act.dataset.act as 'up' | 'down');
+        break;
       case 'parent':
         await this.pickParent(l);
         break;
@@ -1339,6 +1353,9 @@ export class MotionPanel {
     ];
   }
 
+  /** The layers a stack-order action moves: the selection when this layer is in it. */
+  private orderIds(l: Layer): string[] { return this.ed.selected.includes(l.id) ? this.ed.selected : [l.id]; }
+
   layerItems(l: Layer): CtxItem[] {
     const ed = this.ed;
     const asset = l.kind === 'comp' && this.app.project.comps.get(l.comp)?.asset;
@@ -1391,6 +1408,13 @@ export class MotionPanel {
       ...(l.kind === 'drawings' && l.title ? [{ label: 'Edit title…', run: () => this.app.editTitle?.(l.id) }, { label: 'Convert to paint…', run: () => this.app.convertTitle?.(l.id) }] : []),
       ...(!this.makeClip && this.createAsset ? [{ label: 'Create asset from selection…', disabled: this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() }] : []),
       ...(l.kind === 'drawings' && !l.adjust && !l.guide ? [{ label: 'Edit in Flipbook', run: () => this.app.openFlipbook?.(l.id) }] : []),
+      { title: 'Stack order' },
+      { chips: [
+        { label: '⤒ Front', title: 'Bring to front (Ctrl+Shift+])', run: () => ed.restack(this.orderIds(l), 'top') },
+        { label: '▲ Up', title: 'Bring forward (Ctrl+])', run: () => ed.restack(this.orderIds(l), 'up') },
+        { label: '▼ Down', title: 'Send backward (Ctrl+[)', run: () => ed.restack(this.orderIds(l), 'down') },
+        { label: '⤓ Back', title: 'Send to back (Ctrl+Shift+[)', run: () => ed.restack(this.orderIds(l), 'bottom') },
+      ] },
       { title: 'Organize' },
       { label: l.visible ? 'Hide' : 'Show', run: () => ed.setFlag(l.id, 'visible', !l.visible) },
       ...actions.filter(a => ['rename', 'dup', 'lock'].includes(a.value)).map(action),

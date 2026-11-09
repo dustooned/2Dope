@@ -2,6 +2,35 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Motion stack order, group-layer menus, whisper dashes, animated-caption warning (2026-11-09, uncommitted)
+
+- **Stack order**:
+  - `CompEditor.restack(ids, 'up' | 'down' | 'top' | 'bottom')` moves the selected layers as a
+    block, keeping their order. It is one undo step ("Bring forward", "Send backward", "Bring to
+    front", "Send to back") and returns false when nothing moves.
+  - Wired to:
+    - ▲ ▼ on the selected Motion row (`.lorder`, disabled at the ends);
+    - Ctrl+] / Ctrl+[ and, with Shift, top / bottom in Motion (`App.onKey`, a notice at the end of
+      the stack);
+    - Stack order chips at the top of the layer menu;
+    - the Inspector Layer tab ("Stack: n of m" with ⤒ ▲ ▼ ⤓).
+- **Layers inside a group** (Layers cards): ⋯ and hold/right-click (`childItems`) offer Draw on it,
+  Rename, Hide/Show, Lock, and Delete layer, edited through `editProject` without going inside. One
+  undo step; the delete clears parents pointing at the layer and says it affects every use of the
+  group.
+- **To vectors**:
+  - A whisper's dashed ink is cut into separate open pieces (`dashesOf`), because the importer
+    reads no dash patterns.
+  - A caption with keyframes or Shake/Wave/Jitter asks first ("stops animating") and Cancel leaves
+    it alone.
+- Checks:
+  - Inspector fixture 8 of 8 (new: row ▲, Ctrl+Shift+], Ctrl+[, Inspector ⤓, Undo).
+  - layerdelete 7 of 7 (new: delete inside a group and Undo).
+  - captions 36 of 36 (new: whisper dashes as pieces that import, animated caption asks and Cancel
+    keeps it).
+  - Not checked by eye: the ▲ ▼ row layout (the pane window was hidden).
+  - Full results: unit tests 826 passed (1 skipped), build passed, browser suite 74 of 74 (run alone).
+
 ### Delete any layer from the Layers panel (2026-11-09, uncommitted)
 
 - The problem: in Draw and Animate, the Layers panel's "Other layers in this shot" rows had only a name

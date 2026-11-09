@@ -352,6 +352,21 @@ export class MotionInspector {
       this.select<BlendMode>(box, 'Blend', BLEND_MODES.map((b) => [b, cap1(b)] as const), l.blend, (m) => this.editLayer(l, 'Blend mode', (x) => { x.blend = m; }), locked);
     }
     this.field(box, 'Parent', this.parentSelect(l));
+    // stack order: where it sits (1 = front) and buttons to move it
+    const at = ed.comp.layers.indexOf(l), count = ed.comp.layers.length;
+    const order = el('div', { class: 'mi-order', role: 'group', 'aria-label': 'Stack order' });
+    order.append(el('span', { class: 'mi-label' }, `Stack: ${at + 1} of ${count}`));
+    const move = (label: string, where: 'top' | 'up' | 'down' | 'bottom', title: string, off: boolean) => {
+      const b = el('button', { type: 'button', class: 'mi-btn mi-order-btn', title, 'aria-label': title }, label);
+      b.disabled = off || locked;
+      b.addEventListener('click', () => ed.restack(ed.selected.includes(l.id) ? ed.selected : [l.id], where));
+      order.append(b);
+    };
+    move('⤒', 'top', 'Bring to front (Ctrl+Shift+])', at <= 0);
+    move('▲', 'up', 'Bring forward (Ctrl+])', at <= 0);
+    move('▼', 'down', 'Send backward (Ctrl+[)', at >= count - 1);
+    move('⤓', 'bottom', 'Send to back (Ctrl+Shift+[)', at >= count - 1);
+    box.append(order);
     this.button(this.actions(box), 'Duplicate', () => ed.duplicate(l.id), locked);
     if (l.kind === 'drawings') {
       const g = this.group(box, 'Drawing layer options');

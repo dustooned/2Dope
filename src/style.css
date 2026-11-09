@@ -5838,3 +5838,11 @@ body.ws-motion .minspector:not([hidden]) { display: flex; }
 @media (pointer: coarse) { .mi-key { width: 40px; height: 40px; } .mi-num { min-height: 40px; width: 70px; } .mi-field, .mi-prop { min-height: 44px; } .mi-tab { min-height: 40px; } .mi-btn { min-height: 44px; } }
 /* phones and narrow windows: the Inspector floats over the right of the canvas */
 @media (max-width: 760px) { .minspector { position: absolute; z-index: 70; top: 0; right: 0; bottom: 0; width: min(320px, 92vw); box-shadow: -6px 0 24px #0007; } }
+/* Motion: ▲ ▼ on the selected layer row move it up or down the stack */
+.mrow .mleft .lorder { display: inline-flex; flex-direction: column; flex: 0 0 auto; gap: 1px; }
+.mrow .mleft .lorder button { width: 26px; min-width: 26px; height: calc(var(--row-h, 44px) / 2 - 2px); min-height: 0; padding: 0; font-size: 9px; line-height: 1; }
+.mrow .mleft .lorder button:disabled { opacity: 0.3; }
+@media (pointer: coarse) { .mrow .mleft .lorder button { width: 34px; min-width: 34px; font-size: 11px; } }
+.mi-order { display: flex; align-items: center; gap: 4px; min-height: 40px; margin-top: 4px; }
+.mi-order > .mi-label { flex: 1; font-size: 13px; }
+.mi-order-btn { width: 36px; padding: 0; font-size: 14px; }

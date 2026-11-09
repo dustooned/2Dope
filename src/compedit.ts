@@ -967,7 +967,29 @@ export class CompEditor {
     });
   }
 
-  /** Put a layer at an index of the stack (drag to reorder). */
+/**
+   * Move layers up or down the stack (up = in front), or to the top or bottom, keeping their order
+   * among themselves. One undo step; false when none could move.
+   */
+  restack(ids: string[], where: 'up' | 'down' | 'top' | 'bottom'): boolean {
+    const c = this.comp, pick = new Set(ids.filter((id) => c.layers.some((l) => l.id === id)));
+    if (!pick.size) return false;
+    const order = c.layers.map((l) => l.id);
+    let next = [...order];
+    if (where === 'top' || where === 'bottom') {
+      const moved = order.filter((id) => pick.has(id)), rest = order.filter((id) => !pick.has(id));
+      next = where === 'top' ? [...moved, ...rest] : [...rest, ...moved];
+    } else if (where === 'up') {
+      for (let i = 1; i < next.length; i++) if (pick.has(next[i]!) && !pick.has(next[i - 1]!)) [next[i - 1], next[i]] = [next[i]!, next[i - 1]!];
+    } else {
+      for (let i = next.length - 2; i >= 0; i--) if (pick.has(next[i]!) && !pick.has(next[i + 1]!)) [next[i + 1], next[i]] = [next[i]!, next[i + 1]!];
+    }
+    if (next.join() === order.join()) return false;
+    const label = { up: 'Bring forward', down: 'Send backward', top: 'Bring to front', bottom: 'Send to back' }[where];
+    return this.edit(label, (cc) => { const by = new Map(cc.layers.map((l) => [l.id, l])); cc.layers = next.map((id) => by.get(id)!).filter(Boolean); });
+  }
+
+    /** Put a layer at an index of the stack (drag to reorder). */
   moveTo(id: string, index: number): void {
     this.edit('Reorder layer', (c) => {
       const i = c.layers.findIndex((l) => l.id === id);

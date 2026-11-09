@@ -394,6 +394,27 @@ export class LayerCards {
     }
   }
 
+  /** Actions for a layer inside a group, done from outside it (each one Undo step for the whole project). */
+  private childItems(g: Extract<Layer, { kind: 'comp' }>, x: Layer): CtxItem[] {
+    const app = this.app, ed = app.editor, again = () => { this.sig = ''; this.update(); };
+    const inner = (label: string, fn: (layers: Layer[]) => Layer[] | void) => {
+      ed.editProject(label, () => { const c = app.project.comps.get(g.comp); if (!c) return; const out = fn(c.layers); if (out) c.layers = out; });
+      again();
+    };
+    return [
+      { title: `${x.name} · in ${g.name}` },
+      ...(x.kind === 'drawings' ? [{ label: 'Draw on it', icon: 'draw', run: () => { if (ed.enter(g.id)) { app.pickLayer(x.id); again(); } } }] : []),
+      { label: 'Rename…', run: async () => { const n = await askText('Layer name', x.name, 'Rename'); if (n !== null && n.trim()) inner('Rename layer', (ls) => { const y = ls.find((z) => z.id === x.id); if (y) y.name = n.trim(); }); } },
+      { label: x.visible ? 'Hide' : 'Show', icon: 'eye', run: () => inner(x.visible ? 'Hide layer' : 'Show layer', (ls) => { const y = ls.find((z) => z.id === x.id); if (y) y.visible = !y.visible; }) },
+      { label: x.locked ? 'Unlock' : 'Lock', icon: 'lock', run: () => inner(x.locked ? 'Unlock layer' : 'Lock layer', (ls) => { const y = ls.find((z) => z.id === x.id); if (y) y.locked = !y.locked; }) },
+      { sep: true },
+      { label: 'Delete layer', icon: 'trash', danger: true, run: async () => {
+        if (!(await confirmBox(`Delete “${x.name}” from ${g.name}?`, `It goes from every use of ${g.name}. You can undo this.`, 'Delete', true))) return;
+        inner('Delete layer', (ls) => ls.filter((z) => z.id !== x.id).map((z) => (z.parent === x.id ? { ...z, parent: null } : z)));
+      } },
+    ];
+  }
+
   /** Actions for a layer in "Other layers in this shot": the same as its card would have. */
   private otherItems(x: Layer): CtxItem[] {
     const app = this.app, ed = app.editor, again = () => { this.sig = ''; this.update(); };
@@ -594,7 +615,11 @@ export class LayerCards {
       const info = el('div', { class: 'lc-info' });
       info.append(el('span', { class: 'lc-name' }, x.name));
       if (x.kind === 'comp') info.append(el('span', { class: 'lc-tags' }, 'group'));
-      card.append(this.thumb(x, g.start), info);
+      // ⋯ (or hold / right-click): rename, lock or delete it without going inside the group
+      const more = el('button', { type: 'button', class: 'lc-other-more', 'aria-label': `More for ${x.name}`, 'aria-haspopup': 'menu', title: 'Rename, lock or delete this layer of the group' }, '⋯');
+      more.addEventListener('click', (e) => { e.stopPropagation(); const b = more.getBoundingClientRect(); showContextMenu(b.left, b.bottom, this.childItems(g, x)); });
+      attachContextMenu(card, () => this.childItems(g, x));
+      card.append(this.thumb(x, g.start), info, more);
       card.addEventListener('click', () => {
         if (app.strokeActive || !app.editor.enter(g.id)) return;
         if (x.kind === 'drawings') app.pickLayer(x.id);

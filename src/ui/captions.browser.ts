@@ -802,6 +802,35 @@ await check('WOFF2 fonts give letter outlines; faked italic slants them; a capti
   }
 });
 
+await check('To vectors: a whisper keeps its dashes as pieces; an animated caption asks first', async () => {
+  app.setWorkspace('draw'); app.setFrame(10); editor.close();
+  const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);
+  try {
+    const set = (patch: Record<string, unknown>) => app.editor.edit('t', cc => { const l = cc.layers.find(x => x.id === first); if (l?.kind === 'drawings' && l.caption) l.caption = { ...l.caption, text: 'psst', font: 'comic-neue', bold: false, italic: false, values: {}, keys: {}, ...patch }; });
+    set({ style: 'whisper' });
+    const { captionSvg } = await import('../io/captionsvg');
+    const c = app.project.comp.layers.find(x => x.id === first);
+    const svg = await captionSvg(app.project, c?.kind === 'drawings' ? c.caption! : null!, 10, { forVectors: true });
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const inked = [...doc.querySelectorAll('#balloon path[stroke]')];
+    expect(!svg.includes('stroke-dasharray') && inked.length >= 6 && inked.every(p => !p.getAttribute('d')!.endsWith('Z')), `whisper ink not cut into dashes (${inked.length})`);
+    const { importVectorDocument } = await import('../io/vectorimport');
+    expect(importVectorDocument(svg).strokes.length > inked.length, 'the dashed whisper does not import');
+    // an animated caption: Convert asks first, and Cancel leaves it a caption
+    set({ style: 'speech', values: { shake: 40 } });
+    const pending = app.convertCaptionToVectors(first);
+    await wait(150);
+    const cancel = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Cancel' && b.closest('dialog, [role=dialog], .dialog'));
+    expect(cancel, 'no question before converting an animated caption');
+    cancel!.click();
+    expect((await pending) === false, 'converted after Cancel');
+    const still = app.project.comp.layers.find(x => x.id === first);
+    expect(still?.kind === 'drawings' && still.caption, 'not a caption after Cancel');
+  } finally {
+    app.editor.edit('Restore test caption', cc => { const i = cc.layers.findIndex(x => x.id === first); if (i >= 0) cc.layers[i] = structuredClone(saved); });
+  }
+});
+
 await check('Captions after transforming: Motion selects and sizes them; scaled and turned ones keep their handles; Delete works', async () => {
   app.setWorkspace('draw'); app.setFrame(10); editor.close();
   const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);

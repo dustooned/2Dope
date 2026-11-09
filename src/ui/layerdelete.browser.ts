@@ -65,5 +65,20 @@ await check('Hold or right-click a row opens the same menu', async () => {
   void group;
 });
 
+await check('A layer inside a group: ⋯ Delete removes it from the group without going inside, and Undo brings it back', async () => {
+  const g = app.project.comp.layers.find(l => l.name === 'Props');
+  expect(g?.kind === 'comp', 'no group');
+  if (g?.kind !== 'comp') return;
+  const inner = () => app.project.comps.get(g.comp)!.layers.map(l => l.name);
+  expect(inner().includes('Prop'), 'group lost its layer');
+  const items = (cards as unknown as { childItems(g: unknown, x: unknown): { label?: string; run?: () => unknown }[] }).childItems(g, app.project.comps.get(g.comp)!.layers.find(l => l.name === 'Prop'));
+  const del = items.find(i => i.label === 'Delete layer');
+  expect(del, 'no Delete layer for a layer in a group');
+  void del!.run!(); await confirmDelete();
+  expect(!inner().includes('Prop') && app.project.comp.layers.some(l => l.name === 'Props'), 'not deleted from the group (or we went inside)');
+  app.undo(); await wait();
+  expect(inner().includes('Prop'), 'Undo did not bring it back');
+});
+
 await check('No page errors', () => { expect(!errors.length, errors.join(' | ')); });
 document.querySelector('#summary')!.textContent = `${failed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed`;
