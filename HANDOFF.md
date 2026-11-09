@@ -4,6 +4,13 @@
 
 ### Outline extras and sound effects on a path (2026-11-09, committed and pushed to main)
 
+**Deploy (2026-11-09):** the Pages runs for `c91e0e7` and an empty retry commit `c0daae1` first failed
+within a minute without creating any jobs. GitHub status showed Actions and Pages operational, the
+repository is public, and the workflow is unchanged. The owner re-ran the run from its page and attempt 3
+built and deployed successfully. The live bundle contains the new features ("Draw text path" in the
+main chunk, "Trail spacing" in `comp-*.js`). The cause of the first failures was not visible from the
+public API. If it recurs, re-run from the run page first.
+
 - **Outline Trail** (`mode: 'trail'`, `every`):
   - `temporalSamples` also returns `trails`: earlier frames, oldest first. Each one carries a copy of
     the effect set to one line, Outline only, and colour shift +i, with Fade applied.
