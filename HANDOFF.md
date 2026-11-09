@@ -2,6 +2,26 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Cleanup and review of this session's code (2026-11-08, committed and pushed to main)
+
+A sweep of files changed since `7a989bd`: exports used nowhere else, debug leftovers, statement hacks.
+- Removed: `forgetCaptionFont` (never called) and the `captionApp` window hook in the captions fixture.
+- Un-exported: `readDrawnBalloon` and `PANEL_ICONS`, which are used only in their own files.
+- The Letter tool overlay now uses plain statements: no `&&` as a statement, and no `void c` with its
+  dead ternary.
+- The pick whip no longer re-samples imported SVG lines on every pointer move: samples are cached by
+  path and matrix (`sampleShapePath`).
+- Fixed, found in review:
+  - A style file's font id was built from its length and first 24 base64 characters, so different
+    TTFs of the same size could collide. It is now the content hash, the same as Import font.
+  - Painted lines are routes only when one end-to-end path covers at least 85% of the paint. Outline
+    (line-art) characters loop and branch, so the pick whip still parents to them (new
+    `paintedroute.test.ts` case).
+  - Make caption is not offered on Story board or notes layers.
+- Left as is: about 85 exported types and constants used only in their own module. Most are the
+  module's types; a few are portable lettering API. This matches the earlier cleanup's decision.
+- Checks: unit tests 814 passed (1 skipped), build passed, browser suite 72 of 72 (run alone).
+
 ### Bug fixes: trimming layers in Motion, tapping lines for paths (2026-11-08, committed and pushed to main)
 
 Owner reports: a layer could not be lengthened in Motion, and tapping a layer or line to animate

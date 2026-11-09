@@ -433,16 +433,19 @@ export class LetterTool {
       // balloon width: a tall grip on the right edge
       if (h.width) { const q = at(h.width), w = 8 / z, hh = 22 / z; g.beginPath(); g.roundRect(q.x - w / 2, q.y - hh / 2, w, hh, w / 2); g.fillStyle = '#4aa3ff'; g.fill(); g.strokeStyle = '#fff'; g.stroke(); }
       // pick whips beside the tips (a small spiral), filled when the tail follows a layer
-      l.kind === 'drawings' && l.caption && h.whips.forEach((w, i) => {
-        const q = at(w), r = 6.5 / z, on = !!l.caption!.tails[i]?.follow;
+      const tails = l.kind === 'drawings' ? l.caption?.tails ?? [] : [];
+      h.whips.forEach((w, i) => {
+        const q = at(w), r = 6.5 / z, on = !!tails[i]?.follow;
         g.beginPath(); g.arc(q.x, q.y, r, 0, Math.PI * 2); g.fillStyle = on ? '#ff9f1a' : '#fff'; g.fill(); g.strokeStyle = '#ff9f1a'; g.lineWidth = 1.6 / z; g.stroke();
         g.beginPath(); for (let k = 0; k <= 16; k++) { const a = k * 0.75, rr = (r * 0.75 * k) / 16; const px = q.x + Math.cos(a) * rr, py = q.y + Math.sin(a) * rr; if (k) g.lineTo(px, py); else g.moveTo(px, py); } g.strokeStyle = on ? '#fff' : '#ff9f1a'; g.stroke();
       });
       // turn (a dot on a stick above) and scale (a corner square)
-      { const top = at(h.turn), c = l.kind === 'drawings' && l.caption ? at({ x: l.caption.x, y: l.caption.y - (h.turn.y < l.caption.y ? 0 : 0) }) : top, edge = h.outline.reduce((m, p) => (p.y < m.y ? p : m), h.outline[0]!), e = at(edge);
-        g.setLineDash([]); g.strokeStyle = '#4aa3ff'; g.lineWidth = 1.5 / z; g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(top.x, top.y); g.stroke();
-        g.beginPath(); g.arc(top.x, top.y, 7 / z, 0, Math.PI * 2); g.fillStyle = '#4aa3ff'; g.fill(); g.strokeStyle = '#fff'; g.stroke();
-        const sq = at(h.scale), r = 6 / z; g.fillStyle = '#fff'; g.strokeStyle = '#4aa3ff'; g.fillRect(sq.x - r, sq.y - r, r * 2, r * 2); g.strokeRect(sq.x - r, sq.y - r, r * 2, r * 2); void c; }
+      const top = at(h.turn), stick = at(h.outline.reduce((m, p) => (p.y < m.y ? p : m), h.outline[0]!));
+      g.setLineDash([]); g.strokeStyle = '#4aa3ff'; g.lineWidth = 1.5 / z;
+      g.beginPath(); g.moveTo(stick.x, stick.y); g.lineTo(top.x, top.y); g.stroke();
+      g.beginPath(); g.arc(top.x, top.y, 7 / z, 0, Math.PI * 2); g.fillStyle = '#4aa3ff'; g.fill(); g.strokeStyle = '#fff'; g.stroke();
+      const sq = at(h.scale), sr = 6 / z;
+      g.fillStyle = '#fff'; g.strokeStyle = '#4aa3ff'; g.fillRect(sq.x - sr, sq.y - sr, sr * 2, sr * 2); g.strokeRect(sq.x - sr, sq.y - sr, sr * 2, sr * 2);
       // reshape handles (Edit shape): small squares on the outline
       if (l.kind === 'drawings') for (const sh of this.shapeHandles(l)) { const q = at(sh.p), r = 6 / z; g.fillStyle = '#ffcc33'; g.strokeStyle = '#222'; g.fillRect(q.x - r, q.y - r, r * 2, r * 2); g.strokeRect(q.x - r, q.y - r, r * 2, r * 2); }
     }

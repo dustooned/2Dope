@@ -23,7 +23,7 @@ function samplePath(d: string, m: Readonly<Mat>): Pt[] {
 }
 
 /** The balloon a drawing shows (page units of its layer), or null when there is no closed shape. */
-export function readDrawnBalloon(app: App, l: DrawingsLayer): ReadBalloon | null {
+function readDrawnBalloon(app: App, l: DrawingsLayer): ReadBalloon | null {
   const id = drawingOf(l, app.frame), d = id ? app.project.drawings.get(id) : null;
   if (!d) return null;
   // vector lines first: the biggest closed one that reads as a balloon
@@ -50,7 +50,7 @@ export function readDrawnBalloon(app: App, l: DrawingsLayer): ReadBalloon | null
 /** Turn the active drawing layer's balloon into a caption. Returns the caption layer's id. */
 export function captionFromDrawing(app: App, layerId = app.project.activeLayer): string | null {
   const comp = app.project.comp, l = comp.layers.find(x => x.id === layerId);
-  if (l?.kind !== 'drawings' || l.caption || l.locked) { app.onNotice?.('Select a drawing layer with a balloon drawn on it.'); return null; }
+  if (l?.kind !== 'drawings' || l.caption || l.locked || l.guide || l.notes) { app.onNotice?.('Select a drawing layer with a balloon drawn on it.'); return null; }
   const b = readDrawnBalloon(app, l);
   if (!b) { app.onNotice?.('No balloon found: draw a closed balloon shape (with Vector or a brush), then try again.'); return null; }
   // into the shot's space (the drawing layer may be moved, turned or scaled)

@@ -505,7 +505,8 @@ export class CaptionEditor {
     const app = this.app;
     let style = s;
     if (s.font && isCustomFont(s.look.font)) {
-      const bytes = fromBase64(s.font.data), id = `f${s.font.data.length.toString(36)}${s.font.data.slice(0, 24).replace(/[^A-Za-z0-9]/g, '')}`.slice(0, 40);
+      // the same id Import font gives these bytes, so the same font is never added twice (and two fonts never share one)
+      const bytes = fromBase64(s.font.data), id = `f${hashBytes(bytes).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)}`;
       if (!app.project.fonts.has(id)) {
         if (app.project.fonts.size >= 16) { app.onNotice?.('This project holds 16 fonts already; the style uses its own font.'); }
         else app.project.fonts.set(id, { name: s.font.name, path: `assets/${id}.${s.font.ext}`, bytes });
@@ -536,7 +537,7 @@ export class CaptionEditor {
 }
 
 /** The Caption panel's controls and their icons (by label). */
-export const PANEL_ICONS: Record<string, string> = {
+const PANEL_ICONS: Record<string, string> = {
   Done: 'check', 'Import font…': 'import', 'Fit to words': 'fit',
   Small: 'sizeSmall', Body: 'sizeBody', Big: 'sizeBig', Left: 'alignLeft', Centre: 'alignCenter', Right: 'alignRight',
   Bold: 'bold', Italic: 'italic', 'ALL CAPS': 'caps',

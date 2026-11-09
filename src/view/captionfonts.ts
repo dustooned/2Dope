@@ -72,10 +72,6 @@ export async function captionFontsReady(project: Project): Promise<void> {
   await Promise.all(jobs);
 }
 
-/** Forget a project font's loaded face (after it is replaced or removed). */
-export function forgetCaptionFont(font: string): void {
-  for (const k of [...faces.keys()]) if (k.startsWith(familyName(font, false, false).slice(0, -1))) faces.delete(k);
-}
 
 /** Is a caption's own face loaded (for layout caches)? */
 export function captionFontReady(c: CaptionSpec): boolean { return faces.get(familyName(c.font, c.bold, c.italic))?.state === 'ready'; }

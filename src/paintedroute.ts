@@ -43,8 +43,9 @@ export function paintedRoute(d: Drawing): Vec2[] | null {
 
 /**
  * The longest path through the biggest painted region (8-connected), in grid cells: from the cell
- * farthest from anywhere to the cell farthest from it. Null when the region is not line-like (its
- * area is more than a sixth of a square of its length, i.e. it is thick).
+ * farthest from anywhere to the cell farthest from it. Null when the region is not one line: when it
+ * is thick (its area is more than a sixth of a square of its length), or when the path leaves much
+ * of the paint off it (an outline drawing loops and branches: that is a character, not a route).
  */
 export function longestPath(on: Uint8Array, w: number, h: number): Vec2[] | null {
   const seen = new Int32Array(w * h).fill(-1);
@@ -69,8 +70,21 @@ export function longestPath(on: Uint8Array, w: number, h: number): Vec2[] | null
   const a = bfs(bestStart).far, { far: b, parent, len } = bfs(a);
   // line-like: a long, thin region (a character or filled shape is not a route)
   if (len < 6 || bestSize > (len * len) / 6) return null;
-  const cells: Vec2[] = [];
-  for (let c = b; c !== -1; c = parent[c]!) cells.push([(c % w) + 0.5, Math.floor(c / w) + 0.5]);
+  const cells: Vec2[] = [], onPath: number[] = [];
+  for (let c = b; c !== -1; c = parent[c]!) { cells.push([(c % w) + 0.5, Math.floor(c / w) + 0.5]); onPath.push(c); }
+  // one stroke: nearly all of the paint lies within its thickness of the path
+  const near = new Uint8Array(w * h), reach = Math.max(2, Math.ceil(bestSize / Math.max(1, len) / 2) + 1), ring: number[] = [...onPath];
+  const step = new Int32Array(w * h).fill(-1);
+  for (const c of onPath) step[c] = 0;
+  for (let k = 0; k < ring.length; k++) {
+    const c = ring[k]!;
+    near[c] = 1;
+    if (step[c]! >= reach) continue;
+    for (const n of around(c, w, h)) if (seen[n] === region && step[n] === -1) { step[n] = step[c]! + 1; ring.push(n); }
+  }
+  let covered = 0;
+  for (let i = 0; i < w * h; i++) if (seen[i] === region && near[i]) covered++;
+  if (covered < bestSize * 0.85) return null;
   // smooth the stair steps of the grid a little
   return cells.map((p, i) => {
     let x = 0, y = 0, n = 0;

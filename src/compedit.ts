@@ -155,8 +155,18 @@ const CONTENT_PAD = 6;
 /** A route line inside the layer that should travel would travel with it. */
 export const SAME_LAYER_LINE = 'That line is part of this layer, so it would move along with it. In Draw, select the line and use Cut to layer, then try again.';
 
-/** Points along a vector shape's SVG path (page units of its drawing). */
+const shapeSamples = new Map<string, Vec2[]>();
+/** Points along a vector shape's SVG path (page units of its drawing), kept for the next pointer move. */
 function sampleShapePath(d: string, m: readonly number[]): Vec2[] {
+  const key = `${m.join(',')}|${d}`, hit = shapeSamples.get(key);
+  if (hit) return hit;
+  const out = sampleShapePathNow(d, m);
+  if (shapeSamples.size > 200) shapeSamples.delete(shapeSamples.keys().next().value!);
+  shapeSamples.set(key, out);
+  return out;
+}
+
+function sampleShapePathNow(d: string, m: readonly number[]): Vec2[] {
   try {
     const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     p.setAttribute('d', d);

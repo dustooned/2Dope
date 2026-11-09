@@ -21,7 +21,6 @@ const editor = new CaptionEditor(app);
 setCaptionFontHooks({ redraw: () => app.requestRender(), source: async () => null, project: () => app.project });
 app.letters.onEdit = (id, isNew) => editor.open(id, isNew);
 app.history.onChange = () => editor.refresh();
-Object.assign(window, { captionApp: app });
 const errors: string[] = [];
 app.onNotice = () => {};
 addEventListener('error', e => errors.push(e.message));
