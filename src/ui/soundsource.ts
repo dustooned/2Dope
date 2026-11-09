@@ -74,12 +74,26 @@ export function shotSoundSource(app: App, bank: SoundBank): SoundSource {
  * Outline's Picture paint: the first frame of a project Asset, drawn at its own size and kept
  * until the asset's drawings change.
  */
+/** A short stamp of what an Asset's first frame shows (its drawings and their revisions), for cache keys. */
+export function assetStamp(app: App): (id: string) => string {
+  return (id: string) => {
+    const p = app.project, comp = p.comps.get(id);
+    if (!comp?.asset) return '';
+    const content = frameContent(p.comps, comp, 0);
+    let h = 7;
+    for (const ch of content.key) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
+    for (const d of content.drawings) { const dr = p.drawings.get(d); h = (Math.imul(h, 31) + (dr?.rev ?? 0)) >>> 0; }
+    return h.toString(36);
+  };
+}
+
 export function assetPicture(app: App): (id: string) => HTMLCanvasElement | null {
   const kept = new Map<string, { key: string; canvas: HTMLCanvasElement }>();
   return (id: string) => {
     const p = app.project, comp = p.comps.get(id);
     if (!comp?.asset) return null;
-    const key = frameContent(p.comps, comp, 0).key;
+    // what it shows: its frame and every drawing's revision (painting changes a drawing, not the key)
+    const content = frameContent(p.comps, comp, 0), key = `${content.key}|${[...content.drawings].map(d => p.drawings.get(d)?.rev ?? 0).join(',')}`;
     const hit = kept.get(id);
     if (hit && hit.key === key) return hit.canvas;
     const canvas = document.createElement('canvas');

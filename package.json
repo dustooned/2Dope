@@ -19,6 +19,8 @@
     "vitest": "^3.2.7"
   },
   "dependencies": {
-    "mediabunny": "1.61.4"
+    "mediabunny": "1.61.4",
+    "opentype.js": "2.0.0",
+    "pdfjs-dist": "6.4.299"
   }
 }

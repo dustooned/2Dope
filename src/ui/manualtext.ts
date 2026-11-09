@@ -66,6 +66,9 @@ export const MANUAL: ManualSection[] = [
     'Under-fill (Balloon tab) puts a colour block behind the balloon, offset like a print shadow; Under-fill across and down move it. Ink start and Ink length set where the outline begins and ends, so it can draw on from any point.',
     'Styles keep a caption’s look (font, colours, balloon, tail) without its words or place. Tap a ready-made or saved style to use it, Save this style… to keep one on this device, Export to save it as a .2dope-style file (an imported font goes inside), and Import style… to add one.',
     'Effects on a caption can work on its Text, Balloon ink or Balloon fill separately, or the whole caption, so the letters can glow while the balloon stays clean. Anything painted on a caption layer shows on top of it.',
+    'Letters can move by themselves (Animate tab, and Motion rows to key): Shake jolts them every frame, Wave ripples them along the words, Jitter boils them a little on twos like hand-drawn lettering. Write on draws each letter’s outline with a pen, then fills it, one letter after another.',
+    'Lightning tails can be Thin (a zigzag line) or Thick (a filled bolt), and Thickness sets how heavy. Closed and Joined tails always meet the balloon, however far you bend or taper them.',
+    'Delete a caption with Delete in the Caption panel’s header, the Delete caption chip, or the Delete key with the Letter tool on (Undo brings it back). SVG saves the caption as a vector file: the balloon and every letter as shapes, for any vector app.',
     'Captions are layers. In Motion their Reveal, Balloon, Text opacity, Balloon opacity, Ink length, Tracking and Line spacing rows are ready to key, and the Fade in, Pop in, Type on and Fade out chips write those keys at the playhead. In Story, the 💬 button on a dialogue line makes a caption timed to that line. Titles stay separate for simple title cards.',
   ] },
   { id: 'titles', title: 'Editable titles', blocks: [
@@ -283,7 +286,7 @@ export const MANUAL: ManualSection[] = [
       { figure: 'board' },
       {
         steps: [
-          'Open 🗂️ Story and tap Start a storyboard (or import pictures to turn them into panels).',
+          'Open 🗂️ Story and tap Start a storyboard (or import pictures to turn them into panels). Story tools → Import panel images or a PDF… takes many pictures at once, in the order of the numbers in their names (panel 2 before panel 10), and each page of a PDF becomes a panel (up to 200). Import a picture as a layer… brings one in to place and animate instead.',
           'Choose a panel in the thumbnail navigator, then draw it on the sketch canvas. Story’s default tool bar has Brush, Eraser and Colour; tap an active brush tool again for its library. Panel actions live in the Story header and each card’s menu.',
           'In the focused panel editor, type dialogue one subtitle per line: Who speaks (pick a name already used, or type a new one) and What is said. Leave Who empty for narration or a sound. Each line shows how long it will stay on screen.',
           'In a line, Return goes to the next line, then to the first line of the next panel, so you can type a whole scene in one go. Shift+Return or + Line adds a line; × removes one; Escape drops what you just typed.',
@@ -439,6 +442,7 @@ export const MANUAL: ManualSection[] = [
     blocks: [
       { figure: 'motion' },
       'Motion is the last stage: each layer is a bar on the timeline, and you can move, scale, turn and fade it over time with keyframes.',
+      'Inspector (on Motion’s tool bar, or View → Inspector) opens a panel on the right with every setting of the selected layer: type a value, drag a slider or tap ◆ to key it at the playhead. Layer and Transform are always there; Parenting, Path, Trail, Effects, Caption and Instance tabs appear when the layer has them. Drop-downs set the parent and blend mode; effect choices, colours and switches are there too.',
       'Use New layer, Import and Assets to bring things into the shot. Import also offers Paste from clipboard. Layer holds alignment and other layer actions. Animation holds paths, presets and keyframe tools. Scroll across the toolbar on narrow screens. Layer search, Animated, Select and Auto-key sit below it.',
       {
         list: [
@@ -584,6 +588,9 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-11-09', title: 'Motion Inspector', items: ['Inspector on Motion’s tool bar opens every setting of the selected layer on the right: Layer and Transform, plus Parenting, Path, Trail, Effects and Caption tabs when the layer has them. Type, drag a slider or tap ◆ to key.'] },
+  { date: '2026-11-09', title: 'Moving letters, Write on and SVG captions', items: ['Captions: Shake, Wave and Jitter make the letters move; Write on draws each letter’s outline, then fills it.', 'SVG (Caption panel, caption chips or Motion’s layer menu) saves a caption with its balloon and letters as shapes.', 'Delete a caption from the Caption panel, a chip or the Delete key. Lightning tails come Thin or Thick, and closed tails always meet the balloon.'] },
+  { date: '2026-11-09', title: 'Story imports', items: ['Import panel images or a PDF… puts many pictures in their number order, or every page of a PDF, as panels. Import a picture as a layer… adds one to place and animate.'] },
   { date: '2026-11-09', title: 'Outline trails and sound effects on a path', items: ['Outline Trail mode leaves coloured outlines of earlier frames behind a moving drawing. One line can have its own colour and width, and Picture paint fills the lines with one of your Assets.', 'Sound effect captions can follow an arc, a wave or a line you draw (Letters tab, Text path).'] },
   { date: '2026-11-09', title: 'Joined balloons, styled words and under-fill', items: ['+ Joined balloon attaches another balloon with its own words; they share one outline.', 'Select words and tap Bold words, Italic words or Colour words.', 'Under-fill puts an offset colour block behind a balloon, and Ink start sets where its outline begins (both in the Balloon tab, and Ink start animates in Motion).'] },
   { date: '2026-11-09', title: 'Easier with a finger or pencil', items: ['Caption handles are bigger and easier to grab with a finger (a little bigger with a pencil); a mouse keeps its precise handles.', 'On iPads, a layer bar’s ends reach past the bar, so even a one-frame layer can be lengthened, and keyframes and Caption panel buttons are finger-sized.', 'To box-select keyframes with a finger, turn on Select in Motion first (otherwise a finger drag scrolls the timeline).'] },

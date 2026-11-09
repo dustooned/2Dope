@@ -356,11 +356,14 @@ export function mergeTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number, t
 }
 
 /** A closed tail drawn over the balloon edge (the seam look), starting just inside the edge. */
+/**
+ * A tail as its own closed shape. Its base starts well inside the balloon (where the centreline
+ * starts), so it always meets the balloon with no gap however it bends or tapers; the renderer draws
+ * its outline only outside the balloon, and the balloon's own outline closes it.
+ */
 export function seamTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number, taper = 1, tipW = 0): Pt[] {
   const { L, R } = wedge(centreline(poly, tip, bend), width, taper, tipW);
-  const first = (side: Pt[]) => Math.max(0, side.findIndex(p => !inside(poly, p)) - 1);
-  const k = Math.min(first(L), first(R));
-  return [...L.slice(k), ...[...R.slice(k)].reverse()];
+  return [...L, ...[...R].reverse()];
 }
 
 /** Thought tail: shrinking circles from the edge to the tip. */
@@ -377,22 +380,43 @@ export function lightningTail(poly: Pt[], tip: Pt, width: number, zigs = 3, swin
 }
 
 /** Everything a caption's balloon draws: the outline (tails merged in) and separate tail shapes. */
-export interface BalloonShapes { outline: Pt[]; seams: Pt[][]; bubbles: (Pt & { r: number })[]; zigzags: Pt[][] }
+/** A lightning tail as a thick bolt: the zigzag widened either side, narrowing to the tip, its base tucked inside. */
+export function boltShape(poly: Pt[], zig: Pt[], width: number): Pt[] {
+  const c = centroid(poly), base = zig[0]!, inward = norm(sub(c, base)), start = add(base, mul(inward, width * 1.5));
+  const line = [start, ...zig], n = line.length, left: Pt[] = [], right: Pt[] = [];
+  line.forEach((p, i) => {
+    const a = line[Math.max(0, i - 1)]!, b = line[Math.min(n - 1, i + 1)]!, t = norm(sub(b, a)), nr = { x: -t.y, y: t.x }, w = (width / 2) * (1 - i / (n - 1)) + width * 0.04;
+    left.push(add(p, mul(nr, w))); right.push(add(p, mul(nr, -w)));
+  });
+  return [...left, ...right.reverse()];
+}
+
+/**
+ * Everything a caption's balloon draws: the outline (Joined tails merged in), `joined` tails that
+ * could not be merged exactly (drawn into one shared outline with the balloon), `seams` (closed
+ * tails and thick bolts, outlined outside the balloon), bubbles, and zigzag lines with their widths.
+ */
+export interface BalloonShapes { outline: Pt[]; seams: Pt[][]; joined: Pt[][]; bubbles: (Pt & { r: number })[]; zigzags: Pt[][]; zigzagWidths: number[] }
 
 export function balloonShapes(outline: Pt[], tails: CaptionTail[], cx: number, cy: number, size: number): BalloonShapes {
   let poly = outline.map(p => ({ x: p.x + cx, y: p.y + cy }));
-  const seams: Pt[][] = [], bubbles: (Pt & { r: number })[] = [], zigzags: Pt[][] = [];
+  const seams: Pt[][] = [], joined: Pt[][] = [], bubbles: (Pt & { r: number })[] = [], zigzags: Pt[][] = [], zigzagWidths: number[] = [];
   for (const t of tails) {
     const tip = { x: t.x, y: t.y }, bend = t.bend ? { x: t.bend[0], y: t.bend[1] } : null, w = t.width * size;
     if (inside(poly, tip) || t.join === 'none') continue;
     if (t.join === 'bubbles') bubbles.push(...bubbleTail(poly, tip, bend, w * 1.6 * (t.size ?? 1), t.count ?? 3, t.shrink ?? 0.67));
-    else if (t.join === 'lightning') zigzags.push(lightningTail(poly, tip, w * 0.5, t.zigs ?? 3, t.amp ?? 1));
+    else if (t.join === 'lightning') {
+      const zig = lightningTail(poly, tip, w * 0.5, t.zigs ?? 3, t.amp ?? 1);
+      if (t.bolt) seams.push(boltShape(poly, zig, w * 0.45 * (t.line ?? 1)));
+      else { zigzags.push(zig); zigzagWidths.push(t.line ?? 1); }
+    }
     else {
       const merged = t.join === 'merged' ? mergeTail(poly, tip, bend, w, t.taper ?? 1, t.tip ?? 0) : null;
-      if (merged) poly = merged; else seams.push(seamTail(poly, tip, bend, w, t.taper ?? 1, t.tip ?? 0));
+      // a Joined tail always joins: merged exactly when it can be, otherwise drawn into one shared outline
+      if (merged) poly = merged; else (t.join === 'merged' ? joined : seams).push(seamTail(poly, tip, bend, w, t.taper ?? 1, t.tip ?? 0));
     }
   }
-  return { outline: poly, seams, bubbles, zigzags };
+  return { outline: poly, seams, joined, bubbles, zigzags, zigzagWidths };
 }
 
 // ---------------------------------------------------------------------------------------------

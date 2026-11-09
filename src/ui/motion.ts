@@ -17,6 +17,7 @@ import { attachContextMenu, lastMenuPoint, showContextMenu, type CtxItem } from 
 import { rulerStep } from '../core/timecode';
 import { startWhip } from './pickwhip';
 import { el } from './dom';
+import { MotionInspector } from './inspector';
 
 const ZOOM_KEY = '2dope.m3.mcell';
 const ROW_KEY = '2dope.m3.mrow';
@@ -132,6 +133,9 @@ export class MotionPanel {
   openSymbol: ((id: string) => void) | null = null;
   private readonly selectionInfo = el('span', { class: 'motion-selection', role: 'status' });
   private readonly compName = el('span', { class: 'motion-comp-name' });
+  /** Every setting of the selected layer, on the right (toggled by the Inspector button). */
+  readonly inspector: MotionInspector;
+  private readonly inspectorBtn: HTMLButtonElement;
 
   constructor(
     private readonly app: App,
@@ -209,10 +213,15 @@ export class MotionPanel {
       { label: 'Paste from clipboard', icon: 'paste', run: () => app.pasteMedia?.() },
     ]);
     const graph = btn('Graph', 'Edit animation curves', () => this.openGraph?.());
+    this.inspector = new MotionInspector(app, root.closest<HTMLElement>('.workspace') ?? document.body);
+    this.inspectorBtn = btn('Inspector', 'Show or hide the Inspector: every setting of the selected layer, on the right', () => this.inspector.toggle());
+    this.inspectorBtn.setAttribute('aria-pressed', String(this.inspector.isOpen));
+    decorate(this.inspectorBtn, 'panel');
+    this.inspector.onToggle = () => this.inspectorBtn.setAttribute('aria-pressed', String(this.inspector.isOpen));
     const menus = row(
       group(addLayer, importMedia, assets),
       group(graph, layer, this.anchors.button, this.effectsBtn),
-      group(tools, view),
+      group(tools, view, this.inspectorBtn),
     );
     menus.classList.add('motion-menus'); menus.setAttribute('role', 'group'); menus.setAttribute('aria-label', 'Motion commands');
     decorate(assets, 'folder');
@@ -404,6 +413,7 @@ export class MotionPanel {
     }
     this.drawKeySpan();
     this.keepVisible();
+    this.inspector.update();
   }
 
   /** "Shot › Walk cycle": tap a step to go back out to it. Hidden at the top level. */
@@ -1317,6 +1327,7 @@ export class MotionPanel {
       ...([['transparency', 'Transparency grid'], ['safeAreas', 'Title and action safe'], ['centre', 'Centre cross'], ['overscan', 'Overscan']] as const).map(([key, label]) => ({ label, checked: a.canvasView[key], run: () => a.setCanvasView({ [key]: !a.canvasView[key] }) })),
       { label: 'Fit canvas', run: () => a.fit() },
       ...(ed.hasCamera() ? [{ label: 'Through camera', checked: ed.throughCamera, run: () => { if (ed.pathEditing) ed.setPathEditing(false); ed.throughCamera = !ed.throughCamera; a.requestRender(); this.update(); } }] : []),
+      { label: 'Inspector', checked: this.inspector.isOpen, run: () => this.inspector.toggle() },
       { title: 'Timeline' },
       { label: 'Show all layers in Simple mode', checked: this.allRows, run: () => {
         this.allRows = !this.allRows; try { localStorage.setItem('2dope.motion.allRows', this.allRows ? '1' : '0'); } catch { /* session only */ }
@@ -1376,7 +1387,7 @@ export class MotionPanel {
         { label: 'Save as Asset…', icon: 'save', disabled: !ed.selected.length || this.app.playing, run: () => this.makeClip?.(true) },
       ] : []),
       ...(l.kind === 'comp' && this.app.project.comps.get(l.comp)?.asset ? [{ label: 'Symbol options…', disabled: !this.openSymbol, run: () => this.openSymbol?.(l.id) }] : []),
-      ...(l.kind === 'drawings' && l.caption ? [{ label: 'Edit caption…', icon: 'editCaption', run: () => this.app.editCaption(l.id) }] : []),
+      ...(l.kind === 'drawings' && l.caption ? [{ label: 'Edit caption…', icon: 'editCaption', run: () => this.app.editCaption(l.id) }, { label: 'Export caption as SVG', icon: 'export', run: () => void this.app.exportCaptionSvg(l.id) }] : []),
       ...(l.kind === 'drawings' && l.title ? [{ label: 'Edit title…', run: () => this.app.editTitle?.(l.id) }, { label: 'Convert to paint…', run: () => this.app.convertTitle?.(l.id) }] : []),
       ...(!this.makeClip && this.createAsset ? [{ label: 'Create asset from selection…', disabled: this.app.playing || ed.selected.some(id => { const x = ed.layer(id); return x?.kind === 'camera' || x?.kind === 'drawings' && x.guide; }), run: () => this.createAsset?.() }] : []),
       ...(l.kind === 'drawings' && !l.adjust && !l.guide ? [{ label: 'Edit in Flipbook', run: () => this.app.openFlipbook?.(l.id) }] : []),

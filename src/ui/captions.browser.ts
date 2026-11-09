@@ -3,7 +3,7 @@ import { captionFromDrawing } from '../captionconvert';
 import { stripMarkup } from '../lettering/markup';
 const stripWords = (lay: { fit: { lines: { text: string }[] } }) => stripMarkup(lay.fit.lines.map(x => x.text).join(' '));
 import { newEffect } from '../core/effects';
-import { apply } from '../core/comp';
+import { apply, frameContent } from '../core/comp';
 import { Project } from '../core/project';
 import { valueAt, type Prop } from '../core/anim';
 import { captureProject, loadProjectFile } from '../io/projectio';
@@ -257,7 +257,7 @@ await check('Each tail style shows its own settings in the Tails tab', async () 
   const count = inDialog<HTMLInputElement>('Bubble count'); count.value = '5'; count.dispatchEvent(new Event('input')); count.dispatchEvent(new Event('change'));
   expect(cap(first).tails[0]!.count === 5 && captionBalloon(cap(first), 0, 640, 360).shapes.bubbles.length === 5, 'bubble count not applied');
   [...pane().querySelectorAll<HTMLButtonElement>('[role=radio]')].find(b => b.textContent === 'Lightning')!.click();
-  expect(JSON.stringify(labels()) === '["Base width","Zigs","Zig width"]', 'lightning settings: ' + labels().join());
+  expect(JSON.stringify(labels()) === '["Base width","Zigs","Zig width","Thickness"]', 'lightning settings: ' + labels().join());
   for (let i = 0; i < 3; i++) { app.undo(); await wait(30); }
   expect(cap(first).tails[0]!.join === 'merged' && !cap(first).tails[0]!.count, 'Undo did not restore the tail');
   footer('Apply').click();
@@ -699,6 +699,112 @@ await check('Sound effects on a path: an arc lifts the middle letters; Draw path
     editor.close();
     if (id) app.editor.edit('Remove sfx test', cc => { cc.layers = cc.layers.filter(x => x.id !== id); });
     for (const x of hidden) { const live = app.project.comp.layers.find(y => y.id === x.id); if (live) live.visible = true; }
+  }
+});
+
+await check('Shake, Wave and Jitter move the letters over frames, the same each time; still settings change nothing', async () => {
+  app.setWorkspace('draw'); app.setFrame(10); editor.close();
+  const hidden = app.project.comp.layers.filter(x => x.id !== first && x.kind === 'drawings' && x.caption && x.visible);
+  for (const x of hidden) x.visible = false;
+  const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);
+  try {
+    const set = (values: Record<string, number>) => app.editor.edit('motion', cc => { const l = cc.layers.find(x => x.id === first); if (l?.kind === 'drawings' && l.caption) l.caption = { ...l.caption, text: 'WAVY WORDS', values: { ...values } }; });
+    // the whole picture (the letters sit on an opaque balloon, so their colour is what changes)
+    const ink = (f: number) => { render(f); return lg.getImageData(0, 0, 640, 360).data.reduce((h, v, i) => (Math.imul(h, 31) + v * ((i % 7) + 1)) >>> 0, 7); };
+    set({});
+    expect(ink(10) === ink(12), 'still letters changed between frames');
+    for (const k of ['wave', 'shake', 'jitter']) {
+      set({ [k]: 100 });
+      const a = ink(10), b = ink(13), again = ink(10);
+      expect(a !== b, `${k} did not move the letters between frames`);
+      expect(a === again, `${k} is not the same when a frame is drawn again`);
+    }
+    // the frame cache knows moving letters change every frame
+    set({ wave: 60 });
+    const l = app.project.comp.layers.find(x => x.id === first)!;
+    expect(frameContent(app.project.comps, app.project.comp, 10).key !== frameContent(app.project.comps, app.project.comp, 11).key, 'the frame cache would freeze the wave');
+    void l;
+    expect(app.editor.rowsOf(app.project.comp.layers.find(x => x.id === first)!).includes('cap:wave'), 'no Wave row in Motion');
+  } finally {
+    app.editor.edit('Restore test caption', cc => { const i = cc.layers.findIndex(x => x.id === first); if (i >= 0) cc.layers[i] = structuredClone(saved); });
+    for (const x of hidden) { const live = app.project.comp.layers.find(y => y.id === x.id); if (live) live.visible = true; }
+  }
+});
+
+await check('Write on draws each letter outline then fills it, in order; the SVG export has the balloon and every letter as a shape', async () => {
+  app.setWorkspace('draw'); app.setFrame(10); editor.close();
+  const hidden = app.project.comp.layers.filter(x => x.id !== first && x.kind === 'drawings' && x.caption && x.visible);
+  for (const x of hidden) x.visible = false;
+  const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);
+  try {
+    const set = (values: Record<string, number>) => app.editor.edit('write', cc => { const l = cc.layers.find(x => x.id === first); if (l?.kind === 'drawings' && l.caption) l.caption = { ...l.caption, font: 'comic-neue', text: 'WRITE ON', tails: l.caption.tails.map(t => ({ ...t, join: 'seam' as const })), values: { ...values } }; });
+    set({ writeOn: 50 });
+    const cap = () => { const l = app.project.comp.layers.find(x => x.id === first)!; return l.kind === 'drawings' ? l.caption! : null!; };
+    await captionFontsReady(app.project);
+    // the letters' darkness: none written, half written, all written
+    const dark = (w: number) => { set({ writeOn: w }); render(10); let n = 0; const d = lg.getImageData(0, 0, 640, 360).data; for (let i = 0; i < d.length; i += 4) if (d[i]! < 90 && d[i + 3]! > 200) n++; return n; };
+    const none = dark(0), half = dark(50), all = dark(100);
+    expect(half > none && half < all, `write on did not draw part of the words (${none} / ${half} / ${all})`);
+    // the cache knows when outlines arrive and when Write on moves
+    set({ writeOn: 50 });
+    expect(frameContent(app.project.comps, app.project.comp, 10).key.includes('~'), 'the frame key does not follow letter outlines');
+    expect(app.editor.rowsOf(app.project.comp.layers.find(x => x.id === first)!).includes('cap:writeOn'), 'no Write on row in Motion');
+    const { captionSvg } = await import('../io/captionsvg');
+    const svg = await captionSvg(app.project, { ...cap(), values: {} }, 10);
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    expect(!doc.querySelector('parsererror'), 'the SVG does not parse');
+    expect(doc.querySelectorAll('#letters > path').length === 7, `letters as shapes: ${doc.querySelectorAll('#letters > path').length}`);
+    expect(doc.querySelector('#balloon') && doc.querySelector('mask'), 'no balloon or no closed-tail mask');
+    expect(!doc.querySelector('text'), 'letters fell back to text');
+  } finally {
+    app.editor.edit('Restore test caption', cc => { const i = cc.layers.findIndex(x => x.id === first); if (i >= 0) cc.layers[i] = structuredClone(saved); });
+    for (const x of hidden) { const live = app.project.comp.layers.find(y => y.id === x.id); if (live) live.visible = true; }
+  }
+});
+
+await check('Captions after transforming: Motion selects and sizes them; scaled and turned ones keep their handles; Delete works', async () => {
+  app.setWorkspace('draw'); app.setFrame(10); editor.close();
+  const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);
+  const L = () => app.project.comp.layers.find(x => x.id === first)! as Extract<ReturnType<typeof app.project.comp.layers.find>, { kind: 'drawings' }>;
+  try {
+    // Motion: the caption's box is its balloon, not its empty drawing
+    const c = cap(first), b = app.editor.bounds(L()), lay = captionLayout(c, 0, 640, 360);
+    expect(b.w > lay.fit.a * 1.8 && b.h > lay.fit.b * 1.8 && b.x < c.x - lay.fit.a && b.x + b.w > c.x + lay.fit.a, 'Motion’s box does not fit the caption: ' + JSON.stringify(b));
+    const centre = apply(app.editor.matrixOf(L()), [c.x, c.y]);
+    expect(app.editor.hitLayer(centre)?.id === first, 'a click on the caption does not select it in Motion');
+    // scale it to 50% and turn it: the tail tip is still grabbed from the same screen distance
+    app.editor.edit('Scale and turn', cc => { const x = cc.layers.find(y => y.id === first)!; x.transform.anchor = { ...x.transform.anchor, value: [c.x, c.y] }; x.transform.position = { ...x.transform.position, value: [c.x, c.y] }; x.transform.scale = { ...x.transform.scale, value: [50, 50] }; x.transform.rotation = { ...x.transform.rotation, value: 30 }; });
+    app.setLettering(true); app.focusLayer(first);
+    const m = app.editor.matrixOf(L()), tipLocal = app.letters.shown(L()).tails[0]!, tip = apply(m, [tipLocal.x, tipLocal.y]);
+    // 16 px from the tip, on the side away from the bend handle (nearest handle wins)
+    const hb = app.letters.handles(L())!.bends[0]!, bend = apply(m, [hb.x, hb.y]), away = Math.hypot(tip[0] - bend[0], tip[1] - bend[1]) || 1;
+    const off = 16 / app.view.zoom, press = { x: tip[0] + ((tip[0] - bend[0]) / away) * off, y: tip[1] + ((tip[1] - bend[1]) / away) * off };
+    app.letters.down(60, press, 'mouse');
+    const kind = (app.letters as unknown as { drag: { kind: string } | null }).drag?.kind;
+    app.letters.up(60, true);
+    expect(kind === 'tip', 'a press 16 px from a scaled caption’s tail tip did not grab it: ' + kind);
+    // moving it by dragging inside still works, in the caption’s own space
+    const at = apply(m, [c.x, c.y]), before = cap(first).x;
+    app.letters.down(61, { x: at[0], y: at[1] }, 'mouse'); app.letters.move(61, { x: at[0] + 20, y: at[1] }); app.letters.up(61, false);
+    expect(app.history.peekUndo()?.label === 'Move caption' && Math.abs(Math.hypot(cap(first).x - before, cap(first).y - c.y) - 40) < 1, 'dragging a scaled caption did not move it by the dragged distance in its own space: ' + JSON.stringify({ label: app.history.peekUndo()?.label, moved: Math.hypot(cap(first).x - before, cap(first).y - c.y), x: cap(first).x, before, y: cap(first).y, cy: c.y }));
+    // the Transform box still fits it
+    app.toggleDrawTransform();
+    const box = app.letters.transformBox(L())!;
+    expect(inside(box.corners, box.centre) && app.letters.transforming === first, 'no Transform box on the turned caption');
+    app.letters.setTransforming(null);
+    // Delete: from the panel, the Letter row and the key; each one Undo step
+    app.letters.onEdit!(first, false);
+    [...dialog()!.querySelectorAll<HTMLButtonElement>('.cap-head button')].find(x => x.getAttribute('aria-label') === 'Delete caption')!.click();
+    expect(!captions().some(x => x.id === first) && !dialog() && app.history.peekUndo()?.label === 'Delete layer', 'the panel’s Delete did not remove the caption');
+    app.undo(); await wait();
+    expect(captions().some(x => x.id === first), 'Undo did not bring the caption back');
+    app.focusLayer(first); app.setLettering(true);
+    document.querySelector<HTMLElement>('#canvas')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', code: 'Delete', bubbles: true }));
+    expect(!captions().some(x => x.id === first), 'the Delete key did not remove the caption');
+    app.undo(); await wait();
+  } finally {
+    editor.close();
+    app.editor.edit('Restore test caption', cc => { const i = cc.layers.findIndex(x => x.id === first); if (i >= 0) cc.layers[i] = structuredClone(saved); else cc.layers.unshift(structuredClone(saved)); });
   }
 });
 

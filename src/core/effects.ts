@@ -516,9 +516,13 @@ export function temporalSamples(l: { id: string; in: number; start: number; effe
 }
 
 /** A short signature of what effects do at a frame (frame keys, caches). */
+/** What an Asset used as a picture currently shows (set by the app), so effects using it redraw when it changes. */
+let pictureStamp: (id: string) => string = () => '';
+export function setPictureStamp(f: (id: string) => string): void { pictureStamp = f; }
+
 export function effectsKey(l: { id: string; effects?: LayerEffect[] }, frame: number): string {
   const fx = activeEffects(l);
-  return fx.length ? fx.map((e) => effectAt(e, frame)).map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${effectDef(e.type).frameDependent?.(e) ? `@${frame}` : ''}${e.params ? `:${JSON.stringify(e.params)}` : ''}`).join(',') : '';
+  return fx.length ? fx.map((e) => effectAt(e, frame)).map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${effectDef(e.type).frameDependent?.(e) ? `@${frame}` : ''}${e.params ? `:${JSON.stringify(e.params)}` : ''}${e.type === 'outline' && param<string>(e, 'paint') === 'picture' && param<string>(e, 'picture') ? `~${pictureStamp(param<string>(e, 'picture'))}` : ''}`).join(',') : '';
 }
 
 // ---------------------------------------------------------------------------------------------

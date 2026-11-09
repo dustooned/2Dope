@@ -76,10 +76,33 @@ export async function captionFontsReady(project: Project): Promise<void> {
     const words = [cap.text, ...(cap.links ?? []).map(k => k.text)].join(' ');
     if (words.includes('*')) jobs.push(load(project, cap.font, true, cap.italic), load(project, cap.font, true, true));
     if (words.includes('_')) jobs.push(load(project, cap.font, cap.bold, true), load(project, cap.font, true, true));
+    // Write on draws the letters' outlines: their shapes load too (every face the words use)
+    if (cap.keys?.writeOn?.keys.length || (cap.values?.writeOn ?? 100) < 100) {
+      jobs.push(import('./captionglyphs').then(({ glyphFontReady }) => Promise.all([[cap.bold, cap.italic], [true, cap.italic], [cap.bold, true], [true, true]].map(([b, i]) => glyphFontReady(project, cap.font, b!, i!)))).then(() => undefined));
+    }
   }
   await Promise.all(jobs);
 }
 
+
+/** Ask the canvas to draw again (a lettering resource arrived). */
+export function captionRedraw(): void { redraw(); }
+
+/** The bytes of a caption font face (bundled file or the project's own font), or null. */
+export async function captionFontBytes(project: Project, font: string, bold: boolean, italic: boolean): Promise<ArrayBuffer | null> {
+  try {
+    if (isCustomFont(font)) {
+      const asset = project.fonts.get(customFontId(font));
+      const bytes = asset ? (asset.bytes ?? (await assetSource(asset.path))) : null;
+      return bytes ? bytes.slice().buffer : null;
+    }
+    const f = bundledFont(font) ?? bundledFont('comic-neue')!;
+    const res = await fetch(`${import.meta.env.BASE_URL}fonts/${bundledFile(f, bold, italic).file}`);
+    return res.ok ? await res.arrayBuffer() : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Is a caption's own face loaded (for layout caches)? */
 export function captionFontReady(c: CaptionSpec): boolean { return faces.get(familyName(c.font, c.bold, c.italic))?.state === 'ready'; }

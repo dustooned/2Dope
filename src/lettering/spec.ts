@@ -34,6 +34,9 @@ export interface CaptionTail {
   /** Lightning: how many zigs and how wide they swing. */
   zigs?: number;
   amp?: number;
+  /** Lightning: a thick, filled bolt instead of a line; and how thick the line or bolt is. */
+  bolt?: boolean;
+  line?: number;
   /**
    * The tip follows another layer: `at` is a point in that layer's own page units, so the tip stays
    * on the same spot of the character as it moves, turns and scales. x and y are kept as the tip's
@@ -43,7 +46,7 @@ export interface CaptionTail {
 }
 
 /** The ranges of each tail style's own settings (and what absent means). */
-export const TAIL_LIMITS = { taper: [0.3, 3, 1], tip: [0, 0.6, 0], count: [1, 8, 3], size: [0.3, 3, 1], shrink: [0, 0.9, 0.67], zigs: [1, 10, 3], amp: [0.2, 3, 1] } as const;
+export const TAIL_LIMITS = { taper: [0.3, 3, 1], tip: [0, 0.6, 0], count: [1, 8, 3], size: [0.3, 3, 1], shrink: [0, 0.9, 0.67], zigs: [1, 10, 3], amp: [0.2, 3, 1], line: [0.3, 4, 1] } as const;
 
 /**
  * How a balloon is drawn, beyond its style. All optional; absent = the style's classic look.
@@ -68,7 +71,7 @@ export const LOOK_LIMITS = { round: [2, 8], wobble: [0, 1], spikes: [4, 40], spi
 export const MAX_OUTLINE_POINTS = 400;
 
 /** Keyable caption settings: Motion shows them as Caption rows. */
-export type CaptionKey = 'reveal' | 'balloon' | 'textOpacity' | 'balloonOpacity' | 'inkStart' | 'inkEnd' | 'tracking' | 'leading';
+export type CaptionKey = 'reveal' | 'balloon' | 'textOpacity' | 'balloonOpacity' | 'inkStart' | 'inkEnd' | 'tracking' | 'leading' | 'shake' | 'wave' | 'jitter' | 'writeOn';
 export const CAPTION_KEYS: { key: CaptionKey; label: string; min: number; max: number; def: number; unit: string }[] = [
   { key: 'reveal', label: 'Reveal', min: 0, max: 100, def: 100, unit: '%' },
   { key: 'balloon', label: 'Balloon', min: 0, max: 150, def: 100, unit: '%' },
@@ -78,6 +81,10 @@ export const CAPTION_KEYS: { key: CaptionKey; label: string; min: number; max: n
   { key: 'inkEnd', label: 'Ink length', min: 0, max: 100, def: 100, unit: '%' },
   { key: 'tracking', label: 'Tracking', min: -100, max: 300, def: 0, unit: '' },
   { key: 'leading', label: 'Line spacing', min: 80, max: 200, def: 115, unit: '%' },
+  { key: 'shake', label: 'Shake', min: 0, max: 100, def: 0, unit: '%' },
+  { key: 'wave', label: 'Wave', min: 0, max: 100, def: 0, unit: '%' },
+  { key: 'jitter', label: 'Jitter', min: 0, max: 100, def: 0, unit: '%' },
+  { key: 'writeOn', label: 'Write on', min: 0, max: 100, def: 100, unit: '%' },
 ];
 
 /** A keyframe track for a caption setting (same shape as the app's Prop<number>). */
@@ -203,7 +210,7 @@ export function readCaption(input: unknown): CaptionSpec {
     }
     const f = q.follow as { layer?: unknown; at?: unknown } | undefined;
     const follow = f && typeof f.layer === 'string' && /^[A-Za-z0-9_:-]{1,80}$/.test(f.layer) && Array.isArray(f.at) && f.at.length === 2 && f.at.every(n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e6) ? { layer: f.layer, at: [f.at[0], f.at[1]] as [number, number] } : undefined;
-    return [{ x: q.x, y: q.y, ...(bend ? { bend } : {}), join: TAIL_JOINS.includes(q.join as TailJoin) ? (q.join as TailJoin) : 'merged', width: num(q.width, 0.3, 4, 1.2), ...extra, ...(follow ? { follow } : {}) }];
+    return [{ x: q.x, y: q.y, ...(bend ? { bend } : {}), join: TAIL_JOINS.includes(q.join as TailJoin) ? (q.join as TailJoin) : 'merged', width: num(q.width, 0.3, 4, 1.2), ...extra, ...(q.bolt === true ? { bolt: true } : {}), ...(follow ? { follow } : {}) }];
   }) : [];
   const path = Array.isArray(r.path) && r.path.length >= 3 && r.path.length <= 2000 && r.path.every(p => Array.isArray(p) && p.length === 2 && p.every(n => typeof n === 'number' && Number.isFinite(n))) ? (r.path as [number, number][]) : undefined;
   const values: Partial<Record<CaptionKey, number>> = {};

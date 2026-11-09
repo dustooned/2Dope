@@ -492,7 +492,9 @@ export class Bubbles {
       return [this.chip('Done', 'Finish transforming the caption (Enter)', false, () => a.letters.setTransforming(null), 'check'), el('span', { class: 'bub-hint' }, 'Drag inside to move, a corner to scale, the round handle to turn.')];
     }
     if (cap) {
-      out.push(this.chip('Edit caption', 'Words, font, size, balloon and colours: the Caption panel (or double-tap the balloon)', false, () => a.letters.onEdit?.(a.project.activeLayer, false), 'editCaption'));
+      out.push(this.chip('Edit caption', 'Words, font, size, balloon and colours: the Caption panel (or tap the balloon)', false, () => a.letters.onEdit?.(a.project.activeLayer, false), 'editCaption'));
+      out.push(this.chip('Delete caption', 'Delete this caption layer (Delete key; Undo brings it back)', false, () => a.deleteCaption(), 'trash'));
+      out.push(this.chip('SVG', 'Save this caption as an SVG file: the balloon and the letters as shapes', false, () => void a.exportCaptionSvg(a.project.activeLayer), 'export'));
       out.push(this.chip('Fade in', 'Fade the caption in from the playhead', false, () => a.captionPreset('fadeIn'), 'fadeIn'));
       out.push(this.chip('Pop in', 'The balloon pops in from its tail', false, () => a.captionPreset('popIn'), 'popIn'));
       out.push(this.chip('Type on', 'Letters appear one at a time', false, () => a.captionPreset('typeOn'), 'typeOn'));

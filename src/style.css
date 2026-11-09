@@ -5799,3 +5799,40 @@ body.form-tablet .caption-panel .cap-fonts button, body.form-phone .caption-pane
 .caption-panel .cap-link { display: grid; grid-template-columns: 1fr auto; gap: 4px 6px; align-items: start; margin: 6px 0; padding: 6px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
 .caption-panel .cap-link .cap-tail-n { grid-column: 1 / -1; }
 .caption-panel .cap-link textarea { min-height: 44px; }
+.caption-panel .cap-head .cap-delete { color: var(--danger, #e5484d); }
+/* Motion's Inspector: every setting of the selected layer, docked on the right of the canvas */
+.minspector { display: none; flex: 0 0 auto; width: 300px; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); -webkit-user-select: none; user-select: none; }
+body.ws-motion .minspector:not([hidden]) { display: flex; }
+.mi-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 4px 12px; }
+.mi-title { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-close { width: 36px; height: 36px; padding: 0; flex: 0 0 auto; }
+.mi-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 8px; border-bottom: 1px solid var(--line); }
+.mi-tab { min-height: 32px; padding: 0 10px; font-size: 12px; border-radius: var(--pill); }
+.mi-tab[aria-selected=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.mi-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 8px 12px 24px; touch-action: pan-y; }
+.mi-body .hint { color: var(--muted); font-size: 12px; margin: 4px 0 8px; }
+.mi-quote { font-style: italic; }
+.mi-field { display: flex; align-items: center; gap: 8px; min-height: 36px; margin: 0; }
+.mi-field > .mi-label { flex: 1; min-width: 0; font-size: 13px; }
+.mi-field > .mi-select, .mi-field > .mi-text { flex: 0 1 60%; min-width: 0; min-height: 32px; }
+.mi-check { width: 20px; height: 20px; }
+.mi-color { width: 44px; height: 32px; padding: 0; }
+.mi-prop { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; margin-top: 4px; }
+.mi-prop > .mi-label { flex: 1 1 70px; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-key { width: 28px; height: 28px; padding: 0; flex: 0 0 auto; color: var(--muted); background: none; border-color: transparent; }
+.mi-key.anim { color: var(--key); }
+.mi-key.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.mi-nums { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; margin-left: auto; }
+.mi-num { width: 58px; min-height: 30px; padding: 0 4px; font-variant-numeric: tabular-nums; }
+.mi-axis, .mi-unit { color: var(--muted); font-size: 11px; }
+.mi-slider { display: block; width: calc(100% - 34px); margin: 0 0 4px 34px; }
+.mi-group { margin: 8px 0; border-top: 1px solid var(--line); padding-top: 4px; }
+.mi-group > summary { cursor: pointer; font-weight: 600; font-size: 13px; min-height: 32px; display: flex; align-items: center; }
+.mi-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.mi-btn { min-height: 36px; padding: 0 10px; font-size: 12px; }
+.mi-child { display: flex; align-items: center; gap: 6px; min-height: 36px; }
+.mi-child > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* touch: bigger targets */
+@media (pointer: coarse) { .mi-key { width: 40px; height: 40px; } .mi-num { min-height: 40px; width: 70px; } .mi-field, .mi-prop { min-height: 44px; } .mi-tab { min-height: 40px; } .mi-btn { min-height: 44px; } }
+/* phones and narrow windows: the Inspector floats over the right of the canvas */
+@media (max-width: 760px) { .minspector { position: absolute; z-index: 70; top: 0; right: 0; bottom: 0; width: min(320px, 92vw); box-shadow: -6px 0 24px #0007; } }

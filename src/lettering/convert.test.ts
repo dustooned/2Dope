@@ -108,3 +108,31 @@ describe('sound effects on a path', () => {
     expect(readCurve({ kind: 'spiral', bend: 1 })).toBeNull();
   });
 });
+
+import { balloonOutline as outlineOf, balloonShapes as shapesOf, inside as isInside } from './geometry';
+
+describe('tails always close', () => {
+  const ring = outlineOf('speech', 120, 70, 1, undefined, { wobble: 0 });
+  it('a closed (seam) tail starts inside the balloon on both sides, however it bends or tapers', () => {
+    for (const t of [{ x: 40, y: 260, bend: [150, 150] as [number, number] }, { x: -230, y: 140, bend: [-80, 160] as [number, number] }, { x: 0, y: 300 }]) {
+      for (const shape of [{ taper: 1, tip: 0 }, { taper: 3, tip: 0.6 }, { taper: 0.3, tip: 0 }]) {
+        const s = shapesOf(ring, [{ ...t, join: 'seam', width: 2.5, ...shape }], 0, 0, 30).seams[0]!;
+        const n = s.length;
+        // its first and last points (the base, on either side) are inside the balloon: no gap where it meets
+        expect(isInside(ring, s[0]!) && isInside(ring, s[n - 1]!)).toBe(true);
+      }
+    }
+  });
+  it('a Joined tail that cannot merge exactly still joins (drawn in one outline), never as a seam', () => {
+    const s = shapesOf(ring, [{ x: 30, y: 200, bend: [260, 60], join: 'merged', width: 4, taper: 3, tip: 0.6 }], 0, 0, 30);
+    expect(s.seams).toHaveLength(0);
+    expect(s.joined.length + (s.outline.length > ring.length ? 1 : 0)).toBeGreaterThan(0);
+  });
+  it('lightning: thin is a line with its thickness, thick is a closed bolt', () => {
+    const thin = shapesOf(ring, [{ x: 0, y: 260, join: 'lightning', width: 1, line: 2.5 }], 0, 0, 30);
+    expect(thin.zigzags).toHaveLength(1); expect(thin.zigzagWidths).toEqual([2.5]);
+    const thick = shapesOf(ring, [{ x: 0, y: 260, join: 'lightning', width: 1, bolt: true }], 0, 0, 30);
+    expect(thick.zigzags).toHaveLength(0); expect(thick.seams).toHaveLength(1);
+    expect(isInside(ring, thick.seams[0]![0]!)).toBe(true);
+  });
+});

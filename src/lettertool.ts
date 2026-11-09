@@ -73,7 +73,7 @@ export class LetterTool {
   get stroke(): Pt[] | null { return this.drag?.kind === 'stroke' ? this.drag.points : null; }
 
   /** Caption layers visible at this frame, front first, with a stage point mapped into each one's page. */
-  private captionsAt(stage: Pt): { layer: DrawingsLayer; local: Pt; outline: Pt[]; tips: Pt[]; links: Pt[][] }[] {
+  private captionsAt(stage: Pt): { layer: DrawingsLayer; local: Pt; outline: Pt[]; tips: Pt[]; links: Pt[][]; scale: number }[] {
     const app = this.app, comp = app.project.comp, out = [];
     for (const l of comp.layers) {
       if (l.kind !== 'drawings' || !l.caption || !l.visible || l.locked || app.frame < l.in) continue;
@@ -81,7 +81,7 @@ export class LetterTool {
       if (!m) continue;
       const [lx, ly] = apply(m, [stage.x, stage.y]), lf = app.frame - l.start;
       const shown = this.shown(l), { shapes } = captionBalloon(shown, lf, app.project.width, app.project.height);
-      out.push({ layer: l, local: { x: lx, y: ly }, outline: shapes.outline, tips: shown.tails.map(t => ({ x: t.x, y: t.y })), links: captionLinks(shown, lf, app.project.width, app.project.height).map(k => k.outline) });
+      out.push({ layer: l, local: { x: lx, y: ly }, outline: shapes.outline, tips: shown.tails.map(t => ({ x: t.x, y: t.y })), links: captionLinks(shown, lf, app.project.width, app.project.height).map(k => k.outline), scale: this.layerScale(l) });
     }
     return out;
   }
@@ -123,9 +123,10 @@ export class LetterTool {
   }
 
   /** How much a layer is scaled on screen (its own scale and its parents'), for handle sizes. */
+  /** How much a layer is scaled in the document (its own scale and its parents'; the screen zoom is separate). */
   private layerScale(l: DrawingsLayer): number {
     const m = this.app.editor.matrixOf(l);
-    return Math.max(0.05, Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) / this.app.view.zoom);
+    return Math.max(0.05, Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])));
   }
 
   /** A custom balloon's reshape handles (page units of its layer), with the outline index each moves. */
@@ -172,7 +173,7 @@ export class LetterTool {
     if (active?.kind === 'drawings' && active.caption && this.shapeEditing === active.id && active.visible && !active.locked) {
       const m = invert(app.editor.matrixOf(active));
       if (m) {
-        const [lx, ly] = apply(m, [stage.x, stage.y]), hit = this.shapeHandles(active).map(h => ({ ...h, d: Math.hypot(h.p.x - lx, h.p.y - ly) })).filter(h => h.d < near).sort((u, v) => u.d - v.d)[0];
+        const [lx, ly] = apply(m, [stage.x, stage.y]), hit = this.shapeHandles(active).map(h => ({ ...h, d: Math.hypot(h.p.x - lx, h.p.y - ly) * this.layerScale(active) })).filter(h => h.d < near).sort((u, v) => u.d - v.d)[0];
         if (hit) { this.drag = { id, kind: 'shape', layer: active.id, tail: hit.index, start: { x: lx, y: ly }, before: structuredClone(active.caption), moved: false }; return; }
       }
     }
@@ -182,7 +183,8 @@ export class LetterTool {
         const [lx, ly] = apply(m, [stage.x, stage.y]), local = { x: lx, y: ly };
         // inside a joined balloon a handle takes the press only when it is right on it (the balloon wins otherwise)
         const inLink = captionLinks(this.shown(active), app.frame - active.start, app.project.width, app.project.height).some(k => inside(k.outline, local));
-        const reachHere = inLink ? Math.min(near, 12 / zoom) : near, close = (p: Pt) => Math.hypot(p.x - lx, p.y - ly) < reachHere;
+        // distances measured on screen, so a scaled-down caption keeps finger-sized handles
+        const sc = this.layerScale(active), reachHere = inLink ? Math.min(near, 12 / zoom) : near, close = (p: Pt) => Math.hypot(p.x - lx, p.y - ly) * sc < reachHere;
         const start = (kind: 'tip' | 'bend' | 'width', tail: number) => { this.drag = { id, kind, layer: active.id, tail, start: local, before: structuredClone(active.caption!), moved: false }; };
         // turning and scaling the whole caption
         const transformFrom = (kind: 'turn' | 'scale') => {
@@ -213,12 +215,13 @@ export class LetterTool {
       }
     }
     for (const c of this.captionsAt(stage)) {
-      const tail = c.tips.findIndex(t => Math.hypot(t.x - c.local.x, t.y - c.local.y) < near);
+      const tail = c.tips.findIndex(t => Math.hypot(t.x - c.local.x, t.y - c.local.y) * c.scale < near);
       if (tail >= 0) { this.drag = { id, kind: 'tip', layer: c.layer.id, tail, start: c.local, before: structuredClone(c.layer.caption!), moved: false }; return; }
     }
     const rim = (this.pointerKind === 'touch' ? 26 : 16) / zoom, found = this.captionsAt(stage);
-    // pressing on a balloon's edge draws its tail; deeper inside moves it
-    if (found.some(c => edgeDistance(c.outline, c.local) < rim)) { this.drag = { id, kind: 'stroke', points: [stage] }; return; }
+    // pressing on a balloon's edge (or just outside it) draws its tail; inside, only a thin band on the
+    // ink line does, so a small balloon is still easy to move
+    if (found.some(c => edgeDistance(c.outline, c.local) * c.scale < (inside(c.outline, c.local) ? rim * 0.4 : rim))) { this.drag = { id, kind: 'stroke', points: [stage] }; return; }
     for (const c of found) {
       const k = c.links.findIndex(o => inside(o, c.local));
       if (k < 0) continue;
@@ -369,7 +372,7 @@ export class LetterTool {
     const kind = detectBalloon(pts);
     if (kind === 'open') {
       // a line that starts on (or in) a balloon is its tail
-      const owner = this.captionsAt(pts[0]!).find(c => inside(c.outline, c.local) || edgeDistance(c.outline, c.local) < (this.pointerKind === 'touch' ? 26 : 16) / zoom);
+      const owner = this.captionsAt(pts[0]!).find(c => inside(c.outline, c.local) || edgeDistance(c.outline, c.local) * c.scale < (this.pointerKind === 'touch' ? 26 : 16) / zoom);
       if (!owner) { app.onNotice?.("Draw a closed shape for a balloon, or start on a balloon's edge to draw its tail."); return; }
       const m = invert(app.editor.matrixOf(owner.layer))!, local = pts.map(p => { const [x, y] = apply(m, [p.x, p.y]); return { x, y }; });
       const tip = local[local.length - 1]!, mid = local[Math.floor(local.length / 2)]!;

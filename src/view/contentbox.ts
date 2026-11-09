@@ -1,5 +1,6 @@
 import type { Vec2 } from '../core/anim';
-import { apply, contentFrameAt, compLength, nestedFrame, worldMatrix, type Comp, type Layer } from '../core/comp';
+import { apply, captionAtFrame, contentFrameAt, compLength, nestedFrame, worldMatrix, type Comp, type DrawingsLayer, type Layer } from '../core/comp';
+import { captionBalloon, captionLinks } from './caption';
 import type { Drawing, Project } from '../core/project';
 import { drawingAt, totalFrames } from '../core/timeline';
 
@@ -83,7 +84,10 @@ export function layerContentBox(project: Project, comp: Comp, l: Layer, compFram
     const id = drawingAt(l.exposures, f);
     if (!id) return null;
     const d = project.drawings.get(id);
-    return d ? drawingBox(d) : undefined;
+    const drawn = d ? drawingBox(d) : undefined;
+    // a caption shows its balloon, tails, words and joined balloons, not just its (often empty) drawing
+    if (l.caption) { const cap = captionBox(project, comp, l, compFrame); return cap ? union(drawn ?? null, cap) : drawn; }
+    return drawn;
   }
   if (l.kind !== 'comp' || depth > 8) return null;
   const nested = project.comps.get(l.comp);
@@ -108,4 +112,17 @@ export function layerContentBox(project: Project, comp: Comp, l: Layer, compFram
     out = union(out, { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
   }
   return out;
+}
+
+/** The box a caption covers at a comp frame (its own page units): balloon, tails, joined balloons, under-fill and words. */
+export function captionBox(project: Project, comp: Comp, l: DrawingsLayer, compFrame: number): Box | null {
+  const c = captionAtFrame(comp, l, compFrame);
+  if (!c) return null;
+  const lf = compFrame - l.start, { lay, shapes } = captionBalloon(c, lf, project.width, project.height);
+  const pts = [...shapes.outline, ...shapes.seams.flat(), ...shapes.zigzags.flat(), ...shapes.bubbles.flatMap(b => [{ x: b.x - b.r, y: b.y - b.r }, { x: b.x + b.r, y: b.y + b.r }]), ...captionLinks(c, lf, project.width, project.height).flatMap(k => [...k.outline, ...k.neck])];
+  if (!pts.length) return null;
+  const pad = lay.size * (c.inkWidth + 0.2), under = c.underFill ? { x: c.underFill.dx * lay.size, y: c.underFill.dy * lay.size } : { x: 0, y: 0 };
+  let x0 = Math.min(...pts.map(p => p.x)) - pad, x1 = Math.max(...pts.map(p => p.x)) + pad, y0 = Math.min(...pts.map(p => p.y)) - pad, y1 = Math.max(...pts.map(p => p.y)) + pad;
+  x0 = Math.min(x0, x0 + under.x); x1 = Math.max(x1, x1 + under.x); y0 = Math.min(y0, y0 + under.y); y1 = Math.max(y1, y1 + under.y);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }

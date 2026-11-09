@@ -30,10 +30,17 @@ export interface Transform {
 
 /** Rotation in degrees at a layer frame, including Orient along path. */
 /** What a caption shows at a layer frame (its data and keyed values), for frame keys and caches. */
+/** Which letter outlines have loaded (set by the caption renderer): Write on draws differently once they have. */
+let glyphStamp: () => string = () => '';
+export function setGlyphStamp(f: () => string): void { glyphStamp = f; }
+
 export function captionSignature(c: CaptionSpec, f: number): string {
   const { keys, ...rest } = c;
   const now = keys ? Object.entries(keys).map(([k, t]) => `${k}=${t && t.keys.length ? valueAt(t as unknown as Prop<number>, f).toFixed(3) : ''}`).join(',') : '';
-  return `#${JSON.stringify(rest)}|${now}`;
+  // moving letters (Shake, Wave, Jitter) look different every frame, even with still settings
+  const moving = (['shake', 'wave', 'jitter'] as const).some(k => { const t = keys?.[k]; return (t && t.keys.length ? valueAt(t as unknown as Prop<number>, f) : c.values?.[k] ?? 0) > 0; });
+  const writing = (keys?.writeOn?.keys.length ? valueAt(keys.writeOn as unknown as Prop<number>, f) : c.values?.writeOn ?? 100) < 100;
+  return `#${JSON.stringify(rest)}|${now}${moving ? `@${f}` : ''}${writing ? `~${glyphStamp()}` : ''}`;
 }
 
 export function rotationAt(t: Transform, f: number): number {

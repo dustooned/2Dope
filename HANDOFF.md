@@ -2,6 +2,61 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Motion Inspector, moving letters, Write on, caption SVG, Story imports (2026-11-09, uncommitted)
+
+- **Motion Inspector** (`ui/inspector.ts`, owned by `MotionPanel.inspector`):
+  - A right-hand `aside.minspector`, appended to `.workspace`, so the stage's ResizeObserver resizes
+    the canvas. Below 760 px wide it floats over the canvas.
+  - Toggled by the Inspector button (Motion's menus row) or View → Inspector. The open state and tab
+    are kept in localStorage. It shows only in `ws-motion`, and `MotionPanel.update` refreshes it.
+  - Tabs come from the layer:
+    - Layer and Transform are always shown.
+    - Parenting appears when the layer has a parent or children; Path when it has two or more
+      position keys or orient is on.
+    - Trail appears with Echo, Motion blur, Fringe or Outline Trail; Effects with any effect.
+    - Caption appears for a caption; Instance for a precomp's pins.
+  - Number rows use `CompEditor.setValue` (one undo step) and the ◆ uses `toggleKey`. Sliders use
+    `scrubStart`, `scrubSet` and `scrubEnd`. Effect choices, toggles and colours are one `edit` each.
+  - It rebuilds on `ed.rev` and tab changes, keeps the focused box (`data-focus`), and refreshes
+    values every update.
+- **Letters**:
+  - Shake, Wave and Jitter (`letterMotion`) and **Write on** (`writeOn` key, 100 = written).
+  - `paintLetters` traces each letter's real outline (`view/captionglyphs.ts`, using opentype.js,
+    lazy) and then fades the fill in, letter by letter.
+  - Before the outlines parse, or for fonts opentype cannot read (WOFF2), letters wipe on from the
+    left.
+  - `captionSignature` adds a glyph stamp while writing, so frames redraw when outlines arrive.
+    `captionFontsReady` also waits for the outlines of captions that write on.
+- **Caption SVG** (`io/captionsvg.ts`, `App.exportCaptionSvg`):
+  - The balloon is built with the canvas's own order: fills, then ink. Shared outlines and closed
+    tails are inked at 2× width under a mask outside the union.
+  - Letters are glyph paths (from `captionLetters`, the same placement as the canvas). The page is
+    the viewBox.
+  - Offered as SVG in the Caption panel header, a caption chip, and Motion's layer menu.
+  - Not done: converting a caption into vector strokes on its drawing layer.
+- Also this round:
+  - **Picture paint refresh**: `setPictureStamp(assetStamp(app))`, so an Outline using an Asset
+    redraws when the Asset's drawings change.
+  - **Caption transform sweep**: `layerScale` no longer divides by the zoom (`matrixOf` has no screen
+    zoom). Hit distances scale with the layer. Inside a balloon only a thin band starts a tail, so small
+    scaled balloons move. `contentBox` uses `captionBox`, so Motion selects and sizes captions.
+  - **Delete caption**: the panel header, a chip, and Delete/Backspace with the Letter tool.
+  - **Tails**: `seamTail` keeps its base inside the balloon. A Joined tail that cannot merge goes to
+    `shapes.joined` and shares the union outline. Lightning has `bolt` (a thick filled bolt, as a seam)
+    and `line` (thickness).
+  - **Story**: Import panel images or a PDF… (sorted by the number in the name; PDF pages through
+    `io/pdfpages.ts`, pdfjs-dist lazy, max 200) and Import a picture as a layer….
+- Checks (2026-11-09):
+  - Unit tests 826 passed (1 skipped); `tsc` clean; build passed (opentype and pdf are separate lazy
+    chunks).
+  - Inspector fixture (new): 6 of 6. Captions fixture: 34 of 34, adding Write on (part drawn at 50%,
+    the frame key, the Motion row) and the SVG (7 letter paths, balloon and mask, no text fallback).
+    The lightning-settings expectation now includes Thickness.
+  - Story fixture: 25 of 25.
+  - Checked by eye in the pane: Write on traces sit on the letters, and the SVG and canvas renders
+    match across a split line, closed tail included.
+  - Full browser suite: 73 of 73 (run alone).
+
 ### Outline extras and sound effects on a path (2026-11-09, committed and pushed to main)
 
 **Deploy (2026-11-09):** the Pages runs for `c91e0e7` and an empty retry commit `c0daae1` first failed

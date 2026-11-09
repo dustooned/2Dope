@@ -607,6 +607,30 @@ export class App {
   }
 
   /** Open a caption layer to edit: select it, show its handles (Draw and Animate) and its panel. */
+  /** Delete a caption layer (one Undo step). */
+  deleteCaption(id = this.project.activeLayer): void {
+    const l = this.project.comp.layers.find(x => x.id === id);
+    if (l?.kind !== 'drawings' || !l.caption || l.locked) return;
+    this.letters.transforming = null; this.letters.shapeEditing = null; this.letters.shapeTarget = null; this.letters.pathTarget = null;
+    this.editor.deleteLayers([id]);
+    this.onNotice?.('Caption deleted. Undo brings it back.');
+    this.requestRender();
+  }
+
+  /** A caption as an SVG file (balloon and letters as shapes), at the playhead. */
+  async exportCaptionSvg(id: string): Promise<void> {
+    const c = this.project.comp, l = c.layers.find(x => x.id === id);
+    if (l?.kind !== 'drawings' || !l.caption) return;
+    const { captionSvg } = await import('./io/captionsvg');
+    const text = await captionSvg(this.project, l.caption, this.frame - l.start);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+    a.download = `${(l.caption.text.split('\n')[0] ?? '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 40) || 'caption'}.svg`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    this.onNotice?.('Caption exported as SVG: the balloon and the letters as shapes.');
+  }
+
   editCaption(id: string): void {
     const l = this.project.comp.layers.find(x => x.id === id);
     if (l?.kind !== 'drawings' || !l.caption) return;
@@ -4155,16 +4179,29 @@ export class App {
     if (this.live || !files.length) return 0;
     const p = this.project;
     const made: string[] = [];
-    for (const f of files) {
+    // numbered pictures go in number order ("panel 2" before "panel 10"); a PDF's pages each become a panel
+    const { byNumberInName, isPdf, MAX_PDF_PAGES, pdfPages } = await import('./io/pdfpages');
+    const pictures: (File | HTMLCanvasElement)[] = [];
+    for (const f of [...files].sort(byNumberInName)) {
+      if (await isPdf(f)) {
+        try {
+          this.onNotice?.(`Reading ${f.name}…`);
+          const { pages, total } = await pdfPages(f, Math.max(p.width, p.height) * 1.5);
+          pictures.push(...pages);
+          if (total > MAX_PDF_PAGES) this.onNotice?.(`${f.name} has ${total} pages; the first ${MAX_PDF_PAGES} became panels.`);
+        } catch { this.onNotice?.(`${f.name} could not be read as a PDF.`); }
+      } else pictures.push(f);
+    }
+    for (const f of pictures) {
       try {
-        const img = await createImageBitmap(f);
+        const img = f instanceof HTMLCanvasElement ? f : await createImageBitmap(f);
         const d = p.newDrawing();
         const g = d.line.getContext('2d')!;
         const k = Math.min(p.width / img.width, p.height / img.height);
         const w = img.width * k;
         const h = img.height * k;
         g.drawImage(img, (p.width - w) / 2, (p.height - h) / 2, w, h);
-        img.close();
+        if (img instanceof HTMLCanvasElement) img.width = 0; else img.close();
         d.rev++;
         this.residency.updateThumb(d);
         made.push(d.id);
@@ -6673,6 +6710,8 @@ export class App {
       case 'Delete':
       case 'Backspace':
         e.preventDefault();
+        // with the Letter tool on a selected caption, Delete removes the caption
+        if (this.lettering && this.selectedCaption && !this.spatialSelection) { this.deleteCaption(); break; }
         // with part of the canvas selected, Delete removes what is inside it, not the frame
         if (this.spatialSelection) this.deleteSelectedArt();
         else this.deleteFrame();

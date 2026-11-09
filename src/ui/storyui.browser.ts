@@ -165,6 +165,41 @@ await check('Leaving Story restores regular modes, Share and canvas layout', asy
   app.setWorkspace('draw'); await wait(); expect(!document.querySelector<HTMLElement>('.bub-modes [data-mode=share]')!.hidden && getComputedStyle(document.querySelector('.story-canvas-status')!).display === 'none', 'Story UI leaked into Draw');
   app.setWorkspace('board'); await wait(); expect(app.project.activeLayer === app.board!.id && document.querySelector<HTMLElement>('.bub-modes [data-mode=share]')!.hidden, 'return lost Story ownership');
 });
+await check('Import: numbered pictures become panels in number order; each page of a PDF becomes a panel', async () => {
+  app.setWorkspace('board'); if (!app.board) app.createBoard(); await wait();
+  const colourOf = (rgb: string) => new Promise<File>(res => { const c = document.createElement('canvas'); c.width = 32; c.height = 18; const g = c.getContext('2d')!; g.fillStyle = rgb; g.fillRect(0, 0, 32, 18); c.toBlob(b => res(new File([b!], 'x.png', { type: 'image/png' }))); });
+  const named = async (name: string, rgb: string) => { const f = await colourOf(rgb); return new File([f], name, { type: 'image/png' }); };
+  const before = app.board!.exposures.length;
+  app.goPanel(before - 1);
+  // chosen out of order: 10, 2, 1
+  const n = await app.importPanels([await named('panel 10.png', '#0000ff'), await named('panel 2.png', '#00ff00'), await named('panel 1.png', '#ff0000')]);
+  expect(n === 3 && app.board!.exposures.length === before + 3, `pictures not imported: ${n}`);
+  const colour = (i: number) => { const d = app.project.drawings.get(app.board!.exposures[i]!.drawing!)!; return [...d.line.getContext('2d')!.getImageData(160, 90, 1, 1).data].slice(0, 3).join(','); };
+  expect(colour(before) === '255,0,0' && colour(before + 1) === '0,255,0' && colour(before + 2) === '0,0,255', `not in number order: ${[0, 1, 2].map(i => colour(before + i)).join(' | ')}`);
+  // a tiny two-page PDF: a red page, then a blue page
+  const pdf = (() => {
+    const NL = String.fromCharCode(10);
+    const pages = ['1 0 0 rg 0 0 200 100 re f', '0 0 1 rg 0 0 200 100 re f'];
+    const objs: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + i * 2} 0 R`).join(' ')}] /Count ${pages.length} >>`];
+    pages.forEach((c, i) => { objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents ${4 + i * 2} 0 R >>`); objs.push(`<< /Length ${c.length} >>${NL}stream${NL}${c}${NL}endstream`); });
+    let out = `%PDF-1.4${NL}`; const at: number[] = [];
+    objs.forEach((o, i) => { at.push(out.length); out += `${i + 1} 0 obj${NL}${o}${NL}endobj${NL}`; });
+    const xref = out.length;
+    out += `xref${NL}0 ${objs.length + 1}${NL}0000000000 65535 f ${NL}${at.map(n => `${String(n).padStart(10, '0')} 00000 n ${NL}`).join('')}trailer${NL}<< /Size ${objs.length + 1} /Root 1 0 R >>${NL}startxref${NL}${xref}${NL}%%EOF`;
+    return new File([out], 'story.pdf', { type: 'application/pdf' });
+  })();
+  const m = await app.importPanels([pdf]);
+  expect(m === 2, `PDF pages not imported: ${m}`);
+  const end = app.board!.exposures.length;
+  const red = colour(end - 2).split(',').map(Number), blue = colour(end - 1).split(',').map(Number);
+  expect(red[0]! > 200 && red[2]! < 60 && blue[2]! > 200 && blue[0]! < 60, `PDF pages wrong: ${red} | ${blue}`);
+  // the Story menu offers both, and a picture as a layer
+  button('Story tools').click(); await wait();
+  const items = [...menu().querySelectorAll('button')].map(b => b.textContent ?? '');
+  expect(items.some(t => t.includes('Import panel images or a PDF')) && items.some(t => t.includes('Import a picture as a layer')), 'Story menu missing the imports: ' + items.join(' | '));
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  for (let i = 0; i < 2; i++) { app.undo(); await wait(); }
+});
 await check('No uncaught browser errors', () => expect(!errors.length, errors.join('; ')));
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;
 export { app, board, bubbles };

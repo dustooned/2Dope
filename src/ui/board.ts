@@ -46,7 +46,7 @@ export class BoardPanel {
   private readonly nextBtn: HTMLButtonElement;
   private readonly openDetails = new Set<string>();
   private detailProject: App['project'] | null = null;
-  private readonly fileIn = el('input', { type: 'file', accept: 'image/*', multiple: '', hidden: '' });
+  private readonly fileIn = el('input', { type: 'file', accept: 'image/*,application/pdf,.pdf', multiple: '', hidden: '' });
   private sig = '';
   private currentCard = '';
   private thumbs = new Map<string, number>();
@@ -111,7 +111,10 @@ export class BoardPanel {
       const box = this.storyTools.getBoundingClientRect(), hasBoard = !!app.board, selected = hasBoard && !!app.targets.length;
       showContextMenu(box.left, box.bottom, [
         { title: 'Bring in a story' },
-        { label: 'Import panel images…', icon: 'import', run: () => this.pickImages() },
+        // pictures become panels in number order (panel 2 before panel 10); each page of a PDF becomes a panel
+        { label: 'Import panel images or a PDF…', icon: 'import', run: () => this.pickImages() },
+        // a picture (or other media) as a layer to place and animate, not as a panel
+        { label: 'Import a picture as a layer…', icon: 'image', run: () => app.pickMedia?.() },
         { label: 'Paste a script…', icon: 'paste', run: () => void this.pasteScript() },
         { sep: true }, { title: 'Selected panels' },
         { label: 'Duplicate panels', icon: 'copy', disabled: !selected || app.playing, run: () => app.duplicateSelection() },

@@ -134,7 +134,11 @@ export class CaptionEditor {
     const head = el('div', { class: 'cap-head' });
     const done = el('button', { type: 'button', class: 'primary' }, 'Done');
     done.addEventListener('click', () => { this.close(); app.focusCanvas(); });
-    head.append(el('h2', {}, this.isNew ? 'New caption' : 'Caption'), done);
+    const del = el('button', { type: 'button', class: 'cap-delete', title: 'Delete this caption (Undo brings it back)', 'aria-label': 'Delete caption' }, 'Delete');
+    del.addEventListener('click', () => { const id = this.layerId; this.isNew = false; this.panel?.remove(); this.panel = null; this.preview = null; this.base = null; app.deleteCaption(id); });
+    const svg = el('button', { type: 'button', title: 'Save this caption as an SVG file: the balloon and the letters as shapes, for any vector app', 'aria-label': 'Export caption as SVG' }, 'SVG');
+    svg.addEventListener('click', () => void app.exportCaptionSvg(this.layerId));
+    head.append(el('h2', {}, this.isNew ? 'New caption' : 'Caption'), svg, del, done);
 
     // live preview
     const view = el('div', { class: 'cap-preview' });
@@ -453,7 +457,10 @@ export class CaptionEditor {
         if (t.join !== 'none') slider(box, t.join === 'bubbles' ? 'Spread' : 'Base width', 30, 400, 5, Math.round(t.width * 100), '%', v => ({ ...this.cur, tails: this.cur.tails.map((x, j) => (j === i ? { ...x, width: v / 100 } : x)) }), v => setTail('Change tail width', { width: v / 100 }));
         if (t.join === 'merged' || t.join === 'seam') { tailSlider('Taper', 'taper', 100, '%', 'Change tail taper'); tailSlider('Tip', 'tip', 100, '%', 'Change tail tip'); }
         if (t.join === 'bubbles') { tailSlider('Bubble count', 'count', 1, '', 'Change bubble count'); tailSlider('Bubble size', 'size', 100, '%', 'Change bubble size'); tailSlider('Shrink', 'shrink', 100, '%', 'Change bubble shrink'); }
-        if (t.join === 'lightning') { tailSlider('Zigs', 'zigs', 1, '', 'Change lightning zigs'); tailSlider('Zig width', 'amp', 100, '%', 'Change lightning width'); }
+        if (t.join === 'lightning') {
+          chips<'thin' | 'thick'>(box, 'Bolt', [['thin', 'Thin'], ['thick', 'Thick']], t.bolt ? 'thick' : 'thin', v => setTail(v === 'thick' ? 'Thick lightning' : 'Thin lightning', { bolt: v === 'thick' || undefined }));
+          tailSlider('Zigs', 'zigs', 1, '', 'Change lightning zigs'); tailSlider('Zig width', 'amp', 100, '%', 'Change lightning width'); tailSlider('Thickness', 'line', 100, '%', 'Change lightning thickness');
+        }
         // the tip can follow a character: it stays on the same spot of that layer as it moves
         const follows = el('select', { 'aria-label': `Tail ${i + 1} follows` }) as HTMLSelectElement;
         follows.append(el('option', { value: '' }, 'Nothing (stays put)'));
@@ -488,6 +495,12 @@ export class CaptionEditor {
     const animate = section('Animate', 'popIn', 'Presets add keys at the playhead; edit them on the caption’s rows in Motion.');
     keyable(animate, 'reveal');
     keyable(animate, 'balloon');
+    // the letters themselves move: tremble, ripple or boil
+    keyable(animate, 'shake');
+    keyable(animate, 'wave');
+    keyable(animate, 'jitter');
+    // the letters draw on: each outline traced, then filled, one after another
+    keyable(animate, 'writeOn');
     const presets = el('div', { class: 'cap-chips' });
     for (const [kind, label] of [['fadeIn', 'Fade in'], ['popIn', 'Pop in'], ['typeOn', 'Type on'], ['fadeOut', 'Fade out']] as const) {
       const b = el('button', { type: 'button' }, label);
@@ -613,6 +626,7 @@ export class CaptionEditor {
 /** The Caption panel's controls and their icons (by label). */
 const PANEL_ICONS: Record<string, string> = {
   Done: 'check', 'Import font…': 'import', 'Fit to words': 'fit',
+  Thin: 'sizeSmall', Thick: 'sizeBig',
   'Draw path': 'drawShape', Straight: 'alignCenter', Arc: 'lookClassic', Wave: 'tailLightning', Drawn: 'editpoints',
   'Bold words': 'bold', 'Italic words': 'italic', 'Colour words': 'palette', '+ Joined balloon': 'plus', Remove: 'trash',
   Small: 'sizeSmall', Body: 'sizeBody', Big: 'sizeBig', Left: 'alignLeft', Centre: 'alignCenter', Right: 'alignRight',

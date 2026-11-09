@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, param, readEffects, resetEffect, temporalSamples } from './effects';
+import { activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, param, readEffects, resetEffect, setPictureStamp, temporalSamples } from './effects';
 
 describe('layer effects', () => {
   it('samples Echo oldest first and keeps its trails and shutter inside the layer trim', () => {
@@ -129,5 +129,18 @@ describe('keyframed effect settings', () => {
     // before the layer starts there is nothing to trail
     expect(temporalSamples(l, 3).trails).toEqual([]);
     expect(temporalSamples({ ...l, effects: [{ ...e, params: { ...e.params, mode: 'around' } }] }, 8).trails).toEqual([]);
+  });
+  it('an Outline painted with an asset picture is redrawn when that picture changes', () => {
+    const e = { ...newEffect('outline', 'o1', 1), params: { paint: 'picture', picture: 'asset1' } };
+    let stamp = 'a';
+    setPictureStamp(() => stamp);
+    const before = effectsKey({ id: 'L', effects: [e] }, 0);
+    stamp = 'b';
+    expect(effectsKey({ id: 'L', effects: [e] }, 0)).not.toBe(before);
+    // other paints never ask for a stamp
+    const solid = { ...e, params: { paint: 'solid', picture: 'asset1' } };
+    const k1 = effectsKey({ id: 'L', effects: [solid] }, 0); stamp = 'c';
+    expect(effectsKey({ id: 'L', effects: [solid] }, 0)).toBe(k1);
+    setPictureStamp(() => '');
   });
 });
