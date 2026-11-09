@@ -169,7 +169,7 @@ export class MotionPanel {
     this.fpsSel = el('select', { 'aria-label': 'Frames per second', title: 'Frames per second' });
     for (const f of FPS_PRESETS) this.fpsSel.append(el('option', { value: String(f) }, `${f} fps`));
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
-    this.multiBtn = btn('Select', 'Tap layers or keyframes to pick several (to group, stagger, ease or stretch them)', () => {
+    this.multiBtn = btn('Select', 'Tap layers or keyframes to pick several (to group, stagger, ease or stretch them). On a touch screen, drag across keys to box them while this is on', () => {
       this.ed.multiSelect = !this.ed.multiSelect; this.update();
     });
     const menu = (label: string, title: string, icon: string, items: () => CtxItem[]) => {
@@ -370,6 +370,8 @@ export class MotionPanel {
     this.camBtn.setAttribute('aria-pressed', String(ed.throughCamera));
     this.camBtn.hidden = !ed.hasCamera();
     this.multiBtn.setAttribute('aria-pressed', String(this.ed.multiSelect));
+    // on a touch screen a finger drag scrolls the timeline; in Select mode it draws a box around keys
+    this.grid.classList.toggle('picking', this.ed.multiSelect);
     this.animatedBtn.setAttribute('aria-pressed', String(this.animatedOnly));
     this.effectsBtn.disabled = ed.primary?.kind !== 'drawings' && ed.primary?.kind !== 'comp';
     this.compName.textContent = c.name;

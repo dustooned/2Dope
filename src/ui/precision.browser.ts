@@ -107,6 +107,12 @@ await check('Keyframes: drag a box to select several, then drag the span end to 
   expect(JSON.stringify(frames) === '[0,20,40]', 'stretch to 200% wrong: ' + frames);
   expect(JSON.stringify(ed.primary!.transform.rotation.keys.map(k => k.f)) === '[5,30]', 'unselected row changed');
   expect(app.history.peekUndo()?.label === 'Stretch key timing' && ed.selectedKeys().length === 3, 'not one Undo step, or selection lost');
+  // touch: the tracks scroll with a finger, except in Select mode, where a finger drag boxes keys
+  const trackStyle = () => getComputedStyle(document.querySelector<HTMLElement>('#motion .mrow.prop .mright')!).touchAction;
+  expect(trackStyle() !== 'none', 'tracks block finger scrolling outside Select mode');
+  ed.multiSelect = true; refresh(); await wait();
+  expect(trackStyle() === 'none', 'Select mode does not let a finger box keys');
+  ed.multiSelect = false; refresh(); await wait();
   // a tap on the track (no drag) clears the selection and moves the playhead
   refresh(); await wait();
   const row2 = document.querySelector<HTMLElement>('#motion .mrow.prop[data-prop="position"]')!, track2 = row2.querySelector<HTMLElement>('.mright')!;

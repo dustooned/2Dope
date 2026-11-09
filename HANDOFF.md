@@ -2,6 +2,39 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Touch and pen pass (2026-11-09, committed and pushed to main)
+
+There was no real iPad. The pass emulated one: a 768×1024 tablet view in the pane (which reports a
+touch screen), and pointer events typed `touch` and `pen`.
+- **Found and fixed**:
+  - **Caption handles**: they used 22 px for every pointer. `LetterTool.pointerKind` now comes from
+    the press (`down(id, pt, pointerType)`), and the reach is 36 px for touch, 26 for pen and 22 for a
+    mouse. Handle drawings and the spacing between tip, whip, turn and scale handles use
+    `handleScale` (1.5 touch, 1.15 pen, 1 mouse). The edge for drawing tails is 26 px for touch.
+  - **Motion bar ends**: they were 14 px inside the bar. On touch they are 26 px and reach past the
+    bar's ends, so a 1-frame layer can be lengthened. Keyframe diamonds are bigger on touch.
+  - **Box-select by finger** could not work: `.mscroll` is `pan-x pan-y`, so a finger drag scrolls.
+    In Select mode the property tracks become `touch-action: none` (`.mgrid.picking`), so a finger
+    drag boxes keys. The Select button tooltip and the manual say so.
+  - **Caption panel on touch**: chips, sliders and selects are 44 px, tabs 48 px and font tiles 64 px.
+  - The touch CSS applies under `@media (pointer: coarse)` and under the app's own
+    `body.form-tablet` and `body.form-phone`, because the pane did not emulate a coarse pointer and an
+    iPad with a trackpad reports a fine one.
+- **Test fixes**:
+  - The Make caption check relied on the drawing layer staying selected after an Undo, which did
+    not hold in the slower touch pane. It now names the layer.
+  - The fixture records notices.
+- **Checks**:
+  - Captions fixture 29: a finger 30 px from a tip grabs it; a mouse at the same spot does not;
+    handles spread 1.5× for touch; pen is 1.15×. It passes headless and in the touch-screen pane.
+  - Precision: tracks scroll by finger outside Select mode and box in it.
+  - Tablet sizes measured in the pane: chips and sliders 44, tabs 48, font tiles 64, and the panel
+    fits at 768 px.
+  - Full results: unit tests 814 passed (1 skipped), build passed, browser suite 72 of 72 (run alone).
+- **Still untested**: a real iPad and Apple Pencil, including palm rejection while using the Letter
+  tool. In the pane, test captions left by a second, stale app tab came back once (it saved over the
+  cleanup); that tab was closed and the captions removed.
+
 ### Transform on captions (2026-11-09, committed and pushed to main)
 
 Owner report: Transform did not work with captions. Before, Transform on a caption quietly turned on

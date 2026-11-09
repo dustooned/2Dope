@@ -5766,3 +5766,32 @@ body.ws-board.ui-full:not(.ui-hidden):not(.presenting) .bub-modes, body.ws-board
 .caption-panel button.has-ico svg.ico { width: 17px; height: 17px; flex: none; }
 .caption-panel .cap-head button.has-ico svg.ico { width: 16px; height: 16px; }
 .caption-panel .cap-row select { width: 100%; min-height: 32px; grid-column: 2 / -1; }
+
+/* Touch: finger-sized targets for recent timeline and caption controls */
+.mgrid.picking .mrow.prop .mright { touch-action: none; }
+@media (pointer: coarse) {
+  /* a bar's ends reach past the bar, so even a one-frame layer can be lengthened with a finger */
+  .mh { width: 26px; z-index: 3; }
+  .mh.in { left: -13px; }
+  .mh.out { right: -13px; }
+  .mkey { width: 28px; height: 28px; margin: -14px 0 0 -14px; transform: rotate(45deg) scale(0.6); }
+  .caption-panel .cap-chips button, .caption-panel .cap-add, .caption-panel .cap-style-acts button { min-height: 44px; }
+  .caption-panel .cap-row input[type=range] { min-height: 44px; }
+  .caption-panel .cap-row select, .caption-panel input[type=number] { min-height: 44px; }
+  .caption-panel .cap-tabs [role=tab] { min-height: 48px; }
+  .caption-panel .cap-head button { min-height: 44px; }
+  .caption-panel input[type=color] { width: 44px; height: 40px; }
+  .caption-panel .cap-fonts button { min-height: 64px; }
+}
+/* the same on iPads and phones (by the app's device form), whatever pointer the browser reports */
+body.form-tablet .mh, body.form-phone .mh { width: 26px; z-index: 3; }
+body.form-tablet .mh.in, body.form-phone .mh.in { left: -13px; }
+body.form-tablet .mh.out, body.form-phone .mh.out { right: -13px; }
+body.form-tablet .mkey, body.form-phone .mkey { width: 28px; height: 28px; margin: -14px 0 0 -14px; transform: rotate(45deg) scale(0.6); }
+body.form-tablet .caption-panel .cap-chips button, body.form-phone .caption-panel .cap-chips button, body.form-tablet .caption-panel .cap-add, body.form-phone .caption-panel .cap-add, body.form-tablet .caption-panel .cap-style-acts button, body.form-phone .caption-panel .cap-style-acts button { min-height: 44px; }
+body.form-tablet .caption-panel .cap-row input[type=range], body.form-phone .caption-panel .cap-row input[type=range] { min-height: 44px; }
+body.form-tablet .caption-panel .cap-row select, body.form-phone .caption-panel .cap-row select, body.form-tablet .caption-panel input[type=number], body.form-phone .caption-panel input[type=number] { min-height: 44px; }
+body.form-tablet .caption-panel .cap-tabs [role=tab], body.form-phone .caption-panel .cap-tabs [role=tab] { min-height: 48px; }
+body.form-tablet .caption-panel .cap-head button, body.form-phone .caption-panel .cap-head button { min-height: 44px; }
+body.form-tablet .caption-panel input[type=color], body.form-phone .caption-panel input[type=color] { width: 44px; height: 40px; }
+body.form-tablet .caption-panel .cap-fonts button, body.form-phone .caption-panel .cap-fonts button { min-height: 64px; }

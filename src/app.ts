@@ -5631,7 +5631,7 @@ export class App {
         }
       }
       const p = this.toPoint(e, e.timeStamp);
-      this.letters.down(e.pointerId, { x: p.x, y: p.y });
+      this.letters.down(e.pointerId, { x: p.x, y: p.y }, e.pointerType);
       return;
     }
     this.veValid();

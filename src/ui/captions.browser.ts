@@ -22,7 +22,8 @@ setCaptionFontHooks({ redraw: () => app.requestRender(), source: async () => nul
 app.letters.onEdit = (id, isNew) => editor.open(id, isNew);
 app.history.onChange = () => editor.refresh();
 const errors: string[] = [];
-app.onNotice = () => {};
+const notices: string[] = [];
+app.onNotice = m => { notices.push(m); };
 addEventListener('error', e => errors.push(e.message));
 addEventListener('unhandledrejection', e => errors.push(String(e.reason)));
 app.loadProject(new Project(640, 360)); app.project.comp.duration = 96; app.setWorkspace('draw');
@@ -435,14 +436,15 @@ await check('Make caption from a drawing: a vector balloon with a tail, and a pa
   expect(captions().length === before && app.project.comp.layers.find(x => x.id === art.id)!.visible, 'Undo did not restore the drawing');
   // a painted balloon (pixels): traced, read as a box
   d.vectors = []; const g = d.line.getContext('2d')!; g.fillStyle = '#222'; g.fillRect(80, 220, 220, 90); g.clearRect(90, 230, 200, 70); d.rev++;
-  const id2 = captionFromDrawing(app)!;
+  const id2 = captionFromDrawing(app, art.id)!;
+  expect(id2, 'the painted box was not converted: ' + notices.at(-1));
   const c2 = cap(id2);
   expect(c2.style === 'box' && c2.tails.length === 0 && Math.abs(c2.x - 190) < 6, 'painted box not read: ' + JSON.stringify({ style: c2.style, x: c2.x, y: c2.y }));
   footer('Apply').click();
   app.undo(); await wait();
   // nothing closed: a clear message, no caption
   g.clearRect(0, 0, d.line.width, d.line.height); d.rev++;
-  expect(captionFromDrawing(app) === null && captions().length === before, 'an empty drawing made a caption');
+  expect(captionFromDrawing(app, art.id) === null && captions().length === before, 'an empty drawing made a caption');
   app.project.comp.layers = app.project.comp.layers.filter(x => x.id !== art.id);
   app.focusLayer(first);
 });
@@ -548,6 +550,41 @@ await check('Transform on a caption: a box to move, scale and turn it whole (one
   expect(!app.letters.transforming, 'a press outside did not end the box');
   app.toggleDrawTransform(); app.setTool('brush');
   expect(!app.letters.transforming && !app.lettering, 'picking Brush did not end the box');
+});
+
+await check('Touch and pen: finger-sized reach and handles spread apart; a mouse keeps its precise reach', async () => {
+  app.setWorkspace('draw'); app.setLettering(true); app.focusLayer(first); app.setFrame(10); editor.close();
+  const l = app.project.comp.layers.find(x => x.id === first)!;
+  if (l.kind !== 'drawings') throw new Error('not drawings');
+  const tipNow = () => app.letters.shown(l).tails[0]!;
+  // only this caption on screen, so the check measures reach, not other captions' edges nearby
+  const hidden = app.project.comp.layers.filter(x => x.id !== first && x.kind === 'drawings' && x.caption && x.visible);
+  for (const x of hidden) x.visible = false;
+  // a press 30 px off the tip, away from the balloon and to the side of the whip
+  const press = (kind: string, id: number) => {
+    const t = tipNow(), c = cap(first), dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1;
+    const side = { x: -dy / d, y: dx / d }, off = 30 / app.view.zoom, p = { x: t.x + side.x * off, y: t.y + side.y * off };
+    // what the press picks up (then let go without changing anything)
+    app.letters.down(id, p, kind);
+    const drag = (app.letters as unknown as { drag: { kind: string } | null }).drag;
+    const grabbed = drag?.kind === 'tip';
+    app.letters.up(id, true);
+    return grabbed;
+  };
+  expect(press('touch', 30), 'a finger 30 px from the tip did not grab it');
+  await wait();
+  expect(app.letters.handleScale === 1.5, 'touch handles are not bigger');
+  const ht = app.letters.handles(l)!, gapTouch = Math.hypot(ht.whips[0]!.x - ht.tips[0]!.x, ht.whips[0]!.y - ht.tips[0]!.y);
+  expect(!press('mouse', 31), 'a mouse 30 px away grabbed the tip (it should stay precise)');
+  await wait();
+  const hm = app.letters.handles(l)!, gapMouse = Math.hypot(hm.whips[0]!.x - hm.tips[0]!.x, hm.whips[0]!.y - hm.tips[0]!.y);
+  expect(gapTouch > gapMouse * 1.4, `handles do not spread for fingers: ${gapTouch.toFixed(1)} vs ${gapMouse.toFixed(1)}`);
+  // a pen sits in between
+  app.letters.down(32, { x: -999, y: -999 }, 'pen'); app.letters.up(32, true);
+  expect(app.letters.handleScale === 1.15, 'pen handle size wrong');
+  app.letters.down(33, { x: -999, y: -999 }, 'mouse'); app.letters.up(33, true);
+  for (const x of hidden) { const live = app.project.comp.layers.find(y => y.id === x.id); if (live) live.visible = true; }
+  app.setLettering(false);
 });
 
 await check('Motion shows the caption settings as rows, ready to key', () => {

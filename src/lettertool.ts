@@ -47,6 +47,13 @@ export class LetterTool {
   private lastTap = { layer: '', time: 0, kind: '' };
   /** Set by the UI: open the caption editor for a layer (new = just created). */
   onEdit: ((layerId: string, isNew: boolean) => void) | null = null;
+  /** The last pointer used on the canvas: fingers get bigger handles and reach, a pen a little more than a mouse. */
+  pointerKind: 'mouse' | 'pen' | 'touch' = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse';
+  /** Handle sizes and spacing for the pointer in use (1 = mouse). */
+  get handleScale(): number { return this.pointerKind === 'touch' ? 1.5 : this.pointerKind === 'pen' ? 1.15 : 1; }
+  /** How close a press must be to a handle, screen pixels. */
+  private get reach(): number { return this.pointerKind === 'touch' ? 36 : this.pointerKind === 'pen' ? 26 : 22; }
+
   /** A caption shown with a Transform box (Transform picked on a caption): move, scale and turn it whole. */
   transforming: string | null = null;
   /** A caption whose balloon the next closed loop redraws (Draw shape in the Caption panel). */
@@ -106,11 +113,11 @@ export class LetterTool {
     }
     const sizable = c.style !== 'sfx' && (c.style !== 'custom' || !!c.look?.outline) && !c.text.includes('\n');
     // turn: a round handle above the balloon; scale: a square at its lower-right corner (screen sizes)
-    const sc = this.layerScale(l), z = app.view.zoom;
+    const sc = this.layerScale(l), z = app.view.zoom, k = this.handleScale;
     return { outline: shapes.outline, tips, bends, width: sizable ? { x: c.x + lay.fit.a, y: c.y } : null,
-      turn: { x: c.x, y: c.y - lay.fit.b - 34 / (z * sc) }, scale: { x: c.x + lay.fit.a * 0.92 + 10 / (z * sc), y: c.y + lay.fit.b * 0.92 + 10 / (z * sc) },
+      turn: { x: c.x, y: c.y - lay.fit.b - (34 * k) / (z * sc) }, scale: { x: c.x + lay.fit.a * 0.92 + (10 * k) / (z * sc), y: c.y + lay.fit.b * 0.92 + (10 * k) / (z * sc) },
       // a pick whip beside each tip, on the side away from the balloon
-      whips: c.tails.map(t => { const dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1, r = 32 / (z * sc); return { x: t.x + (dx / d) * r, y: t.y + (dy / d) * r }; }) };
+      whips: c.tails.map(t => { const dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1, r = (32 * k) / (z * sc); return { x: t.x + (dx / d) * r, y: t.y + (dy / d) * r }; }) };
   }
 
   /** How much a layer is scaled on screen (its own scale and its parents'), for handle sizes. */
@@ -134,8 +141,9 @@ export class LetterTool {
     this.app.requestRender();
   }
 
-  down(id: number, stage: Pt): void {
-    const app = this.app, zoom = app.view.zoom, near = 22 / zoom;
+  down(id: number, stage: Pt, pointer?: string): void {
+    if (pointer === 'touch' || pointer === 'pen' || pointer === 'mouse') this.pointerKind = pointer;
+    const app = this.app, zoom = app.view.zoom, near = this.reach / zoom;
     // drawing a new shape for a caption: every stroke is that drawing
     if (this.shapeTarget) { this.drag = { id, kind: 'stroke', points: [stage] }; return; }
     // the selected caption's handles come first
@@ -196,7 +204,7 @@ export class LetterTool {
       const tail = c.tips.findIndex(t => Math.hypot(t.x - c.local.x, t.y - c.local.y) < near);
       if (tail >= 0) { this.drag = { id, kind: 'tip', layer: c.layer.id, tail, start: c.local, before: structuredClone(c.layer.caption!), moved: false }; return; }
     }
-    const rim = 16 / zoom, found = this.captionsAt(stage);
+    const rim = (this.pointerKind === 'touch' ? 26 : 16) / zoom, found = this.captionsAt(stage);
     // pressing on a balloon's edge draws its tail; deeper inside moves it
     if (found.some(c => edgeDistance(c.outline, c.local) < rim)) { this.drag = { id, kind: 'stroke', points: [stage] }; return; }
     const hit = found.find(c => inside(c.outline, c.local));
@@ -321,7 +329,7 @@ export class LetterTool {
     const kind = detectBalloon(pts);
     if (kind === 'open') {
       // a line that starts on (or in) a balloon is its tail
-      const owner = this.captionsAt(pts[0]!).find(c => inside(c.outline, c.local) || edgeDistance(c.outline, c.local) < 16 / zoom);
+      const owner = this.captionsAt(pts[0]!).find(c => inside(c.outline, c.local) || edgeDistance(c.outline, c.local) < (this.pointerKind === 'touch' ? 26 : 16) / zoom);
       if (!owner) { app.onNotice?.("Draw a closed shape for a balloon, or start on a balloon's edge to draw its tail."); return; }
       const m = invert(app.editor.matrixOf(owner.layer))!, local = pts.map(p => { const [x, y] = apply(m, [p.x, p.y]); return { x, y }; });
       const tip = local[local.length - 1]!, mid = local[Math.floor(local.length / 2)]!;
@@ -410,7 +418,7 @@ export class LetterTool {
     const m = app.editor.matrixOf(l), at = (x: number, y: number) => { const [sx, sy] = apply(m, [x, y]); return { x: sx, y: sy }; };
     const corners = [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)];
     const top = { x: (corners[0]!.x + corners[1]!.x) / 2, y: (corners[0]!.y + corners[1]!.y) / 2 };
-    const centre = at(c.x, c.y), up = { x: top.x - (corners[3]!.x + corners[2]!.x) / 2, y: top.y - (corners[3]!.y + corners[2]!.y) / 2 }, len = Math.hypot(up.x, up.y) || 1, reach = 34 / app.view.zoom;
+    const centre = at(c.x, c.y), up = { x: top.x - (corners[3]!.x + corners[2]!.x) / 2, y: top.y - (corners[3]!.y + corners[2]!.y) / 2 }, len = Math.hypot(up.x, up.y) || 1, reach = (34 * this.handleScale) / app.view.zoom;
     return { corners, centre, turn: { x: top.x + (up.x / len) * reach, y: top.y + (up.y / len) * reach } };
   }
 
@@ -481,13 +489,13 @@ export class LetterTool {
 
   /** The live stroke and the active caption's tail handles. */
   drawOverlay(g: CanvasRenderingContext2D): void {
-    const app = this.app, z = app.view.zoom;
+    const app = this.app, z = app.view.zoom / this.handleScale;
     g.save();
-    g.lineWidth = 2 / z; g.strokeStyle = '#4aa3ff'; g.setLineDash([6 / z, 5 / z]);
+    g.lineWidth = 2 / app.view.zoom; g.strokeStyle = '#4aa3ff'; g.setLineDash([6 / app.view.zoom, 5 / app.view.zoom]);
     const wd = this.drag?.kind === 'whip' ? this.drag : null;
     if (wd) {
       // the whip line, and the layer it would follow
-      g.save(); g.strokeStyle = '#ff9f1a'; g.lineWidth = 2 / z; g.setLineDash([]);
+      g.save(); g.strokeStyle = '#ff9f1a'; g.lineWidth = 2 / app.view.zoom; g.setLineDash([]);
       g.beginPath(); g.moveTo(wd.from.x, wd.from.y); g.lineTo(wd.to.x, wd.to.y); g.stroke();
       g.beginPath(); g.arc(wd.to.x, wd.to.y, (wd.target ? 9 : 5) / z, 0, Math.PI * 2); g.fillStyle = wd.target ? '#ff9f1a' : 'rgba(255,159,26,.4)'; g.fill();
       g.restore();
@@ -500,7 +508,7 @@ export class LetterTool {
     if (box) {
       // the Transform box: a solid frame, corner squares to scale, a round handle on a stick to turn
       const [a, b] = box.corners, top = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
-      g.strokeStyle = '#4aa3ff'; g.lineWidth = 1.5 / z;
+      g.strokeStyle = '#4aa3ff'; g.lineWidth = 1.5 / app.view.zoom;
       g.beginPath(); box.corners.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.closePath(); g.stroke();
       g.beginPath(); g.moveTo(top.x, top.y); g.lineTo(box.turn.x, box.turn.y); g.stroke();
       g.beginPath(); g.arc(box.turn.x, box.turn.y, 8 / z, 0, Math.PI * 2); g.fillStyle = '#4aa3ff'; g.fill(); g.strokeStyle = '#fff'; g.stroke();
@@ -514,9 +522,9 @@ export class LetterTool {
     if (l && h) {
       const m = app.editor.matrixOf(l), at = (p: Pt) => { const [x, y] = apply(m, [p.x, p.y]); return { x, y }; };
       // the selected balloon's outline
-      g.setLineDash([5 / z, 4 / z]); g.lineWidth = 1.5 / z;
+      g.setLineDash([5 / app.view.zoom, 4 / app.view.zoom]); g.lineWidth = 1.5 / app.view.zoom;
       g.beginPath(); h.outline.forEach((p, i) => { const q = at(p); if (i) g.lineTo(q.x, q.y); else g.moveTo(q.x, q.y); }); g.closePath(); g.stroke();
-      g.setLineDash([]); g.lineWidth = 2 / z; g.fillStyle = '#fff';
+      g.setLineDash([]); g.lineWidth = 2 / app.view.zoom; g.fillStyle = '#fff';
       // tail bends: small diamonds (double-tap to straighten)
       for (const b of h.bends) { const q = at(b), r = 7 / z; g.beginPath(); g.moveTo(q.x, q.y - r); g.lineTo(q.x + r, q.y); g.lineTo(q.x, q.y + r); g.lineTo(q.x - r, q.y); g.closePath(); g.fill(); g.stroke(); }
       // tail tips: round dots
@@ -527,12 +535,12 @@ export class LetterTool {
       const tails = l.kind === 'drawings' ? l.caption?.tails ?? [] : [];
       h.whips.forEach((w, i) => {
         const q = at(w), r = 6.5 / z, on = !!tails[i]?.follow;
-        g.beginPath(); g.arc(q.x, q.y, r, 0, Math.PI * 2); g.fillStyle = on ? '#ff9f1a' : '#fff'; g.fill(); g.strokeStyle = '#ff9f1a'; g.lineWidth = 1.6 / z; g.stroke();
+        g.beginPath(); g.arc(q.x, q.y, r, 0, Math.PI * 2); g.fillStyle = on ? '#ff9f1a' : '#fff'; g.fill(); g.strokeStyle = '#ff9f1a'; g.lineWidth = 1.6 / app.view.zoom; g.stroke();
         g.beginPath(); for (let k = 0; k <= 16; k++) { const a = k * 0.75, rr = (r * 0.75 * k) / 16; const px = q.x + Math.cos(a) * rr, py = q.y + Math.sin(a) * rr; if (k) g.lineTo(px, py); else g.moveTo(px, py); } g.strokeStyle = on ? '#fff' : '#ff9f1a'; g.stroke();
       });
       // turn (a dot on a stick above) and scale (a corner square)
       const top = at(h.turn), stick = at(h.outline.reduce((m, p) => (p.y < m.y ? p : m), h.outline[0]!));
-      g.setLineDash([]); g.strokeStyle = '#4aa3ff'; g.lineWidth = 1.5 / z;
+      g.setLineDash([]); g.strokeStyle = '#4aa3ff'; g.lineWidth = 1.5 / app.view.zoom;
       g.beginPath(); g.moveTo(stick.x, stick.y); g.lineTo(top.x, top.y); g.stroke();
       g.beginPath(); g.arc(top.x, top.y, 7 / z, 0, Math.PI * 2); g.fillStyle = '#4aa3ff'; g.fill(); g.strokeStyle = '#fff'; g.stroke();
       const sq = at(h.scale), sr = 6 / z;
