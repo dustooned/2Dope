@@ -32,7 +32,7 @@ type Drag =
   | { id: number; kind: 'stroke'; points: Pt[] }
   | { id: number; kind: 'move' | 'tip' | 'bend' | 'width' | 'shape'; layer: string; tail: number; start: Pt; before: CaptionSpec; moved: boolean }
   /** Turn or scale the whole caption (its layer's rotation and scale, around the balloon's centre). */
-  | { id: number; kind: 'turn' | 'scale'; layer: string; startStage: Pt; centre: Pt; before: Layer['transform']; moved: boolean }
+  | { id: number; kind: 'turn' | 'scale' | 'slide'; layer: string; startStage: Pt; centre: Pt; before: Layer['transform']; moved: boolean }
   /** Pick whip from a tail tip: let go on a layer and the tip follows it. */
   | { id: number; kind: 'whip'; layer: string; tail: number; from: Pt; to: Pt; target: string | null };
 
@@ -47,6 +47,8 @@ export class LetterTool {
   private lastTap = { layer: '', time: 0, kind: '' };
   /** Set by the UI: open the caption editor for a layer (new = just created). */
   onEdit: ((layerId: string, isNew: boolean) => void) | null = null;
+  /** A caption shown with a Transform box (Transform picked on a caption): move, scale and turn it whole. */
+  transforming: string | null = null;
   /** A caption whose balloon the next closed loop redraws (Draw shape in the Caption panel). */
   shapeTarget: string | null = null;
   /** A caption whose custom shape shows reshape handles (Edit shape in the Caption panel). */
@@ -138,6 +140,18 @@ export class LetterTool {
     if (this.shapeTarget) { this.drag = { id, kind: 'stroke', points: [stage] }; return; }
     // the selected caption's handles come first
     const active = app.project.comp.layers.find(x => x.id === app.project.activeLayer);
+    // the Transform box: corners scale, the top handle turns, inside moves; a press outside ends it
+    if (this.transforming && active?.kind === 'drawings' && active.caption && active.id === this.transforming && !active.locked) {
+      const box = this.transformBox(active);
+      if (box) {
+        const from = (kind: 'turn' | 'scale' | 'slide') => { this.drag = { id, kind, layer: active.id, startStage: stage, centre: box.centre, before: structuredClone(active.transform), moved: false }; };
+        const d = (p: Pt) => Math.hypot(p.x - stage.x, p.y - stage.y);
+        if (d(box.turn) < near) { from('turn'); return; }
+        if (box.corners.some(p => d(p) < near)) { from('scale'); return; }
+        if (inside(box.corners, stage)) { from('slide'); return; }
+      }
+      this.setTransforming(null);
+    }
     if (active?.kind === 'drawings' && active.caption && this.shapeEditing === active.id && active.visible && !active.locked) {
       const m = invert(app.editor.matrixOf(active));
       if (m) {
@@ -210,7 +224,7 @@ export class LetterTool {
       this.app.requestRender();
       return;
     }
-    if (d.kind === 'turn' || d.kind === 'scale') {
+    if (d.kind === 'turn' || d.kind === 'scale' || d.kind === 'slide') {
       const t = this.app.project.comp.layers.find(x => x.id === d.layer);
       if (t?.kind === 'drawings' && t.caption) this.transformMove(d, t, stage);
       return;
@@ -266,13 +280,13 @@ export class LetterTool {
       app.onNotice?.(`The tail now follows “${target.name}”. Drag its tip to point at another spot; Follows → Nothing in the Tails tab stops it.`);
       return;
     }
-    if (d.kind === 'turn' || d.kind === 'scale') {
+    if (d.kind === 'turn' || d.kind === 'scale' || d.kind === 'slide') {
       const l = app.project.comp.layers.find(x => x.id === d.layer);
       if (!l) return;
       const after = l.transform;
       l.transform = d.before;
       if (cancelled || !d.moved) { app.requestRender(); return; }
-      app.editor.edit(d.kind === 'turn' ? 'Turn caption' : 'Scale caption', c => { const x = c.layers.find(y => y.id === d.layer); if (x) { x.transform = after; x.anchorFixed = true; } });
+      app.editor.edit(d.kind === 'turn' ? 'Turn caption' : d.kind === 'scale' ? 'Scale caption' : 'Move caption', c => { const x = c.layers.find(y => y.id === d.layer); if (x) { x.transform = after; x.anchorFixed = true; } });
       return;
     }
     if (isCaptionEdit(d)) {
@@ -336,12 +350,22 @@ export class LetterTool {
    * the anchor moves to the centre first, with position compensated, then rotation or scale change.
    * Animated properties get a key at the playhead instead.
    */
-  private transformMove(d: Extract<Drag, { kind: 'turn' | 'scale' }>, l: DrawingsLayer, stage: Pt): void {
+  private transformMove(d: Extract<Drag, { kind: 'turn' | 'scale' | 'slide' }>, l: DrawingsLayer, stage: Pt): void {
     const app = this.app, dx = stage.x - d.startStage.x, dy = stage.y - d.startStage.y;
     if (Math.hypot(dx, dy) * app.view.zoom > 3) d.moved = true;
     if (!d.moved) return;
     const t = structuredClone(d.before), f = app.frame - l.start, c = l.caption!;
     const write = <T extends number | Vec2>(p: Prop<T>, v: T): Prop<T> => (isAnimated(p) ? setKey(p, f, v) : { ...p, value: v });
+    if (d.kind === 'slide') {
+      // the whole caption moves with the finger (its layer's position, in its parent's space)
+      const inv = invert(app.editor.pathMatrix({ ...l, transform: d.before }));
+      if (!inv) return;
+      const a = apply(inv, [d.startStage.x, d.startStage.y]), b = apply(inv, [stage.x, stage.y]), p = valueAt(d.before.position, f);
+      t.position = write(t.position, [Math.round((p[0] + b[0] - a[0]) * 10) / 10, Math.round((p[1] + b[1] - a[1]) * 10) / 10] as Vec2);
+      l.transform = t;
+      app.requestRender();
+      return;
+    }
     // pivot on the balloon: anchor to its centre, position compensated so nothing jumps
     const anchor = valueAt(t.anchor, f), pos = valueAt(t.position, f), lm = localMatrix({ ...l, transform: d.before }, app.frame);
     const ax = c.x - anchor[0], ay = c.y - anchor[1];
@@ -361,6 +385,33 @@ export class LetterTool {
     }
     l.transform = t;
     app.requestRender();
+  }
+
+  /** Turn the Transform box on for a caption (or off with null). */
+  setTransforming(id: string | null): void {
+    if (this.transforming === id) return;
+    this.transforming = id;
+    this.app.onToolChange();
+    this.app.requestRender();
+  }
+
+  /**
+   * The Transform box around a caption on screen (stage points): the box around its balloon, tails
+   * and letters, turned and scaled with the layer; the turn handle above its top edge; and the
+   * balloon's centre (the pivot).
+   */
+  transformBox(l: DrawingsLayer): { corners: Pt[]; turn: Pt; centre: Pt } | null {
+    const app = this.app, c = l.caption ? this.shown(l) : undefined;
+    if (!c) return null;
+    const { lay, shapes } = captionBalloon(c, app.frame - l.start, app.project.width, app.project.height);
+    const pts = [...shapes.outline, ...shapes.seams.flat(), ...shapes.zigzags.flat(), ...shapes.bubbles.flatMap(b => [{ x: b.x - b.r, y: b.y - b.r }, { x: b.x + b.r, y: b.y + b.r }])];
+    const pad = lay.size * (c.inkWidth + 0.15);
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y), x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+    const m = app.editor.matrixOf(l), at = (x: number, y: number) => { const [sx, sy] = apply(m, [x, y]); return { x: sx, y: sy }; };
+    const corners = [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)];
+    const top = { x: (corners[0]!.x + corners[1]!.x) / 2, y: (corners[0]!.y + corners[1]!.y) / 2 };
+    const centre = at(c.x, c.y), up = { x: top.x - (corners[3]!.x + corners[2]!.x) / 2, y: top.y - (corners[3]!.y + corners[2]!.y) / 2 }, len = Math.hypot(up.x, up.y) || 1, reach = 34 / app.view.zoom;
+    return { corners, centre, turn: { x: top.x + (up.x / len) * reach, y: top.y + (up.y / len) * reach } };
   }
 
   /** A point in a caption layer's page units, as a spot on another layer (its own page units). */
@@ -445,6 +496,20 @@ export class LetterTool {
     if (s && s.length > 1) { g.beginPath(); s.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.stroke(); }
     g.setLineDash([]);
     const l = app.project.comp.layers.find(x => x.id === app.project.activeLayer);
+    const box = l?.kind === 'drawings' && l.caption && this.transforming === l.id ? this.transformBox(l) : null;
+    if (box) {
+      // the Transform box: a solid frame, corner squares to scale, a round handle on a stick to turn
+      const [a, b] = box.corners, top = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+      g.strokeStyle = '#4aa3ff'; g.lineWidth = 1.5 / z;
+      g.beginPath(); box.corners.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.closePath(); g.stroke();
+      g.beginPath(); g.moveTo(top.x, top.y); g.lineTo(box.turn.x, box.turn.y); g.stroke();
+      g.beginPath(); g.arc(box.turn.x, box.turn.y, 8 / z, 0, Math.PI * 2); g.fillStyle = '#4aa3ff'; g.fill(); g.strokeStyle = '#fff'; g.stroke();
+      const r = 7 / z;
+      for (const p of box.corners) { g.fillStyle = '#fff'; g.strokeStyle = '#4aa3ff'; g.fillRect(p.x - r, p.y - r, r * 2, r * 2); g.strokeRect(p.x - r, p.y - r, r * 2, r * 2); }
+      g.beginPath(); g.arc(box.centre.x, box.centre.y, 3 / z, 0, Math.PI * 2); g.fillStyle = '#4aa3ff'; g.fill();
+      g.restore();
+      return;
+    }
     const h = l?.kind === 'drawings' && l.caption ? this.handles(l) : null;
     if (l && h) {
       const m = app.editor.matrixOf(l), at = (p: Pt) => { const [x, y] = apply(m, [p.x, p.y]); return { x, y }; };

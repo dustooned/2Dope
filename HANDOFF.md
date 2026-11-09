@@ -2,6 +2,29 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Transform on captions (2026-11-09, committed and pushed to main)
+
+Owner report: Transform did not work with captions. Before, Transform on a caption quietly turned on
+the Letter tool, whose small turn and scale dots were easy to miss; no Transform box appeared.
+- `LetterTool.transforming` and `transformBox`: a box around the caption's balloon, tails and
+  letters (turned and scaled with the layer), corner squares, and a turn handle on a stick.
+  - Inside moves: a new `slide` drag changes the layer position in its parent's space.
+  - Corners scale and the top handle turns, about the balloon (the existing `transformMove`).
+  - Each drag is one Undo step (Move, Scale or Turn caption); animated properties get a key.
+- `App.toggleDrawTransform` toggles the box for the selected caption.
+- The box ends when you:
+  - tap Transform again, press Enter or Esc, or press outside the box;
+  - pick another tool (`setTool`), or turn off the Letter tool.
+- The Transform button stays lit while the box is on the selected caption. The Letter row shows
+  only Done and a hint.
+- Checks:
+  - Captions fixture 28: the box holds the balloon and tail; move, scale (no jump) and turn are one
+    Undo each; rendered at the new place; Esc ends it; Undo restores; a press outside or Brush ends it.
+  - In the pane with a real mouse: Transform from the tool bar showed the box (checked by eye), and
+    a drag inside moved the caption as one "Move caption" step. The pane could not take screenshots
+    after that (the app window was hidden), so turning was checked only by the fixture.
+- Full results: unit tests 814 passed (1 skipped), build passed, browser suite 72 of 72 (run alone).
+
 ### One-tap captions from the style chips; tail tip picking (2026-11-08, committed and pushed to main)
 
 The owner asked for captions that start simple without drawing, made easier in the existing UI.
@@ -29,7 +52,7 @@ The owner asked for captions that start simple without drawing, made easier in t
   - The style chip action adds, places, keeps one Undo step and removes an empty caption.
   - A box goes to a corner.
   - A press just past a tip aims the tail.
-- Full results: see below.
+- Full results: unit tests 814 passed (1 skipped), build passed, browser suite 72 of 72 (run alone).
 
 ### Cleanup and review of this session's code (2026-11-08, committed and pushed to main)
 

@@ -626,12 +626,14 @@ export class App {
       this.smudging = false;
     }
     this.lettering = on;
+    if (!on) this.letters.transforming = null;
     this.onToolChange();
     this.requestRender();
   }
 
   setTool(t: Tool): void {
     this.lettering = false;
+    this.letters.transforming = null;
     if (this.xf) this.applyTransform();
     if (this.arrangingAssets) this.setArrangeAssets(false);
     if (this.adjusting) this.applyAdjust();
@@ -1502,10 +1504,13 @@ export class App {
 
   toggleDrawTransform(): void {
     if (this.xf) { this.applyTransform(); return; }
-    // a caption has no pixels to transform: the Letter tool turns and scales it as a layer
+    // a caption has no pixels to transform: it gets a Transform box that moves, scales and turns it whole
     if (this.selectedCaption && !this.spatialSelection) {
+      const id = this.project.activeLayer;
+      if (this.letters.transforming === id) { this.letters.setTransforming(null); return; }
       this.setLettering(true);
-      this.onNotice?.('Captions turn and scale as a whole: drag the round handle above the balloon to turn it, the corner square to scale it.');
+      this.letters.setTransforming(id);
+      this.onNotice?.('Drag inside the box to move the caption, a corner to scale it, the round handle to turn it. Tap Transform again (or Enter) when done.');
       return;
     }
     if (this.arrangingAssets) this.setArrangeAssets(false);
@@ -6613,6 +6618,8 @@ export class App {
       this.updateCursor();
       return;
     }
+    // the caption Transform box: Esc or Enter finishes
+    if ((e.key === 'Escape' || e.key === 'Enter') && this.letters.transforming && !(e.target as HTMLElement | null)?.closest?.('input, textarea, select')) { e.preventDefault(); this.letters.setTransforming(null); return; }
     // Draw shape (captions): Esc stops waiting for the loop
     if (e.key === 'Escape' && this.letters.shapeTarget) { e.preventDefault(); this.letters.armShape(null); this.onNotice?.('Stopped drawing a balloon shape.'); return; }
     if (this.workspace === 'motion') {

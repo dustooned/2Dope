@@ -507,6 +507,49 @@ await check('Re-edit a caption with one tap (or from Layers and Motion), and fin
   footer('Apply').click();
 });
 
+await check('Transform on a caption: a box to move, scale and turn it whole (one Undo each); Esc finishes', async () => {
+  app.setWorkspace('draw'); app.setLettering(false); app.focusLayer(first); app.setFrame(10); editor.close();
+  app.toggleDrawTransform();
+  expect(app.lettering && app.letters.transforming === first, 'Transform did not give the caption a box');
+  const l = () => app.project.comp.layers.find(x => x.id === first)! as Extract<ReturnType<typeof app.project.comp.layers.find>, { kind: 'drawings' }>;
+  const box = app.letters.transformBox(l())!;
+  expect(box && box.corners.length === 4, 'no box');
+  // the box holds the whole caption: the balloon centre and its tail tip are inside
+  const tip = apply(app.editor.matrixOf(l()), [app.letters.shown(l()).tails[0]!.x, app.letters.shown(l()).tails[0]!.y]);
+  expect(inside(box.corners, box.centre) && inside(box.corners, { x: tip[0], y: tip[1] }), 'the box does not hold the caption');
+  // move: drag inside
+  const p0 = valueAt(l().transform.position, 0);
+  app.letters.down(20, box.centre); app.letters.move(20, { x: box.centre.x + 40, y: box.centre.y + 25 }); app.letters.up(20, false);
+  const p1 = valueAt(l().transform.position, 0);
+  expect(Math.abs(p1[0] - p0[0] - 40) < 0.6 && Math.abs(p1[1] - p0[1] - 25) < 0.6 && app.history.peekUndo()?.label === 'Move caption', 'move failed: ' + JSON.stringify({ p0, p1, undo: app.history.peekUndo()?.label }));
+  // scale: drag a corner out to 1.5× its distance from the centre
+  const b2 = app.letters.transformBox(l())!, cnr = b2.corners[2]!;
+  app.letters.down(21, cnr); app.letters.move(21, { x: b2.centre.x + (cnr.x - b2.centre.x) * 1.5, y: b2.centre.y + (cnr.y - b2.centre.y) * 1.5 }); app.letters.up(21, false);
+  expect(Math.abs(l().transform.scale.value[0] - 150) < 1 && app.history.peekUndo()?.label === 'Scale caption', 'scale failed: ' + l().transform.scale.value);
+  // the balloon stays where it was while scaling (pivot on the balloon)
+  const b3 = app.letters.transformBox(l())!;
+  expect(Math.hypot(b3.centre.x - b2.centre.x, b3.centre.y - b2.centre.y) < 0.6, 'the caption jumped while scaling');
+  // turn: the handle above, a quarter turn
+  const r = Math.hypot(b3.turn.x - b3.centre.x, b3.turn.y - b3.centre.y);
+  app.letters.down(22, b3.turn); app.letters.move(22, { x: b3.centre.x + r * 0.7, y: b3.centre.y - r * 0.7 }); app.letters.move(22, { x: b3.centre.x + r, y: b3.centre.y }); app.letters.up(22, false);
+  expect(Math.abs(l().transform.rotation.value - 90) < 0.5 && app.history.peekUndo()?.label === 'Turn caption', 'turn failed: ' + l().transform.rotation.value);
+  // rendered where the box says (the balloon's centre is white after the move)
+  render(10);
+  const c = app.letters.transformBox(l())!.centre, px = lg.getImageData(Math.round(c.x), Math.round(c.y), 1, 1).data;
+  expect(px[3]! > 200, 'the moved caption is not drawn at its new place');
+  // Esc finishes; three Undo steps put it back
+  document.querySelector<HTMLElement>('#canvas')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  expect(!app.letters.transforming, 'Esc did not finish the box');
+  for (let i = 0; i < 3; i++) { app.undo(); await wait(40); }
+  const back = l().transform;
+  expect(back.rotation.value === 0 && back.scale.value[0] === 100 && Math.abs(valueAt(back.position, 0)[0] - p0[0]) < 0.01, 'Undo did not restore the caption');
+  // a press outside the box ends it too, and picking a drawing tool does
+  app.toggleDrawTransform(); app.letters.down(23, { x: 2, y: 2 }); app.letters.up(23, true);
+  expect(!app.letters.transforming, 'a press outside did not end the box');
+  app.toggleDrawTransform(); app.setTool('brush');
+  expect(!app.letters.transforming && !app.lettering, 'picking Brush did not end the box');
+});
+
 await check('Motion shows the caption settings as rows, ready to key', () => {
   const l = app.project.comp.layers.find(x => x.id === first)!;
   const rows = app.editor.rowsOf(l).filter(r => r.startsWith('cap:'));

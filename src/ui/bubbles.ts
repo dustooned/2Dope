@@ -487,6 +487,10 @@ export class Bubbles {
       const id = a.letters.createInFreeSpot(s);
       if (id) a.letters.onEdit?.(id, true); else a.onToolChange();
     }, icon));
+    if (cap && a.letters.transforming === a.project.activeLayer) {
+      // the Transform box is on: just the way out
+      return [this.chip('Done', 'Finish transforming the caption (Enter)', false, () => a.letters.setTransforming(null), 'check'), el('span', { class: 'bub-hint' }, 'Drag inside to move, a corner to scale, the round handle to turn.')];
+    }
     if (cap) {
       out.push(this.chip('Edit caption', 'Words, font, size, balloon and colours: the Caption panel (or double-tap the balloon)', false, () => a.letters.onEdit?.(a.project.activeLayer, false), 'editCaption'));
       out.push(this.chip('Fade in', 'Fade the caption in from the playhead', false, () => a.captionPreset('fadeIn'), 'fadeIn'));
@@ -762,7 +766,7 @@ export class Bubbles {
         : k === 'autokey' ? a.editor.autoKey
         : k === 'look' ? a.editor.throughCamera
         : k === 'play' ? a.playing
-        : k === 'more' ? this.moreTools : k === 'eyedrop' ? a.eyedropArmed : k === 'safeareas' ? a.canvasView.safeAreas : k === 'centrecross' ? a.canvasView.centre : k === 'overscan' ? a.canvasView.overscan : k === 'transform' ? a.transforming : k === cur || (k === 'onion' && a.onion.enabled);
+        : k === 'more' ? this.moreTools : k === 'eyedrop' ? a.eyedropArmed : k === 'safeareas' ? a.canvasView.safeAreas : k === 'centrecross' ? a.canvasView.centre : k === 'overscan' ? a.canvasView.overscan : k === 'transform' ? a.transforming || (!!a.letters.transforming && a.letters.transforming === a.project.activeLayer) : k === cur || (k === 'onion' && a.onion.enabled);
       b.setAttribute('aria-pressed', String(on));
       if (drawWs) {
         // one wording for every painting tool: what it does, then what a tap (or a second tap) does
