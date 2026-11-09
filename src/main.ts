@@ -917,6 +917,8 @@ setCaptionFontHooks({ redraw: () => app.requestRender(), source: (path) => store
 // the Letter tool opens the caption editor (new captions and double-taps)
 const captionEditor = new CaptionEditor(app);
 app.letters.onEdit = (id, isNew) => captionEditor.open(id, isNew);
+app.history.onChange = chain(app.history.onChange, () => captionEditor.refresh());
+app.onFrameChange = chain(app.onFrameChange, () => captionEditor.frameChanged());
 files = new FileUI(app, store, persistent);
 artworkUI.library.openProject = file => files!.importFile(file);
 app.onDocChanged = chain(app.onDocChanged, () => audioPlayback.invalidate());

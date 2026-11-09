@@ -2,6 +2,35 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Caption panel and canvas handles (2026-11-08, committed and pushed to main)
+
+- `ui/captioneditor.ts` rewritten as a docked, non-modal **Caption panel**:
+  - A live preview, with an option to show the animation at the playhead.
+  - Font tiles drawn in their own fonts, and Import font.
+  - Size, Align, Bold/Italic/CAPS, letter colour and outline, Tracking and Line spacing.
+  - Balloon shape, Width, fill and ink, ink width, Ink length and the opacities.
+  - Per-tail join, base width, Straighten, Remove and Add tail.
+  - Reveal, Balloon and presets; X/Y position.
+  - Each change is one Undo step. `refresh()` follows Undo; it is wired in `main.ts` and also follows the playhead.
+- `CaptionSpec.shape` (balloon width 0.5–2.5) → `FitOptions.aspect`. There is a unit test for it.
+- `lettertool.ts`:
+  - `handles()`.
+  - A dashed outline on the selected balloon.
+  - A bend diamond: drag to bend, double-tap to straighten.
+  - A width grip on the right edge.
+  - A press picks the nearest handle.
+- Fixed while testing:
+  - The bend grip was placed using the merged outline, so it landed on the tail tip; it now uses the
+    plain balloon outline (`captionBalloon` returns `outline`).
+  - A bend drag counted as the first tap of a double-tap.
+  - The starting tail is now sized in lettering sizes (3 left, 7.5 down), so a three- or four-line
+    balloon does not swallow it.
+- Captions fixture **15 of 15**: panel preview pixels, live and committed Width, Ink width and Tracking,
+  three Undo steps followed by the panel, Add tail, bend, straighten, and the width grip.
+- Manual, UPDATES and design doc updated. Not checked by screenshot (the pane would not render
+  screenshots this session); the panel layout was checked in the DOM (no horizontal overflow).
+- Full checks: unit tests 780 passed (1 skipped), build passed, full browser suite **72 of 72** (run alone).
+
 ### Comic captions, lettering phase 1 (2026-11-08, format 10)
 
 Design and as-built notes: `docs/LETTERING-DESIGN.md` ("Phase 1 as built"). Owner decisions: bundle

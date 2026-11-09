@@ -5710,10 +5710,34 @@ body.ws-board.ui-full:not(.ui-hidden):not(.presenting) .bub-modes, body.ws-board
 }
 
 /* Caption editor */
-.caption-editor textarea { width: 100%; min-height: 72px; resize: vertical; font-size: 16px; }
-.caption-editor .cap-row { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 8px; margin: 6px 0; }
-.caption-editor .cap-row select, .caption-editor .cap-row input[type=range] { width: 100%; min-height: 36px; }
-.caption-editor .cap-toggles { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
-.caption-editor .cap-toggles button[aria-pressed='true'] { background: var(--accent); color: #fff; }
-.caption-editor .cap-colours { display: grid; grid-template-columns: auto 44px auto 44px auto 44px; align-items: center; gap: 6px 8px; margin: 8px 0; }
-.caption-editor input[type=color] { width: 44px; height: 32px; padding: 0; border: 0; background: none; }
+
+/* Caption panel: docked beside the canvas (non-modal), with a live preview */
+.caption-panel { position: fixed; z-index: 60; right: 12px; top: 64px; width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 80px); display: flex; flex-direction: column; background: var(--panel); color: var(--text); border: 1px solid var(--line, #3334); border-radius: var(--radius-md, 10px); box-shadow: 0 10px 30px #0006; overflow: hidden; }
+.caption-panel .cap-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line, #3334); }
+.caption-panel .cap-head h2 { flex: 1; margin: 0; font-size: 15px; }
+.caption-panel .cap-head button { min-height: 36px; padding: 0 16px; }
+.caption-panel .cap-preview { padding: 8px 10px 4px; }
+.caption-panel .cap-preview canvas { display: block; width: 100%; aspect-ratio: 560 / 300; border-radius: 8px; }
+.caption-panel .cap-anim { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 4px; color: var(--muted); }
+.caption-panel .cap-body { overflow-y: auto; padding: 0 10px 12px; }
+.caption-panel .cap-sec { border-top: 1px solid var(--line, #3334); padding: 4px 0; }
+.caption-panel .cap-sec > summary { cursor: pointer; font-weight: 700; padding: 8px 0; min-height: 28px; }
+.caption-panel textarea { width: 100%; min-height: 64px; resize: vertical; font-size: 16px; }
+.caption-panel .cap-row { display: grid; grid-template-columns: 92px 1fr auto; align-items: center; gap: 6px; margin: 6px 0; }
+.caption-panel .cap-row > .name { font-size: 12px; color: var(--muted); }
+.caption-panel .cap-row.keyed > .name::after { content: ' ◆'; color: var(--accent); }
+.caption-panel .cap-row input[type=range] { width: 100%; min-height: 32px; }
+.caption-panel .cap-val { min-width: 42px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.caption-panel .cap-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; grid-column: 2 / -1; }
+.caption-panel .cap-chips button { min-height: 32px; padding: 0 10px; font-size: 12px; }
+.caption-panel button[aria-checked='true'], .caption-panel button[aria-pressed='true'] { background: var(--accent); color: #fff; }
+.caption-panel input[type=color] { width: 40px; height: 30px; padding: 0; border: 0; background: none; }
+.caption-panel input[type=number] { width: 72px; min-height: 32px; }
+.caption-panel .cap-fonts { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; margin: 4px 0; }
+.caption-panel .cap-fonts button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; min-height: 58px; }
+.caption-panel .cap-font-sample { font-size: 22px; line-height: 1.1; }
+.caption-panel .cap-font-name { font-size: 10px; line-height: 1.2; text-align: center; }
+.caption-panel .cap-tail { border-radius: 8px; padding: 6px; margin: 6px 0; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.caption-panel .cap-tail-n { font-size: 12px; font-weight: 700; }
+.caption-panel .cap-add { min-height: 34px; margin: 4px 0; }
+@media (max-width: 700px) { .caption-panel { top: auto; bottom: 8px; right: 8px; left: 8px; width: auto; max-height: 55vh; } .caption-panel .cap-preview canvas { max-height: 120px; } }

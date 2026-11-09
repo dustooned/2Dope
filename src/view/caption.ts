@@ -27,14 +27,14 @@ export function captionSize(c: CaptionSpec, pageHeight: number): number { return
 export function captionLayout(c: CaptionSpec, frame: number, pageW: number, pageH: number): CaptionLayout {
   const size = captionSize(c, pageH), tracking = captionAt(c, 'tracking', frame), leading = captionAt(c, 'leading', frame) / 100;
   const text = c.caps ? c.text.toUpperCase() : c.text, font = captionFont(c, size);
-  const key = `${text}|${font}|${captionFontReady(c)}|${c.style}|${tracking}|${leading}|${pageW}x${pageH}`;
+  const key = `${text}|${font}|${captionFontReady(c)}|${c.style}|${c.shape ?? 1}|${tracking}|${leading}|${pageW}x${pageH}`;
   const hit = layouts.get(key);
   if (hit) return hit;
   const g = (measureCanvas ??= document.createElement('canvas').getContext('2d')!);
   g.font = font;
   const extra = (tracking / 1000) * size;
   const measure = (t: string) => g.measureText(t).width + extra * Math.max(0, [...t].length - 1);
-  const fit = fitCaption(text.length ? text : ' ', c.style, measure, { size, leading, maxA: pageW * 0.48, maxB: pageH * 0.48 });
+  const fit = fitCaption(text.length ? text : ' ', c.style, measure, { size, leading, maxA: pageW * 0.48, maxB: pageH * 0.48, aspect: c.shape ?? 1 });
   const out = { fit, size, tracking: extra, font, text };
   if (layouts.size > 200) layouts.delete(layouts.keys().next().value!);
   layouts.set(key, out);
@@ -49,7 +49,7 @@ export function captionBalloon(c: CaptionSpec, frame: number, pageW: number, pag
   const lay = captionLayout(c, frame, pageW, pageH);
   const seed = [...c.text].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
   const outline = balloonOutline(c.style, lay.fit.a, lay.fit.b, seed, c.path);
-  return { lay, shapes: balloonShapes(outline, c.style === 'sfx' ? [] : c.tails, c.x, c.y, lay.size) };
+  return { lay, outline, shapes: balloonShapes(outline, c.style === 'sfx' ? [] : c.tails, c.x, c.y, lay.size) };
 }
 
 /** Draw a caption at a layer frame. `planes`: 'fill' = balloon fill only, 'line' = ink and letters only. */

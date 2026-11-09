@@ -15,6 +15,7 @@ const motion = new MotionPanel(app, document.querySelector<HTMLElement>('#motion
 const editor = new CaptionEditor(app);
 setCaptionFontHooks({ redraw: () => app.requestRender(), source: async () => null, project: () => app.project });
 app.letters.onEdit = (id, isNew) => editor.open(id, isNew);
+app.history.onChange = () => editor.refresh();
 Object.assign(window, { captionApp: app });
 const errors: string[] = [];
 app.onNotice = () => {};
@@ -27,9 +28,10 @@ app.view.zoom = 1;
 type Pt = { x: number; y: number };
 const wait = (ms = 60) => new Promise<void>(r => setTimeout(r, ms));
 const expect = (ok: unknown, reason: string) => { if (!ok) throw new Error(reason); };
-const dialog = () => document.querySelector<HTMLDialogElement>('dialog.caption-editor[open]');
+const dialog = () => document.querySelector<HTMLElement>('.caption-panel');
 const inDialog = <T extends HTMLElement>(label: string) => { const f = dialog()?.querySelector<T>(`[aria-label="${label}"]`); if (!f) throw new Error(`Missing ${label}`); return f; };
-const footer = (name: string) => { const b = [...dialog()!.querySelectorAll<HTMLButtonElement>('.vfoot button')].find(x => x.textContent === name); if (!b) throw new Error(`Missing ${name}`); return b; };
+const button = (name: string) => { const b = [...dialog()!.querySelectorAll<HTMLButtonElement>('button')].find(x => x.textContent === name || x.title.startsWith(name)); if (!b) throw new Error(`Missing ${name}`); return b; };
+const footer = (name: string) => button(name === 'Apply' || name === 'Cancel' ? 'Done' : name);
 const captions = () => app.project.comp.layers.filter(l => l.kind === 'drawings' && !!l.caption);
 const cap = (id: string): CaptionSpec => { const l = app.project.comp.layers.find(x => x.id === id); if (l?.kind !== 'drawings' || !l.caption) throw new Error('caption gone'); return l.caption; };
 const tap = (x: number, y: number) => { app.letters.down(1, { x, y }); app.letters.up(1, false); };
@@ -101,13 +103,57 @@ await check('Letter sizes follow the page height and stay the same for every cap
 await check('Changing the font is live and changes the measured letters', async () => {
   const before = captionLayout(cap(first), 0, 640, 360);
   app.letters.onEdit!(first, false);
-  const f = inDialog<HTMLSelectElement>('Font'); f.value = 'bangers'; f.dispatchEvent(new Event('change'));
+  button('Bangers').click();
   await captionFontsReady(app.project); await wait();
+  expect(cap(first).font === 'bangers' && app.history.peekUndo()?.label === 'Change caption font', 'font change not applied');
+  expect(dialog()!.querySelector('[role=radio][aria-checked=true]')?.textContent?.includes('Bangers'), 'panel did not show the new font');
   footer('Apply').click();
-  expect(cap(first).font === 'bangers' && app.history.peekUndo()?.label === 'Edit caption', 'font change not applied');
   expect(captionFontReady(cap(first)), 'Bangers did not load');
   const after = captionLayout(cap(first), 0, 640, 360);
   expect(JSON.stringify(after.fit.lines) !== JSON.stringify(before.fit.lines), 'measurement ignored the new font');
+});
+
+await check('The panel previews the caption and its sliders commit one Undo step each', async () => {
+  app.focusLayer(first); app.letters.onEdit!(first, false);
+  const pv = dialog()!.querySelector<HTMLCanvasElement>('.cap-preview canvas')!, pg = pv.getContext('2d')!;
+  const dark = () => { const d = pg.getImageData(0, 0, pv.width, pv.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i]! < 80) n++; return n; };
+  expect(dark() > 200, 'preview shows no lettering');
+  const lines = captionLayout(cap(first), 0, 640, 360).fit.lines.length;
+  const width = inDialog<HTMLInputElement>('Width'); width.value = '220'; width.dispatchEvent(new Event('input'));
+  expect(cap(first).shape === 2.2 && app.history.peekUndo()?.label !== 'Change balloon width', 'width did not preview live');
+  width.dispatchEvent(new Event('change'));
+  expect(app.history.peekUndo()?.label === 'Change balloon width' && captionLayout(cap(first), 0, 640, 360).fit.lines.length < lines, 'wider balloon did not give fewer lines');
+  const ink = inDialog<HTMLInputElement>('Ink width'); ink.value = '20'; ink.dispatchEvent(new Event('input')); ink.dispatchEvent(new Event('change'));
+  expect(cap(first).inkWidth === 0.2 && app.history.peekUndo()?.label === 'Balloon ink width', 'ink width not kept');
+  const track = inDialog<HTMLInputElement>('Tracking'); track.value = '40'; track.dispatchEvent(new Event('input')); track.dispatchEvent(new Event('change'));
+  expect(cap(first).values?.tracking === 40, 'tracking slider did not set the value');
+  app.undo(); await wait(); app.undo(); await wait(); app.undo(); await wait();
+  expect(!cap(first).shape && cap(first).inkWidth === 0.09 && !cap(first).values?.tracking, 'three Undo steps did not restore the caption');
+  expect(inDialog<HTMLInputElement>('Width').value === '100', 'panel did not follow Undo');
+  button('+ Add tail').click();
+  expect(cap(first).tails.length === 2 && app.history.peekUndo()?.label === 'Add caption tail', 'Add tail failed');
+  expect(dialog()!.querySelectorAll('.cap-tail').length === 2, 'panel did not list the new tail');
+  app.undo(); await wait();
+  footer('Apply').click();
+});
+
+await check('Canvas handles: bend a tail, straighten it, and widen the balloon', async () => {
+  app.focusLayer(first); app.setFrame(10);
+  const l = app.project.comp.layers.find(x => x.id === first)!;
+  if (l.kind !== 'drawings') throw new Error('not drawings');
+  const h = app.letters.handles(l)!;
+  expect(h.tips.length === 1 && h.bends.length === 1 && !!h.width, 'handles missing');
+  const b = h.bends[0]!;
+  app.letters.down(5, b); app.letters.move(5, { x: b.x + 40, y: b.y }); app.letters.up(5, false);
+  expect(cap(first).tails[0]!.bend && Math.abs(cap(first).tails[0]!.bend![0] - (b.x + 40)) < 1 && app.history.peekUndo()?.label === 'Bend caption tail', 'bend handle failed');
+  const nb = app.letters.handles(l)!.bends[0]!;
+  expect(Math.abs(nb.x - (b.x + 40)) < 1, 'bend handle not at the bend');
+  app.letters.down(6, nb); app.letters.up(6, false); app.letters.down(6, nb); app.letters.up(6, false);
+  expect(!cap(first).tails[0]!.bend && app.history.peekUndo()?.label === 'Straighten caption tail', 'double-tap did not straighten');
+  const w = h.width!, a0 = w.x - cap(first).x;
+  app.letters.down(7, w); app.letters.move(7, { x: w.x + a0 * 0.5, y: w.y }); app.letters.up(7, false);
+  expect(Math.abs((cap(first).shape ?? 1) - 1.5) < 0.05 && app.history.peekUndo()?.label === 'Change balloon width', 'width grip failed: ' + cap(first).shape);
+  app.undo(); await wait();
 });
 
 await check('Motion shows the caption settings as rows, ready to key', () => {

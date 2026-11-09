@@ -29,6 +29,16 @@ describe('text sets the balloon', () => {
     // every line fits inside the ellipse with room for the ink
     for (const l of long.lines) expect((l.width / 2 / long.a) ** 2 + (l.y / long.b) ** 2).toBeLessThan(1);
   });
+  it('a wider balloon setting gives fewer, longer lines; the letters keep their size', () => {
+    const text = 'WAIT FOR ME, I LEFT MY LUNCH ON THE BUS AND MY HOMEWORK TOO!';
+    const usual = fitCaption(text, 'speech', mono(34), o), wide = fitCaption(text, 'speech', mono(34), { ...o, aspect: 2.2 }), tall = fitCaption(text, 'speech', mono(34), { ...o, aspect: 0.6 });
+    expect(wide.lines.length).toBeLessThan(usual.lines.length);
+    expect(tall.lines.length).toBeGreaterThan(usual.lines.length);
+    expect(wide.a / wide.b).toBeGreaterThan(usual.a / usual.b);
+    for (const f of [wide, tall]) for (const l of f.lines) expect((l.width / 2 / f.a) ** 2 + (l.y / f.b) ** 2).toBeLessThan(1);
+    expect(readCaption({ ...defaultCaption(0, 0), shape: 9 }).shape).toBe(2.5);
+    expect(readCaption({ ...defaultCaption(0, 0), shape: 1 }).shape).toBeUndefined();
+  });
   it('keeps the student’s own line breaks, and never squeezes past the frame', () => {
     const own = fitCaption('ONE\nTWO WORDS', 'speech', mono(34), o);
     expect(own.lines.map(l => l.text)).toEqual(['ONE', 'TWO WORDS']);

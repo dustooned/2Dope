@@ -33,6 +33,8 @@ export interface FitOptions {
   /** Largest balloon half-width and half-height allowed. */
   maxA: number;
   maxB: number;
+  /** Balloon width: multiplies the style's usual width-to-height ratio (1 = usual; wider = fewer, longer lines). */
+  aspect?: number;
 }
 
 /** Text width, page units, at the lettering size. */
@@ -42,7 +44,7 @@ const ASPECT: Record<BalloonStyle, number> = { speech: 1.5, whisper: 1.5, though
 
 /** Lay out text for a balloon style. Explicit line breaks in the text are kept as they are. */
 export function fitCaption(text: string, style: BalloonStyle, measure: Measure, o: FitOptions): Fit {
-  const lead = o.size * o.leading;
+  const lead = o.size * o.leading, K = ASPECT[style] * Math.min(2.5, Math.max(0.5, o.aspect ?? 1));
   const pad = style === 'shout' ? o.size * 1.4 : style === 'thought' ? o.size * 1.2 : o.size * 0.9;
   const paragraphs = text.split('\n');
   if (style === 'sfx' || paragraphs.length > 1 || !text.trim()) {
@@ -52,7 +54,7 @@ export function fitCaption(text: string, style: BalloonStyle, measure: Measure, 
     const out = lines.map((l, i) => ({ ...l, y: top + i * lead }));
     if (style === 'sfx' || style === 'box') return { lines: out, a: wMax / 2 + (style === 'box' ? pad : 0), b: (lines.length * lead) / 2 + (style === 'box' ? pad * 0.7 : 0), tooLong: false };
     // an ellipse around a block of lines: corners of the block must sit inside the inset ellipse
-    const hb = (lines.length * lead) / 2, hw = wMax / 2, k = ASPECT[style];
+    const hb = (lines.length * lead) / 2, hw = wMax / 2, k = K;
     let b = Math.max(hb + pad, (hw + pad) / k);
     for (let i = 0; i < 60 && (hw / (k * b - pad)) ** 2 + (hb / (b - pad)) ** 2 > 1; i++) b *= 1.04;
     return { lines: out, a: Math.min(k * b, o.maxA), b: Math.min(b, o.maxB), tooLong: k * b > o.maxA || b > o.maxB };
@@ -94,9 +96,9 @@ export function fitCaption(text: string, style: BalloonStyle, measure: Measure, 
   for (let n = 1; n <= Math.min(16, W); n++) {
     // too few lines for the longest line the frame allows: skip without searching
     if (pre[W]! / n > 2 * o.maxA) continue;
-    let lo = Math.max(o.size * 0.6, widest / (2 * ASPECT[style])), hi = Math.max(lo * 2, o.maxB * 1.5), found: { a: number; b: number; lines: Fit['lines'] } | null = null;
+    let lo = Math.max(o.size * 0.6, widest / (2 * K)), hi = Math.max(lo * 2, o.maxB * 1.5), found: { a: number; b: number; lines: Fit['lines'] } | null = null;
     for (let it = 0; it < 26; it++) {
-      const b = (lo + hi) / 2, a = Math.min(ASPECT[style] * b, o.maxA), c = caps(n, a, b), lines = c && breakLines(c);
+      const b = (lo + hi) / 2, a = Math.min(K * b, o.maxA), c = caps(n, a, b), lines = c && breakLines(c);
       if (lines) { found = { a, b, lines }; hi = b; } else lo = b;
     }
     if (!found || found.b > o.maxB) continue;

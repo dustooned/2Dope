@@ -4,6 +4,8 @@
  * - Draw a closed loop: it becomes the balloon (speech, box, thought, shout or kept as drawn).
  * - Draw a line out from a balloon's edge: its tail, following the line.
  * - Drag inside a balloon: move it (tails keep pointing where they point). Drag the tail tip: re-aim it.
+ * - The selected caption shows handles: the tail tip, the tail's bend (double-tap to straighten)
+ *   and the balloon's width (drag sideways for fewer, longer lines or more, shorter ones).
  * - Double-tap a balloon: edit its words and look.
  * Every finished gesture is one Undo step; drags preview live.
  */
@@ -11,7 +13,7 @@ import type { App } from './app';
 import { apply, drawingsLayer, invert, type DrawingsLayer } from './core/comp';
 import { newId } from './io/persist';
 import { detectBalloon, inside, type Pt } from './lettering/geometry';
-import { defaultCaption, type BalloonStyle, type CaptionSpec } from './lettering/spec';
+import { defaultCaption, LETTER_SIZE_FRACTION, type BalloonStyle, type CaptionSpec } from './lettering/spec';
 import { captionBalloon } from './view/caption';
 
 /** Distance from a point to a closed outline. */
@@ -27,11 +29,14 @@ function edgeDistance(outline: Pt[], p: Pt): number {
 
 type Drag =
   | { id: number; kind: 'stroke'; points: Pt[] }
-  | { id: number; kind: 'move' | 'tip'; layer: string; tail: number; start: Pt; before: CaptionSpec; moved: boolean };
+  | { id: number; kind: 'move' | 'tip' | 'bend' | 'width'; layer: string; tail: number; start: Pt; before: CaptionSpec; moved: boolean };
+
+/** A caption's on-canvas handles, in its layer's page units. */
+export interface CaptionHandles { outline: Pt[]; tips: Pt[]; bends: Pt[]; width: Pt | null }
 
 export class LetterTool {
   private drag: Drag | null = null;
-  private lastTap = { layer: '', time: 0 };
+  private lastTap = { layer: '', time: 0, kind: '' };
   /** Set by the UI: open the caption editor for a layer (new = just created). */
   onEdit: ((layerId: string, isNew: boolean) => void) | null = null;
   /** The style a tap makes. */
@@ -62,8 +67,52 @@ export class LetterTool {
     if (l?.kind === 'drawings') { l.caption = c; this.app.requestRender(); }
   }
 
+  /** Handles of a caption layer at the current frame: tail tips, bends and the balloon-width grip. */
+  handles(l: DrawingsLayer): CaptionHandles | null {
+    const c = l.caption, app = this.app;
+    if (!c) return null;
+    const { lay, outline, shapes } = captionBalloon(c, app.frame - l.start, app.project.width, app.project.height);
+    const tips: Pt[] = [], bends: Pt[] = [];
+    for (const t of c.tails) {
+      tips.push({ x: t.x, y: t.y });
+      if (t.bend) { bends.push({ x: t.bend[0], y: t.bend[1] }); continue; }
+      // a straight tail: the grip sits halfway from the balloon's edge to the tip
+      const ang = Math.atan2(t.y - c.y, t.x - c.x);
+      // (the plain balloon, without tails merged in, so the base is on the balloon's edge)
+      let base = { x: c.x + outline[0]!.x, y: c.y + outline[0]!.y }, best = Infinity;
+      for (const o of outline) { const p = { x: c.x + o.x, y: c.y + o.y }; const d = Math.abs(Math.atan2(Math.sin(Math.atan2(p.y - c.y, p.x - c.x) - ang), Math.cos(Math.atan2(p.y - c.y, p.x - c.x) - ang))); if (d < best) { best = d; base = p; } }
+      bends.push({ x: (base.x + t.x) / 2, y: (base.y + t.y) / 2 });
+    }
+    const sizable = c.style !== 'sfx' && c.style !== 'custom' && !c.text.includes('\n');
+    return { outline: shapes.outline, tips, bends, width: sizable ? { x: c.x + lay.fit.a, y: c.y } : null };
+  }
+
   down(id: number, stage: Pt): void {
     const app = this.app, zoom = app.view.zoom, near = 22 / zoom;
+    // the selected caption's handles come first
+    const active = app.project.comp.layers.find(x => x.id === app.project.activeLayer);
+    if (active?.kind === 'drawings' && active.caption && active.visible && !active.locked) {
+      const m = invert(app.editor.matrixOf(active)), h = this.handles(active);
+      if (m && h) {
+        const [lx, ly] = apply(m, [stage.x, stage.y]), local = { x: lx, y: ly }, close = (p: Pt) => Math.hypot(p.x - lx, p.y - ly) < near;
+        const start = (kind: 'tip' | 'bend' | 'width', tail: number) => { this.drag = { id, kind, layer: active.id, tail, start: local, before: structuredClone(active.caption!), moved: false }; };
+        // the nearest handle wins (a short tail's bend sits close to its tip)
+        const all = [...h.tips.map((p, i) => ({ p, kind: 'tip' as const, i })), ...h.bends.map((p, i) => ({ p, kind: 'bend' as const, i })), ...(h.width ? [{ p: h.width, kind: 'width' as const, i: -1 }] : [])];
+        const pick = all.filter(x => close(x.p)).sort((u, v) => Math.hypot(u.p.x - lx, u.p.y - ly) - Math.hypot(v.p.x - lx, v.p.y - ly))[0];
+        if (pick?.kind === 'tip') { start('tip', pick.i); return; }
+        if (pick?.kind === 'width') { start('width', -1); return; }
+        const bend = pick?.kind === 'bend' ? pick.i : -1;
+        if (bend >= 0) {
+          const now = performance.now();
+          if (this.lastTap.kind === `bend${bend}` && this.lastTap.layer === active.id && now - this.lastTap.time < 350) {
+            this.lastTap = { layer: '', time: 0, kind: '' };
+            if (active.caption.tails[bend]?.bend) app.editor.edit('Straighten caption tail', cc => { const x = cc.layers.find(y => y.id === active.id); if (x?.kind === 'drawings' && x.caption) x.caption = { ...x.caption, tails: x.caption.tails.map((t, i) => { if (i !== bend) return t; const { bend: _drop, ...rest } = t; return rest; }) }; });
+            return;
+          }
+          start('bend', bend); return;
+        }
+      }
+    }
     for (const c of this.captionsAt(stage)) {
       const tail = c.tips.findIndex(t => Math.hypot(t.x - c.local.x, t.y - c.local.y) < near);
       if (tail >= 0) { this.drag = { id, kind: 'tip', layer: c.layer.id, tail, start: c.local, before: structuredClone(c.layer.caption!), moved: false }; return; }
@@ -74,8 +123,8 @@ export class LetterTool {
     const hit = found.find(c => inside(c.outline, c.local));
     if (hit) {
       const now = performance.now();
-      if (this.lastTap.layer === hit.layer.id && now - this.lastTap.time < 350) { this.lastTap = { layer: '', time: 0 }; this.onEdit?.(hit.layer.id, false); return; }
-      this.lastTap = { layer: hit.layer.id, time: now };
+      if (this.lastTap.kind === 'move' && this.lastTap.layer === hit.layer.id && now - this.lastTap.time < 350) { this.lastTap = { layer: '', time: 0, kind: '' }; this.onEdit?.(hit.layer.id, false); return; }
+      this.lastTap = { layer: hit.layer.id, time: now, kind: 'move' };
       if (app.project.activeLayer !== hit.layer.id) app.focusLayer(hit.layer.id);
       this.drag = { id, kind: 'move', layer: hit.layer.id, tail: -1, start: hit.local, before: structuredClone(hit.layer.caption!), moved: false };
       return;
@@ -100,7 +149,14 @@ export class LetterTool {
     if (!d.moved) return;
     const c = structuredClone(d.before);
     if (d.kind === 'tip') { const t = c.tails[d.tail]!; t.x += dx; t.y += dy; if (t.bend) t.bend = [t.bend[0] + dx / 2, t.bend[1] + dy / 2]; }
-    else { c.x += dx; c.y += dy; if (c.path) c.path = c.path.map(([px, py]) => [px, py]); }
+    else if (d.kind === 'bend') c.tails[d.tail]!.bend = [x, y];
+    else if (d.kind === 'width') {
+      // drag the grip sideways: the balloon's half-width follows the finger (within the shape limits)
+      const from = Math.max(1, Math.abs(d.start.x - d.before.x)), to = Math.max(1, Math.abs(x - d.before.x));
+      const shape = Math.min(2.5, Math.max(0.5, (d.before.shape ?? 1) * to / from));
+      if (Math.abs(shape - 1) < 0.03) delete c.shape; else c.shape = Math.round(shape * 100) / 100;
+    }
+    else { c.x += dx; c.y += dy; }
     this.preview(d.layer, c);
   }
 
@@ -114,8 +170,10 @@ export class LetterTool {
       if (l?.kind !== 'drawings') return;
       const after = l.caption!;
       l.caption = d.before;
+      // a bend grip pressed without moving is a tap (two make a double-tap that straightens)
+      if (!cancelled && !d.moved && d.kind === 'bend') this.lastTap = { layer: d.layer, time: performance.now(), kind: `bend${d.tail}` };
       if (cancelled || !d.moved) { app.requestRender(); return; }
-      app.editor.edit(d.kind === 'tip' ? 'Aim caption tail' : 'Move caption', c => { const x = c.layers.find(y => y.id === d.layer); if (x?.kind === 'drawings') x.caption = after; });
+      app.editor.edit(d.kind === 'tip' ? 'Aim caption tail' : d.kind === 'bend' ? 'Bend caption tail' : d.kind === 'width' ? 'Change balloon width' : 'Move caption', c => { const x = c.layers.find(y => y.id === d.layer); if (x?.kind === 'drawings') x.caption = after; });
       return;
     }
     app.requestRender();
@@ -166,8 +224,9 @@ export class LetterTool {
     if (app.playing) return null;
     const c = defaultCaption(stage.x, stage.y, style);
     // the starting tail is sized to the page, like the letters
-    const k = project.height / 720;
-    c.tails = tails ? c.tails.map(t => ({ ...t, x: stage.x + (t.x - stage.x) * k, y: stage.y + (t.y - stage.y) * k })) : [];
+    // (in lettering sizes, long enough to clear a balloon of three or four lines)
+    const size = LETTER_SIZE_FRACTION[c.size] * project.height;
+    c.tails = tails ? c.tails.map(t => ({ ...t, x: stage.x - size * 3, y: stage.y + size * 7.5 })) : [];
     const drawing = project.newDrawing();
     const made = drawingsLayer(newId('caption'), 'Caption', [{ drawing: drawing.id, length: 1 }], project.width, project.height, comp.width, comp.height);
     made.start = made.in = app.frame; made.still = true; made.play = 'loop'; made.caption = c;
@@ -190,12 +249,19 @@ export class LetterTool {
     if (s && s.length > 1) { g.beginPath(); s.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.stroke(); }
     g.setLineDash([]);
     const l = app.project.comp.layers.find(x => x.id === app.project.activeLayer);
-    if (l?.kind === 'drawings' && l.caption) {
-      const m = app.editor.matrixOf(l);
-      for (const t of l.caption.tails) {
-        const [x, y] = apply(m, [t.x, t.y]);
-        g.beginPath(); g.arc(x, y, 8 / z, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.stroke();
-      }
+    const h = l?.kind === 'drawings' && l.caption ? this.handles(l) : null;
+    if (l && h) {
+      const m = app.editor.matrixOf(l), at = (p: Pt) => { const [x, y] = apply(m, [p.x, p.y]); return { x, y }; };
+      // the selected balloon's outline
+      g.setLineDash([5 / z, 4 / z]); g.lineWidth = 1.5 / z;
+      g.beginPath(); h.outline.forEach((p, i) => { const q = at(p); if (i) g.lineTo(q.x, q.y); else g.moveTo(q.x, q.y); }); g.closePath(); g.stroke();
+      g.setLineDash([]); g.lineWidth = 2 / z; g.fillStyle = '#fff';
+      // tail bends: small diamonds (double-tap to straighten)
+      for (const b of h.bends) { const q = at(b), r = 7 / z; g.beginPath(); g.moveTo(q.x, q.y - r); g.lineTo(q.x + r, q.y); g.lineTo(q.x, q.y + r); g.lineTo(q.x - r, q.y); g.closePath(); g.fill(); g.stroke(); }
+      // tail tips: round dots
+      for (const t of h.tips) { const q = at(t); g.beginPath(); g.arc(q.x, q.y, 8 / z, 0, Math.PI * 2); g.fill(); g.stroke(); }
+      // balloon width: a tall grip on the right edge
+      if (h.width) { const q = at(h.width), w = 8 / z, hh = 22 / z; g.beginPath(); g.roundRect(q.x - w / 2, q.y - hh / 2, w, hh, w / 2); g.fillStyle = '#4aa3ff'; g.fill(); g.strokeStyle = '#fff'; g.stroke(); }
     }
     g.restore();
   }

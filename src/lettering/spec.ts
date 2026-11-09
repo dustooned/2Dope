@@ -65,6 +65,8 @@ export interface CaptionSpec {
   /** Outline behind the letters (sound effects); null = none. Width as a fraction of the lettering size. */
   textOutline: string | null;
   textOutlineWidth: number;
+  /** Balloon width as a share of the style's usual shape, 0.5–2.5 (absent = 1). */
+  shape?: number;
   /** Still values of the keyable settings (absent = default). */
   values?: Partial<Record<CaptionKey, number>>;
   /** Keyframes of the keyable settings, in layer time. */
@@ -126,6 +128,7 @@ export function readCaption(input: unknown): CaptionSpec {
     x: num(r.x, -1e6, 1e6, 0), y: num(r.y, -1e6, 1e6, 0), style, ...(style === 'custom' && path ? { path } : {}), tails,
     fill: col(r.fill, '#ffffff'), ink: col(r.ink, '#111111'), inkWidth: num(r.inkWidth, 0, 0.6, 0.09),
     textColor: col(r.textColor, '#111111'), textOutline: r.textOutline === null || r.textOutline === undefined ? null : col(r.textOutline, '#111111'), textOutlineWidth: num(r.textOutlineWidth, 0, 0.6, 0.18),
+    ...(typeof r.shape === 'number' && Number.isFinite(r.shape) && r.shape !== 1 ? { shape: num(r.shape, 0.5, 2.5, 1) } : {}),
     ...(Object.keys(values).length ? { values } : {}), ...(Object.keys(keys).length ? { keys } : {}),
   };
 }

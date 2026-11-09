@@ -426,9 +426,12 @@ any time), and **keep Titles separate and simple**. Captions are their own syste
   speech, box, thought or shout balloon (or keep it as drawn); press on a balloon's **edge** and draw out
   for its tail (a zigzag makes a lightning tail); drag inside to move; drag the tip to re-aim;
   double-tap to edit. Each gesture is one Undo step. New captions open in Motion.
-- **Caption editor** (`ui/captioneditor.ts`): words, font (bundled, project, Import font…), size,
-  balloon, align, Bold/Italic/ALL CAPS, fill, ink, text colour, letter outline, ink width and tail join.
-  Live preview; Apply is one Undo step; Cancel restores (and removes an empty new caption).
+- **Caption panel** (`ui/captioneditor.ts`, revised the same day): docked and non-modal, with a live
+  preview (still look, or the playhead's frame) and sections Words, Lettering (font tiles in their own
+  font, import, size, align, emphasis, colour, letter outline, tracking, line spacing), Balloon (shape,
+  Width = `CaptionSpec.shape`, fill, ink, ink width, ink length, opacities), Tails (join, base width,
+  straighten, remove, add), Animate and Position. Every change is one Undo step; it follows Undo and
+  canvas drags. Canvas handles: tail tip, tail bend (double-tap straightens) and a balloon-width grip.
 - **Motion**: rows Reveal, Balloon, Text opacity, Balloon opacity, Ink length, Tracking and Line
   spacing (`cap:` keys) appear automatically. Chips: Fade in, Pop in, Type on, Fade out.
 - **Story**: each dialogue line has a 💬 button that makes a caption timed to that line in the animatic,
