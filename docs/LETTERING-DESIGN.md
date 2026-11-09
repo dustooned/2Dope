@@ -442,6 +442,24 @@ Not built yet: a Tail tip Motion row and pick-whipping a tail to a speaker; colo
 balloon and ink start; converting vector or pixel layers to captions; joined balloons; kerning and
 inline styling; sound effects on a path; Shake/Wave/Jitter; phase 3 vector letters.
 
+### Later the same day: shapes, styles, effects and transforms (2026-11-08)
+
+- **Looks** (`CaptionSpec.look`, `geometry.ts`): superellipse roundness (Classic 2.7 is the new speech
+  default, after the owner's reference balloons), outward-only wobble, spike and bump counts and depth,
+  and `outline` (a normalised custom shape). Words are fitted to a **profile** (half-width at each
+  height), so fuller and custom shapes keep the text inside, like Area Type.
+- **Custom shapes**: drawn loops, Draw shape (redraw a caption's balloon), Use SVG shape (browser path
+  sampling with group transforms, `svgOutline` in the panel), Edit shape (16 handles, smooth falloff),
+  Turn 90° and Mirror. `shapeForText` turns a shape so its principal axis is horizontal (when tilted
+  more than 6°) and centres the middle rows' chords on the words.
+- **Tails**: per style settings on `CaptionTail` (taper and tip; count, size and shrink; zigs and amp).
+- **Effects**: a `text` target. On a caption, Ink means the balloon's ink and Text the letters; the
+  effect pipeline renders fill, ink and text separately when needed.
+- **Transform**: turn and scale handles change the caption layer's rotation and scale around the
+  balloon (anchor moved there first); Transform on a caption hands over to them.
+- **Styles** (`lettering/styles.ts`): capture and apply a look, six ready-made styles, a device
+  library, and `.2dope-style` files that embed an imported font.
+
 ## Decisions needed from the owner (answered 2026-11-08 for fonts and Titles)
 
 - Which 4–6 Open Font License fonts to bundle, and whether students may import their own.

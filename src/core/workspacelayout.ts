@@ -5,8 +5,8 @@ export const WORKSPACE_LAYOUT_KEY = '2dope.workspace.layouts';
 export const WORKSPACE_NAMES: Record<Workspace, string> = { board: 'Story', draw: 'Draw', animate: 'Animate', time: 'Timing', motion: 'Motion' };
 export const WORKSPACE_TOOLS = {
   // the animation actions (play, onion, step, new / duplicate / delete drawing, effects) can be pinned too
-  draw: ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'pen', 'fill', 'adjust', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx', 'safeareas', 'centrecross', 'overscan'],
-  animate: ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'pen', 'fill', 'adjust', 'assets', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx', 'safeareas', 'centrecross', 'overscan'],
+  draw: ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'pen', 'fill', 'adjust', 'letter', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx', 'safeareas', 'centrecross', 'overscan'],
+  animate: ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'pen', 'fill', 'adjust', 'letter', 'assets', 'color', 'layers', 'reference', 'play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx', 'safeareas', 'centrecross', 'overscan'],
   board: ['brush', 'eraser', 'color', 'panel', 'images', 'dup', 'del', 'play', 'export'],
   time: ['play', 'onion', 'insert', 'dup', 'del', 'layers'],
   motion: ['addlayer', 'camera', 'group', 'split', 'autokey', 'look', 'flipbook', 'fx', 'safeareas', 'centrecross', 'overscan'],
@@ -20,7 +20,7 @@ export const WORKSPACE_TOOL_NAMES: Record<WorkspaceTool, string> = {
   insert: 'New drawing', addlayer: 'New layer', camera: 'Camera', group: 'Group', split: 'Split',
   autokey: 'Auto-key', look: 'Camera view', flipbook: 'Edit flipbook', fx: 'Effects',
   prevdraw: 'Previous drawing', nextdraw: 'Next drawing', eyedrop: 'Eyedropper',
-  safeareas: 'Title safe', centrecross: 'Centre cross', overscan: 'Overscan',
+  letter: 'Letter (captions)', safeareas: 'Title safe', centrecross: 'Centre cross', overscan: 'Overscan',
 };
 export interface WorkspaceLayout {
   tools: WorkspaceTool[];
@@ -42,8 +42,8 @@ const SEEN_BEFORE: Record<Workspace, readonly string[]> = {
 };
 export type WorkspaceLayouts = Record<Workspace, WorkspaceLayout>;
 export function defaultWorkspaceLayout(ws: Workspace): WorkspaceLayout {
-  return { tools: ws === 'draw' ? ['brush', 'eraser', 'color', 'select', 'transform', 'eyedrop', 'layers']
-    : ws === 'animate' ? ['brush', 'eraser', 'color', 'select', 'transform', 'assets', 'layers']
+  return { tools: ws === 'draw' ? ['brush', 'eraser', 'color', 'select', 'transform', 'eyedrop', 'letter', 'layers']
+    : ws === 'animate' ? ['brush', 'eraser', 'color', 'select', 'transform', 'assets', 'letter', 'layers']
     // Timing: Play, onion and frame actions already have homes (transport, X-sheet); they can be pinned
     : ws === 'time' ? ['layers'] : ws === 'board' ? ['brush', 'eraser', 'color'] : ['look', 'safeareas', 'centrecross', 'overscan'],
   toolDock: 'top', brushEdge: 'left', labels: false, advancedTargets: false, seen: [...WORKSPACE_TOOLS[ws]] };

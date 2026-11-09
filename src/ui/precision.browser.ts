@@ -13,6 +13,7 @@ import { GraphUI } from './graph';
 import { VectorObjectsUI } from './vectorobjects';
 import { MotionPanel } from './motion';
 import { closeContextMenu } from './contextmenu';
+import { layerContentBox } from '../view/contentbox';
 const closeMenus = () => closeContextMenu();
 export const app = new App(document.querySelector<HTMLCanvasElement>('#canvas')!, document.querySelector<HTMLElement>('#stage')!);
 export const layout = new LayoutUI(app), graph = new GraphUI(app), objects = new VectorObjectsUI(app), motion = new MotionPanel(app, document.querySelector<HTMLElement>('#motion')!);
@@ -78,6 +79,69 @@ await check('Animate along a path: draw on the canvas, choose the time, one Undo
   ed.setDrawingPath(true); expect(ed.drawingPath, 'second start');
   (document.querySelector<HTMLElement>('#canvas') ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   expect(!ed.drawingPath && !ed.pathStroke, 'Escape did not cancel drawing the path');
+});
+await check('Keyframes: drag a box to select several, then drag the span end to stretch their timing (one Undo)', async () => {
+  app.loadProject(new Project(320, 180)); app.project.comp.duration = 90; app.setWorkspace('motion'); refresh();
+  const ed = app.editor, id = app.project.layer.id; ed.select(id); app.history.clear();
+  const l = ed.primary!; l.transform.position = { value: [160, 90], keys: [0, 10, 20].map(f => ({ f, v: [160 + f * 4, 90] as Vec2, in: LINEAR, out: LINEAR })) };
+  l.transform.rotation = { value: 0, keys: [{ f: 5, v: 0, in: LINEAR, out: LINEAR }, { f: 30, v: 90, in: LINEAR, out: LINEAR }] };
+  ed.open.add(id); ed.onChange(); refresh(); await wait();
+  const grid = document.querySelector<HTMLElement>('#motion .mgrid')!;
+  const row = grid.querySelector<HTMLElement>(`.mrow.prop[data-prop="position"]`)!, track = row.querySelector<HTMLElement>('.mright')!;
+  const keys = [...row.querySelectorAll<HTMLElement>('[data-key]')].map(k => k.getBoundingClientRect());
+  expect(keys.length === 3, 'position keys not shown');
+  const r = track.getBoundingClientRect(), y = r.top + r.height / 2;
+  const fire = (target: HTMLElement, type: string, x: number, yy: number) => target.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: yy, pointerId: 7, button: 0, isPrimary: true, pointerType: 'mouse' }));
+  fire(track, 'pointerdown', keys[0]!.left - 6, y - 12);
+  fire(grid, 'pointermove', keys[2]!.right + 6, y + 12);
+  fire(grid, 'pointerup', keys[2]!.right + 6, y + 12);
+  expect(ed.selectedKeys().length === 3 && ed.selectedKeys().every(k => k.prop === 'position'), 'box did not select the three keys: ' + JSON.stringify(ed.selectedKeys()));
+  refresh(); await wait();
+  const span = document.querySelector<HTMLElement>('#motion .mkspan');
+  expect(span && span.textContent?.includes('3 keys'), 'no span for the selected keys');
+  const grip = span!.querySelector<HTMLElement>('.mkgrip.end')!, g = grip.getBoundingClientRect(), cell = keys[1]!.left - keys[0]!.left; // 10 frames
+  fire(grip, 'pointerdown', g.left + 4, g.top + 4);
+  fire(grid, 'pointermove', g.left + 4 + cell * 2, g.top + 4);
+  fire(grid, 'pointerup', g.left + 4 + cell * 2, g.top + 4);
+  const frames = ed.primary!.transform.position.keys.map(k => k.f);
+  expect(JSON.stringify(frames) === '[0,20,40]', 'stretch to 200% wrong: ' + frames);
+  expect(JSON.stringify(ed.primary!.transform.rotation.keys.map(k => k.f)) === '[5,30]', 'unselected row changed');
+  expect(app.history.peekUndo()?.label === 'Stretch key timing' && ed.selectedKeys().length === 3, 'not one Undo step, or selection lost');
+  // a tap on the track (no drag) clears the selection and moves the playhead
+  refresh(); await wait();
+  const row2 = document.querySelector<HTMLElement>('#motion .mrow.prop[data-prop="position"]')!, track2 = row2.querySelector<HTMLElement>('.mright')!;
+  const last = [...row2.querySelectorAll<HTMLElement>('[data-key]')].at(-1)!.getBoundingClientRect(), tx = last.right + cell * 1.5, ty = last.top + last.height / 2;
+  const hit = document.elementFromPoint(tx, ty) as HTMLElement;
+  fire(hit && track2.contains(hit) ? hit : track2, 'pointerdown', tx, ty); fire(grid, 'pointerup', tx, ty);
+  expect(!ed.selectedKeys().length, 'tap did not clear the key selection');
+  app.undo(); await wait(140);
+  expect(JSON.stringify(ed.primary!.transform.position.keys.map(k => k.f)) === '[0,10,20]', 'Undo did not restore the timing');
+  ed.selectKeys([0, 10, 20].map(f => ({ layer: id, prop: 'position' as const, f })));
+  expect(ed.scaleKeys(0.5) && JSON.stringify(ed.primary!.transform.position.keys.map(k => k.f)) === '[0,5,10]' && app.history.peekUndo()?.label === 'Squeeze key timing', 'squeeze from the Stretch button path failed');
+});
+await check('Animate along a path: the artwork itself rides the line, not the page centre; a hand-placed anchor is kept', async () => {
+  app.loadProject(new Project(320, 180)); app.project.comp.duration = 60; app.setWorkspace('motion'); refresh();
+  const ed = app.editor, id = app.project.layer.id;
+  // a small shape far from the page centre (like a ball drawn in a corner)
+  app.drawing.vectors = importVectorDocument('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect x="20" y="20" width="30" height="20" fill="#f00"/></svg>').strokes; app.drawing.rev++;
+  ed.select(id); app.setFrame(0); app.history.clear();
+  const route: Vec2[] = Array.from({ length: 30 }, (_, i) => [40 + i * 8, 150 - Math.sin(i / 5) * 40] as Vec2);
+  const m = ed.pathMatrix(ed.primary!);
+  expect(ed.animateAlongPath(id, route.map(p => apply(m, p) as Vec2), 20, { even: true, orient: false }), 'path not applied');
+  const box = layerContentBox(app.project, app.project.comp, ed.primary!, 0)!, centre: Vec2 = [box.x + box.w / 2, box.y + box.h / 2];
+  for (const f of [0, 10, 20]) {
+    const at = apply(worldMatrix(app.project.comp, ed.primary!, f), centre), want = valueAt(ed.primary!.transform.position, f);
+    expect(Math.hypot(at[0] - want[0], at[1] - want[1]) < 0.5, `artwork centre off the path at frame ${f}: ${at} vs ${want}`);
+  }
+  const start = apply(worldMatrix(app.project.comp, ed.primary!, 0), centre);
+  expect(Math.hypot(start[0] - 40, start[1] - 150) < 1, 'artwork does not start where the path starts: ' + start);
+  expect(app.history.peekUndo()?.label === 'Animate along path' && ed.primary!.anchorFixed, 'not one Undo step, or anchor not kept');
+  app.undo(); await wait(140);
+  expect(!ed.primary!.transform.position.keys.length && !ed.primary!.anchorFixed && ed.primary!.transform.anchor.value[0] === 160, 'Undo did not restore the anchor');
+  // an anchor placed by hand stays where it was put
+  ed.primary!.transform.anchor.value = [20, 20]; ed.primary!.anchorFixed = true;
+  ed.animateAlongPath(id, route.map(p => apply(m, p) as Vec2), 20, { even: true, orient: false });
+  expect(ed.primary!.transform.anchor.value[0] === 20 && ed.primary!.transform.anchor.value[1] === 20, 'hand-placed anchor was moved');
 });
 await check('Animate along a path: a tap on a line drawn with Vector on another layer becomes the route', async () => {
   app.loadProject(new Project(320, 180)); app.project.comp.duration = 60; app.setWorkspace('motion'); refresh();

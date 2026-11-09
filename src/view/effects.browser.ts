@@ -31,7 +31,7 @@ function run(effects: LayerEffect[], line: Paint | null, fill: Paint | null = nu
   const parts = { line: blank(w, h), fill: blank(w, h) };
   if (line) line(parts.line.getContext('2d')!);
   if (fill) fill(parts.fill.getContext('2d')!);
-  const paint = (g: CanvasRenderingContext2D, part: 'all' | 'line' | 'fill') => {
+  const paint = (g: CanvasRenderingContext2D, part: 'all' | 'line' | 'fill' | 'ink' | 'text') => {
     if (part !== 'line') g.drawImage(parts.fill, 0, 0);
     if (part !== 'fill') g.drawImage(parts.line, 0, 0);
   };

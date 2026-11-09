@@ -48,7 +48,7 @@ try {
   check('More groups tools with icons and names without growing the pinned row', !drawer.hidden &&
     !!drawer.querySelector('[aria-label="Drawing tools"] [data-extra-tool="pen"] svg') &&
     drawer.querySelector('[data-extra-tool="pen"] .lbl')?.textContent === 'Vector' &&
-    !!drawer.querySelector('[data-extra-tool="smudge"] svg') && document.querySelectorAll('.bub-tools button').length === 8);
+    !!drawer.querySelector('[data-extra-tool="smudge"] svg') && document.querySelectorAll('.bub-tools button').length === 9);
   click('Vector', drawer); await settle(); check('Picking an extra tool keeps it visible while active and closes the drawer', app.tool === 'pen' && !!tool('pen') && drawer.hidden);
   click('Brush', document.querySelector('.bub-tools')!); check('An unpinned tool steps aside when no longer active', !tool('pen'));
   click('Edit workspace'); toggle('Pin Vector'); click('Move Vector up'); select('Tool dock', 'left'); select('Brush controls edge', 'right'); click('Cancel');

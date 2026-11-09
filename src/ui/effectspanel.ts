@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
 import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
-import { canMerge, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, TARGET_NAMES, temporalEffect, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
+import { canMerge, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, CAPTION_TARGET_NAMES, TARGET_NAMES, temporalEffect, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { setKey } from '../core/anim';
 import { showContextMenu, type CtxItem } from './contextmenu';
@@ -371,12 +371,15 @@ export class EffectsPanel {
     const name = plainName(def);
     const adv = this.advanced;
     const body = el('div', { class: 'fx-body' });
-    if (adv && this.layer()?.kind === 'drawings' && !this.layer()?.adjust && !temporalEffect(e.type)) {
+    // a caption always shows its parts (text, balloon ink, balloon fill), so each can have its own look
+    const isCaption = this.layer()?.kind === 'drawings' && !!(this.layer() as import('../core/comp').DrawingsLayer).caption;
+    if ((adv || isCaption) && this.layer()?.kind === 'drawings' && !this.layer()?.adjust && !temporalEffect(e.type)) {
       const seg = el('div', { class: 'fx-seg', role: 'group', 'aria-label': 'Works on' });
-      for (const t of ['line', 'fill', 'layer'] as EffectTarget[]) {
-        const b = el('button', { type: 'button', 'aria-pressed': String(e.target === t) }, TARGET_NAMES[t]);
+      const names = isCaption ? CAPTION_TARGET_NAMES : TARGET_NAMES;
+      for (const t of (isCaption ? ['text', 'line', 'fill', 'layer'] : ['line', 'fill', 'layer']) as EffectTarget[]) {
+        const b = el('button', { type: 'button', 'aria-pressed': String(e.target === t) }, names[t]);
         if (t === 'line' && this.layer()?.kind === 'drawings' && (this.layer() as import('../core/comp').DrawingsLayer).title) { b.disabled = true; b.title = 'Titles use Colour pixels. Convert to paint for Ink effects.'; }
-        b.addEventListener('click', () => { if (e.target !== t) this.patch(i, { target: t }, `${name} on ${TARGET_NAMES[t].toLowerCase()}`); });
+        b.addEventListener('click', () => { if (e.target !== t) this.patch(i, { target: t }, `${name} on ${names[t].toLowerCase()}`); });
         seg.append(b);
       }
       body.append(seg);

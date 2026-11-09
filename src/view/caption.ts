@@ -4,7 +4,7 @@
  * Colour plane; ink, tails and letters on the Ink plane, so Ink/Colour effect targets work.
  */
 import { valueAt, type Prop } from '../core/anim';
-import { balloonOutline, balloonShapes, fitCaption, type Fit, type Pt } from '../lettering/geometry';
+import { balloonOutline, balloonProfile, balloonShapes, fitCaption, type Fit, type Pt } from '../lettering/geometry';
 import { CAPTION_KEYS, captionValue, LETTER_SIZE_FRACTION, type CaptionKey, type CaptionSpec } from '../lettering/spec';
 import { captionFont, captionFontReady, captionProject } from './captionfonts';
 
@@ -18,6 +18,14 @@ export function captionAt(c: CaptionSpec, key: CaptionKey, frame: number): numbe
 export interface CaptionLayout { fit: Fit; size: number; tracking: number; font: string; text: string }
 
 const layouts = new Map<string, CaptionLayout>();
+/** The look as a short cache key (a custom outline by its size and a checksum, not every point). */
+function lookKey(c: CaptionSpec): string {
+  const l = c.look;
+  if (!l) return '';
+  const { outline, ...rest } = l;
+  const sum = outline ? outline.reduce((s, [x, y], i) => s + (x * 31 + y * 17) * (i + 1), 0).toFixed(3) : '';
+  return `${JSON.stringify(rest)}${outline ? `#${outline.length}:${sum}` : ''}`;
+}
 let measureCanvas: CanvasRenderingContext2D | null = null;
 
 /** The lettering size of a caption, page units. */
@@ -27,14 +35,14 @@ export function captionSize(c: CaptionSpec, pageHeight: number): number { return
 export function captionLayout(c: CaptionSpec, frame: number, pageW: number, pageH: number): CaptionLayout {
   const size = captionSize(c, pageH), tracking = captionAt(c, 'tracking', frame), leading = captionAt(c, 'leading', frame) / 100;
   const text = c.caps ? c.text.toUpperCase() : c.text, font = captionFont(c, size);
-  const key = `${text}|${font}|${captionFontReady(c)}|${c.style}|${c.shape ?? 1}|${tracking}|${leading}|${pageW}x${pageH}`;
+  const key = `${text}|${font}|${captionFontReady(c)}|${c.style}|${c.shape ?? 1}|${lookKey(c)}|${tracking}|${leading}|${pageW}x${pageH}`;
   const hit = layouts.get(key);
   if (hit) return hit;
   const g = (measureCanvas ??= document.createElement('canvas').getContext('2d')!);
   g.font = font;
   const extra = (tracking / 1000) * size;
   const measure = (t: string) => g.measureText(t).width + extra * Math.max(0, [...t].length - 1);
-  const fit = fitCaption(text.length ? text : ' ', c.style, measure, { size, leading, maxA: pageW * 0.48, maxB: pageH * 0.48, aspect: c.shape ?? 1 });
+  const fit = fitCaption(text.length ? text : ' ', c.style, measure, { size, leading, maxA: pageW * 0.48, maxB: pageH * 0.48, aspect: c.shape ?? 1, profile: balloonProfile(c.style, c.look) });
   const out = { fit, size, tracking: extra, font, text };
   if (layouts.size > 200) layouts.delete(layouts.keys().next().value!);
   layouts.set(key, out);
@@ -48,12 +56,15 @@ const lengthOf = (pts: Pt[]) => { let n = 0; for (let i = 0; i < pts.length; i++
 export function captionBalloon(c: CaptionSpec, frame: number, pageW: number, pageH: number) {
   const lay = captionLayout(c, frame, pageW, pageH);
   const seed = [...c.text].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
-  const outline = balloonOutline(c.style, lay.fit.a, lay.fit.b, seed, c.path);
+  const outline = balloonOutline(c.style, lay.fit.a, lay.fit.b, seed, c.path, c.look);
   return { lay, outline, shapes: balloonShapes(outline, c.style === 'sfx' ? [] : c.tails, c.x, c.y, lay.size) };
 }
 
-/** Draw a caption at a layer frame. `planes`: 'fill' = balloon fill only, 'line' = ink and letters only. */
-export function paintCaption(g: CanvasRenderingContext2D, c: CaptionSpec, frame: number, planes: 'all' | 'line' | 'fill'): void {
+/**
+ * Draw a caption at a layer frame. `planes`: 'fill' = balloon fill only, 'line' = ink and letters,
+ * 'ink' = the balloon's ink and tails only, 'text' = the letters only (so effects can target each).
+ */
+export function paintCaption(g: CanvasRenderingContext2D, c: CaptionSpec, frame: number, planes: 'all' | 'line' | 'fill' | 'ink' | 'text'): void {
   const project = captionProject(), pageW = project?.width ?? g.canvas.width, pageH = project?.height ?? g.canvas.height;
   const { lay, shapes } = captionBalloon(c, frame, pageW, pageH), size = lay.size;
   const scale = captionAt(c, 'balloon', frame) / 100, balloonA = captionAt(c, 'balloonOpacity', frame) / 100, textA = captionAt(c, 'textOpacity', frame) / 100;
@@ -62,10 +73,10 @@ export function paintCaption(g: CanvasRenderingContext2D, c: CaptionSpec, frame:
   g.save();
   g.translate(pivot.x, pivot.y); g.scale(scale, scale); g.translate(-pivot.x, -pivot.y);
   const base = g.globalAlpha;
-  if (c.style !== 'sfx' && balloonA > 0) {
+  if (c.style !== 'sfx' && balloonA > 0 && planes !== 'text') {
     g.globalAlpha = base * balloonA;
     const closedShapes = [shapes.outline, ...shapes.seams];
-    if (planes !== 'line') {
+    if (planes === 'all' || planes === 'fill') {
       g.fillStyle = c.fill;
       for (const s of closedShapes) { pathOf(g, s); g.fill(); }
       for (const b of shapes.bubbles) { g.beginPath(); g.arc(b.x, b.y, b.r, 0, Math.PI * 2); g.fill(); }
@@ -86,7 +97,7 @@ export function paintCaption(g: CanvasRenderingContext2D, c: CaptionSpec, frame:
       g.setLineDash([]);
     }
   }
-  if (planes !== 'fill' && textA > 0 && c.text.trim()) {
+  if (planes !== 'fill' && planes !== 'ink' && textA > 0 && c.text.trim()) {
     g.globalAlpha = base * textA;
     g.font = lay.font; g.textBaseline = 'middle';
     g.fillStyle = c.textColor;

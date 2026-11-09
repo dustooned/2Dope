@@ -1492,6 +1492,12 @@ export class App {
 
   toggleDrawTransform(): void {
     if (this.xf) { this.applyTransform(); return; }
+    // a caption has no pixels to transform: the Letter tool turns and scales it as a layer
+    if (this.selectedCaption && !this.spatialSelection) {
+      this.setLettering(true);
+      this.onNotice?.('Captions turn and scale as a whole: drag the round handle above the balloon to turn it, the corner square to scale it.');
+      return;
+    }
     if (this.arrangingAssets) this.setArrangeAssets(false);
     if (this.adjusting) this.applyAdjust();
     if (this.gradEdit) this.applyGradEdit();
@@ -6597,6 +6603,8 @@ export class App {
       this.updateCursor();
       return;
     }
+    // Draw shape (captions): Esc stops waiting for the loop
+    if (e.key === 'Escape' && this.letters.shapeTarget) { e.preventDefault(); this.letters.armShape(null); this.onNotice?.('Stopped drawing a balloon shape.'); return; }
     if (this.workspace === 'motion') {
       if (e.code === 'KeyY' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); if (!e.repeat) this.editor.setAnchorEditing(!this.editor.anchorEditing); return; }
       if (e.key === 'Escape' && this.editor.anchorEditing) { e.preventDefault(); this.editor.setAnchorEditing(false); return; }

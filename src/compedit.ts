@@ -3,7 +3,7 @@ import { pathProp } from './core/motionpath';
 import { alignment, distribution, unionBoxes, snapBox, readSnap, type Alignment, type Distribution, type LayoutBox, type SnapPrefs, type SnapGuide } from './core/layout';
 import { syncCelGroups } from './core/cellink';
 import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
-import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
+import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, scaleKeyTimes, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
 import { loopKeys, smoothKeys, staggerOffsets, wiggle, type LoopMode, type StaggerOrder, type WiggleOptions } from './core/keytools';
 import { effectDef, keyableSettings, newEffect, plainName, stillSetting, temporalEffect } from './core/effects';
 import { newSeed } from './core/rng';
@@ -1175,6 +1175,19 @@ export class CompEditor {
     this.keys.clear();
   }
 
+  /** Select several keys at once (a box around them); `add` keeps what was selected. */
+  selectKeys(refs: KeyRef[], add = false): void {
+    if (!add) this.keys.clear();
+    for (const r of refs) this.keys.add(keyId(r));
+    this.onChange();
+  }
+
+  clearKeys(): void {
+    if (!this.keys.size) return;
+    this.keys.clear();
+    this.onChange();
+  }
+
   selectKey(k: KeyRef, add = false): void {
     const id = keyId(k);
     if (add) {
@@ -1453,6 +1466,37 @@ export class CompEditor {
     return common ?? null;
   }
 
+  /** A key's frame on the shot's clock (keys are stored in their layer's own time). */
+  keyShotFrame(r: KeyRef): number {
+    const l = this.layer(r.layer);
+    return l ? r.f + (this.app.frame - this.frameOf(l, r.prop)) : r.f;
+  }
+
+  /**
+   * Stretch (factor > 1) or squeeze the timing of the selected keys around a shot frame: the first
+   * selected key by default, so the motion starts on time and ends later or sooner. One Undo step.
+   */
+  scaleKeys(factor: number, pivotShot?: number, refs = this.selectedKeys()): boolean {
+    if (!refs.length || !Number.isFinite(factor) || factor <= 0 || Math.abs(factor - 1) < 1e-6) return false;
+    const pivot = pivotShot ?? Math.min(...refs.map((r) => this.keyShotFrame(r)));
+    const rows = new Map<string, KeyRef[]>();
+    for (const r of refs) rows.set(`${r.layer}|${r.prop}`, [...(rows.get(`${r.layer}|${r.prop}`) ?? []), r]);
+    const next = new Set<string>();
+    const made = this.edit(factor > 1 ? 'Stretch key timing' : 'Squeeze key timing', (c) => {
+      for (const list of rows.values()) {
+        const l = c.layers.find((x) => x.id === list[0]!.layer);
+        if (!l) continue;
+        const n = list[0]!.prop, offset = this.app.frame - this.frameOf(l, n), before = this.getProp(l, n);
+        const frames = new Set(list.map((r) => r.f)), after = scaleKeyTimes(before, frames, pivot - offset, factor);
+        this.setProp(l, n, after);
+        // the selection follows the moved keys (new objects; untouched keys keep their identity)
+        for (const k of after.keys) if (!before.keys.includes(k)) next.add(keyId({ layer: l.id, prop: n, f: k.f }));
+      }
+    });
+    if (made) { this.keys = next; this.onChange(); }
+    return made;
+  }
+
   /** Mirror the selected keys (or a whole row) in time so the motion plays backwards. */
   reverse(refs = this.selectedKeys()): void {
     const rows = new Map<string, KeyRef[]>();
@@ -1576,6 +1620,8 @@ export class CompEditor {
   /**
    * Animate along a path: the layer's position follows `points` (stage space, as drawn) from the
    * playhead for `frames` frames. Replaces its position keys. One Undo step.
+   * The artwork itself travels on the line: a layer whose anchor is still the untouched page centre
+   * gets it moved to the centre of what it shows first (an anchor placed by hand is kept).
    */
   animateAlongPath(id: string, points: Vec2[], frames: number, options: { even: boolean; orient: boolean }): boolean {
     const layer = this.layer(id);
@@ -1588,11 +1634,22 @@ export class CompEditor {
     const made = this.edit('Animate along path', c => {
       const l = c.layers.find(x => x.id === id);
       if (!l) return;
+      const centre = this.pathAnchor(layer);
+      if (centre) { l.transform.anchor = { ...l.transform.anchor, value: centre }; l.anchorFixed = true; }
       l.transform.position = prop;
       if (options.orient) l.transform.orient = true; else delete l.transform.orient;
     });
     if (made) this.app.onNotice?.('Path set. Play to watch it travel; Edit motion path reshapes it.');
     return made;
+  }
+
+  /** Where a layer's anchor should be to travel a path: the centre of its artwork, or null to keep it. */
+  private pathAnchor(l: Layer): Vec2 | null {
+    if (l.anchorFixed || isAnimated(l.transform.anchor) || (l.kind !== 'drawings' && l.kind !== 'comp')) return null;
+    const b = layerContentBox(this.app.project, this.comp, l, this.app.frame);
+    if (!b) return null;
+    const next: Vec2 = [b.x + b.w / 2, b.y + b.h / 2], [ax, ay] = l.transform.anchor.value;
+    return Math.hypot(next[0] - ax, next[1] - ay) < 0.5 ? null : next;
   }
 
   /** Even speed on a layer's position path (on or off). One Undo step. */

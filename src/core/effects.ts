@@ -15,7 +15,8 @@ export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'tu
 
 /** Effects added in format 10: older readers drop unknown effect types, so saving one needs reader 10. */
 export const FORMAT10_EFFECTS: readonly EffectType[] = ['fill', 'outline', 'blinds', 'kaleido', 'soundwave'];
-export type EffectTarget = 'line' | 'fill' | 'layer';
+/** What an effect works on: Ink, Colour, the whole layer, or (captions only) the letters. */
+export type EffectTarget = 'line' | 'fill' | 'layer' | 'text';
 export const MAX_LAYER_EFFECTS = 16;
 export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
 export interface EffectStyleOrigin { v: 1; name: string; effects: LayerEffect[] }
@@ -365,7 +366,9 @@ function readParams(def: EffectDef, v: unknown): Record<string, number | string 
   return Object.keys(out).length ? out : undefined;
 }
 
-export const TARGET_NAMES: Record<EffectTarget, string> = { line: 'Ink', fill: 'Colour', layer: 'Whole layer' };
+export const TARGET_NAMES: Record<EffectTarget, string> = { line: 'Ink', fill: 'Colour', layer: 'Whole layer', text: 'Text' };
+/** On a caption the same targets read as its parts. */
+export const CAPTION_TARGET_NAMES: Record<EffectTarget, string> = { line: 'Balloon ink', fill: 'Balloon fill', layer: 'Whole caption', text: 'Text' };
 
 /** An effect's name without its emoji (for undo steps and notices). */
 export function plainName(d: EffectDef): string {
@@ -406,7 +409,7 @@ export function readEffects(v: unknown): LayerEffect[] | undefined {
       id: typeof r.id === 'string' && r.id.length <= 40 ? r.id : `fx${out.length + 1}`,
       type: def.id,
       on: r.on !== false,
-      target: temporalEffect(def.id) ? 'layer' : r.target === 'fill' || r.target === 'layer' ? r.target : r.target === 'line' ? 'line' : def.target,
+      target: temporalEffect(def.id) ? 'layer' : r.target === 'fill' || r.target === 'layer' || r.target === 'text' ? r.target : r.target === 'line' ? 'line' : def.target,
       amount: num(r.amount, def.amountRange, def.amount),
       size: num(r.size, def.sizeRange, def.size),
       hold: Math.round(num(r.hold, EFFECT_LIMITS.hold, def.hold)),

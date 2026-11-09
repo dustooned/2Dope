@@ -68,7 +68,11 @@ function show(n: PropName, v: number | Vec2): string {
 type Drag =
   | { kind: 'scrub' }
   | { kind: 'bar'; layer: string; mode: 'move' | 'in' | 'out'; x0: number; el: HTMLElement; l0: number; w0: number; moved: boolean }
-  | { kind: 'key'; ref: { layer: string; prop: PropKey; f: number }; x0: number; el: HTMLElement; moved: boolean; shift: boolean };
+  | { kind: 'key'; ref: { layer: string; prop: PropKey; f: number }; x0: number; el: HTMLElement; moved: boolean; shift: boolean }
+  /** Box-select keys: drag on a property row's empty track. */
+  | { kind: 'box'; x0: number; y0: number; add: boolean; moved: boolean; frame: number }
+  /** Stretch the selected keys' timing by a grip at either end of their span. */
+  | { kind: 'span'; side: 'start' | 'end'; x0: number; minF: number; maxF: number; moved: boolean };
 
 /**
  * The Motion view: the comp's layers as rows with timing bars, twirl-down property rows with
@@ -89,6 +93,9 @@ export class MotionPanel {
   /** Simple screen: every layer row shows (otherwise the selected layers, their linked layers and cameras). */
   private allRows = (() => { try { return localStorage.getItem('2dope.motion.allRows') === '1'; } catch { return false; } })();
   private drag: Drag | null = null;
+  private rulerRight: HTMLElement | null = null;
+  private readonly boxEl = el('div', { class: 'mbox', 'aria-hidden': 'true' });
+  private readonly spanEl = el('div', { class: 'mkspan', title: 'The selected keys. Drag an end to stretch or squeeze their timing.' });
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private pinch: { dist: number; cell: number } | null = null;
 
@@ -104,6 +111,7 @@ export class MotionPanel {
   private readonly anchors: AnchorControls;
   private readonly effectsBtn: HTMLButtonElement;
   private readonly easeBtns = new Map<Easing, HTMLButtonElement>();
+  private stretchBtn!: HTMLButtonElement;
   private readonly sideBtns: HTMLButtonElement[];
   private readonly curveSel: HTMLSelectElement;
   private readonly multiBtn: HTMLButtonElement;
@@ -161,7 +169,7 @@ export class MotionPanel {
     this.fpsSel = el('select', { 'aria-label': 'Frames per second', title: 'Frames per second' });
     for (const f of FPS_PRESETS) this.fpsSel.append(el('option', { value: String(f) }, `${f} fps`));
     this.fpsSel.addEventListener('change', () => app.setFps(Number(this.fpsSel.value)));
-    this.multiBtn = btn('Select', 'Tap layers to pick several (to group or stagger them)', () => {
+    this.multiBtn = btn('Select', 'Tap layers or keyframes to pick several (to group, stagger, ease or stretch them)', () => {
       this.ed.multiSelect = !this.ed.multiSelect; this.update();
     });
     const menu = (label: string, title: string, icon: string, items: () => CtxItem[]) => {
@@ -257,7 +265,8 @@ export class MotionPanel {
       if (id) ed.setCurve(id);
       this.update();
     });
-    ease.append(...this.sideBtns, this.curveSel);
+    this.stretchBtn = btn('Stretch…', 'Stretch or squeeze the timing of the selected keys (from the first one). Or drag an end of the orange span on the ruler.', () => void this.askStretch());
+    ease.append(...this.sideBtns, this.curveSel, this.stretchBtn);
     const workspace = row(filter, this.animatedBtn, this.multiBtn, this.autoBtn, this.selectionInfo);
     workspace.classList.add('motion-workspace-tools');
     const rowC = row(
@@ -372,6 +381,7 @@ export class MotionPanel {
     const cur = ed.easingOfSelection();
     for (const [e, b] of this.easeBtns) b.setAttribute('aria-pressed', String(ed.keys.size ? cur === e : ed.lastEase === e));
     for (const b of this.sideBtns) b.disabled = !ed.keys.size;
+    this.stretchBtn.disabled = ed.keys.size < 2;
     this.curveSel.disabled = !ed.keys.size;
     this.curveSel.value = (ed.keys.size ? ed.curveOfSelection() : null) ?? '';
     // playhead and live values
@@ -390,6 +400,7 @@ export class MotionPanel {
       k.classList.toggle('on', on);
       k.title = on ? 'Remove the keyframe at the playhead' : 'Add a keyframe at the playhead';
     }
+    this.drawKeySpan();
     this.keepVisible();
   }
 
@@ -456,6 +467,23 @@ export class MotionPanel {
     ed.group([...ed.selected], name);
     this.ed.multiSelect = false;
     this.update();
+  }
+
+  /** The span of the selected keys on the ruler, with a grip at each end for stretching their timing. */
+  private drawKeySpan(): void {
+    const refs = this.ed.selectedKeys(), rr = this.rulerRight;
+    if (this.drag?.kind === 'span') return;
+    const frames = refs.map((r) => this.ed.keyShotFrame(r));
+    if (!rr || refs.length < 2 || Math.max(...frames) === Math.min(...frames)) { this.spanEl.remove(); return; }
+    const a = Math.min(...frames), b = Math.max(...frames);
+    this.spanEl.style.left = `${a * this.cell + this.cell / 2}px`;
+    this.spanEl.style.width = `${(b - a) * this.cell}px`;
+    if (!this.spanEl.childElementCount) {
+      const grip = (side: 'start' | 'end') => el('span', { class: `mkgrip ${side}`, 'data-span': side, role: 'slider', 'aria-label': side === 'start' ? 'Stretch from the last key' : 'Stretch from the first key', title: side === 'start' ? 'Drag to stretch or squeeze the selected keys, keeping the last one in place' : 'Drag to stretch or squeeze the selected keys, keeping the first one in place' });
+      this.spanEl.append(grip('start'), el('span', { class: 'mklabel' }), grip('end'));
+    }
+    this.spanEl.querySelector('.mklabel')!.textContent = `${refs.length} keys · ${this.app.fmtDur(b - a)}`;
+    if (this.spanEl.parentElement !== rr) rr.append(this.spanEl);
   }
 
   private keepVisible(): void {
@@ -525,7 +553,14 @@ export class MotionPanel {
     }, true);
   }
 
+  /** Redraw the rows, keeping the scroll position (emptying the grid would jump it to the top). */
   private rebuild(): void {
+    const s = this.scroll, top = s.scrollTop, left = s.scrollLeft;
+    this.rebuildRows();
+    s.scrollTop = top; s.scrollLeft = left;
+  }
+
+  private rebuildRows(): void {
     const ed = this.ed;
     const app = this.app;
     const c = ed.comp;
@@ -542,6 +577,7 @@ export class MotionPanel {
     corner.append(el('span', { class: 'mleft-grip', role: 'separator', 'aria-orientation': 'vertical', 'aria-label': 'Layer column width', tabindex: '0', title: 'Drag to show more or less of the layer column (double-click: back to normal)' }));
     const rr = el('div', { class: 'mright' });
     rr.style.width = `${end * this.cell}px`;
+    this.rulerRight = rr;
     const step = rulerStep(this.cell, c.fps, app.timeFormat);
     for (let f = 0; f < end; f += step) {
       const t = el('span', { class: f % c.fps === 0 ? 'tick sec' : 'tick' }, app.fmt(f));
@@ -1135,6 +1171,16 @@ export class MotionPanel {
     if (!this.ed.setParentOf(l.id, choice)) this.app.editor.onChange();
   }
 
+  /** Stretch the selected keys' timing to a percentage, keeping the first key in place. */
+  private async askStretch(): Promise<void> {
+    const refs = this.ed.selectedKeys();
+    if (refs.length < 2) { this.app.onNotice?.('Select two or more keys first: Shift-click them, or drag a box around them on a property row.'); return; }
+    const frames = refs.map((r) => this.ed.keyShotFrame(r)), span = Math.max(...frames) - Math.min(...frames);
+    const r = await askNumbers(`Stretch ${refs.length} keys (${this.app.fmtDur(span)})`, [{ label: 'Length', value: 100, unit: '%' }]);
+    if (!r || !(r[0]! > 0)) return;
+    this.ed.scaleKeys(r[0]! / 100);
+  }
+
   /** The context menu for what is under the pointer in the layer list / time area. */
   private contextItems(t: HTMLElement): CtxItem[] | null {
     const ed = this.ed;
@@ -1148,6 +1194,8 @@ export class MotionPanel {
       return [
         { title: n > 1 ? `${n} keys` : 'Key' },
         { chips: [ease('Linear', 'linear'), ease('Ease in', 'easeIn'), ease('Ease out', 'easeOut'), ease('In & out', 'easeInOut'), ease('Hold', 'hold')] },
+        { label: 'Stretch timing…', disabled: n < 2, title: 'Make the selected keys take longer or shorter, from the first one', run: () => void this.askStretch() },
+        { label: 'Select all keys on this row', run: () => { const l = ed.layer(ref.layer); if (l) ed.selectKeys(ed.getProp(l, ref.prop).keys.map((k) => ({ layer: ref.layer, prop: ref.prop, f: k.f })), true); } },
         { label: 'Reverse', run: () => ed.reverse() },
         { label: 'Wiggle…', run: () => void this.askWiggle(ref) },
         { label: 'Smooth keys…', run: () => void this.askSmooth() },
@@ -1489,7 +1537,7 @@ export class MotionPanel {
     if (key) {
       const [layer, prop, f] = key.dataset.key!.split('|');
       const ref = { layer: layer!, prop: prop as PropKey, f: Number(f) };
-      const add = e.shiftKey || e.ctrlKey || e.metaKey;
+      const add = e.shiftKey || e.ctrlKey || e.metaKey || this.ed.multiSelect;
       this.drag = { kind: 'key', ref, x0: e.clientX, el: key, moved: false, shift: add };
       if (!this.ed.keys.has(keyId(ref)) || add) this.ed.selectKey(ref, add);
       capture(key, e.pointerId);
@@ -1503,6 +1551,20 @@ export class MotionPanel {
       this.drag = { kind: 'bar', layer: id, mode, x0: e.clientX, el: barEl, l0: parseFloat(barEl.style.left), w0: parseFloat(barEl.style.width), moved: false };
       this.ed.select(id, e.shiftKey);
       capture(barEl, e.pointerId);
+      return;
+    }
+    // a grip on the selected keys' span: stretch their timing
+    const spanGrip = t.closest<HTMLElement>('[data-span]');
+    if (spanGrip) {
+      const frames = this.ed.selectedKeys().map((r) => this.ed.keyShotFrame(r));
+      this.drag = { kind: 'span', side: spanGrip.dataset.span as 'start' | 'end', x0: e.clientX, minF: Math.min(...frames), maxF: Math.max(...frames), moved: false };
+      capture(this.grid, e.pointerId);
+      return;
+    }
+    // a property row's empty track: drag a box around keys to select them (a tap still moves the playhead)
+    if (t.closest('.mrow.prop') && t.closest('.mright')) {
+      this.drag = { kind: 'box', x0: e.clientX, y0: e.clientY, add: e.shiftKey || e.ctrlKey || e.metaKey || this.ed.multiSelect, moved: false, frame: this.frameAtX(e.clientX) };
+      capture(this.grid, e.pointerId);
       return;
     }
     // empty time area / ruler: scrub
@@ -1527,9 +1589,30 @@ export class MotionPanel {
       this.app.setFrame(this.frameAtX(e.clientX));
       return;
     }
+    if (d.kind === 'box') {
+      if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < DRAG) return;
+      d.moved = true;
+      const g = this.grid.getBoundingClientRect(), x = Math.min(d.x0, e.clientX), y = Math.min(d.y0, e.clientY);
+      Object.assign(this.boxEl.style, { left: `${x - g.left}px`, top: `${y - g.top}px`, width: `${Math.abs(e.clientX - d.x0)}px`, height: `${Math.abs(e.clientY - d.y0)}px` });
+      if (this.boxEl.parentElement !== this.grid) this.grid.append(this.boxEl);
+      return;
+    }
     const dx = e.clientX - d.x0;
     if (!d.moved && Math.abs(dx) < DRAG) return;
     d.moved = true;
+    if (d.kind === 'span') {
+      // preview: the span and the selected keys slide to their stretched places
+      const df = Math.round(dx / this.cell), span = Math.max(1, d.maxF - d.minF), next = Math.max(1, span + (d.side === 'end' ? df : -df));
+      const pivot = d.side === 'end' ? d.minF : d.maxF, k = next / span;
+      const a = d.side === 'end' ? d.minF : d.maxF - next;
+      this.spanEl.style.left = `${a * this.cell + this.cell / 2}px`; this.spanEl.style.width = `${next * this.cell}px`;
+      this.spanEl.querySelector('.mklabel')!.textContent = `${Math.round(k * 100)}% · ${this.app.fmtDur(next)}`;
+      for (const r of this.ed.selectedKeys()) {
+        const keyEl = this.grid.querySelector<HTMLElement>(`[data-key="${CSS.escape(keyId(r))}"]`), f = this.ed.keyShotFrame(r);
+        if (keyEl) keyEl.style.transform = `translate(${(pivot + (f - pivot) * k - f) * this.cell}px, -50%)`;
+      }
+      return;
+    }
     const snap = Math.round(dx / this.cell) * this.cell;
     if (d.kind === 'key') {
       d.el.style.transform = `translate(${snap}px, -50%)`;
@@ -1561,6 +1644,23 @@ export class MotionPanel {
     if (this.app.editLine) this.app.setEditLine(null);
     if (d.kind === 'scrub') {
       this.app.endScrub();
+      return;
+    }
+    if (d.kind === 'box') {
+      this.boxEl.remove();
+      if (cancelled) return;
+      if (!d.moved) { if (!d.add) this.ed.clearKeys(); this.app.setFrame(d.frame); return; }
+      const box = { l: Math.min(d.x0, e.clientX), r: Math.max(d.x0, e.clientX), t: Math.min(d.y0, e.clientY), b: Math.max(d.y0, e.clientY) };
+      const hits = [...this.grid.querySelectorAll<HTMLElement>('[data-key]')].filter((k) => { const q = k.getBoundingClientRect(), x = q.left + q.width / 2, y = q.top + q.height / 2; return x >= box.l && x <= box.r && y >= box.t && y <= box.b; });
+      this.ed.selectKeys(hits.map((k) => { const [layer, prop, f] = k.dataset.key!.split('|'); return { layer: layer!, prop: prop as PropKey, f: Number(f) }; }), d.add);
+      return;
+    }
+    if (d.kind === 'span') {
+      for (const k of this.grid.querySelectorAll<HTMLElement>('.mkey.selected')) k.style.transform = '';
+      const df = Math.round((e.clientX - d.x0) / this.cell), span = Math.max(1, d.maxF - d.minF), next = Math.max(1, span + (d.side === 'end' ? df : -df));
+      if (!cancelled && d.moved && next !== span) this.ed.scaleKeys(next / span, d.side === 'end' ? d.minF : d.maxF);
+      this.signature = '';
+      this.update();
       return;
     }
     const df = Math.round((e.clientX - d.x0) / this.cell);

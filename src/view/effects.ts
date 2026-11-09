@@ -11,7 +11,8 @@ export { setSoundPreload, setSoundSource, soundReady } from './fxextra';
  * aim at one of them, then they are put together and the whole-layer effects run last.
  */
 
-type Part = 'line' | 'fill';
+/** A painted part: Ink, Colour, or for captions the balloon ink alone and the letters alone. */
+type Part = 'line' | 'fill' | 'ink' | 'text';
 
 const scratch = new Map<string, HTMLCanvasElement>();
 function canvasFor(tag: string, w: number, h: number): HTMLCanvasElement {
@@ -94,19 +95,22 @@ export function drawEffected(
   const out = canvasFor(`o${depth}`, w, h);
   const og = out.getContext('2d')!;
   const per = (t: Part) => fx.filter((e) => e.target === t);
-  if (!per('line').length && !per('fill').length) {
+  // on a caption, Ink is the balloon's ink and Text is the letters: each has its own effects
+  const split = per('text').length > 0 || (!!(l as { caption?: unknown }).caption && per('line').length > 0);
+  if (!per('line').length && !per('fill').length && !split) {
     og.setTransform(scale, 0, 0, scale, pad, pad);
     paint(og, planes);
     og.setTransform(1, 0, 0, 1, 0, 0);
   } else {
-    for (const part of ['fill', 'line'] as const) {
-      if (planes !== 'all' && planes !== part) continue;
+    for (const part of split ? (['fill', 'ink', 'text'] as const) : (['fill', 'line'] as const)) {
+      const plane = part === 'ink' || part === 'text' ? 'line' : part;
+      if (planes !== 'all' && planes !== plane && planes !== part) continue;
       const c = canvasFor(`${part}${depth}`, w, h);
       const pg = c.getContext('2d')!;
       pg.setTransform(scale, 0, 0, scale, pad, pad);
       paint(pg, part);
       pg.setTransform(1, 0, 0, 1, 0, 0);
-      for (const e of per(part)) applyEffect(c, e, frame, pad, fps, l.id);
+      for (const e of per(part === 'ink' ? 'line' : part)) applyEffect(c, e, frame, pad, fps, l.id);
       og.drawImage(c, 0, 0);
     }
   }

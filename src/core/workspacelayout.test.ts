@@ -30,11 +30,11 @@ describe('workspace layout preferences', () => {
     // saved before Motion had the view switches (no `seen`): they join the end
     const old = readWorkspaceLayouts({ motion: { tools: ['camera', 'addlayer'] }, draw: { tools: ['brush', 'eraser'] } });
     expect(old.motion.tools).toEqual(['camera', 'addlayer', 'safeareas', 'centrecross', 'overscan']);
-    expect(old.draw.tools).toEqual(['brush', 'eraser', 'eyedrop']);
+    expect(old.draw.tools).toEqual(['brush', 'eraser', 'eyedrop', 'letter']);
     // taken off after that: it stays off
     const later = readWorkspaceLayouts(JSON.parse(JSON.stringify({ ...old, motion: { ...old.motion, tools: ['camera'] } })));
     expect(later.motion.tools).toEqual(['camera']);
-    expect(later.draw.tools).toEqual(['brush', 'eraser', 'eyedrop']);
+    expect(later.draw.tools).toEqual(['brush', 'eraser', 'eyedrop', 'letter']);
   });
 
   it('moves only the untouched Story bar to sketch tools and keeps custom actions', () => {
@@ -61,7 +61,7 @@ describe('workspace layout preferences', () => {
     expect(defaultWorkspaceLayout('animate').tools.slice(0, 3)).toEqual(defaultWorkspaceLayout('board').tools);
     const former = ['brush', 'eraser', 'color', 'select', 'transform', 'smudge', 'eyedrop', 'layers'];
     expect(readWorkspaceLayouts({ draw: { tools: former } }).draw.tools).toEqual(defaultWorkspaceLayout('draw').tools);
-    expect(readWorkspaceLayouts({ draw: { tools: former, brushEdge: 'right' } }).draw.tools).toEqual(former);
+    expect(readWorkspaceLayouts({ draw: { tools: former, brushEdge: 'right' } }).draw.tools).toEqual([...former, 'letter']);
     expect(readWorkspaceLayouts({ draw: { tools: old, seen: [...WORKSPACE_TOOLS.draw], labels: true } }).draw.tools).toEqual(old);
     expect(readWorkspaceLayouts({ draw: { tools: ['brush', 'color'], seen: [...WORKSPACE_TOOLS.draw] } }).draw.tools).toEqual(['brush', 'color']);
   });

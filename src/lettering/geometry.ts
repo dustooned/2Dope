@@ -3,7 +3,7 @@
  * detection. Pure functions (ported from docs/research/lettering-prototype), no DOM. Text width
  * comes from a measure function the caller supplies.
  */
-import type { BalloonStyle, CaptionTail } from './spec';
+import type { BalloonLook, BalloonStyle, CaptionTail } from './spec';
 
 export type Pt = { x: number; y: number };
 const dist = (a: Pt, b: Pt) => Math.hypot(b.x - a.x, b.y - a.y);
@@ -35,6 +35,124 @@ export interface FitOptions {
   maxB: number;
   /** Balloon width: multiplies the style's usual width-to-height ratio (1 = usual; wider = fewer, longer lines). */
   aspect?: number;
+  /** The balloon's half-width share at a height share (0 = middle, 1 = top or bottom); default an oval. */
+  profile?: Profile;
+}
+
+/** A balloon's half-width (share of its widest) at a height share u, 0 = middle … 1 = top/bottom. */
+export type Profile = (u: number) => number;
+export const ovalProfile: Profile = u => (u >= 1 ? 0 : Math.sqrt(1 - u * u));
+/** A superellipse: power 2 is an oval, higher is fuller (flatter top and bottom). */
+export const superProfile = (n: number): Profile => u => (u >= 1 ? 0 : Math.pow(1 - Math.pow(u, n), 1 / n));
+
+/** The classic roundness of each style when the look does not set one. */
+export function lookRound(style: BalloonStyle, look?: BalloonLook): number {
+  return look?.round ?? (style === 'speech' || style === 'whisper' ? 2.7 : style === 'thought' ? 2.4 : 2.2);
+}
+export function lookWobble(style: BalloonStyle, look?: BalloonLook): number {
+  return look?.wobble ?? (style === 'speech' || style === 'whisper' ? 0.4 : 0);
+}
+
+/**
+ * Normalise a drawn or imported outline: centred, stretched to -1…1 on both axes and resampled
+ * evenly (so any SVG or hand-drawn loop can be fitted to words like the built-in shapes).
+ */
+export function normalizeOutline(pts: Pt[], n = 160): [number, number][] {
+  if (pts.length < 3) return [];
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const w = (x1 - x0) / 2 || 1, h = (y1 - y0) / 2 || 1, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const q = pts.map(p => ({ x: (p.x - cx) / w, y: (p.y - cy) / h }));
+  return resample([...q, q[0]!], n + 1).slice(0, n).map(p => [Math.round(p.x * 1e4) / 1e4, Math.round(p.y * 1e4) / 1e4]);
+}
+
+/**
+ * A drawn or imported shape made ready for words (like Area Type: each line gets the shape's width
+ * at its height). `orient` turns it so its longest direction runs sideways, the way words read.
+ * The result is normalised, then shifted so the middle rows' widths are centred on the words.
+ */
+export function shapeForText(pts: Pt[], orient = true): [number, number][] {
+  let q = pts;
+  if (orient && pts.length >= 3) {
+    // the principal axis (from the shape's spread) becomes horizontal
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    let xx = 0, yy = 0, xy = 0;
+    for (const p of pts) { const dx = p.x - cx, dy = p.y - cy; xx += dx * dx; yy += dy * dy; xy += dx * dy; }
+    let ang = 0.5 * Math.atan2(2 * xy, xx - yy);
+    // a nearly level shape stays as drawn (a slight tilt is often part of the look)
+    if (Math.abs(ang) < (6 * Math.PI) / 180) ang = 0;
+    const c = Math.cos(-ang), s = Math.sin(-ang);
+    q = pts.map(p => ({ x: (p.x - cx) * c - (p.y - cy) * s, y: (p.x - cx) * s + (p.y - cy) * c }));
+  }
+  const unit = normalizeOutline(q);
+  return centreForText(unit);
+}
+
+/** Shift a unit outline so the chords of its middle rows are centred on x = 0 (where words go). */
+export function centreForText(unit: [number, number][]): [number, number][] {
+  const poly = unit.map(([x, y]) => ({ x, y }));
+  let sum = 0, n = 0;
+  for (let i = -6; i <= 6; i++) {
+    const y = (i / 6) * 0.5;
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < poly.length; j++) {
+      const a = poly[j]!, b = poly[(j + 1) % poly.length]!;
+      if ((a.y > y) === (b.y > y)) continue;
+      const x = a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x);
+      lo = Math.min(lo, x); hi = Math.max(hi, x);
+    }
+    if (hi > lo) { sum += (lo + hi) / 2; n++; }
+  }
+  const dx = n ? sum / n : 0;
+  return Math.abs(dx) < 1e-4 ? unit : unit.map(([x, y]) => [Math.round((x - dx) * 1e4) / 1e4, y]);
+}
+
+/** Turn a unit outline a quarter turn, or mirror it, then ready it for words again. */
+export function turnOutline(unit: [number, number][], how: 'turn' | 'mirror'): [number, number][] {
+  const pts = unit.map(([x, y]) => (how === 'turn' ? { x: -y, y: x } : { x: -x, y }));
+  return centreForText(normalizeOutline(how === 'mirror' ? pts.reverse() : pts));
+}
+
+/**
+ * Reshape a unit outline by dragging the point at `index` by (dx, dy) unit lengths; its neighbours
+ * follow with a smooth falloff over `reach` of the outline, so the line stays smooth.
+ */
+export function reshapeOutline(unit: [number, number][], index: number, dx: number, dy: number, reach = 0.12): [number, number][] {
+  const n = unit.length, span = Math.max(2, Math.round(n * reach));
+  return unit.map(([x, y], i) => {
+    const d = Math.min(Math.abs(i - index), n - Math.abs(i - index));
+    if (d > span) return [x, y];
+    const w = 0.5 * (1 + Math.cos((Math.PI * d) / span));
+    const nx = Math.max(-1.5, Math.min(1.5, x + dx * w)), ny = Math.max(-1.5, Math.min(1.5, y + dy * w));
+    return [Math.round(nx * 1e4) / 1e4, Math.round(ny * 1e4) / 1e4];
+  });
+}
+
+/** A custom outline's profile: at each height, the narrower of its left and right extents. */
+export function outlineProfile(unit: [number, number][]): Profile {
+  const N = 48, table: number[] = [];
+  const poly = unit.map(([x, y]) => ({ x, y }));
+  const across = (y: number) => {
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i]!, b = poly[(i + 1) % poly.length]!;
+      if ((a.y > y) === (b.y > y)) continue;
+      const x = a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x);
+      lo = Math.min(lo, x); hi = Math.max(hi, x);
+    }
+    return hi > lo ? Math.max(0, Math.min(-lo, hi)) : 0;
+  };
+  for (let i = 0; i <= N; i++) { const u = i / N; table.push(Math.min(across(u * 0.999), across(-u * 0.999))); }
+  // the narrowest from the middle out: text rows must fit wherever the shape pinches
+  for (let i = 1; i <= N; i++) table[i] = Math.min(table[i]!, table[i - 1]!);
+  return u => { if (u >= 1) return 0; const f = u * N, i = Math.floor(f), t = f - i; return table[i]! * (1 - t) + table[Math.min(N, i + 1)]! * t; };
+}
+
+/** The profile words are fitted to, for a style and look. */
+export function balloonProfile(style: BalloonStyle, look?: BalloonLook): Profile {
+  if (look?.outline && look.outline.length >= 8) return outlineProfile(look.outline);
+  if (style === 'box' || style === 'sfx') return u => (u >= 1 ? 0 : 1);
+  const n = lookRound(style, look);
+  return n === 2 ? ovalProfile : superProfile(n);
 }
 
 /** Text width, page units, at the lettering size. */
@@ -44,7 +162,8 @@ const ASPECT: Record<BalloonStyle, number> = { speech: 1.5, whisper: 1.5, though
 
 /** Lay out text for a balloon style. Explicit line breaks in the text are kept as they are. */
 export function fitCaption(text: string, style: BalloonStyle, measure: Measure, o: FitOptions): Fit {
-  const lead = o.size * o.leading, K = ASPECT[style] * Math.min(2.5, Math.max(0.5, o.aspect ?? 1));
+  const lead = o.size * o.leading, K = ASPECT[style] * Math.min(2.5, Math.max(0.5, o.aspect ?? 1)), prof = o.profile ?? ovalProfile;
+  const fits = (x: number, y: number, A: number, B: number) => y < B && x <= A * prof(y / B);
   const pad = style === 'shout' ? o.size * 1.4 : style === 'thought' ? o.size * 1.2 : o.size * 0.9;
   const paragraphs = text.split('\n');
   if (style === 'sfx' || paragraphs.length > 1 || !text.trim()) {
@@ -56,7 +175,7 @@ export function fitCaption(text: string, style: BalloonStyle, measure: Measure, 
     // an ellipse around a block of lines: corners of the block must sit inside the inset ellipse
     const hb = (lines.length * lead) / 2, hw = wMax / 2, k = K;
     let b = Math.max(hb + pad, (hw + pad) / k);
-    for (let i = 0; i < 60 && (hw / (k * b - pad)) ** 2 + (hb / (b - pad)) ** 2 > 1; i++) b *= 1.04;
+    for (let i = 0; i < 80 && !fits(hw, hb, k * b - pad, b - pad); i++) b *= 1.04;
     return { lines: out, a: Math.min(k * b, o.maxA), b: Math.min(b, o.maxB), tooLong: k * b > o.maxA || b > o.maxB };
   }
   const words = text.split(/\s+/).filter(Boolean), W = words.length, wordW = words.map(measure), space = measure(' ');
@@ -85,9 +204,11 @@ export function fitCaption(text: string, style: BalloonStyle, measure: Measure, 
     for (let i = 0; i < n; i++) {
       const y = top + i * lead;
       if (style === 'box') { if ((n * lead) / 2 > b - pad * 0.7) return null; out.push({ y, cap: 2 * (a - pad) }); continue; }
-      const yy = Math.abs(y) + o.size / 2, inner = 1 - (yy / (b - pad * 0.6)) ** 2;
-      if (inner <= 0) return null;
-      out.push({ y, cap: 2 * (a * Math.sqrt(inner) - pad) });
+      const yy = Math.abs(y) + o.size / 2, u = yy / (b - pad * 0.6);
+      if (u >= 1) return null;
+      const w = prof(u);
+      if (w <= 0) return null;
+      out.push({ y, cap: 2 * (a * w - pad) });
     }
     return out;
   };
@@ -116,8 +237,14 @@ export function fitCaption(text: string, style: BalloonStyle, measure: Measure, 
 
 function hash(seed: number, i: number): number { let x = Math.imul(seed ^ (i * 0x9e3779b1), 0x85ebca6b) >>> 0; x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35) >>> 0; x ^= x >>> 16; return (x >>> 0) / 4294967296; }
 
-export function balloonOutline(style: BalloonStyle, a: number, b: number, seed = 1, custom?: [number, number][]): Pt[] {
-  if (style === 'custom' && custom?.length) return custom.map(([x, y]) => ({ x, y }));
+export function balloonOutline(style: BalloonStyle, a: number, b: number, seed = 1, custom?: [number, number][], look?: BalloonLook): Pt[] {
+  if (style === 'custom' && custom?.length && !look?.outline) return custom.map(([x, y]) => ({ x, y }));
+  const wobble = lookWobble(style, look), phase = [hash(seed, 101) * 6.283, hash(seed, 102) * 6.283, hash(seed, 103) * 6.283];
+  // hand-inked: a slow, steady swell (never inward, so the words keep their room)
+  const swell = (t: number) => 1 + wobble * (0.03 + 0.018 * Math.sin(t + phase[0]!) + 0.009 * Math.sin(2 * t + phase[1]!) + 0.004 * Math.sin(3 * t + phase[2]!));
+  if (look?.outline && look.outline.length >= 8) return look.outline.map(([x, y]) => { const t = Math.atan2(y, x), s = swell(t); return { x: x * a * s, y: y * b * s }; });
+  const n0 = lookRound(style, look), e = 2 / n0;
+  const base = (t: number): Pt => { const c = Math.cos(t), s = Math.sin(t); return { x: a * Math.sign(c) * Math.pow(Math.abs(c), e), y: b * Math.sign(s) * Math.pow(Math.abs(s), e) }; };
   if (style === 'box') {
     const r = Math.min(a, b) * 0.12, out: Pt[] = [];
     const corner = (cx: number, cy: number, from: number) => { for (let i = 0; i <= 6; i++) { const t = from + (i / 6) * (Math.PI / 2); out.push({ x: cx + Math.cos(t) * r, y: cy + Math.sin(t) * r }); } };
@@ -127,18 +254,18 @@ export function balloonOutline(style: BalloonStyle, a: number, b: number, seed =
   const n = 180;
   if (style === 'thought') {
     // scallops whose size follows the balloon, all bulging outward
-    const perim = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))), k = Math.max(6, Math.min(16, Math.round(perim / (Math.min(a, b) * 0.9))));
-    return Array.from({ length: n * 2 }, (_, i) => { const t = (i / (n * 2)) * Math.PI * 2, s = 1 + 0.16 * Math.pow(Math.abs(Math.sin((k * t) / 2)), 0.55); return { x: Math.cos(t) * a * s, y: Math.sin(t) * b * s }; });
+    const perim = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))), k = look?.bumps ?? Math.max(6, Math.min(16, Math.round(perim / (Math.min(a, b) * 0.9)))), depth = look?.bumpDepth ?? 0.16;
+    return Array.from({ length: n * 2 }, (_, i) => { const t = (i / (n * 2)) * Math.PI * 2, s = (1 + depth * Math.pow(Math.abs(Math.sin((k * t) / 2)), 0.55)) * swell(t), p = base(t); return { x: p.x * s, y: p.y * s }; });
   }
   if (style === 'shout') {
-    const spikes = Math.max(10, Math.min(22, Math.round((a + b) / 18))), out: Pt[] = [];
+    const spikes = look?.spikes ?? Math.max(10, Math.min(22, Math.round((a + b) / 18))), reach = look?.spikeDepth ?? 0.26, out: Pt[] = [];
     for (let i = 0; i < spikes * 2; i++) {
-      const t = (i / (spikes * 2)) * Math.PI * 2, r = i % 2 ? 0.96 : 1.22 + (hash(seed, i) - 0.5) * 0.16;
-      out.push({ x: Math.cos(t) * a * r, y: Math.sin(t) * b * r });
+      const t = (i / (spikes * 2)) * Math.PI * 2, r = i % 2 ? 0.96 : 0.96 + reach + (hash(seed, i) - 0.5) * reach * 0.6, p = base(t);
+      out.push({ x: p.x * r, y: p.y * r });
     }
     return out;
   }
-  return Array.from({ length: n }, (_, i) => { const t = (i / n) * Math.PI * 2; return { x: Math.cos(t) * a, y: Math.sin(t) * b }; });
+  return Array.from({ length: n }, (_, i) => { const t = (i / n) * Math.PI * 2, p = base(t), s = swell(t); return { x: p.x * s, y: p.y * s }; });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -174,10 +301,12 @@ function centreline(poly: Pt[], tip: Pt, bend: Pt | null, n = 40): Pt[] {
   return Array.from({ length: n + 1 }, (_, i) => { const t = i / n, u = 1 - t; return { x: u * u * start.x + 2 * u * t * ctrl.x + t * t * tip.x, y: u * u * start.y + 2 * u * t * ctrl.y + t * t * tip.y }; });
 }
 
-function wedge(line: Pt[], width: number): { L: Pt[]; R: Pt[] } {
+function wedge(line: Pt[], width: number, taper = 1, tip = 0): { L: Pt[]; R: Pt[] } {
   const L: Pt[] = [], R: Pt[] = [];
   line.forEach((p, i) => {
-    const a = line[Math.max(0, i - 1)]!, b = line[Math.min(line.length - 1, i + 1)]!, t = norm(sub(b, a)), nr = { x: -t.y, y: t.x }, w = (width / 2) * (1 - i / (line.length - 1));
+    const a = line[Math.max(0, i - 1)]!, b = line[Math.min(line.length - 1, i + 1)]!, t = norm(sub(b, a)), nr = { x: -t.y, y: t.x }, u = 1 - i / (line.length - 1);
+    // the width along the tail: `taper` bends the narrowing, `tip` leaves a blunt end
+    const w = (width / 2) * (tip + (1 - tip) * Math.pow(u, 1 / taper));
     L.push(add(p, mul(nr, w))); R.push(add(p, mul(nr, -w)));
   });
   return { L, R };
@@ -209,8 +338,8 @@ function selfCrosses(p: Pt[]): boolean {
 }
 
 /** The balloon outline with a tail spliced in (no seam), or null when it cannot merge cleanly. */
-export function mergeTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number): Pt[] | null {
-  const { L, R } = wedge(centreline(poly, tip, bend), width);
+export function mergeTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number, taper = 1, tipW = 0): Pt[] | null {
+  const { L, R } = wedge(centreline(poly, tip, bend), width, taper, tipW);
   const a = sideExit(L, poly), b = sideExit(R, poly);
   if (!a || !b) return null;
   const reenters = (side: Pt[]) => side.some((p, k) => k > 0 && !inside(poly, side[k - 1]!) && inside(poly, p));
@@ -227,22 +356,23 @@ export function mergeTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number): 
 }
 
 /** A closed tail drawn over the balloon edge (the seam look), starting just inside the edge. */
-export function seamTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number): Pt[] {
-  const { L, R } = wedge(centreline(poly, tip, bend), width);
+export function seamTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number, taper = 1, tipW = 0): Pt[] {
+  const { L, R } = wedge(centreline(poly, tip, bend), width, taper, tipW);
   const first = (side: Pt[]) => Math.max(0, side.findIndex(p => !inside(poly, p)) - 1);
   const k = Math.min(first(L), first(R));
   return [...L.slice(k), ...[...R.slice(k)].reverse()];
 }
 
 /** Thought tail: shrinking circles from the edge to the tip. */
-export function bubbleTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number, count = 3): (Pt & { r: number })[] {
+export function bubbleTail(poly: Pt[], tip: Pt, bend: Pt | null, width: number, count = 3, shrink = 0.67): (Pt & { r: number })[] {
   const line = centreline(poly, tip, bend, 60), from = Math.max(0, line.findIndex(p => !inside(poly, p)));
-  return Array.from({ length: count }, (_, k) => { const t = (k + 0.6) / count, p = line[Math.round(from + (line.length - 1 - from) * t)]!; return { ...p, r: Math.max(2, (width / 2) * (1 - k / count) * 0.75) }; });
+  // each bubble is smaller than the one before by `shrink` of the first's size, spread out to the tip
+  return Array.from({ length: count }, (_, k) => { const t = count === 1 ? 0.6 : (k + 0.6) / count, p = line[Math.round(from + (line.length - 1 - from) * t)]!; return { ...p, r: Math.max(2, (width / 2) * 0.75 * (1 - (shrink * k) / Math.max(1, count - 1))) }; });
 }
 
 /** Radio or phone tail: a zigzag from the edge to the tip. */
-export function lightningTail(poly: Pt[], tip: Pt, width: number, zigs = 3): Pt[] {
-  const base = exitPoint(poly, tip), d = sub(tip, base), dir = norm(d), nr = { x: -dir.y, y: dir.x }, amp = width * 0.8;
+export function lightningTail(poly: Pt[], tip: Pt, width: number, zigs = 3, swing = 1): Pt[] {
+  const base = exitPoint(poly, tip), d = sub(tip, base), dir = norm(d), nr = { x: -dir.y, y: dir.x }, amp = width * 0.8 * swing;
   return Array.from({ length: zigs * 2 + 1 }, (_, i) => { const t = i / (zigs * 2), p = add(base, mul(d, t)); return i === 0 || i === zigs * 2 ? p : add(p, mul(nr, i % 2 ? amp : -amp)); });
 }
 
@@ -255,11 +385,11 @@ export function balloonShapes(outline: Pt[], tails: CaptionTail[], cx: number, c
   for (const t of tails) {
     const tip = { x: t.x, y: t.y }, bend = t.bend ? { x: t.bend[0], y: t.bend[1] } : null, w = t.width * size;
     if (inside(poly, tip) || t.join === 'none') continue;
-    if (t.join === 'bubbles') bubbles.push(...bubbleTail(poly, tip, bend, w * 1.6));
-    else if (t.join === 'lightning') zigzags.push(lightningTail(poly, tip, w * 0.5));
+    if (t.join === 'bubbles') bubbles.push(...bubbleTail(poly, tip, bend, w * 1.6 * (t.size ?? 1), t.count ?? 3, t.shrink ?? 0.67));
+    else if (t.join === 'lightning') zigzags.push(lightningTail(poly, tip, w * 0.5, t.zigs ?? 3, t.amp ?? 1));
     else {
-      const merged = t.join === 'merged' ? mergeTail(poly, tip, bend, w) : null;
-      if (merged) poly = merged; else seams.push(seamTail(poly, tip, bend, w));
+      const merged = t.join === 'merged' ? mergeTail(poly, tip, bend, w, t.taper ?? 1, t.tip ?? 0) : null;
+      if (merged) poly = merged; else seams.push(seamTail(poly, tip, bend, w, t.taper ?? 1, t.tip ?? 0));
     }
   }
   return { outline: poly, seams, bubbles, zigzags };

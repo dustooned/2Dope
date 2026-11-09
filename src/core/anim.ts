@@ -314,6 +314,26 @@ export function moveKey<T extends Value>(p: Prop<T>, from: number, to: number): 
   return { ...p, keys };
 }
 
+/**
+ * Stretch or squeeze the timing of some keys (those on `frames`) around `pivot`: a key at f moves to
+ * pivot + (f - pivot) × factor, rounded to whole frames. The moved keys keep their order and never
+ * share a frame (and never go before frame 0); a moved key replaces an unselected key it lands on.
+ */
+export function scaleKeyTimes<T extends Value>(p: Prop<T>, frames: ReadonlySet<number>, pivot: number, factor: number): Prop<T> {
+  if (!Number.isFinite(factor) || factor <= 0) return p;
+  const moving = p.keys.filter((k) => frames.has(k.f)).sort((a, b) => a.f - b.f);
+  if (!moving.length) return p;
+  const to: number[] = [];
+  moving.forEach((k, i) => {
+    const at = Math.max(0, Math.round(pivot + (k.f - pivot) * factor));
+    to.push(i ? Math.max(at, to[i - 1]! + 1) : at);
+  });
+  const landed = new Set(to);
+  const keys = p.keys.filter((k) => !frames.has(k.f) && !landed.has(k.f)).concat(moving.map((k, i) => ({ ...k, f: to[i]! })));
+  keys.sort((a, b) => a.f - b.f);
+  return { ...p, keys };
+}
+
 /** Set the easing of the segment that starts at the key on frame `f`. */
 export function setSegmentEasing<T extends Value>(p: Prop<T>, f: number, e: Easing): Prop<T> {
   const i = p.keys.findIndex((k) => k.f === f);

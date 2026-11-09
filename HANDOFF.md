@@ -2,6 +2,63 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Captions round 3, keyframe stretching and fixes (2026-11-08, committed and pushed to main)
+
+Owner requests in this round: multi-select and scale key timing; cleaner caption UI; fix panels
+jumping to the top; professional balloon shapes with spikes, bumps and SVG shapes; drawing and
+editing shapes with auto-orientation for text; separate text, ink and fill for effects; unique
+icons; per-style tail settings; saved and shared styles; transforming captions; and a drawing that
+"did not show up in Motion or Animate".
+
+- **Scroll**: `MotionPanel.rebuild` keeps scrollTop and scrollLeft (emptying the grid reset them).
+  The Caption panel keeps its scroll and tab across rebuilds. Effects panel and layer cards
+  already kept theirs. Story resets on purpose when the panel changes.
+- **Keys** (`ui/motion.ts`, `compedit.ts`, `core/anim.ts`):
+  - Box-select by dragging on a property row's empty track.
+  - Select mode also picks keys.
+  - An orange span on the ruler with end grips stretches the selection (`scaleKeys`, `scaleKeyTimes`).
+  - A Stretch… button, plus Stretch timing… and Select all keys on this row in the key menu.
+- **Caption panel**:
+  - Tabs: Letters, Balloon, Tails, Animate, Place, Styles, with the words always visible.
+  - The Letter tool is pinned in Draw and Animate; existing bars gain it once.
+  - Unique icons for the Letter tool, each balloon style, Edit caption and the four presets.
+- **Shapes, tails, effects, styles and turn/scale**: see `docs/LETTERING-DESIGN.md`, "Later the same day".
+- **Lost strokes**: a caption layer drew only its caption, so strokes made while a caption was
+  selected vanished outside Draw. `paintPlanes` now draws the caption, then the layer's own pixels.
+  This is the likely cause of the reported glitch. It was not reproduced from the owner's steps.
+
+Checks:
+- Lettering unit tests: 24, in `lettering.test.ts` and `styles.test.ts`.
+- `core/keyscale.test.ts`: 3.
+- `workspacelayout.test.ts`: updated for the new pinned tool.
+- `captions` fixture: 22 checks, covering:
+  - Tabs, and scroll kept after a change.
+  - Motion scroll kept after an edit.
+  - SVG import with the owner's reference balloon, looks, spikes.
+  - Draw shape, Edit shape, Turn and Mirror.
+  - Per-style tail settings.
+  - Text, ink and fill effect targets by pixel colour.
+  - Strokes on a caption layer.
+  - Turn and scale.
+  - Styles: apply, save, and import with an embedded font.
+- `precision` fixture: 23 (box-select and stretch with real pointer events).
+- Unit tests: 798 passed (1 skipped).
+- Build: passed.
+- Full browser suite: 70 of 72 on the first run. The two `workspacelayout` fixtures expected 8 buttons in the pinned row; the Letter tool makes it 9 on purpose, so the expectation was updated. Both now pass (22 and 88), so all 72 fixtures pass.
+
+Not checked by eye: the new icons and the panel layout (pane screenshots failed this session).
+
+### Animate along a path keeps the artwork on the line (2026-11-08, committed and pushed to main)
+
+- Before: following a path moved the layer's anchor along it. A new layer's anchor is the page centre,
+  so artwork drawn elsewhere travelled offset from the line.
+- Fix: `CompEditor.animateAlongPath` now moves an untouched, unanimated anchor to the artwork's centre
+  in the same Undo step (`pathAnchor`) and marks it fixed. A hand-placed anchor (`anchorFixed`) is
+  kept. Drawing, tapping a Vector line and the pick whip all go through this.
+- `precision` fixture, new check (22 total): the artwork's centre is on the path at frames 0, 10 and
+  20 and starts at the path's start; Undo restores the anchor; a hand-placed anchor is kept. Unit
+  tests 780, build and full browser suite 72 of 72 passed.
+
 ### Caption panel and canvas handles (2026-11-08, committed and pushed to main)
 
 - `ui/captioneditor.ts` rewritten as a docked, non-modal **Caption panel**:

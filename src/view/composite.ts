@@ -35,7 +35,8 @@ import { strokeLength, type StrokeRecord } from '../core/stroke';
 import { tweenStrokes } from '../core/vectortween';
 
 /** Which planes of each drawing to draw: everything, only linework (with vectors), or only fills. */
-export type Planes = 'all' | 'line' | 'fill';
+/** `ink` and `text` split a caption's Ink plane into its balloon ink and its letters (other drawings: ink = line, text = nothing). */
+export type Planes = 'all' | 'line' | 'fill' | 'ink' | 'text';
 
 /** Resident pixels and preview-only ink supplied by the drawing tool. Never saved as artwork. */
 export interface DrawingSource {
@@ -193,8 +194,15 @@ interface PartsCtx {
 }
 
 function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions, parts?: PartsCtx): void {
-  // a caption layer draws its balloon and lettering live instead of the drawing's pixels
-  if (parts?.layer.kind === 'drawings' && parts.layer.caption) { paintCaption(g, parts.layer.caption, parts.lf, planes === 'all' ? 'all' : planes); return; }
+  // a caption layer draws its balloon and lettering live, then anything painted on its drawing on
+  // top (so strokes made while a caption was selected are never lost from Motion or exports)
+  if (parts?.layer.kind === 'drawings' && parts.layer.caption) {
+    paintCaption(g, parts.layer.caption, parts.lf, planes);
+    if (planes !== 'text') paintPlanes(g, d, planes === 'ink' ? 'line' : planes, opt, { ...parts, layer: { ...parts.layer, caption: undefined } });
+    return;
+  }
+  if (planes === 'text') return;
+  if (planes === 'ink') planes = 'line';
   if (d.parked) return; // the caller pins what a frame needs; never draw a packed-away drawing
   const src: DrawingSource = opt?.source?.(d) ?? { line: d.line, fill: d.fill };
   const paint = (t: CanvasRenderingContext2D, name: PartName) => {

@@ -5720,8 +5720,14 @@ body.ws-board.ui-full:not(.ui-hidden):not(.presenting) .bub-modes, body.ws-board
 .caption-panel .cap-preview canvas { display: block; width: 100%; aspect-ratio: 560 / 300; border-radius: 8px; }
 .caption-panel .cap-anim { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 4px; color: var(--muted); }
 .caption-panel .cap-body { overflow-y: auto; padding: 0 10px 12px; }
-.caption-panel .cap-sec { border-top: 1px solid var(--line, #3334); padding: 4px 0; }
-.caption-panel .cap-sec > summary { cursor: pointer; font-weight: 700; padding: 8px 0; min-height: 28px; }
+.caption-panel .cap-wordsbox { padding: 4px 10px 0; }
+.caption-panel .cap-wordsbox .hint { margin: 2px 0 6px; font-size: 11px; }
+.caption-panel .cap-tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; padding: 4px 8px; border-top: 1px solid var(--line, #3334); border-bottom: 1px solid var(--line, #3334); background: color-mix(in srgb, var(--text) 4%, transparent); }
+.caption-panel .cap-tabs [role=tab] { display: flex; flex-direction: column; align-items: center; gap: 1px; min-height: 44px; padding: 3px 2px; font-size: 11px; border-radius: 8px; background: none; border: 0; color: var(--muted); }
+.caption-panel .cap-tabs [role=tab][aria-selected='true'] { background: var(--accent); color: #fff; }
+.caption-panel .cap-tab-icon { font-size: 16px; line-height: 1.1; font-weight: 700; }
+.caption-panel .cap-pane { padding-top: 6px; }
+.caption-panel .cap-pane-hint { margin: 0 0 6px; font-size: 11px; }
 .caption-panel textarea { width: 100%; min-height: 64px; resize: vertical; font-size: 16px; }
 .caption-panel .cap-row { display: grid; grid-template-columns: 92px 1fr auto; align-items: center; gap: 6px; margin: 6px 0; }
 .caption-panel .cap-row > .name { font-size: 12px; color: var(--muted); }
@@ -5741,3 +5747,18 @@ body.ws-board.ui-full:not(.ui-hidden):not(.presenting) .bub-modes, body.ws-board
 .caption-panel .cap-tail-n { font-size: 12px; font-weight: 700; }
 .caption-panel .cap-add { min-height: 34px; margin: 4px 0; }
 @media (max-width: 700px) { .caption-panel { top: auto; bottom: 8px; right: 8px; left: 8px; width: auto; max-height: 55vh; } .caption-panel .cap-preview canvas { max-height: 120px; } }
+
+/* Motion: box-select keys and the selected keys' span (drag an end to stretch their timing) */
+.mbox { position: absolute; z-index: 20; border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); pointer-events: none; }
+.mkspan { position: absolute; bottom: 1px; height: 14px; min-width: 2px; z-index: 6; border-radius: 7px; background: color-mix(in srgb, #ff9f1a 35%, transparent); border: 1px solid #ff9f1a; display: flex; align-items: center; justify-content: center; }
+.mkspan .mklabel { font-size: 9px; line-height: 1; white-space: nowrap; pointer-events: none; color: var(--text); padding: 0 12px; overflow: hidden; }
+.mkspan .mkgrip { position: absolute; top: -6px; width: 14px; height: 24px; border-radius: 5px; background: #ff9f1a; cursor: ew-resize; touch-action: none; }
+.mkspan .mkgrip.start { left: -8px; }
+.mkspan .mkgrip.end { right: -8px; }
+@media (pointer: coarse) { .mkspan .mkgrip { width: 22px; height: 32px; top: -10px; } .mkspan .mkgrip.start { left: -12px; } .mkspan .mkgrip.end { right: -12px; } }
+.caption-panel .cap-styles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.caption-panel .cap-style { display: flex; flex-direction: column; gap: 2px; }
+.caption-panel .cap-style-use { display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 4px; min-height: 0; font-size: 11px; }
+.caption-panel .cap-style-use canvas { width: 100%; aspect-ratio: 180 / 96; border-radius: 6px; }
+.caption-panel .cap-style-acts { display: flex; gap: 2px; }
+.caption-panel .cap-style-acts button { flex: 1; min-height: 28px; font-size: 11px; padding: 0 4px; }

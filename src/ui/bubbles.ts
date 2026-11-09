@@ -478,20 +478,20 @@ export class Bubbles {
   /** The Letter tool's row: balloon styles (what a tap makes; restyles the selected caption), edit, and In/Out presets. */
   private letterChips(): HTMLElement[] {
     const a = this.app, cap = a.selectedCaption;
-    const styles: [BalloonStyle, string, string][] = [['speech', 'Speech', 'Oval with a tail'], ['thought', 'Thought', 'Cloud with bubbles'], ['shout', 'Shout', 'Jagged burst'], ['whisper', 'Whisper', 'Dashed outline'], ['box', 'Box', 'Narration box'], ['sfx', 'Sound effect', 'Big lettering, no balloon']];
-    const out: HTMLElement[] = styles.map(([s, label, title]) => this.chip(label, `${title}. Tap the canvas to add one${cap ? '; restyles the selected caption' : ''}`, (cap?.style ?? a.letters.style) === s, () => { a.letters.style = s; if (cap) a.setCaptionStyle(s); else a.onToolChange(); }, 'text'));
+    const styles: [BalloonStyle, string, string, string][] = [['speech', 'Speech', 'Oval with a tail', 'balloonSpeech'], ['thought', 'Thought', 'Cloud with bubbles', 'balloonThought'], ['shout', 'Shout', 'Jagged burst', 'balloonShout'], ['whisper', 'Whisper', 'Dashed outline', 'balloonWhisper'], ['box', 'Box', 'Narration box', 'balloonBox'], ['sfx', 'Sound effect', 'Big lettering, no balloon', 'sfx']];
+    const out: HTMLElement[] = styles.map(([s, label, title, icon]) => this.chip(label, `${title}. Tap the canvas to add one${cap ? '; restyles the selected caption' : ''}`, (cap?.style ?? a.letters.style) === s, () => { a.letters.style = s; if (cap) a.setCaptionStyle(s); else a.onToolChange(); }, icon));
     if (cap) {
-      out.push(this.chip('Edit caption', 'Words, font, size and colours (or double-tap the balloon)', false, () => a.letters.onEdit?.(a.project.activeLayer, false), 'text'));
-      out.push(this.chip('Fade in', 'Fade the caption in from the playhead', false, () => a.captionPreset('fadeIn'), 'play'));
-      out.push(this.chip('Pop in', 'The balloon pops in from its tail', false, () => a.captionPreset('popIn'), 'play'));
-      out.push(this.chip('Type on', 'Letters appear one at a time', false, () => a.captionPreset('typeOn'), 'text'));
-      out.push(this.chip('Fade out', 'Fade the caption out, ending at the playhead', false, () => a.captionPreset('fadeOut'), 'play'));
+      out.push(this.chip('Edit caption', 'Words, font, size, balloon and colours: the Caption panel (or double-tap the balloon)', false, () => a.letters.onEdit?.(a.project.activeLayer, false), 'editCaption'));
+      out.push(this.chip('Fade in', 'Fade the caption in from the playhead', false, () => a.captionPreset('fadeIn'), 'fadeIn'));
+      out.push(this.chip('Pop in', 'The balloon pops in from its tail', false, () => a.captionPreset('popIn'), 'popIn'));
+      out.push(this.chip('Type on', 'Letters appear one at a time', false, () => a.captionPreset('typeOn'), 'typeOn'));
+      out.push(this.chip('Fade out', 'Fade the caption out, ending at the playhead', false, () => a.captionPreset('fadeOut'), 'fadeOut'));
     } else out.push(el('span', { class: 'bub-hint' }, "Tap to add a caption, or draw a balloon shape. Draw out from a balloon's edge for its tail."));
     return out;
   }
 
   private toolsFor(ws: Workspace, expanded = false): [ToolKey, string, string][] {
-    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['eyedrop', 'Eyedropper', 'eyedrop'], ['fill', 'Bucket fill', 'fill'], ['select', 'Select', 'lasso'], ['transform', 'Transform', 'transform'], ['adjust', 'Adjustments', 'adjust'], ['letter', 'Letter (captions)', 'text']];
+    const draw: [ToolKey, string, string][] = [['brush', 'Brush', 'brush'], ['smudge', 'Smudge', 'smudge'], ['pen', 'Vector', 'pen'], ['eraser', 'Eraser', 'eraser'], ['eyedrop', 'Eyedropper', 'eyedrop'], ['fill', 'Bucket fill', 'fill'], ['select', 'Select', 'lasso'], ['transform', 'Transform', 'transform'], ['adjust', 'Adjustments', 'adjust'], ['letter', 'Letter (captions)', 'letter']];
     // Draw and Flip (the flipbook) draw with every tool; Flip's layers are pages' layers
     // Focus: what a flipbook needs (Procreate Dreams' simplest drawing screen)
     const assets: [ToolKey, string, string] = ['assets', 'Move assets', 'freeform'];
