@@ -2,6 +2,55 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Bug fixes: trimming layers in Motion, tapping lines for paths (2026-11-08, committed and pushed to main)
+
+Owner reports: a layer could not be lengthened in Motion, and tapping a layer or line to animate
+along it did not work.
+- **Trim**: a mouse drag on a bar's end worked in testing, but on touch a press and a short pause
+  opened the layer menu, which cancelled the drag. Holding a bar's edge (`[data-handle]`) no longer
+  opens the menu; holding the bar's middle still does. Also, a layer dragged past the end of a shot
+  with a set length now lengthens the shot, in the same Undo step (`setDuration` and `combine`).
+- **Tap a line**: `CompEditor.lineAt` accepted only Vector pen lines. It now takes any vector stroke
+  (imported SVG shapes are sampled), and then painted (brush) lines. `paintedroute.ts` traces the
+  longest path through a line-like painted region, end to end. A thick painted shape (a character) is
+  not a route, so the pick whip still parents to characters.
+- Checks:
+  - `paintedroute.test.ts` (2).
+  - Precision fixture 25: tapping a brush line animates end to end; a filled blob is not a route; a
+    bar edge has no hold menu but the bar does; the shot grows to fit, as one Undo.
+  - Unit tests 813 passed (1 skipped), build passed, browser suite 72 of 72.
+- Not tested on a real iPad: the hold-cancel cause was found in code, not reproduced with a finger.
+
+### Tails that follow a character; captions from drawings (2026-11-08, committed and pushed to main)
+
+Details: `docs/LETTERING-DESIGN.md`, "Tails that follow and captions from drawings".
+- Follow:
+  - `CaptionTail.follow` and `captionAtFrame` (resolved in keys and rendering).
+  - The Letter tool's pick whip beside each tip, with re-pinning on drag.
+  - A Follows menu in the Tails tab.
+- Make caption:
+  - `captionconvert.ts` reads the balloon; it is offered as the Make caption chip in the Letter row when
+    the active layer is a plain drawing.
+  - `readBalloon` and `trace.ts` turn the drawing into an outline and a tail.
+  - `CaptionSpec.minSize` keeps the drawn size, with Fit to words in the Balloon tab.
+- Found while checking by eye: the first tracer broke on a hand-stroked outline (thin diagonals).
+  It was replaced (mask grown by one cell; edges chained into loops), with a test for 1-cell outlines.
+
+Checks:
+- Unit tests:
+  - `core/captionfollow.test.ts`: 3. Moves, turns, a missing layer, and the frame key.
+  - `lettering/convert.test.ts`: 6. Tracing with holes, specks, a stroked ring and a 1-cell outline;
+    reading a speech balloon with its tail, a box, and an open scribble.
+  - A follow round trip in `lettering.test.ts`.
+- `captions` fixture, 24 checks. New ones:
+  - Canvas pick whip, following when the character moves, and the drawn tail running toward it.
+  - The Follows menu and stopping.
+  - A vector balloon with a tail, a painted box, and an empty drawing.
+- Checked by eye in the pane: a hand-sketched balloon became a classic speech balloon at its drawn
+  size, and the tail was whipped to a character. The test layers were removed from the local project
+  afterwards.
+- Full results: unit tests 811 passed (1 skipped), build passed, browser suite 72 of 72 (run alone).
+
 ### Caption panel icons (2026-11-08, committed and pushed to main)
 
 The owner reported that not all icons were made yet. Every control in the Caption panel was still

@@ -211,3 +211,12 @@ describe('each tail style has its own settings', () => {
     expect(readCaption({ ...defaultCaption(0, 0), tails: [{ x: 1, y: 2, join: 'bubbles', width: 1, count: 30, shrink: -2 }] }).tails[0]).toMatchObject({ count: 8, shrink: 0 });
   });
 });
+
+describe('a tail that follows a layer', () => {
+  it('keeps the layer and its spot when read back, and drops a malformed one', () => {
+    const c = readCaption({ ...defaultCaption(0, 0), tails: [{ x: 1, y: 2, join: 'merged', width: 1, follow: { layer: 'L7', at: [30, 40] } }] });
+    expect(c.tails[0]!.follow).toEqual({ layer: 'L7', at: [30, 40] });
+    const bad = readCaption({ ...defaultCaption(0, 0), tails: [{ x: 1, y: 2, join: 'merged', width: 1, follow: { layer: '<script>', at: [1] } }] });
+    expect(bad.tails[0]!.follow).toBeUndefined();
+  });
+});

@@ -15,6 +15,7 @@ import { onionHold } from './onionpop';
 import type { BoardView } from './board';
 import type { BalloonStyle } from '../lettering/spec';
 import { defaultWorkspaceLayout, WORKSPACE_NAMES, WORKSPACE_TOOLS, WORKSPACE_TOOL_NAMES, type WorkspaceTool } from '../core/workspacelayout';
+import { captionFromDrawing } from '../captionconvert';
 import { el } from './dom';
 
 /** Option rows whose actions the user can reorder (their command context has the same name). */
@@ -486,7 +487,12 @@ export class Bubbles {
       out.push(this.chip('Pop in', 'The balloon pops in from its tail', false, () => a.captionPreset('popIn'), 'popIn'));
       out.push(this.chip('Type on', 'Letters appear one at a time', false, () => a.captionPreset('typeOn'), 'typeOn'));
       out.push(this.chip('Fade out', 'Fade the caption out, ending at the playhead', false, () => a.captionPreset('fadeOut'), 'fadeOut'));
-    } else out.push(el('span', { class: 'bub-hint' }, "Tap to add a caption, or draw a balloon shape. Draw out from a balloon's edge for its tail."));
+    } else {
+      // a drawing with a balloon drawn on it can become a live caption
+      const l = a.project.isPlaceholder ? null : a.project.layer;
+      if (l?.kind === 'drawings' && !l.caption && !l.locked) out.push(this.chip('Make caption', 'Turn the balloon drawn on this layer (a closed Vector line or painted shape) into a live caption with the same shape, size and tail', false, () => captionFromDrawing(a), 'letter'));
+      out.push(el('span', { class: 'bub-hint' }, "Tap to add a caption, or draw a balloon shape. Draw out from a balloon's edge for its tail."));
+    }
     return out;
   }
 

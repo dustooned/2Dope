@@ -460,6 +460,21 @@ inline styling; sound effects on a path; Shake/Wave/Jitter; phase 3 vector lette
 - **Styles** (`lettering/styles.ts`): capture and apply a look, six ready-made styles, a device
   library, and `.2dope-style` files that embed an imported font.
 
+### Tails that follow and captions from drawings (2026-11-08)
+
+- `CaptionTail.follow = { layer, at }`: `at` is a point in the followed layer's page units.
+  `captionAtFrame(comp, layer, compFrame)` (`core/comp.ts`) resolves tips (and bends) per frame. It is
+  used in the frame-content key, the effect cache key and `paintPlanes` (`PartsCtx` carries the comp
+  and frame), so every view and export agrees. A missing layer falls back to the stored tip.
+- The Letter tool shows a pick whip beside each tip (drop on a layer); a followed tip dragged is
+  re-pinned (`followSpot`). The Tails tab has a Follows menu.
+- `captionconvert.ts`, Make caption: the largest closed vector line (SVG shape paths sampled in the
+  browser) or the traced outer edge of the painted pixels (`lettering/trace.ts`: one-cell growth, the
+  largest region, edges chained into loops) goes to `readBalloon` (`geometry.ts`). The one or two
+  sharpest points (a turn over 110°, sticking out) are the tail; the spike is cut at its base corners;
+  the rest is recognised as usual. `CaptionSpec.minSize` keeps the drawn size until the words need
+  more, and Fit to words drops it. The drawing layer is hidden, and it is one Undo step.
+
 ## Decisions needed from the owner (answered 2026-11-08 for fonts and Titles)
 
 - Which 4–6 Open Font License fonts to bundle, and whether students may import their own.

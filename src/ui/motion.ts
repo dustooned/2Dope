@@ -1184,6 +1184,8 @@ export class MotionPanel {
   /** The context menu for what is under the pointer in the layer list / time area. */
   private contextItems(t: HTMLElement): CtxItem[] | null {
     const ed = this.ed;
+    // a bar's edge is for trimming: a press, a pause and a drag must trim, not open a menu
+    if (t.closest('[data-handle]')) return null;
     const key = t.closest<HTMLElement>('[data-key]');
     if (key) {
       const [layer, prop, f] = key.dataset.key!.split('|');

@@ -265,6 +265,11 @@ export class CaptionEditor {
     const balloon = section('Balloon', 'balloonSpeech', 'The balloon’s shape, width, fill and ink.');
     chips<BalloonStyle>(balloon, 'Shape', STYLE_NAMES.filter(([s]) => s !== 'custom' || c.style === 'custom'), c.style, v => change('Change balloon style', { style: v, ...(v === 'sfx' ? { tails: [] } : {}) }));
     if (c.style !== 'sfx' && (c.style !== 'custom' || c.look?.outline)) slider(balloon, 'Width', 50, 250, 5, Math.round((c.shape ?? 1) * 100), '%', v => ({ ...this.cur, shape: v / 100 }), v => change('Change balloon width', { shape: v === 100 ? undefined : v / 100 }));
+    if (c.minSize) {
+      const fit = el('button', { type: 'button', title: 'This balloon keeps the size it was drawn at. Fit to words lets it size to the words like other captions.' }, 'Fit to words');
+      fit.addEventListener('click', () => { const { minSize: _m, ...rest } = this.base!; this.commit('Fit balloon to words', rest); });
+      row(balloon, 'Drawn size', fit);
+    }
     if (c.style !== 'sfx' && c.style !== 'box' && (c.style !== 'custom' || c.look?.outline)) {
       // the look: quick presets, then the dials (each change one Undo step)
       const withLook = (patch: Partial<BalloonLook> | null, base = this.cur): CaptionSpec => {
@@ -361,6 +366,19 @@ export class CaptionEditor {
         if (t.join === 'merged' || t.join === 'seam') { tailSlider('Taper', 'taper', 100, '%', 'Change tail taper'); tailSlider('Tip', 'tip', 100, '%', 'Change tail tip'); }
         if (t.join === 'bubbles') { tailSlider('Bubble count', 'count', 1, '', 'Change bubble count'); tailSlider('Bubble size', 'size', 100, '%', 'Change bubble size'); tailSlider('Shrink', 'shrink', 100, '%', 'Change bubble shrink'); }
         if (t.join === 'lightning') { tailSlider('Zigs', 'zigs', 1, '', 'Change lightning zigs'); tailSlider('Zig width', 'amp', 100, '%', 'Change lightning width'); }
+        // the tip can follow a character: it stays on the same spot of that layer as it moves
+        const follows = el('select', { 'aria-label': `Tail ${i + 1} follows` }) as HTMLSelectElement;
+        follows.append(el('option', { value: '' }, 'Nothing (stays put)'));
+        for (const x of app.project.comp.layers) if (x.id !== this.layerId && !(x.kind === 'drawings' && x.caption) && x.kind !== 'camera') follows.append(el('option', { value: x.id }, x.name));
+        follows.value = t.follow?.layer ?? '';
+        follows.addEventListener('change', () => {
+          const lay = this.layer();
+          if (!lay) return;
+          const shown = app.letters.shown(lay).tails[i]!, target = follows.value;
+          const at = target ? app.letters.followSpot(lay, target, { x: shown.x, y: shown.y }) : null;
+          change(target ? 'Tail follows layer' : 'Tail stops following', { tails: this.base!.tails.map((x, j) => { if (j !== i) return x; const { follow: _f, ...rest } = x; return target && at ? { ...rest, x: shown.x, y: shown.y, follow: { layer: target, at } } : { ...rest, x: shown.x, y: shown.y }; }) });
+        });
+        row(box, 'Follows', follows);
         const acts = el('div', { class: 'cap-chips' });
         if (t.bend) { const s = el('button', { type: 'button' }, 'Straighten'); s.addEventListener('click', () => change('Straighten caption tail', { tails: this.base!.tails.map((x, j) => { if (j !== i) return x; const { bend: _b, ...rest } = x; return rest; }) })); acts.append(s); }
         const del = el('button', { type: 'button' }, 'Remove tail'); del.addEventListener('click', () => setTail('Remove caption tail', null)); acts.append(del);
@@ -519,7 +537,7 @@ export class CaptionEditor {
 
 /** The Caption panel's controls and their icons (by label). */
 export const PANEL_ICONS: Record<string, string> = {
-  Done: 'check', 'Import font…': 'import',
+  Done: 'check', 'Import font…': 'import', 'Fit to words': 'fit',
   Small: 'sizeSmall', Body: 'sizeBody', Big: 'sizeBig', Left: 'alignLeft', Centre: 'alignCenter', Right: 'alignRight',
   Bold: 'bold', Italic: 'italic', 'ALL CAPS': 'caps',
   Speech: 'balloonSpeech', Thought: 'balloonThought', Shout: 'balloonShout', Whisper: 'balloonWhisper', Box: 'balloonBox', 'Sound effect': 'sfx', 'As drawn': 'balloonCustom',

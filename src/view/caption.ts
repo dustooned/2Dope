@@ -35,14 +35,16 @@ export function captionSize(c: CaptionSpec, pageHeight: number): number { return
 export function captionLayout(c: CaptionSpec, frame: number, pageW: number, pageH: number): CaptionLayout {
   const size = captionSize(c, pageH), tracking = captionAt(c, 'tracking', frame), leading = captionAt(c, 'leading', frame) / 100;
   const text = c.caps ? c.text.toUpperCase() : c.text, font = captionFont(c, size);
-  const key = `${text}|${font}|${captionFontReady(c)}|${c.style}|${c.shape ?? 1}|${lookKey(c)}|${tracking}|${leading}|${pageW}x${pageH}`;
+  const key = `${text}|${font}|${captionFontReady(c)}|${c.style}|${c.shape ?? 1}|${lookKey(c)}|${c.minSize ?? ''}|${tracking}|${leading}|${pageW}x${pageH}`;
   const hit = layouts.get(key);
   if (hit) return hit;
   const g = (measureCanvas ??= document.createElement('canvas').getContext('2d')!);
   g.font = font;
   const extra = (tracking / 1000) * size;
   const measure = (t: string) => g.measureText(t).width + extra * Math.max(0, [...t].length - 1);
-  const fit = fitCaption(text.length ? text : ' ', c.style, measure, { size, leading, maxA: pageW * 0.48, maxB: pageH * 0.48, aspect: c.shape ?? 1, profile: balloonProfile(c.style, c.look) });
+  const fitted = fitCaption(text.length ? text : ' ', c.style, measure, { size, leading, maxA: pageW * 0.48, maxB: pageH * 0.48, aspect: c.shape ?? 1, profile: balloonProfile(c.style, c.look) });
+  // a minimum size (a converted drawing keeps its drawn size until the words need more)
+  const fit = c.minSize ? { ...fitted, a: Math.max(fitted.a, c.minSize[0]), b: Math.max(fitted.b, c.minSize[1]) } : fitted;
   const out = { fit, size, tracking: extra, font, text };
   if (layouts.size > 200) layouts.delete(layouts.keys().next().value!);
   layouts.set(key, out);

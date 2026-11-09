@@ -469,3 +469,75 @@ export function detectBalloon(raw: Pt[]): Detected {
   if (solidity >= 0.985 && rectFill >= 0.74 && rectFill < 0.84 && dents <= 4) return 'speech';
   return 'custom';
 }
+
+// ---------------------------------------------------------------------------------------------
+// Turning a drawn balloon into a caption
+
+/** A balloon read from a drawing: its style, centre and size, a custom outline if needed, and a tail tip. */
+export interface ReadBalloon {
+  style: BalloonStyle;
+  centre: Pt;
+  width: number;
+  height: number;
+  /** Balloon width setting that keeps the drawn proportions (CaptionSpec.shape). */
+  shape: number;
+  outline?: [number, number][];
+  tail?: Pt;
+}
+
+/**
+ * Read a balloon from the outline of a drawing (a vector line or a traced painted shape). A spike
+ * that reaches well past the rest of the outline is its tail: the tip is kept and the spike is cut
+ * from the balloon. The rest is recognised like a drawn balloon (speech, box, thought, shout or a
+ * custom shape that still fits the words). Null when it is not a closed shape.
+ */
+export function readBalloon(raw: Pt[]): ReadBalloon | null {
+  if (raw.length < 8) return null;
+  // an open line (its ends far apart) is not a balloon
+  let travel = 0;
+  for (let i = 1; i < raw.length; i++) travel += dist(raw[i - 1]!, raw[i]!);
+  if (travel < 20 || dist(raw[0]!, raw[raw.length - 1]!) > travel * 0.18) return null;
+  const pts = resample([...raw, raw[0]!], 240).slice(0, 240), n = pts.length;
+  const cx = pts.reduce((s, p) => s + p.x, 0) / n, cy = pts.reduce((s, p) => s + p.y, 0) / n;
+  const r = pts.map(p => Math.hypot(p.x - cx, p.y - cy)), sorted = [...r].sort((a, b) => a - b), med = sorted[Math.floor(n / 2)]!;
+  // the tail: the one sharp point that sticks out (a turn over 110° within a short stretch, reaching
+  // past the typical radius). Box corners turn 90°; a shout has many sharp points and keeps them all.
+  const k = Math.max(3, Math.round(n / 48));
+  const turnAt = (i: number) => {
+    const a = pts[(i - k + n) % n]!, b = pts[i]!, c = pts[(i + k) % n]!;
+    const u = { x: b.x - a.x, y: b.y - a.y }, v = { x: c.x - b.x, y: c.y - b.y };
+    return Math.abs(Math.atan2(u.x * v.y - u.y * v.x, u.x * v.x + u.y * v.y));
+  };
+  const sharp: number[] = [];
+  for (let i = 0; i < n; i++) if (r[i]! > med * 1.2 && turnAt(i) > (110 * Math.PI) / 180 && r[i]! >= r[(i - 1 + n) % n]! && r[i]! >= r[(i + 1) % n]!) sharp.push(i);
+  // neighbouring hits are one spike
+  const spikes = sharp.filter((i, j) => j === 0 || i - sharp[j - 1]! > k);
+  let tail: Pt | undefined, body = pts;
+  if (spikes.length >= 1 && spikes.length <= 2) {
+    const tip = spikes.reduce((best, i) => (r[i]! > r[best]! ? i : best), spikes[0]!);
+    tail = { ...pts[tip]! };
+    // cut the spike back along its sides to the corners where it meets the balloon (the sides run
+    // fairly straight; the base is a sharp turn the other way)
+    const signedTurn = (i: number) => {
+      const p0 = pts[(i - k + n) % n]!, p1 = pts[i]!, p2 = pts[(i + k) % n]!;
+      return Math.atan2((p1.x - p0.x) * (p2.y - p1.y) - (p1.y - p0.y) * (p2.x - p1.x), (p1.x - p0.x) * (p2.x - p1.x) + (p1.y - p0.y) * (p2.y - p1.y));
+    };
+    const tipSign = Math.sign(signedTurn(tip)), corner = (35 * Math.PI) / 180;
+    let a = (tip - k + n) % n, b = (tip + k) % n;
+    for (let q = 0; q < n / 5 && !(Math.sign(signedTurn(a)) === -tipSign && Math.abs(signedTurn(a)) > corner); q++) a = (a - 1 + n) % n;
+    for (let q = 0; q < n / 5 && !(Math.sign(signedTurn(b)) === -tipSign && Math.abs(signedTurn(b)) > corner); q++) b = (b + 1) % n;
+    const cut = new Set<number>();
+    for (let i = a; ; i = (i + 1) % n) { cut.add(i); if (i === b) break; }
+    body = pts.filter((_, i) => !cut.has(i));
+  }
+  const kind = detectBalloon(resample([...body, body[0]!], 200));
+  if (kind === 'open') return null;
+  const xs = body.map(p => p.x), ys = body.map(p => p.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const width = x1 - x0, height = y1 - y0, style: BalloonStyle = kind === 'custom' ? 'custom' : kind;
+  return {
+    style, centre: { x: (x0 + x1) / 2, y: (y0 + y1) / 2 }, width, height,
+    shape: Math.round(Math.min(2.5, Math.max(0.5, width / Math.max(1, height) / ASPECT[style])) * 100) / 100,
+    ...(style === 'custom' ? { outline: shapeForText(body, false) } : {}),
+    ...(tail ? { tail } : {}),
+  };
+}

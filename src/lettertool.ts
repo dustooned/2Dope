@@ -10,7 +10,7 @@
  * Every finished gesture is one Undo step; drags preview live.
  */
 import type { App } from './app';
-import { apply, drawingsLayer, invert, localMatrix, type DrawingsLayer, type Layer } from './core/comp';
+import { apply, captionAtFrame, drawingsLayer, invert, localMatrix, worldMatrix, type DrawingsLayer, type Layer } from './core/comp';
 import { isAnimated, setKey, valueAt, type Prop, type Vec2 } from './core/anim';
 import { newId } from './io/persist';
 import { detectBalloon, inside, reshapeOutline, shapeForText, type Pt } from './lettering/geometry';
@@ -32,13 +32,15 @@ type Drag =
   | { id: number; kind: 'stroke'; points: Pt[] }
   | { id: number; kind: 'move' | 'tip' | 'bend' | 'width' | 'shape'; layer: string; tail: number; start: Pt; before: CaptionSpec; moved: boolean }
   /** Turn or scale the whole caption (its layer's rotation and scale, around the balloon's centre). */
-  | { id: number; kind: 'turn' | 'scale'; layer: string; startStage: Pt; centre: Pt; before: Layer['transform']; moved: boolean };
+  | { id: number; kind: 'turn' | 'scale'; layer: string; startStage: Pt; centre: Pt; before: Layer['transform']; moved: boolean }
+  /** Pick whip from a tail tip: let go on a layer and the tip follows it. */
+  | { id: number; kind: 'whip'; layer: string; tail: number; from: Pt; to: Pt; target: string | null };
 
 type CaptionEdit = Extract<Drag, { kind: 'move' | 'tip' | 'bend' | 'width' | 'shape' }>;
 const isCaptionEdit = (d: Drag): d is CaptionEdit => d.kind === 'move' || d.kind === 'tip' || d.kind === 'bend' || d.kind === 'width' || d.kind === 'shape';
 
 /** A caption's on-canvas handles, in its layer's page units. */
-export interface CaptionHandles { outline: Pt[]; tips: Pt[]; bends: Pt[]; width: Pt | null; turn: Pt; scale: Pt }
+export interface CaptionHandles { outline: Pt[]; tips: Pt[]; bends: Pt[]; width: Pt | null; turn: Pt; scale: Pt; whips: Pt[] }
 
 export class LetterTool {
   private drag: Drag | null = null;
@@ -67,8 +69,8 @@ export class LetterTool {
       const m = invert(app.editor.matrixOf(l));
       if (!m) continue;
       const [lx, ly] = apply(m, [stage.x, stage.y]), lf = app.frame - l.start;
-      const { shapes } = captionBalloon(l.caption, lf, app.project.width, app.project.height);
-      out.push({ layer: l, local: { x: lx, y: ly }, outline: shapes.outline, tips: l.caption.tails.map(t => ({ x: t.x, y: t.y })) });
+      const shown = this.shown(l), { shapes } = captionBalloon(shown, lf, app.project.width, app.project.height);
+      out.push({ layer: l, local: { x: lx, y: ly }, outline: shapes.outline, tips: shown.tails.map(t => ({ x: t.x, y: t.y })) });
     }
     return out;
   }
@@ -80,8 +82,13 @@ export class LetterTool {
   }
 
   /** Handles of a caption layer at the current frame: tail tips, bends and the balloon-width grip. */
+  /** The caption as it shows now (a tail that follows a layer points at it). */
+  shown(l: DrawingsLayer): CaptionSpec {
+    return captionAtFrame(this.app.project.comp, l, this.app.frame) ?? l.caption!;
+  }
+
   handles(l: DrawingsLayer): CaptionHandles | null {
-    const c = l.caption, app = this.app;
+    const c = l.caption ? this.shown(l) : undefined, app = this.app;
     if (!c) return null;
     const { lay, outline, shapes } = captionBalloon(c, app.frame - l.start, app.project.width, app.project.height);
     const tips: Pt[] = [], bends: Pt[] = [];
@@ -99,7 +106,9 @@ export class LetterTool {
     // turn: a round handle above the balloon; scale: a square at its lower-right corner (screen sizes)
     const sc = this.layerScale(l), z = app.view.zoom;
     return { outline: shapes.outline, tips, bends, width: sizable ? { x: c.x + lay.fit.a, y: c.y } : null,
-      turn: { x: c.x, y: c.y - lay.fit.b - 34 / (z * sc) }, scale: { x: c.x + lay.fit.a * 0.92 + 10 / (z * sc), y: c.y + lay.fit.b * 0.92 + 10 / (z * sc) } };
+      turn: { x: c.x, y: c.y - lay.fit.b - 34 / (z * sc) }, scale: { x: c.x + lay.fit.a * 0.92 + 10 / (z * sc), y: c.y + lay.fit.b * 0.92 + 10 / (z * sc) },
+      // a pick whip beside each tip, on the side away from the balloon
+      whips: c.tails.map(t => { const dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1, r = 24 / (z * sc); return { x: t.x + (dx / d) * r, y: t.y + (dy / d) * r }; }) };
   }
 
   /** How much a layer is scaled on screen (its own scale and its parents'), for handle sizes. */
@@ -147,6 +156,8 @@ export class LetterTool {
           const c = active.caption!, q = apply(app.editor.matrixOf(active), [c.x, c.y]);
           this.drag = { id, kind, layer: active.id, startStage: stage, centre: { x: q[0], y: q[1] }, before: structuredClone(active.transform), moved: false };
         };
+        const whip = h.whips.findIndex(stageNear);
+        if (whip >= 0) { const q = apply(app.editor.matrixOf(active), [h.tips[whip]!.x, h.tips[whip]!.y]); this.drag = { id, kind: 'whip', layer: active.id, tail: whip, from: { x: q[0], y: q[1] }, to: stage, target: null }; return; }
         if (stageNear(h.turn)) { transformFrom('turn'); return; }
         if (stageNear(h.scale)) { transformFrom('scale'); return; }
         // the nearest handle wins (a short tail's bend sits close to its tip)
@@ -193,6 +204,12 @@ export class LetterTool {
       if (Math.hypot(stage.x - last.x, stage.y - last.y) >= 1.5 / this.app.view.zoom) { d.points.push(stage); this.app.requestRender(); }
       return;
     }
+    if (d.kind === 'whip') {
+      d.to = stage;
+      d.target = this.app.editor.hitLayer([stage.x, stage.y], { allowLocked: true, accept: x => x.id !== d.layer && !(x.kind === 'drawings' && x.caption) })?.id ?? null;
+      this.app.requestRender();
+      return;
+    }
     if (d.kind === 'turn' || d.kind === 'scale') {
       const t = this.app.project.comp.layers.find(x => x.id === d.layer);
       if (t?.kind === 'drawings' && t.caption) this.transformMove(d, t, stage);
@@ -207,7 +224,13 @@ export class LetterTool {
     if (Math.hypot(dx, dy) * this.app.view.zoom > 3) d.moved = true;
     if (!d.moved) return;
     const c = structuredClone(d.before);
-    if (d.kind === 'tip') { const t = c.tails[d.tail]!; t.x += dx; t.y += dy; if (t.bend) t.bend = [t.bend[0] + dx / 2, t.bend[1] + dy / 2]; }
+    if (d.kind === 'tip') {
+      const t = c.tails[d.tail]!, shownTip = this.shown({ ...l, caption: d.before }).tails[d.tail]!;
+      t.x = shownTip.x + dx; t.y = shownTip.y + dy;
+      if (t.bend) t.bend = [t.bend[0] + dx / 2, t.bend[1] + dy / 2];
+      // a tip that follows a layer stays pinned to it, at the new spot
+      if (t.follow) { const at = this.followSpot(l, t.follow.layer, { x: t.x, y: t.y }); if (at) t.follow = { layer: t.follow.layer, at }; }
+    }
     else if (d.kind === 'bend') c.tails[d.tail]!.bend = [x, y];
     else if (d.kind === 'shape' && d.before.look?.outline) {
       // reshape: the handle's outline point follows the finger; its neighbours follow smoothly
@@ -229,6 +252,20 @@ export class LetterTool {
     if (!d || d.id !== id) return;
     this.drag = null;
     const app = this.app;
+    if (d.kind === 'whip') {
+      app.requestRender();
+      const l = app.project.comp.layers.find(x => x.id === d.layer);
+      if (cancelled || l?.kind !== 'drawings' || !l.caption) return;
+      if (!d.target) { app.onNotice?.('Let go on a character (or any layer) for the tail to follow it.'); return; }
+      const m = invert(app.editor.matrixOf(l));
+      if (!m) return;
+      const [x, y] = apply(m, [d.to.x, d.to.y]), at = this.followSpot(l, d.target, { x, y });
+      if (!at) return;
+      const target = app.project.comp.layers.find(x => x.id === d.target)!;
+      app.editor.edit('Tail follows layer', cc => { const c = cc.layers.find(y => y.id === d.layer); if (c?.kind === 'drawings' && c.caption) c.caption = { ...c.caption, tails: c.caption.tails.map((t, i) => (i === d.tail ? { ...t, x, y, follow: { layer: target.id, at } } : t)) }; });
+      app.onNotice?.(`The tail now follows “${target.name}”. Drag its tip to point at another spot; Follows → Nothing in the Tails tab stops it.`);
+      return;
+    }
     if (d.kind === 'turn' || d.kind === 'scale') {
       const l = app.project.comp.layers.find(x => x.id === d.layer);
       if (!l) return;
@@ -324,6 +361,15 @@ export class LetterTool {
     app.requestRender();
   }
 
+  /** A point in a caption layer's page units, as a spot on another layer (its own page units). */
+  followSpot(caption: DrawingsLayer, layerId: string, local: Pt): [number, number] | null {
+    const comp = this.app.project.comp, target = comp.layers.find(x => x.id === layerId);
+    const inv = target && invert(worldMatrix(comp, target, this.app.frame));
+    if (!inv) return null;
+    const [x, y] = apply(inv, apply(worldMatrix(comp, caption, this.app.frame), [local.x, local.y]));
+    return [Math.round(x * 100) / 100, Math.round(y * 100) / 100];
+  }
+
   private zigzag(pts: Pt[]): boolean {
     let flips = 0, prev = 0;
     for (let i = 2; i < pts.length; i += 2) {
@@ -361,6 +407,14 @@ export class LetterTool {
     const app = this.app, z = app.view.zoom;
     g.save();
     g.lineWidth = 2 / z; g.strokeStyle = '#4aa3ff'; g.setLineDash([6 / z, 5 / z]);
+    const wd = this.drag?.kind === 'whip' ? this.drag : null;
+    if (wd) {
+      // the whip line, and the layer it would follow
+      g.save(); g.strokeStyle = '#ff9f1a'; g.lineWidth = 2 / z; g.setLineDash([]);
+      g.beginPath(); g.moveTo(wd.from.x, wd.from.y); g.lineTo(wd.to.x, wd.to.y); g.stroke();
+      g.beginPath(); g.arc(wd.to.x, wd.to.y, (wd.target ? 9 : 5) / z, 0, Math.PI * 2); g.fillStyle = wd.target ? '#ff9f1a' : 'rgba(255,159,26,.4)'; g.fill();
+      g.restore();
+    }
     const s = this.stroke;
     if (s && s.length > 1) { g.beginPath(); s.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.stroke(); }
     g.setLineDash([]);
@@ -378,6 +432,12 @@ export class LetterTool {
       for (const t of h.tips) { const q = at(t); g.beginPath(); g.arc(q.x, q.y, 8 / z, 0, Math.PI * 2); g.fill(); g.stroke(); }
       // balloon width: a tall grip on the right edge
       if (h.width) { const q = at(h.width), w = 8 / z, hh = 22 / z; g.beginPath(); g.roundRect(q.x - w / 2, q.y - hh / 2, w, hh, w / 2); g.fillStyle = '#4aa3ff'; g.fill(); g.strokeStyle = '#fff'; g.stroke(); }
+      // pick whips beside the tips (a small spiral), filled when the tail follows a layer
+      l.kind === 'drawings' && l.caption && h.whips.forEach((w, i) => {
+        const q = at(w), r = 6.5 / z, on = !!l.caption!.tails[i]?.follow;
+        g.beginPath(); g.arc(q.x, q.y, r, 0, Math.PI * 2); g.fillStyle = on ? '#ff9f1a' : '#fff'; g.fill(); g.strokeStyle = '#ff9f1a'; g.lineWidth = 1.6 / z; g.stroke();
+        g.beginPath(); for (let k = 0; k <= 16; k++) { const a = k * 0.75, rr = (r * 0.75 * k) / 16; const px = q.x + Math.cos(a) * rr, py = q.y + Math.sin(a) * rr; if (k) g.lineTo(px, py); else g.moveTo(px, py); } g.strokeStyle = on ? '#fff' : '#ff9f1a'; g.stroke();
+      });
       // turn (a dot on a stick above) and scale (a corner square)
       { const top = at(h.turn), c = l.kind === 'drawings' && l.caption ? at({ x: l.caption.x, y: l.caption.y - (h.turn.y < l.caption.y ? 0 : 0) }) : top, edge = h.outline.reduce((m, p) => (p.y < m.y ? p : m), h.outline[0]!), e = at(edge);
         g.setLineDash([]); g.strokeStyle = '#4aa3ff'; g.lineWidth = 1.5 / z; g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(top.x, top.y); g.stroke();

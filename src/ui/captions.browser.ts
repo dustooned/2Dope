@@ -1,4 +1,5 @@
 import { App } from '../app';
+import { captionFromDrawing } from '../captionconvert';
 import { newEffect } from '../core/effects';
 import { apply } from '../core/comp';
 import { Project } from '../core/project';
@@ -358,6 +359,93 @@ await check('Caption styles: apply a ready-made one, save your own, and import o
   app.undo(); await wait();
   writeSavedStyles([]);
   footer('Apply').click();
+});
+
+await check('Pick-whip a tail onto a character: the tip follows it as it moves (one Undo)', async () => {
+  app.setWorkspace('draw'); app.setLettering(true); app.setFrame(10);
+  // a character: a drawing layer with a red blob at the lower right
+  app.editor.addLayer('drawings');
+  const hero = app.editor.primary!;
+  if (hero.kind !== 'drawings') throw new Error('no drawing layer');
+  hero.name = 'Hero';
+  const hd = app.project.drawings.get(hero.exposures[0]!.drawing!)!, hg = hd.line.getContext('2d')!;
+  hg.fillStyle = '#c03030'; hg.beginPath(); hg.arc(520, 290, 40, 0, Math.PI * 2); hg.fill(); hd.rev++;
+  app.focusLayer(first); app.letters.onEdit!(first, false);
+  const l = app.project.comp.layers.find(x => x.id === first)!;
+  if (l.kind !== 'drawings') throw new Error('not drawings');
+  const h = app.letters.handles(l)!;
+  expect(h.whips.length === cap(first).tails.length && h.whips.length > 0, 'no whip handles');
+  const w = apply(app.editor.matrixOf(l), [h.whips[0]!.x, h.whips[0]!.y]);
+  app.letters.down(11, { x: w[0], y: w[1] }); app.letters.move(11, { x: 515, y: 285 }); app.letters.up(11, false);
+  const t = cap(first).tails[0]!;
+  expect(t.follow?.layer === hero.id && app.history.peekUndo()?.label === 'Tail follows layer', 'whip did not attach the tail: ' + JSON.stringify(t.follow));
+  // move the hero 60 px left: the tail tip goes with it
+  const before = app.letters.shown(l).tails[0]!;
+  app.editor.edit('Move hero', c => { const x = c.layers.find(y => y.id === hero.id)!; x.transform.position = { ...x.transform.position, value: [x.transform.position.value[0] - 60, x.transform.position.value[1]] }; });
+  const after = app.letters.shown(app.project.comp.layers.find(x => x.id === first) as typeof l).tails[0]!;
+  expect(Math.abs(after.x - (before.x - 60)) < 0.5 && Math.abs(after.y - before.y) < 0.5, `tip did not follow: ${before.x},${before.y} → ${after.x},${after.y}`);
+  // rendered: the tail reaches the moved hero
+  // rendered: the tail runs toward the moved hero (sampled just short of the tip, which the hero covers)
+  render(10);
+  const cc = cap(first), sx = Math.round(after.x + (cc.x - after.x) * 0.2), sy = Math.round(after.y + (cc.y - after.y) * 0.2);
+  const px = lg.getImageData(sx - 4, sy - 4, 9, 9).data;
+  let ink = 0; for (let i = 0; i < px.length; i += 4) if (px[i + 3]! > 150 && px[i]! < 90 && px[i + 1]! < 90) ink++;
+  expect(ink > 0, 'the drawn tail does not run toward the moved hero');
+  // the Tails tab shows who it follows; choosing Nothing stops it where it is
+  const tab = (name: string) => [...dialog()!.querySelectorAll<HTMLButtonElement>('[role=tab]')].find(x => x.textContent?.endsWith(name))!;
+  tab('Tails').click();
+  const sel = inDialog<HTMLSelectElement>('Tail 1 follows');
+  expect(sel.value === hero.id, 'Follows menu does not show the hero');
+  sel.value = ''; sel.dispatchEvent(new Event('change'));
+  const stopped = cap(first).tails[0]!;
+  expect(!stopped.follow && Math.abs(stopped.x - after.x) < 0.5 && app.history.peekUndo()?.label === 'Tail stops following', 'stop following failed');
+  for (let i = 0; i < 4; i++) { app.undo(); await wait(30); }
+  expect(!app.project.comp.layers.some(x => x.id === hero.id) || !cap(first).tails[0]!.follow, 'Undo did not restore');
+  app.project.comp.layers = app.project.comp.layers.filter(x => x.id !== hero.id);
+  footer('Apply').click(); app.focusLayer(first);
+});
+
+await check('Make caption from a drawing: a vector balloon with a tail, and a painted one', async () => {
+  app.setWorkspace('draw'); app.setFrame(10);
+  const before = captions().length;
+  // a vector balloon drawn as one outline with a spike for its tail
+  app.editor.addLayer('drawings');
+  const art = app.editor.primary!;
+  if (art.kind !== 'drawings') throw new Error('no drawing layer');
+  art.name = 'Drawn balloon';
+  const d = app.project.drawings.get(art.exposures[0]!.drawing!)!;
+  const n = 120, pts: { x: number; y: number }[] = [];
+  for (let i = 0; i < n; i++) { const t = (i / n) * Math.PI * 2; pts.push({ x: 300 + Math.cos(t) * 140, y: 120 + Math.sin(t) * 60 }); }
+  const k = Math.round(n * 0.3); // lower left (y grows downward)
+  for (let i = -4; i <= 4; i++) { const p = pts[k + i]!, f = 1 + 1.5 * (1 - Math.abs(i) / 5); pts[k + i] = { x: 300 + (p.x - 300) * f, y: 120 + (p.y - 120) * f }; }
+  pts.push({ ...pts[0]! });
+  d.vectors = [{ id: 'vb', tool: 'pen', brush: { ...app.brush }, color: '#111111', seed: 1, points: pts.map((p, i) => ({ ...p, pressure: 1, tiltX: 0, tiltY: 0, t: i })) } as unknown as typeof d.vectors[number]];
+  d.rev++;
+  app.focusLayer(art.id); app.history.clear();
+  const id = captionFromDrawing(app)!;
+  expect(id && captions().length === before + 1, 'no caption made');
+  const c = cap(id), src = app.project.comp.layers.find(x => x.id === art.id)!;
+  expect(c.style === 'speech' && c.tails.length === 1 && c.tails[0]!.y > 150 && c.tails[0]!.x < 280, 'balloon or tail not read: ' + JSON.stringify({ style: c.style, tails: c.tails }));
+  expect(Math.abs(c.x - 300) < 12 && Math.abs(c.y - 120) < 8 && c.minSize && Math.abs(c.minSize[0] - 140) < 10 && Math.abs(c.minSize[1] - 60) < 8, 'place or drawn size not kept: ' + JSON.stringify({ x: c.x, y: c.y, min: c.minSize }));
+  expect(!src.visible && app.history.peekUndo()?.label === 'Make caption from drawing' && !!dialog(), 'original not hidden, not one Undo step, or no panel');
+  const { fit } = captionBalloon(c, 0, 640, 360).lay;
+  expect(fit.a >= 139 && fit.b >= 59, 'the balloon is smaller than the drawing');
+  button('Fit to words');
+  footer('Apply').click();
+  app.undo(); await wait();
+  expect(captions().length === before && app.project.comp.layers.find(x => x.id === art.id)!.visible, 'Undo did not restore the drawing');
+  // a painted balloon (pixels): traced, read as a box
+  d.vectors = []; const g = d.line.getContext('2d')!; g.fillStyle = '#222'; g.fillRect(80, 220, 220, 90); g.clearRect(90, 230, 200, 70); d.rev++;
+  const id2 = captionFromDrawing(app)!;
+  const c2 = cap(id2);
+  expect(c2.style === 'box' && c2.tails.length === 0 && Math.abs(c2.x - 190) < 6, 'painted box not read: ' + JSON.stringify({ style: c2.style, x: c2.x, y: c2.y }));
+  footer('Apply').click();
+  app.undo(); await wait();
+  // nothing closed: a clear message, no caption
+  g.clearRect(0, 0, d.line.width, d.line.height); d.rev++;
+  expect(captionFromDrawing(app) === null && captions().length === before, 'an empty drawing made a caption');
+  app.project.comp.layers = app.project.comp.layers.filter(x => x.id !== art.id);
+  app.focusLayer(first);
 });
 
 await check('Motion shows the caption settings as rows, ready to key', () => {

@@ -5765,3 +5765,4 @@ body.ws-board.ui-full:not(.ui-hidden):not(.presenting) .bub-modes, body.ws-board
 .caption-panel button.has-ico { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 .caption-panel button.has-ico svg.ico { width: 17px; height: 17px; flex: none; }
 .caption-panel .cap-head button.has-ico svg.ico { width: 16px; height: 16px; }
+.caption-panel .cap-row select { width: 100%; min-height: 32px; grid-column: 2 / -1; }

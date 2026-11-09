@@ -34,6 +34,12 @@ export interface CaptionTail {
   /** Lightning: how many zigs and how wide they swing. */
   zigs?: number;
   amp?: number;
+  /**
+   * The tip follows another layer: `at` is a point in that layer's own page units, so the tip stays
+   * on the same spot of the character as it moves, turns and scales. x and y are kept as the tip's
+   * place when that layer is gone.
+   */
+  follow?: { layer: string; at: [number, number] };
 }
 
 /** The ranges of each tail style's own settings (and what absent means). */
@@ -105,6 +111,8 @@ export interface CaptionSpec {
   shape?: number;
   /** How the balloon is drawn: roundness, wobble, spikes, bumps or a custom outline. */
   look?: BalloonLook;
+  /** The smallest the balloon gets (half-width, half-height, page units), e.g. a converted drawing's size. */
+  minSize?: [number, number];
   /** Still values of the keyable settings (absent = default). */
   values?: Partial<Record<CaptionKey, number>>;
   /** Keyframes of the keyable settings, in layer time. */
@@ -165,7 +173,9 @@ export function readCaption(input: unknown): CaptionSpec {
       const v = q[k], [lo, hi] = TAIL_LIMITS[k];
       if (typeof v === 'number' && Number.isFinite(v)) extra[k] = Math.min(hi, Math.max(lo, k === 'count' || k === 'zigs' ? Math.round(v) : v));
     }
-    return [{ x: q.x, y: q.y, ...(bend ? { bend } : {}), join: TAIL_JOINS.includes(q.join as TailJoin) ? (q.join as TailJoin) : 'merged', width: num(q.width, 0.3, 4, 1.2), ...extra }];
+    const f = q.follow as { layer?: unknown; at?: unknown } | undefined;
+    const follow = f && typeof f.layer === 'string' && /^[A-Za-z0-9_:-]{1,80}$/.test(f.layer) && Array.isArray(f.at) && f.at.length === 2 && f.at.every(n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e6) ? { layer: f.layer, at: [f.at[0], f.at[1]] as [number, number] } : undefined;
+    return [{ x: q.x, y: q.y, ...(bend ? { bend } : {}), join: TAIL_JOINS.includes(q.join as TailJoin) ? (q.join as TailJoin) : 'merged', width: num(q.width, 0.3, 4, 1.2), ...extra, ...(follow ? { follow } : {}) }];
   }) : [];
   const path = Array.isArray(r.path) && r.path.length >= 3 && r.path.length <= 2000 && r.path.every(p => Array.isArray(p) && p.length === 2 && p.every(n => typeof n === 'number' && Number.isFinite(n))) ? (r.path as [number, number][]) : undefined;
   const values: Partial<Record<CaptionKey, number>> = {};
@@ -186,6 +196,7 @@ export function readCaption(input: unknown): CaptionSpec {
     textColor: col(r.textColor, '#111111'), textOutline: r.textOutline === null || r.textOutline === undefined ? null : col(r.textOutline, '#111111'), textOutlineWidth: num(r.textOutlineWidth, 0, 0.6, 0.18),
     ...(typeof r.shape === 'number' && Number.isFinite(r.shape) && r.shape !== 1 ? { shape: num(r.shape, 0.5, 2.5, 1) } : {}),
     ...(readLook(r.look) ? { look: readLook(r.look)! } : {}),
+    ...(Array.isArray(r.minSize) && r.minSize.length === 2 && r.minSize.every(n => typeof n === 'number' && Number.isFinite(n) && n > 0) ? { minSize: [num(r.minSize[0], 1, 1e5, 1), num(r.minSize[1], 1, 1e5, 1)] as [number, number] } : {}),
     ...(Object.keys(values).length ? { values } : {}), ...(Object.keys(keys).length ? { keys } : {}),
   };
 }

@@ -119,6 +119,47 @@ await check('Keyframes: drag a box to select several, then drag the span end to 
   ed.selectKeys([0, 10, 20].map(f => ({ layer: id, prop: 'position' as const, f })));
   expect(ed.scaleKeys(0.5) && JSON.stringify(ed.primary!.transform.position.keys.map(k => k.f)) === '[0,5,10]' && app.history.peekUndo()?.label === 'Squeeze key timing', 'squeeze from the Stretch button path failed');
 });
+await check('Animate along a path: tapping a line painted with a brush follows it; a thick shape is not a route', async () => {
+  app.loadProject(new Project(320, 180)); app.project.comp.duration = 60; app.setWorkspace('motion'); refresh();
+  const p = app.project, guideId = p.layer.id, d = p.drawing(p.layer.exposures[0]!.drawing!), g = d.line.getContext('2d')!;
+  // a brush line (pixels only, no vector) and, apart from it, a filled blob
+  g.strokeStyle = '#222'; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.moveTo(30, 150); g.bezierCurveTo(100, 40, 180, 160, 260, 50); g.stroke();
+  d.rev++;
+  app.editor.addLayer('drawings'); refresh();
+  const ed = app.editor, mover = ed.primary!;
+  app.setFrame(0); app.history.clear();
+  ed.setDrawingPath(true);
+  const toStage = (x: number, y: number) => apply(ed.view(), apply(worldMatrix(p.comp, p.comp.layers.find(l => l.id === guideId)!, 0), [x, y])) as Vec2;
+  // tap on the painted line, about halfway along
+  const mid = toStage(145, 101);
+  expect(ed.gestureStart(mid, 1), 'tap not taken'); ed.gestureEnd(); await wait(80);
+  expect(!!document.querySelector('dialog[open]'), 'tapping the painted line did not open the path options: ' + notices.at(-1));
+  button('Animate').click(); await wait(120);
+  const pos = ed.layer(mover.id)!.transform.position, inv = ed.pathMatrix(ed.layer(mover.id)!);
+  const ends = [apply(inv, pos.keys[0]!.v), apply(inv, pos.keys.at(-1)!.v)], a = toStage(30, 150), b = toStage(260, 50);
+  const near = (u: Vec2, v: Vec2) => Math.hypot(u[0] - v[0], u[1] - v[1]) < 6;
+  expect(pos.keys.length >= 2 && ((near(ends[0]!, a) && near(ends[1]!, b)) || (near(ends[0]!, b) && near(ends[1]!, a))), 'route does not run along the painted line ' + JSON.stringify({ ends, a, b }));
+  // a filled blob is a shape, not a line: the pick whip keeps it for parenting
+  g.clearRect(0, 0, d.line.width, d.line.height); g.fillStyle = '#c33'; g.beginPath(); g.arc(160, 90, 40, 0, Math.PI * 2); g.fill(); d.rev++;
+  expect(ed.lineAt(toStage(160, 90), 18) === null, 'a filled shape was taken as a route');
+});
+
+await check('Motion: holding a bar’s edge does not open the menu (so press-pause-drag trims); a set-length shot grows to fit', async () => {
+  app.loadProject(new Project(320, 180)); app.project.comp.duration = 24; app.setWorkspace('motion'); refresh();
+  const ed = app.editor, l = app.project.layer;
+  ed.select(l.id); refresh();
+  const handle = document.querySelector<HTMLElement>(`#motion [data-bar="${l.id}"] .mh.out`)!;
+  const items = (motion as unknown as { contextItems(t: HTMLElement): unknown }).contextItems(handle);
+  expect(handle && items === null, 'a bar edge still opens the menu on hold');
+  const body = document.querySelector<HTMLElement>(`#motion [data-bar="${l.id}"]`)!;
+  expect((motion as unknown as { contextItems(t: HTMLElement): unknown }).contextItems(body) !== null, 'the bar itself lost its menu');
+  ed.setTiming(l.id, { out: 40 }, 'Trim layer end');
+  expect(app.project.comp.duration === 40 && ed.layer(l.id)!.out === 40, 'the shot did not grow to the longer layer: ' + app.project.comp.duration);
+  expect(app.history.peekUndo()?.label === 'Trim layer end', 'not one Undo step: ' + app.history.peekUndo()?.label);
+  app.undo(); await wait(140);
+  expect(app.project.comp.duration === 24 && app.project.layer.out === null, 'Undo did not restore the shot length: ' + app.project.comp.duration);
+});
+
 await check('Animate along a path: the artwork itself rides the line, not the page centre; a hand-placed anchor is kept', async () => {
   app.loadProject(new Project(320, 180)); app.project.comp.duration = 60; app.setWorkspace('motion'); refresh();
   const ed = app.editor, id = app.project.layer.id;

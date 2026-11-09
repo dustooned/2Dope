@@ -537,6 +537,28 @@ export function localMatrix(l: Layer, compFrame: number): Mat {
 }
 
 /** Layer space → comp space, through its parents. Parent cycles are cut. */
+/**
+ * A caption as it shows at a comp frame: a tail that follows a layer points at its spot on that
+ * layer (moving, turning and scaling with it), in the caption layer's own page units. A bend moves
+ * with the tip by the same amount. Unchanged (the same object) when no tail follows anything.
+ */
+export function captionAtFrame(c: Comp, l: DrawingsLayer, compFrame: number): CaptionSpec | undefined {
+  const cap = l.caption;
+  if (!cap || !cap.tails.some(t => t.follow)) return cap;
+  const mine = invert(worldMatrix(c, l, compFrame));
+  if (!mine) return cap;
+  return {
+    ...cap,
+    tails: cap.tails.map(t => {
+      const target = t.follow ? c.layers.find(x => x.id === t.follow!.layer) : undefined;
+      if (!t.follow || !target || target.id === l.id) return t;
+      const [x, y] = apply(mine, apply(worldMatrix(c, target, compFrame), t.follow.at));
+      const dx = x - t.x, dy = y - t.y;
+      return { ...t, x, y, ...(t.bend ? { bend: [t.bend[0] + dx / 2, t.bend[1] + dy / 2] as [number, number] } : {}) };
+    }),
+  };
+}
+
 export function worldMatrix(c: Comp, l: Layer, compFrame: number): Mat {
   let m = localMatrix(l, compFrame);
   const seen = new Set([l.id]);
@@ -687,7 +709,7 @@ export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | 
       if (tween) drawings.add(tween.next);
       const pk = partsKey(l, frame - l.start);
 // a caption draws live: its words, look and animated values at this frame are part of what shows
-const cap = l.kind === 'drawings' && l.caption ? captionSignature(l.caption, frame - l.start) : '';
+const cap = l.kind === 'drawings' && l.caption ? captionSignature(captionAtFrame(c, l, frame)!, frame - l.start) : '';
       return `${l.id}:${id}${cap}${tween ? `>${tween.next}:${tween.t}` : ''}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}${pk ? `<${pk}>` : ''}@${look}`;
     }
     const n = comps.get(l.comp);

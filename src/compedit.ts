@@ -32,6 +32,7 @@ import {
 import { defaultPart, drawingOf, localMatrix, nestedFrame, partOf, PART_LABEL, type PartGrad, type PartName } from './core/comp';
 import { rippleExposures, shiftLater } from './core/ripple';
 import { contentFrameAt, type PinProp, type PlayMode } from './core/comp';
+import { paintedNear, paintedRoute } from './paintedroute';
 import { totalFrames } from './core/timeline';
 import { layerContentBox } from './view/contentbox';
 import type { Command } from './core/history';
@@ -153,6 +154,21 @@ const CONTENT_PAD = 6;
  */
 /** A route line inside the layer that should travel would travel with it. */
 export const SAME_LAYER_LINE = 'That line is part of this layer, so it would move along with it. In Draw, select the line and use Cut to layer, then try again.';
+
+/** Points along a vector shape's SVG path (page units of its drawing). */
+function sampleShapePath(d: string, m: readonly number[]): Vec2[] {
+  try {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', d);
+    const host = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    host.style.cssText = 'position:absolute;left:-9999px;width:0;height:0;visibility:hidden';
+    host.append(p); document.body.append(host);
+    const len = p.getTotalLength(), out: Vec2[] = [];
+    for (let i = 0; i <= 120; i++) { const q = p.getPointAtLength((i / 120) * len); out.push([m[0]! * q.x + m[2]! * q.y + m[4]!, m[1]! * q.x + m[3]! * q.y + m[5]!]); }
+    host.remove();
+    return out;
+  } catch { return []; }
+}
 
 export class CompEditor {
   /** Selected layer ids (order = selection order). */
@@ -1008,7 +1024,7 @@ export class CompEditor {
    * `in` / `out` trim what shows without touching the content.
    */
   setTiming(id: string, t: { start?: number; in?: number; out?: number | null }, label = 'Move layer'): void {
-    this.edit(label, (c) => {
+    if (!this.edit(label, (c) => {
       const l = c.layers.find((x) => x.id === id);
       if (!l) return;
       // trimming the end (ripple on): the layers that started at or after the old end move with it
@@ -1038,7 +1054,13 @@ export class CompEditor {
       if (t.in !== undefined) l.in = Math.round(t.in);
       if (t.out !== undefined) l.out = t.out === null ? null : Math.round(t.out);
       if (l.out !== null && l.out <= l.in) l.out = l.in + 1;
-    });
+    })) return;
+    // a layer dragged past the end of a shot with a set length makes the shot that long (one Undo step)
+    const after = this.layer(id), c = this.comp;
+    if (t.out !== undefined && after?.out != null && c.duration !== null && after.out > c.duration) {
+      this.setDuration(after.out);
+      this.app.history.combine(2, label);
+    }
   }
 
   /** Beginner asset timing: one instance, one undo step, with no ripple into other tracks. */
@@ -1590,8 +1612,10 @@ export class CompEditor {
       if (!d) continue;
       const m = mul(view, worldMatrix(c, l, f));
       for (const s of d.vectors) {
-        if (s.tool !== 'pen' || s.points.length < 2) continue;
-        const pts = s.points.map(p => apply(m, [p.x, p.y]) as Vec2);
+        // any vector line (pen, vector brush strokes, imported shapes)
+        const own = s.shape?.path ? sampleShapePath(s.shape.path, s.shape.matrix) : s.points.map(p => [p.x, p.y] as Vec2);
+        if (own.length < 2) continue;
+        const pts = own.map(p => apply(m, p) as Vec2);
         for (let i = 1; i < pts.length; i++) {
           const a = pts[i - 1]!, b = pts[i]!, dx = b[0] - a[0], dy = b[1] - a[1], ll = dx * dx + dy * dy;
           const t = ll ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / ll)) : 0;
@@ -1600,7 +1624,21 @@ export class CompEditor {
         }
       }
     }
-    return best;
+    if (best) return best;
+    // a painted line (brush): the route runs through its middle, end to end. Front layers first;
+    // thick painted shapes (characters) are not routes, so the pick whip still parents to them.
+    for (const l of [...c.layers].reverse()) {
+      if (l.kind !== 'drawings' || !l.visible || l.notes || l.caption) continue;
+      const id = drawingOf(l, f), d = id ? this.app.project.drawings.get(id) : undefined;
+      if (!d) continue;
+      const m = mul(view, worldMatrix(c, l, f)), inv = invert(m);
+      if (!inv) continue;
+      const [x, y] = apply(inv, pt), scale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1;
+      if (!paintedNear(d, x, y, reach / scale)) continue;
+      const route = paintedRoute(d);
+      if (route && route.length >= 2) return { points: route.map(p => apply(m, p) as Vec2), layer: l.id };
+    }
+    return null;
   }
 
   /** Start (or stop) drawing a path for the selected layer to travel along. */

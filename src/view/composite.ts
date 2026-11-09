@@ -1,7 +1,7 @@
 import { activeEffects, effectsPad, temporalEffect, temporalSamples } from '../core/effects';
 import { drawEffected, fxPreview, fxPreviewScale, releaseEffectScratch } from './effects';
 import { paintCaption } from './caption';
-import { captionSignature } from '../core/comp';
+import { captionAtFrame, captionSignature } from '../core/comp';
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { valueAt } from '../core/anim';
@@ -191,13 +191,17 @@ interface PartsCtx {
   /** The layer's own frame (part keys are in layer time). */
   lf: number;
   depth: number;
+  /** The comp and its frame (a caption's tail can follow another layer). */
+  comp?: Comp;
+  frame?: number;
 }
 
 function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions, parts?: PartsCtx): void {
   // a caption layer draws its balloon and lettering live, then anything painted on its drawing on
   // top (so strokes made while a caption was selected are never lost from Motion or exports)
   if (parts?.layer.kind === 'drawings' && parts.layer.caption) {
-    paintCaption(g, parts.layer.caption, parts.lf, planes);
+    const shown = parts.comp && parts.frame !== undefined ? captionAtFrame(parts.comp, parts.layer, parts.frame)! : parts.layer.caption;
+    paintCaption(g, shown, parts.lf, planes);
     if (planes !== 'text') paintPlanes(g, d, planes === 'ink' ? 'line' : planes, opt, { ...parts, layer: { ...parts.layer, caption: undefined } });
     return;
   }
@@ -450,7 +454,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     // while you work effects can be faster (half size) or off; exports always render them in full
     const fxScale = opt.export ? 1 : fxPreviewScale();
     const drawing = d;
-    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, drawing, part, opt, { layer: l, lf, depth }), opt.source ? undefined : `${d.id}:${d.rev}${tweenKey}:${l.parts ? JSON.stringify(l.parts) : ''}${l.caption ? captionSignature(l.caption, lf) : ''}`, c.fps, fxScale) : null;
+    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, drawing, part, opt, { layer: l, lf, depth, comp: c, frame }), opt.source ? undefined : `${d.id}:${d.rev}${tweenKey}:${l.parts ? JSON.stringify(l.parts) : ''}${l.caption ? captionSignature(captionAtFrame(c, l, frame)!, lf) : ''}`, c.fps, fxScale) : null;
     if (alpha >= 1 && l.blend === 'normal' && !masked && !fx && !poses) direct = d;
     else {
       // effects that reach past the art (shadow, glow) come back on a grown page
@@ -461,7 +465,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
         sg.setTransform(1, 0, 0, 1, 0, 0);
         sg.clearRect(0, 0, source.width, source.height);
         sg.drawImage(fx, 0, 0, source.width, source.height);
-      } else paintPlanes(sg, d, planes, opt, { layer: l, lf, depth });
+      } else paintPlanes(sg, d, planes, opt, { layer: l, lf, depth, comp: c, frame });
       if (masked) {
         sg.setTransform(1, 0, 0, 1, pad, pad);
         sg.globalAlpha = 1;
@@ -501,7 +505,7 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     g.setTransform(m);
     g.globalAlpha = alpha;
     g.globalCompositeOperation = BLEND[l.blend];
-    if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth });
+    if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth, comp: c, frame });
     else if (source) g.drawImage(source, -pad, -pad);
   }
   g.globalAlpha = 1;
