@@ -1,3 +1,4 @@
+import { totalFrames } from '../core/timeline';
 import { soundStart } from '../core/audio';
 import { compLength } from '../core/comp';
 import { valueAt } from '../core/anim';
@@ -19,6 +20,30 @@ export function soundVoices(project: Pick<Project, 'comps'>, compId: string): So
         const at = map(t); if (at === null) return null;
         const offset = clip.trimIn + at - start / c.fps;
         return offset >= clip.trimIn && offset < clip.trimOut ? offset : null;
+      } });
+    }
+    // a movie layer's sound plays with its picture: wherever the layer sits, trimmed, split or sped up
+    for (const layer of c.layers) {
+      if (layer.kind !== 'drawings' || !layer.video?.sound || layer.video.muted || layer.video.volume <= 0 || !layer.visible || layer.play === 'single') continue;
+      const v = layer.video, len = totalFrames(layer.exposures);
+      voices.push({ asset: v.sound!, gain: v.volume, sourceTime(t) {
+        const at = map(t); if (at === null) return null;
+        const frame = at * c.fps;
+        if (frame < layer.in || (layer.out !== null && frame >= layer.out)) return null;
+        const lf = frame - layer.start;
+        let f: number;
+        if (layer.timeRemap?.keys.length) {
+          const a = valueAt(layer.timeRemap, lf), b = valueAt(layer.timeRemap, lf + 0.001);
+          if (Math.abs(b - a) < 1e-9) return null; // a held frame is silent
+          f = a;
+        } else {
+          if (lf < 0) return null;
+          f = lf * layer.speed;
+          if (layer.play === 'loop') f = mod(f, len);
+          else if (layer.play === 'pingpong') { const last = Math.max(1, len - 1), ph = mod(f, last * 2); f = ph <= last ? ph : last * 2 - ph; }
+          else if (f >= len) return null;
+        }
+        return Math.max(0, v.offset + f / c.fps);
       } });
     }
     for (const layer of c.layers) {

@@ -1,7 +1,8 @@
-import { activeEffects, effectsPad, temporalEffect, temporalSamples } from '../core/effects';
+import { activeEffects, artReach, effectsPad, temporalEffect, temporalSamples } from '../core/effects';
 import { drawEffected, fxPreview, fxPreviewScale, releaseEffectScratch } from './effects';
 import { paintCaption } from './caption';
-import { captionAtFrame, captionSignature } from '../core/comp';
+import { captionAtFrame, captionSignature, videoAt } from '../core/comp';
+import { videoFrame, videoFrameReady } from './videoframes';
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { valueAt } from '../core/anim';
@@ -194,9 +195,25 @@ interface PartsCtx {
   /** The comp and its frame (a caption's tail can follow another layer). */
   comp?: Comp;
   frame?: number;
+  /** The project (a movie layer's movie size). */
+  project?: Project;
 }
 
 function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions, parts?: PartsCtx): void {
+  // a movie layer shows its movie on the Colour plane, fitted to the page, under anything painted on it
+  if (parts?.layer.kind === 'drawings' && parts.layer.video && parts.comp && parts.frame !== undefined && parts.project) {
+    const v = parts.layer.video, asset = parts.project.videos.get(v.asset), t = videoAt(parts.layer, parts.frame, parts.comp.fps);
+    if (asset && t !== null && t < asset.duration && (planes === 'all' || planes === 'fill')) {
+      const pic = videoFrame(v.asset, t, parts.comp.fps, !!opt?.export);
+      if (pic) {
+        const W = parts.project.width, H = parts.project.height, k = Math.min(W / asset.width, H / asset.height);
+        const w = asset.width * k, h = asset.height * k;
+        g.drawImage(pic, (W - w) / 2, (H - h) / 2, w, h);
+      }
+    }
+    paintPlanes(g, d, planes, opt, { ...parts, layer: { ...parts.layer, video: undefined } });
+    return;
+  }
   // a caption layer draws its balloon and lettering live, then anything painted on its drawing on
   // top (so strokes made while a caption was selected are never lost from Motion or exports)
   if (parts?.layer.kind === 'drawings' && parts.layer.caption) {
@@ -439,6 +456,8 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
   let source: HTMLCanvasElement | null = null;
   let direct: Drawing | null = null;
   let pad = 0;
+  // the flattened copy's resolution (1 = page pixels)
+  let res = 1;
   if (l.kind === 'drawings') {
     const id = drawingOf(l, frame);
     let d = editingDrawing ?? (id ? project.drawings.get(id) : undefined);
@@ -459,20 +478,26 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     // while you work effects can be faster (half size) or off; exports always render them in full
     const fxScale = opt.export ? 1 : fxPreviewScale();
     const drawing = d;
-    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, drawing, part, opt, { layer: l, lf, depth, comp: c, frame }), opt.source ? undefined : `${d.id}:${d.rev}${tweenKey}:${l.parts ? JSON.stringify(l.parts) : ''}${l.caption ? captionSignature(captionAtFrame(c, l, frame)!, lf) : ''}`, c.fps, fxScale) : null;
+    const fx = activeEffects(l).length && (opt.export || fxPreview !== 'off') ? drawEffected(l, lf, project.width, project.height, planes, depth, (t, part) => paintPlanes(t, drawing, part, opt, { layer: l, lf, depth, comp: c, frame, project }), opt.source ? undefined : `${d.id}:${d.rev}${tweenKey}:${l.video ? `v${videoAt(l, frame, c.fps)}:${videoFrameReady(l.video.asset, videoAt(l, frame, c.fps) ?? 0) ? 1 : 0}` : ''}:${l.parts ? JSON.stringify(l.parts) : ''}${l.caption ? captionSignature(captionAtFrame(c, l, frame)!, lf) : ''}`, c.fps, fxScale) : null;
     if (alpha >= 1 && l.blend === 'normal' && !masked && !fx && !poses) direct = d;
     else {
-      // effects that reach past the art (shadow, glow) come back on a grown page
-      pad = fx ? effectsPad(l) : 0;
-      const sg = fresh(`d${depth}`, project.width + 2 * pad, project.height + 2 * pad);
+      // effects that reach past the art (shadow, glow) come back on a grown page; a caption placed
+      // past its page edge gets the room it needs too, so it is never cut at the page
+      pad = fx ? effectsPad(l) : artReach(l);
+      // a caption is drawn live, so its flattened copy is made at the size it shows (sharp when scaled up)
+      if (!fx && l.caption) res = Math.max(1, Math.min(3, Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)), 4096 / (project.width + 2 * pad), 4096 / (project.height + 2 * pad)));
+      const sg = fresh(`d${depth}`, Math.ceil((project.width + 2 * pad) * res), Math.ceil((project.height + 2 * pad) * res));
       source = sg.canvas;
       if (fx) {
         sg.setTransform(1, 0, 0, 1, 0, 0);
         sg.clearRect(0, 0, source.width, source.height);
         sg.drawImage(fx, 0, 0, source.width, source.height);
-      } else paintPlanes(sg, d, planes, opt, { layer: l, lf, depth, comp: c, frame });
+      } else {
+        sg.setTransform(res, 0, 0, res, pad * res, pad * res);
+        paintPlanes(sg, d, planes, opt, { layer: l, lf, depth, comp: c, frame, project });
+      }
       if (masked) {
-        sg.setTransform(1, 0, 0, 1, pad, pad);
+        sg.setTransform(res, 0, 0, res, pad * res, pad * res);
         sg.globalAlpha = 1;
         sg.globalCompositeOperation = 'destination-out';
         const maskSrc = opt.source?.(mask);
@@ -504,14 +529,14 @@ function drawLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, l: La
     g.globalCompositeOperation = 'lighter';
     for (const pose of poses) {
       g.setTransform(pose);
-      g.drawImage(source, -pad, -pad);
+      g.drawImage(source, -pad, -pad, source.width / res, source.height / res);
     }
   } else {
     g.setTransform(m);
     g.globalAlpha = alpha;
     g.globalCompositeOperation = BLEND[l.blend];
-    if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth, comp: c, frame });
-    else if (source) g.drawImage(source, -pad, -pad);
+    if (direct && l.kind === 'drawings') paintPlanes(g, direct, planes, opt, { layer: l, lf: layerFrame(l, frame), depth, comp: c, frame, project });
+    else if (source) g.drawImage(source, -pad, -pad, source.width / res, source.height / res);
   }
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';

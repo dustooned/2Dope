@@ -1,5 +1,6 @@
 import type { TitleSpec } from './title';
 import type { CaptionSpec } from '../lettering/spec';
+import type { VideoSpec } from './video';
 import { effectsKey, temporalSamples, type EffectStyleOrigin, type LayerEffect } from './effects';
 import { easingSides, progress, staticProp, travelAngle, valueAt, type Prop, type Vec2 } from './anim';
 import { drawingAt, locate, totalFrames, type Exposure } from './timeline';
@@ -133,6 +134,8 @@ export interface DrawingsLayer extends LayerBase, Timed {
   title?: TitleSpec;
   /** A live caption (balloon and lettering), drawn instead of the drawing's pixels. Format 10. */
   caption?: CaptionSpec;
+  /** A movie this layer plays (its picture under the drawing's paint, and its sound). Format 11. */
+  video?: VideoSpec;
   kind: 'drawings';
   exposures: Exposure[];
   /** Interpolate matching authored vectors over the hold before the next drawing. */
@@ -694,6 +697,19 @@ export interface FrameContent {
   key: string;
   /** Every drawing the frame needs, through precomps. */
   drawings: Set<string>;
+  /** Every movie frame the frame shows (asset and seconds into it), through precomps. */
+  videos: { asset: string; time: number }[];
+}
+
+/** Is a movie frame decoded and ready to draw (set by the renderer)? A frame key changes when it becomes ready. */
+let videoReady: (asset: string, time: number) => boolean = () => true;
+export function setVideoReady(f: (asset: string, time: number) => boolean): void { videoReady = f; }
+
+/** The movie time a movie layer shows at a comp frame (null when it shows none). */
+export function videoAt(l: DrawingsLayer, compFrame: number, fps: number): number | null {
+  if (!l.video) return null;
+  const f = contentFrameAt(l, compFrame, totalFrames(l.exposures), EMPTY);
+  return f === null ? null : Math.max(0, l.video.offset + f / fps);
 }
 
 const round = (m: Mat) => m.map((x) => Math.round(x * 1e4) / 1e4).join(',');
@@ -702,7 +718,8 @@ const round = (m: Mat) => m.map((x) => Math.round(x * 1e4) / 1e4).join(',');
 export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | Comp, frame: number, depth = 0, temporal = true): FrameContent {
   const c = typeof compId === 'string' ? comps.get(compId) : compId;
   const drawings = new Set<string>();
-  if (!c || depth > 8) return { key: '', drawings };
+  const videos: { asset: string; time: number }[] = [];
+  if (!c || depth > 8) return { key: '', drawings, videos };
   const parts: string[] = [c.background ?? '-', round(viewMatrix(c, frame, comps))];
   const describe = (l: DrawingsLayer | CompLayer, frame: number, childTemporal: boolean): string | null => {
     const look = `${round(worldMatrix(c, l, frame))}|${opacityAt(l, frame).toFixed(4)}|${l.blend}`;
@@ -717,13 +734,18 @@ export function frameContent(comps: ReadonlyMap<string, Comp>, compId: string | 
       const pk = partsKey(l, frame - l.start);
 // a caption draws live: its words, look and animated values at this frame are part of what shows
 const cap = l.kind === 'drawings' && l.caption ? captionSignature(captionAtFrame(c, l, frame)!, frame - l.start) : '';
-      return `${l.id}:${id}${cap}${tween ? `>${tween.next}:${tween.t}` : ''}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}${pk ? `<${pk}>` : ''}@${look}`;
+      // a movie shows a new picture every frame: its frame (and whether it is decoded yet) is part of the key
+      const vt = l.video ? videoAt(l, frame, c.fps) : null;
+      if (l.video && vt !== null) videos.push({ asset: l.video.asset, time: vt });
+      const mv = l.video && vt !== null ? `~v${l.video.asset}@${Math.floor(vt * c.fps + 1e-6)}${videoReady(l.video.asset, vt) ? '' : '?'}` : '';
+      return `${l.id}:${id}${cap}${mv}${tween ? `>${tween.next}:${tween.t}` : ''}${l.mask ? `~${l.mask}` : ''}${fx ? `{${fx}}` : ''}${pk ? `<${pk}>` : ''}@${look}`;
     }
     const n = comps.get(l.comp);
     const nf = n ? nestedFrame(l, frame, c.fps, n, comps) : null;
     if (!n || nf === null) return null;
     const inner = frameContent(comps, instanceComp(n, l), nf, depth + 1, childTemporal);
     for (const d of inner.drawings) drawings.add(d);
+    videos.push(...inner.videos);
     return `${l.id}:[${inner.key}]${fx ? `{${fx}}` : ''}@${look}`;
   };
   for (const l of c.layers) {
@@ -742,5 +764,5 @@ const cap = l.kind === 'drawings' && l.caption ? captionSignature(captionAtFrame
     }
     if (poses.length) parts.push(`shutter:${poses.map(f => round(worldMatrix(c, l, f))).join('/')}`);
   }
-  return { key: parts.join(';'), drawings };
+  return { key: parts.join(';'), drawings, videos };
 }

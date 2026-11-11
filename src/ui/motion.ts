@@ -702,7 +702,7 @@ export class MotionPanel {
     dot.style.background = LABELS[l.label] ?? LABELS[0]!;
     const marks = `${l.kind === 'drawings' && l.clip ? ' ↳' : ''}${l.kind === 'drawings' && l.mask ? ' ◐' : ''}`;
     const how = [l.kind === 'drawings' && l.clip ? 'clipping mask' : '', l.kind === 'drawings' && l.mask ? 'has a mask' : '', l.blend !== 'normal' ? `${blendName(l.blend)} blend` : ''].filter(Boolean).join(', ');
-    const name = el('button', { type: 'button', class: 'lname', 'data-act': 'name', title: `${how ? `${how[0]!.toUpperCase()}${how.slice(1)}. ` : ''}Tap to select. Double-tap to rename. ▸ shows its properties.` }, `${KIND_ICON[l.kind]} ${l.name}${marks}`);
+    const name = el('button', { type: 'button', class: 'lname', 'data-act': 'name', title: `${how ? `${how[0]!.toUpperCase()}${how.slice(1)}. ` : ''}Tap to select. Double-tap to rename. ▸ shows its properties.` }, `${l.kind === 'drawings' && l.video ? '🎞' : KIND_ICON[l.kind]} ${l.name}${marks}`);
     const presentation = layerPresentation(l, comps, this.app.frame, Number(ed.valueNow(l, 'opacity'))); name.setAttribute('aria-label', presentation.label); name.title = `${presentation.label}. Tap to select. Double-tap to rename.`; if (presentation.kind === 'Title') name.textContent = `T ${l.name}${marks}`;
     const eye = el('button', { type: 'button', class: 'leye', 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}`, 'aria-pressed': String(l.visible), title: l.visible ? 'Hide this layer' : 'Show this layer', 'data-act': 'eye' }, l.visible ? '' : '–');
     if (l.visible) eye.innerHTML = iconSvg('eye');

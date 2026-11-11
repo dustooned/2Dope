@@ -104,6 +104,8 @@ export class Project {
   readonly drawings = new Map<string, Drawing>();
   readonly comps = new Map<string, Comp>();
   readonly sounds = new Map<string, SoundAsset>();
+  /** Movie files the shot's movie layers play (format 11). */
+  readonly videos = new Map<string, import('./video').VideoAsset>();
   /** Fonts students imported for captions. */
   readonly fonts = new Map<string, FontAsset>();
   folders: BinFolder[] = [];

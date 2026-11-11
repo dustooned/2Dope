@@ -3,7 +3,7 @@ import { pathProp } from './core/motionpath';
 import { alignment, distribution, unionBoxes, snapBox, readSnap, type Alignment, type Distribution, type LayoutBox, type SnapPrefs, type SnapGuide } from './core/layout';
 import { syncCelGroups } from './core/cellink';
 import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type AssetClipGesture } from './core/assettiming';
-import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, scaleKeyTimes, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Prop, type Side, type Vec2 } from './core/anim';
+import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, scaleKeyTimes, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Key, type Prop, type Side, type Vec2 } from './core/anim';
 import { loopKeys, smoothKeys, staggerOffsets, wiggle, type LoopMode, type StaggerOrder, type WiggleOptions } from './core/keytools';
 import { effectDef, keyableSettings, newEffect, plainName, stillSetting, temporalEffect } from './core/effects';
 import { newSeed } from './core/rng';
@@ -1259,6 +1259,60 @@ export class CompEditor {
       const [layer, prop, f] = s.split('|');
       return { layer: layer!, prop: prop as PropKey, f: Number(f) };
     });
+  }
+
+  /** Copied keyframes: per source layer (in order) and property, keys with frames from the earliest. */
+  private keyClip: { layer: string; prop: PropKey; keys: Key[] }[] | null = null;
+
+  /** Copy the selected keys (their values and easing), to paste at the playhead on any layer. */
+  copyKeys(): number {
+    const refs = this.selectedKeys().filter((r) => this.layer(r.layer));
+    if (!refs.length) return 0;
+    const base = Math.min(...refs.map((r) => this.keyShotFrame(r)));
+    const groups = new Map<string, { layer: string; prop: PropKey; keys: Key[] }>();
+    for (const r of refs) {
+      const l = this.layer(r.layer)!, k = this.getProp(l, r.prop).keys.find((x) => x.f === r.f);
+      if (!k) continue;
+      const id = `${r.layer}|${r.prop}`, g = groups.get(id) ?? { layer: r.layer, prop: r.prop, keys: [] };
+      g.keys.push({ ...structuredClone(k), f: this.keyShotFrame(r) - base });
+      groups.set(id, g);
+    }
+    this.keyClip = [...groups.values()];
+    return refs.length;
+  }
+
+  get hasKeyClip(): boolean { return !!this.keyClip?.length; }
+
+  /**
+   * Paste copied keys at the playhead, on the selected layers (keys copied from one layer go on
+   * each selected layer; from several, layer by layer in order). Properties a layer does not have
+   * are skipped. One Undo step; the pasted keys become the selection.
+   */
+  pasteKeys(): number {
+    const clip = this.keyClip, targets = this.selected.map((id) => this.layer(id)).filter((l): l is Layer => !!l && !l.locked);
+    if (!clip?.length || !targets.length) return 0;
+    const sources = [...new Set(clip.map((c) => c.layer))];
+    const pasted: KeyRef[] = [];
+    this.edit('Paste keys', (c) => {
+      targets.forEach((t, i) => {
+        const l = c.layers.find((x) => x.id === t.id);
+        if (!l) return;
+        const from = sources.length === 1 ? sources[0]! : sources[i];
+        if (!from) return;
+        for (const g of clip.filter((x) => x.layer === from)) {
+          if (!this.rowsOf(l).includes(g.prop) && !isPartProp(g.prop as PropName)) continue;
+          const at = this.frameOf(l, g.prop), p = structuredClone(this.getProp(l, g.prop));
+          for (const k of g.keys) {
+            const f = at + k.f;
+            p.keys = [...p.keys.filter((x) => x.f !== f), { ...structuredClone(k), f }].sort((a, b) => a.f - b.f);
+            pasted.push({ layer: l.id, prop: g.prop, f });
+          }
+          this.setProp(l, g.prop, p);
+        }
+      });
+    });
+    if (pasted.length) { this.keys.clear(); for (const r of pasted) this.keys.add(keyId(r)); this.changed(); }
+    return pasted.length;
   }
 
   /** Move selected keys by whole frames (retiming). */

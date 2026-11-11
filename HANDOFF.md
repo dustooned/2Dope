@@ -2,6 +2,78 @@
 
 ## Current state (2026-11-08) — read this first
 
+### Movie tracks, long sounds, sound split, Flipbook handles, caption edge, copy and paste (2026-11-10, uncommitted)
+
+- **Movie tracks** (format 11):
+  - Model: `core/video.ts` (`VideoAsset`, `VideoSpec`, `readVideo`, limits of 10 minutes and 500 MB).
+  - A movie is a drawings layer with `video: { asset, offset, sound, volume, muted }`. It has one
+    exposure of a blank placeholder drawing whose length is the movie's frames.
+  - `paintPlanes` draws the movie (fitted to the page) on the Colour plane, then the drawing's
+    paint on top.
+  - Timing comes from `videoAt` (it uses `contentFrameAt`, so speed, loop, Show frame, trims and
+    split all apply).
+  - `frameContent` adds `videos` and a per-frame key part (`~v<asset>@<frame>`, with `?` until
+    the frame is decoded).
+  - `view/videoframes.ts` decodes with mediabunny:
+    - The preview `CanvasSink` is at most 1280 wide: a 150-frame cache, decoding 12 ahead, with a
+      redraw hook.
+    - The full-size sink serves exports through `videoFramesReady`. It is called by exportvideo,
+      exportseq, exportgif, apng, bundle (picture and poster) and animatic.
+    - `setVideoHooks` is wired in `main.ts` with `app.assets`. `store.getAsset` returned nothing
+      for these.
+  - Sound: `soundVoices` adds a voice per movie layer (fractional content time, held remap frames
+    silent).
+  - `App.importVideo` replaces the old 12-second frame import (`importMovie` and `MOVIE_MAX_S`
+    removed). `media.ts` routes movies there with `AudioTracks.movieSound`.
+  - Persistence: `ProjectFile.videos`, `LayerFile.video`, `SCHEMA` 11 (migration step, and
+    `minimumDrawingSchema` gives 11 only with movies), asset paths in `schema.ts` and
+    `persist.ts`, capture and load in `projectio.ts`. A movie's sound is saved even when no clip
+    uses it.
+  - The Inspector has a Movie tab (Starts at for slip, volume, mute, split). The Motion row shows
+    🎞.
+- **Sounds**:
+  - Up to 10 minutes (`SOUND_MAX_SECONDS` 600; the schema allows 600).
+  - Sounds over 2 minutes are kept mono at 22.05 kHz (`compactSound`); `decoderFor` reads stored
+    ones at that rate.
+  - Budgets are 96 / 192 MB; files up to 160 MB.
+  - `SoundBank.importMovieSound` decodes a movie's audio (browser first, mediabunny fallback).
+  - `AudioTracks.splitClip` and `duplicateClip`: in the hold menu and the clip's controls.
+- **Flipbook handles**: the trim handle was only added to the cel under the playhead on the active
+  track. Now every cel on every track has one (others `.quiet`); a handle on another track picks it
+  first. Pointer capture is guarded.
+- **Captions past the page**:
+  - `artReach` / `setLayerReach` (from `captionReach`) grows the effect buffer and the flattened
+    buffer (opacity, blend, mask) so captions are not cut at the page edge.
+  - A caption's flattened copy is made at the drawn scale (up to 3×, at most 4096 px), so scaled
+    captions stay sharp.
+- **Copy and paste**:
+  - In Draw and Animate, Copy with nothing selected copies the whole drawing (`copyWholeDrawing`);
+    Cut clears it.
+  - On a caption, movie, title or clip it copies the layer; Paste makes a new layer.
+  - In Motion, Copy with keys selected copies keyframes (`CompEditor.copyKeys` / `pasteKeys`).
+    Paste puts them at the playhead on the selected layers, as one undo step.
+- Checks (2026-11-10):
+  - Unit tests 826 passed (1 skipped); `tsc` clean; build passed.
+  - New fixtures:
+    - `movies` 11/11: an MP4 with AAC made in the page; import, colours over time, background
+      decode, sound timing and move, split and trim, mute and undo, save/load at format 11,
+      Movie tab slip and volume, sound split and duplicate, keyframe copy and paste.
+    - `fliptrim` 4/4.
+  - `layerdelete` 9/9 (copy the whole drawing and paste on another layer; copy a caption layer).
+  - `captions` 37/37 (a page-edge caption with an effect and with opacity).
+  - `clipboardassets` 10/10: a pasted movie becomes an asset holding its movie track, placed at the
+    playhead (`importVideo` with an asset frame calls `addMediaAsset`). The decoder copies the bytes
+    (`new Uint8Array(bytes)`), so bytes from another realm work.
+  - `fliptrim` restores localStorage when it ends; it had left the Flipbook on and broke
+    `paintingworkflow` when run before it.
+  - Full browser suite: 76 of 76 (run alone).
+- Not done or not verified:
+  - Video export is still capped by `VIDEO_MAX_BYTES` (64 MB), so a long animatic may not export
+    in full.
+  - Movies are not tried on iPad Safari (mediabunny decoding there is untested).
+  - Movie bytes stay in memory after import until the project is reopened.
+  - Painting on a movie layer paints one drawing for all of its frames.
+
 ### Motion stack order, group-layer menus, whisper dashes, animated-caption warning (2026-11-09, uncommitted)
 
 - **Stack order**:

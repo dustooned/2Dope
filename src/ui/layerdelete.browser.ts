@@ -3,9 +3,11 @@ import { App } from '../app';
 import { Project } from '../core/project';
 import { defaultCaption } from '../lettering/spec';
 import { LayerCards } from './layercards';
+import { installClipboard } from './clipboard';
 
 const app = new App(document.querySelector<HTMLCanvasElement>('#canvas')!, document.querySelector<HTMLElement>('#stage')!);
 const cards = new LayerCards(app);
+installClipboard(app, document.querySelector<HTMLElement>('#stage')!, async () => {});
 const errors: string[] = [];
 addEventListener('error', e => errors.push(e.message));
 addEventListener('unhandledrejection', e => errors.push(String(e.reason)));
@@ -78,6 +80,37 @@ await check('A layer inside a group: ⋯ Delete removes it from the group withou
   expect(!inner().includes('Prop') && app.project.comp.layers.some(l => l.name === 'Props'), 'not deleted from the group (or we went inside)');
   app.undo(); await wait();
   expect(inner().includes('Prop'), 'Undo did not bring it back');
+});
+
+const clip = (type: 'copy' | 'paste') => { const e = new ClipboardEvent(type, { clipboardData: lastData ?? new DataTransfer(), bubbles: true, cancelable: true }); if (type === 'copy') lastData = e.clipboardData; document.querySelector<HTMLCanvasElement>('#canvas')!.dispatchEvent(e); };
+let lastData: DataTransfer | null = null;
+
+await check('Copy with nothing selected copies the whole drawing; Paste puts it on another layer', async () => {
+  cards.close?.();
+  const hero = app.project.comp.layers.find(l => l.name === 'Hero')!.id, sky = app.project.comp.layers.find(l => l.name === 'Sky')!.id;
+  app.pickLayer(hero); await wait(120);
+  await app.residency.ensure(app.drawing);
+  const g = app.drawing.line.getContext('2d')!; g.fillStyle = '#f00'; g.fillRect(40, 40, 30, 30); app.drawing.rev++;
+  expect(!app.spatialSelection, 'something was selected');
+  clip('copy'); await wait();
+  expect(!app.spatialSelection, 'copy left a selection behind');
+  app.pickLayer(sky); await wait(120);
+  await app.residency.ensure(app.drawing);
+  clip('paste'); await wait(120);
+  if (app.transforming) app.applyTransform();
+  const px = app.drawing.line.getContext('2d')!.getImageData(50, 50, 1, 1).data;
+  expect(px[0]! > 200 && px[3]! > 200, `nothing pasted on Sky (${[...px]})`);
+});
+
+await check('Copy on a caption copies the caption layer; Paste makes a new caption layer', async () => {
+  const balloon = app.project.comp.layers.find(l => l.name === 'Balloon')!.id;
+  app.pickLayer(balloon); app.clearSpatialSelection(); await wait(120);
+  const before = app.project.comp.layers.filter(l => l.kind === 'drawings' && l.caption).length;
+  clip('copy'); await wait();
+  clip('paste'); await wait(120);
+  const after = app.project.comp.layers.filter(l => l.kind === 'drawings' && l.caption).length;
+  expect(after === before + 1, `captions ${before} -> ${after}`);
+  app.undo(); await wait();
 });
 
 await check('No page errors', () => { expect(!errors.length, errors.join(' | ')); });

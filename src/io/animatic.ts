@@ -121,6 +121,7 @@ export function animaticPicture(project: Project, opts: AnimaticOptions): VideoP
   return {
     frames: animaticLength(board),
     drawings: (frame) => frameContent(project.comps, opts.picture === 'shot' ? comp : { ...comp, layers: [board] }, frame).drawings,
+    videos: (frame) => frameContent(project.comps, opts.picture === 'shot' ? comp : { ...comp, layers: [board] }, frame).videos,
     paint: (g: CanvasRenderingContext2D, frame: number, plan: VideoPlan) => paintAnimatic(g, project, comp, board, frame, opts, cues, plan.width, plan.height),
   };
 }

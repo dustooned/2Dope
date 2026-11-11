@@ -13,7 +13,8 @@ const timeline = '#strip, #motion, #board, #tab-xsheet, .flip-row';
 type InternalCopy =
   | { kind: 'art' }
   | { kind: 'frames'; project: WeakRef<Project> }
-  | { kind: 'layers'; project: WeakRef<Project>; comp: string; layers: Layer[] };
+  | { kind: 'layers'; project: WeakRef<Project>; comp: string; layers: Layer[] }
+  | { kind: 'keys' };
 
 function png(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob(blob => {
@@ -64,6 +65,11 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     } else if (internal?.kind === 'layers') {
       if (internal.project.deref() !== app.project || !app.editor.pasteLayers(internal.layers, internal.comp))
         notice('These layers could not be pasted into this composition.');
+      else notice(internal.layers.length === 1 ? `Pasted “${internal.layers[0]!.name}” as a new layer.` : `Pasted ${internal.layers.length} layers.`);
+    } else if (internal?.kind === 'keys') {
+      if (app.workspace !== 'motion') notice('Open Motion and select a layer to paste these keyframes.');
+      else if (!app.editor.selected.length) notice('Select the layer to paste the keyframes on.');
+      else { const n = app.editor.pasteKeys(); notice(n ? `Pasted ${n} key${n === 1 ? '' : 's'} at the playhead.` : 'This layer has none of those properties.'); }
     }
   };
 
@@ -126,7 +132,22 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     if (!data || !accepts(e) || app.strokeActive || app.playing || app.adjusting || app.editor.dragging) return;
     const painting = app.workspace === 'draw' || app.workspace === 'animate';
     const onTimeline = e.target instanceof Element && e.target.closest(timeline);
-    if (app.workspace === 'motion' || app.arrangingAssets) {
+    // a layer that is not paint (a caption, a movie, a title, a clip): copy the layer itself, from any workspace
+    const active = app.project.comp.layers.find(l => l.id === app.project.activeLayer);
+    const whole = painting && !onTimeline && !app.spatialSelection && !!active && (active.kind !== 'drawings' || !!active.caption || !!active.video || !!active.title);
+    if (app.workspace === 'motion' && !cut && app.editor.keys.size && app.editor.copyKeys()) {
+      internal = { kind: 'keys' };
+    } else if (whole && active) {
+      if (cut && active.locked) return;
+      internal = { kind: 'layers', project: new WeakRef(app.project), comp: app.project.activeComp, layers: structuredClone([active]) };
+      if (cut) app.editor.deleteLayers([active.id]);
+    } else if (painting && !onTimeline && (!timelineFocused || e.target === canvas) && !app.spatialSelection && !app.copyWholeDrawing()) {
+      return;
+    } else if (painting && !onTimeline && (!timelineFocused || e.target === canvas) && !app.spatialSelection) {
+      // nothing selected on the canvas: the whole drawing was copied (paste it on any drawing)
+      if (cut) { if (app.project.layer.locked) return; app.selectCanvas(); app.deleteSelectedArt('Cut'); app.clearSpatialSelection(); }
+      internal = { kind: 'art' };
+    } else if (app.workspace === 'motion' || app.arrangingAssets) {
       const layers = app.project.comp.layers.filter(l => app.editor.selected.includes(l.id));
       if (!layers.length || cut && layers.some(l => l.locked && l.id !== app.placedAsset?.id)) return;
       internal = { kind: 'layers', project: new WeakRef(app.project), comp: app.project.activeComp, layers: structuredClone(layers) };
@@ -150,7 +171,7 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     }, token);
     else {
       imageWrite++;
-      notice(internal.kind === 'frames' ? 'Copied timeline frames.' : 'Copied selected layers.');
+      notice(internal.kind === 'frames' ? 'Copied timeline frames.' : internal.kind === 'keys' ? 'Copied keyframes. Select a layer, move the playhead and paste.' : internal.layers.length === 1 ? `Copied the layer “${internal.layers[0]!.name}”. Paste makes a new one.` : 'Copied selected layers.');
     }
   };
 

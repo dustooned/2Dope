@@ -1,3 +1,4 @@
+import { videoFramesReady } from '../view/videoframes';
 import { makeCanvas } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { paintDrawing, type Drawing, type Project } from '../core/project';
@@ -67,6 +68,8 @@ interface Unit {
   key: string;
   label: string;
   drawings: Drawing[];
+  /** Movie frames the unit shows (decoded before drawing it). */
+  videos?: readonly { asset: string; time: number }[];
   draw(g: CanvasRenderingContext2D, pass: Pass): void;
 }
 
@@ -123,7 +126,7 @@ export async function exportSequence(
       frameKeys.push(fc.key);
       if (!units.has(fc.key)) {
         const drawings = [...fc.drawings].map((id) => project.drawings.get(id)).filter((d): d is Drawing => !!d);
-        units.set(fc.key, { key: fc.key, label: `Frame ${frame + 1}`, drawings, draw: (g, pass) => drawCompPass(g, project, comp.id, frame, pass, opts, w, h) });
+        units.set(fc.key, { key: fc.key, label: `Frame ${frame + 1}`, drawings, videos: fc.videos, draw: (g, pass) => drawCompPass(g, project, comp.id, frame, pass, opts, w, h) });
       }
     }
   }
@@ -151,6 +154,7 @@ export async function exportSequence(
     for (const unit of units.values()) {
       check();
       for (const d of unit.drawings) await hold.pin(d);
+      if (unit.videos?.length) await videoFramesReady(project, unit.videos);
       try {
         for (const pass of opts.passes) {
           check();

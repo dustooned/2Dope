@@ -298,8 +298,16 @@ export function param<T extends number | string | boolean>(e: LayerEffect, key: 
 }
 
 /** How far the layer is padded for its effects (shadows and glows reach past the art). Keyed settings pad for their largest value. */
+/**
+ * How far a layer's own art reaches past its page (set by the renderer: a caption placed or grown
+ * past the page edge), so effects work on all of it instead of cutting it at the page.
+ */
+let layerReach: (l: { id: string }) => number = () => 0;
+export function setLayerReach(f: (l: { id: string }) => number): void { layerReach = f; }
+export function artReach(l: { id: string }): number { return Math.ceil(layerReach(l)); }
+
 export function effectsPad(l: { id: string; effects?: LayerEffect[] }): number {
-  let pad = 0;
+  let pad = artReach(l);
   for (const e of activeEffects(l)) {
     const big = { ...e, params: { ...e.params } };
     for (const [k, p] of Object.entries(e.keys ?? {})) {

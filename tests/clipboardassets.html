@@ -19,6 +19,8 @@
   import { wavBytes } from '../src/io/sound';
   import { soundVoices } from '../src/io/soundmix';
   import { exportVideo } from '../src/io/exportvideo';
+  import { videoFramesReady } from '../src/view/videoframes';
+  import { frameContent } from '../src/core/comp';
 
   const frame = document.querySelector('iframe'), win = frame.contentWindow;
   const wait = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms));
@@ -235,7 +237,7 @@
     expect(placement.start === 34 && placement.comp === source.id && voice?.sourceTime(1) === null &&
       Math.abs(voice.sourceTime(1.2) - (1.2 - 34 / 30)) < 0.001, 'Audio asset lost its start or nested sound');
   });
-  await check('A short movie pasted as a file remains one editable asset with multiple frames', async () => {
+  await check('A short movie pasted as a file becomes one editable asset holding its movie track', async () => {
     const project = new Project(64, 64);
     project.comp.fps = 30;
     const movie = await exportVideo(project, { format: 'webm', size: 'original', background: 'black' },
@@ -245,7 +247,8 @@
     app.setFrame(48);
     pasteFile(movie.blob, 'Footage.webm', 'video/webm');
     await until(() => asset('Footage'));
-    expect(asset('Footage').layers[0].exposures.length === 6 && app.editor.primary.start === 48 &&
+    for (const f of [48, 52]) await videoFramesReady(app.project, frameContent(app.project.comps, shot(), f).videos);
+    expect(asset('Footage').layers[0].video && app.editor.primary.start === 48 &&
       pixelAt(48, 25, 25)[2] > 200 && pixelAt(52, 25, 25)[1] > 200, 'Movie frames were missing, flattened or mistimed');
   });
   document.querySelector('#summary').textContent = `${passed} passed, ${failed} failed`;

@@ -1,3 +1,4 @@
+import { hashBytes } from './io/hash';
 import { gradientAt, type Grad } from './fill/gradient';
 import { ACTION_SAFE, CANVAS_VIEW_KEY, readCanvasView, safeRect, TITLE_SAFE, type CanvasView } from './core/canvasview';
 import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection, vanishingPoints, type Guide } from './core/guides';
@@ -1985,6 +1986,18 @@ export class App {
     return true;
   }
 
+  /** Copy the whole drawing at the playhead (nothing selected): paste it on any drawing, any frame. */
+  copyWholeDrawing(): boolean {
+    if (this.strokeActive || this.xf || this.blankPage || !this.residency.isReady(this.drawing)) return false;
+    const was = this.project.layer.locked;
+    if (was) return false;
+    this.selectCanvas();
+    const ok = !!this.spatialSelection && this.copyArt();
+    this.clearSpatialSelection();
+    if (ok) this.onNotice?.('Copied the whole drawing. Paste puts it on any drawing, any frame, ready to move.');
+    return ok;
+  }
+
   /** A transparent system clipboard representation of the current editable art copy. */
   clipboardArtwork(): HTMLCanvasElement | null {
     return this.artClip ? artClipCanvas(this.artClip, (v) => this.lengthOf(v)) : null;
@@ -3660,7 +3673,6 @@ export class App {
   // timeline from frame 1. The pixels go on the FILL part, so the LINE stays free to draw over.
 
   /** Longest movie brought in as frames (seconds); longer movies are cut here. */
-  static readonly MOVIE_MAX_S = 12;
 
   /** Paint a picture onto a drawing's FILL, fitted inside the page and centred. */
   private paintMedia(d: Drawing, src: CanvasImageSource, sw: number, sh: number): void {
@@ -3916,74 +3928,60 @@ export class App {
   }
 
   /**
-   * A movie as a drawings layer: one drawing per frame of the shot, from frame 1 (up to
-   * MOVIE_MAX_S seconds). Trace over it, or keep it as live footage in the shot.
+   * A movie as a movie track (Procreate Dreams style): one layer that plays the movie file, with its
+   * sound, from the playhead (frame 1 in an empty shot). Nothing is turned into drawings, so long
+   * animatics stay light. Move, trim, split, speed up or duplicate it like any layer; picture and
+   * sound stay together. Draw over it on another layer. One Undo step.
+   * `sound` decodes the movie's sound (null when it has none or the browser cannot read it).
    */
-  async importMovie(
-    file: File,
-    progress: (done: number, total: number) => void = () => {},
-    asset?: { frame: number; audio: () => Promise<{ id: string; sound: SoundAsset } | null> },
-  ): Promise<boolean> {
+  async importVideo(file: File, sound: (bytes: Uint8Array) => Promise<{ id: string; sound: SoundAsset } | null>, at?: number): Promise<boolean> {
     if (this.strokeActive) return false;
     if (this.playing) this.togglePlay();
     const p = this.project, comp = p.comp;
-    const check = () => {
-      if (this.project !== p || p.comp !== comp || this.strokeActive || this.playing) throw new Error('The timeline changed while the movie was loading.');
-    };
-    const url = URL.createObjectURL(file);
-    const v = document.createElement('video');
-    v.muted = true;
-    v.playsInline = true;
-    v.preload = 'auto';
-    v.src = url;
-    const made: Drawing[] = [];
     try {
-      await new Promise<void>((ok, bad) => {
-        v.onloadeddata = () => ok();
-        v.onerror = () => bad(new Error('This movie could not be opened here. MP4 (H.264) or MOV usually works.'));
-        setTimeout(() => bad(new Error('This movie took too long to open.')), 15000);
-      });
-      check();
-      if (!v.videoWidth || !Number.isFinite(v.duration)) throw new Error('This movie has no picture to bring in.');
-      const fps = p.comp.fps;
-      const all = Math.max(1, Math.round(v.duration * fps));
-      const total = Math.min(all, App.MOVIE_MAX_S * fps);
-      if (asset) this.checkMediaAsset(total);
-      const audio = await asset?.audio();
-      check();
-      if (asset) this.checkMediaAsset(total);
-      for (let i = 0; i < total; i++) {
-        check();
-        const t = Math.max(0, Math.min(v.duration - 0.001, (i + 0.25) / fps));
-        if (Math.abs(v.currentTime - t) > 1e-6) await new Promise<void>((ok, fail) => {
-          const done = () => { clearTimeout(timer); ok(); };
-          const timer = setTimeout(() => { v.removeEventListener('seeked', done); fail(new Error('A movie frame took too long to load.')); }, 3000);
-          v.addEventListener('seeked', done, { once: true });
-          v.currentTime = t;
-        });
-        check();
-        const d = p.newDrawing();
-        this.paintMedia(d, v, v.videoWidth, v.videoHeight);
-        made.push(d);
-        if (i % 6 === 0) progress(i, total);
+      const { VIDEO_MAX_BYTES, VIDEO_MAX_SECONDS } = await import('./core/video');
+      if (!file.size || file.size > VIDEO_MAX_BYTES) throw new Error(`Choose a movie smaller than ${Math.round(VIDEO_MAX_BYTES / 1048576)} MB.`);
+      if (p.comp.layers.length >= MAX_LAYERS || p.videos.size >= 64) throw new Error('This shot has too many layers or movies.');
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const { probeVideo } = await import('./view/videoframes');
+      const info = await probeVideo(bytes);
+      const audio = info.hasAudio ? await sound(bytes).catch(() => null) : null;
+      if (this.project !== p || p.comp !== comp) throw new Error('The shot changed while the movie was loading. Import it again.');
+      const hash = hashBytes(bytes), ext = (/\.(mp4|m4v|mov|webm)$/i.exec(file.name)?.[1] ?? (file.type.includes('webm') ? 'webm' : file.type.includes('quicktime') ? 'mov' : 'mp4')).toLowerCase();
+      const asset = `v${hash.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)}`;
+      const seconds = Math.min(VIDEO_MAX_SECONDS, info.duration);
+      const frames = Math.max(1, Math.ceil(seconds * comp.fps - 1e-6));
+      const name = file.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 60) || 'Movie';
+      if (!p.videos.has(asset)) p.videos.set(asset, { name: file.name.slice(0, 120), path: `assets/${hash.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)}.${ext}`, duration: info.duration, width: info.width, height: info.height, fps: info.fps, bytes });
+      if (audio && !p.sounds.has(audio.id)) p.sounds.set(audio.id, audio.sound);
+      const start = at ?? (comp.layers.some(l => l.kind === 'drawings' || l.kind === 'comp') ? Math.round(this.frame) : 0);
+      const d = p.newDrawing();
+      const id = p.newId('L');
+      // pasted or dropped into Assets: an asset holding the movie track, placed at the playhead
+      if (at !== undefined) {
+        const track = drawingsLayer(id, name, [{ drawing: d.id, length: frames }], p.width, p.height, comp.width, comp.height);
+        track.video = { v: 1, asset, offset: 0, sound: audio?.id ?? null, volume: 1, muted: false };
+        this.addMediaAsset(name, [d], [track], at, false);
+        this.onNotice?.(`${file.name} is an asset with its movie track${audio ? ' and sound' : ''}, placed at frame ${at + 1}.`);
+        return true;
       }
-      if (made.some(d => !p.drawings.has(d.id))) throw new Error('The project changed while preparing the movie frames.');
-      const name = file.name.replace(/\.[a-z0-9]+$/i, '');
-      if (asset) {
-        if (p.comp.layers.length >= MAX_LAYERS || p.comps.size >= MAX_COMPS) throw new Error('This asset would exceed the project size limit.');
-        const track = drawingsLayer(p.newId('L'), name.slice(0, 60), made.map(d => ({ drawing: d.id, length: 1 })), p.width, p.height, comp.width, comp.height);
-        this.addMediaAsset(name, made, [track], asset.frame, false, audio ?? undefined);
-      } else this.addMediaLayer(name, made, false);
-      if (total < all) this.onNotice?.(`Only the first ${App.MOVIE_MAX_S} seconds of the movie came in (${total} frames).`);
+      const above = p.isPlaceholder ? null : p.activeLayer;
+      this.editor.edit('Import movie', (cc) => {
+        const layer = drawingsLayer(id, name, [{ drawing: d.id, length: frames }], p.width, p.height, cc.width, cc.height);
+        layer.start = layer.in = Math.max(0, start);
+        layer.video = { v: 1, asset, offset: 0, sound: audio?.id ?? null, volume: 1, muted: false };
+        cc.layers.splice(Math.max(0, cc.layers.findIndex((l) => l.id === above)), 0, layer);
+        // a shot with a set length grows to hold the whole movie
+        if (cc.duration !== null && layer.start + frames > cc.duration) cc.duration = layer.start + frames;
+      });
+      this.focusLayer(id);
+      this.onCompChanged(); this.requestRender(); this.onFrameChange(); this.onDocChanged();
+      const long = info.duration > VIDEO_MAX_SECONDS ? ` Only its first ${VIDEO_MAX_SECONDS / 60} minutes play.` : '';
+      this.onNotice?.(`${file.name} is a movie track${audio ? ' with its sound' : info.hasAudio ? ' (its sound could not be read here)' : ''}: ${this.fmtDur(frames)} from frame ${start + 1}. Move, trim or split it (Motion: Ctrl+Shift+D at the playhead); its sound stays with it. Draw over it on another layer.${long}`);
       return true;
     } catch (e) {
-      for (const d of made) p.drawings.delete(d.id);
-      this.onNotice?.(e instanceof Error ? e.message : String(e));
+      this.onNotice?.(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
       return false;
-    } finally {
-      URL.revokeObjectURL(url);
-      v.removeAttribute('src');
-      v.load();
     }
   }
 

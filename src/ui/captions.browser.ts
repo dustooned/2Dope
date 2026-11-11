@@ -831,6 +831,30 @@ await check('To vectors: a whisper keeps its dashes as pieces; an animated capti
   }
 });
 
+await check('A caption past its page edge is not cut off with an effect or layer opacity, and stays sharp scaled up', async () => {
+  app.setWorkspace('draw'); app.setFrame(10); editor.close();
+  const hidden = app.project.comp.layers.filter(x => x.id !== first && x.visible);
+  for (const x of hidden) x.visible = false;
+  const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);
+  try {
+    const set = (fn: (l: import('../core/comp').DrawingsLayer) => void) => app.editor.edit('edge', cc => { const l = cc.layers.find(x => x.id === first); if (l?.kind === 'drawings' && l.caption) fn(l); });
+    // the balloon's centre 10 px inside the page's right edge, the layer moved 200 px left so all of it is on screen
+    set(l => { l.caption = { ...l.caption!, x: 630, y: 100, text: 'EDGE', values: {}, keys: {}, tails: [] }; l.transform.position = { value: [120, 180], keys: [] }; l.transform.anchor = { value: [320, 180], keys: [] }; l.transform.scale = { value: [100, 100], keys: [] }; l.transform.rotation = { value: 0, keys: [] }; });
+    const inkRight = () => { render(10); return inkIn(440, 40, 80, 120); };
+    const plain = inkRight();
+    expect(plain > 20, `no ink past the page edge even without effects (${plain})`);
+    set(l => { l.effects = [newEffect('shadow', 'edge-fx', 1)]; });
+    const withFx = inkRight();
+    set(l => { delete l.effects; l.transform.opacity = { value: 70, keys: [] }; });
+    const faded = (() => { render(10); const d = lg.getImageData(440, 40, 80, 120).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 100 && d[i]! < 150) n++; return n; })();
+    expect(withFx > plain * 0.6, `the effect cut the caption at the page edge (${withFx} vs ${plain})`);
+    expect(faded > plain * 0.6, `layer opacity cut the caption at the page edge (${faded} vs ${plain})`);
+  } finally {
+    app.editor.edit('Restore test caption', cc => { const i = cc.layers.findIndex(x => x.id === first); if (i >= 0) cc.layers[i] = structuredClone(saved); });
+    for (const x of hidden) { const live = app.project.comp.layers.find(y => y.id === x.id); if (live) live.visible = true; }
+  }
+});
+
 await check('Captions after transforming: Motion selects and sizes them; scaled and turned ones keep their handles; Delete works', async () => {
   app.setWorkspace('draw'); app.setFrame(10); editor.close();
   const saved = structuredClone(app.project.comp.layers.find(x => x.id === first)!);

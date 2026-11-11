@@ -102,16 +102,8 @@ export function mediaPicker(app: App, audio: AudioTracks) {
           }
         } else if (kind === 'movie') {
           app.onNotice?.(`Bringing in ${f.name}…`);
-          let audioUnavailable = false;
-          const ok = await app.importMovie(f, (i, n) => app.onNotice?.(`Bringing in ${f.name}… ${Math.round((i / n) * 100)}%`),
-            assetFrame === undefined ? undefined : { frame: assetFrame, audio: async () => {
-              try { return await audio.decodeAsset(f); }
-              catch { audioUnavailable = true; return null; }
-            } });
-          if (ok && assetFrame === undefined) {
-            await audio.import(f, true);
-            app.onNotice?.(`${f.name} is a layer from frame 1, one drawing per frame. Draw over it on another layer. To remove it, hold its track (or Layers → Delete); any sound it had is a separate clip with its own delete.`);
-          } else if (ok && audioUnavailable) app.onNotice?.(`${f.name}: added a movie asset. The browser did not provide a readable sound track.`);
+          checkTarget();
+          await app.importVideo(f, bytes => audio.movieSound(bytes, f.name), assetFrame);
         } else if (kind === 'sound') {
           if (assetFrame === undefined) await audio.import(f);
           else {

@@ -4535,6 +4535,12 @@ body.ui-simple .nav-row button.playback-range-button .lbl { display: inline; }
 .flip-trim { position: absolute; right: 0; top: 0; bottom: 0; width: 14px; background: var(--accent); cursor: ew-resize; touch-action: none; }
 .flip-trim::after { content: ''; position: absolute; left: 5px; top: 30%; bottom: 30%; width: 4px; border-left: 1px solid #fff; border-right: 1px solid #fff; }
 .flip-trim:focus-visible { outline: 2px solid white; outline-offset: -3px; }
+/* every drawing has its trim handle; the current one is bright, the others show quietly (and fully on hover or touch) */
+.flip-trim.quiet { width: 9px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.flip-trim.quiet::after { left: 3px; }
+.flip-trim.quiet::after { opacity: 0.6; }
+.flip-cel:hover .flip-trim.quiet, .flip-trim.quiet:active { background: var(--accent); }
+@media (pointer: coarse) { .flip-trim { width: 20px; } .flip-trim.quiet { width: 14px; } }
 .flip-playhead { position: absolute; top: 0; bottom: 0; width: 44px; margin-left: 0; pointer-events: none; z-index: 1; background: color-mix(in srgb, var(--accent) 14%, transparent); border-left: 2px solid var(--accent); }
 @media (max-width: 700px) { .flip-btn { font-size: 0; gap: 0; } .flip-btn svg { margin: 0; } }
 .flip-icon { width: 40px; padding: 0; justify-content: center; }
@@ -5806,7 +5812,7 @@ body.form-tablet .caption-panel .cap-fonts button, body.form-phone .caption-pane
 .minspector { display: none; flex: 0 0 auto; width: 300px; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); -webkit-user-select: none; user-select: none; }
 body.ws-motion .minspector:not([hidden]) { display: flex; }
 .mi-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 4px 12px; }
-.mi-title { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-title { min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mi-close { width: 36px; height: 36px; padding: 0; flex: 0 0 auto; }
 .mi-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 8px; border-bottom: 1px solid var(--line); }
 .mi-tab { min-height: 32px; padding: 0 10px; font-size: 12px; border-radius: var(--pill); }
@@ -5846,3 +5852,5 @@ body.ws-motion .minspector:not([hidden]) { display: flex; }
 .mi-order { display: flex; align-items: center; gap: 4px; min-height: 40px; margin-top: 4px; }
 .mi-order > .mi-label { flex: 1; font-size: 13px; }
 .mi-order-btn { width: 36px; padding: 0; font-size: 14px; }
+.mi-names { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mi-kind { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

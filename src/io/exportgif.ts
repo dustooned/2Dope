@@ -1,3 +1,4 @@
+import { videoFramesReady } from '../view/videoframes';
 import { makeCanvas } from '../brush/raster';
 import { compLength, frameContent, exportComp } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
@@ -45,6 +46,7 @@ export async function exportGif(project: Project, lite: boolean, signal: AbortSi
           if (!d) throw new Error(`Drawing ${id} is missing.`);
           pinned.push(d); await hold.pin(d);
         }
+        await videoFramesReady(project, content.videos);
         check();
         g.setTransform(1, 0, 0, 1, 0, 0);
         if (transparent) g.clearRect(0, 0, p.width, p.height);

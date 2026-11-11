@@ -52,6 +52,32 @@ export class AudioTracks {
     this.app.onNotice?.(`Deleted “${clip.name}”. Undo brings it back.`);
   }
 
+  /**
+   * Split a sound at the playhead into two (one Undo step): the first ends there, the second starts
+   * there with the rest of the sound. Cut a part out by splitting twice and deleting the middle.
+   */
+  splitClip(id: string, frame = this.app.frame): boolean {
+    const c = this.app.project.comp, clip = (c.audio ?? []).find(s => s.id === id);
+    const start = clip ? soundStart(clip, c) : null;
+    if (!clip || start === null) return false;
+    const at = clip.trimIn + (frame - start) / c.fps;
+    if (at <= clip.trimIn + 0.5 / c.fps || at >= clip.trimOut - 0.5 / c.fps) { this.app.onNotice?.('Move the playhead inside the sound to split it there.'); return false; }
+    const second: SoundClip = { ...structuredClone(clip), id: this.app.project.newId('a'), trimIn: at, start: frame, ...(clip.link ? { link: { ...clip.link, offset: clip.link.offset + frame - start } } : {}) };
+    this.edit('Split sound', list => list.flatMap(s => (s.id === id ? [{ ...s, trimOut: at }, second] : [s])));
+    this.signature = ''; this.update(true);
+    return true;
+  }
+
+  /** A copy of a sound right after it (one Undo step). */
+  duplicateClip(id: string): void {
+    const c = this.app.project.comp, clip = (c.audio ?? []).find(s => s.id === id);
+    const start = clip ? soundStart(clip, c) : null;
+    if (!clip || start === null) return;
+    const copy: SoundClip = { ...structuredClone(clip), id: this.app.project.newId('a'), start: start + Math.round((clip.trimOut - clip.trimIn) * c.fps), link: null };
+    this.edit('Duplicate sound', list => list.flatMap(s => (s.id === id ? [s, copy] : [s])));
+    this.signature = ''; this.update(true);
+  }
+
   /** Press and hold (or right-click) a sound: its settings, mute and delete. */
   soundMenu(id: string): CtxItem[] | null {
     const clip = (this.app.project.comp.audio ?? []).find(s => s.id === id);
@@ -60,6 +86,8 @@ export class AudioTracks {
       { title: `♪ ${clip.name}` },
       { label: 'Settings…', run: () => this.openCard(id) },
       { label: clip.muted ? 'Unmute' : 'Mute', run: () => this.edit(clip.muted ? 'Unmute audio' : 'Mute audio', list => list.map(s => s.id === id ? { ...s, muted: !s.muted } : s)) },
+      { label: 'Split at the playhead', run: () => this.splitClip(id) },
+      { label: 'Duplicate', run: () => this.duplicateClip(id) },
       { sep: true },
       { label: 'Delete sound', danger: true, run: () => this.deleteClip(id) },
     ];
@@ -76,6 +104,8 @@ export class AudioTracks {
   }
 
   decodeAsset(file: File) { return this.playback.bank.import(this.app.project, file); }
+  /** A movie's sound as a stored sound asset (null when it has none). */
+  movieSound(bytes: Uint8Array, name: string) { return this.playback.bank.importMovieSound(this.app.project, bytes, name); }
 
   async import(file: File, quiet = false): Promise<void> {
     if (this.importing || this.app.strokeActive) return;
@@ -192,6 +222,8 @@ export class AudioTracks {
       const occurrence = board.exposures.slice(0, at.index).filter(e => e.drawing === drawing).length;
       change({ link: { layer: board.id, drawing, occurrence, offset: clip.start - board.start - at.start } });
     });
+    button('Split at the playhead', () => this.splitClip(clip.id));
+    button('Duplicate', () => this.duplicateClip(clip.id));
     const del = el('button', 'Delete sound'); del.type = 'button'; del.className = 'danger';
     del.onclick = () => this.deleteClip(clip.id); controls.append(del);
     if (start === null) controls.append(el('span', 'Linked panel removed: clip is silent. Unlink to place it manually.'));

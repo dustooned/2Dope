@@ -4,12 +4,35 @@
  * Colour plane; ink, tails and letters on the Ink plane, so Ink/Colour effect targets work.
  */
 import { valueAt, type Prop } from '../core/anim';
+import { setLayerReach } from '../core/effects';
 import { alongPath, balloonOutline, balloonProfile, balloonShapes, fitCaption, pathBand, pathLength, textPath, type Fit, type Pt } from '../lettering/geometry';
 import { CAPTION_KEYS, captionValue, LETTER_SIZE_FRACTION, type CaptionKey, type CaptionSpec } from '../lettering/spec';
 import { freshState, hasBold, runsOf, stripMarkup } from '../lettering/markup';
 import { captionFont, captionFontReady, captionProject } from './captionfonts';
 import { baselineOffset, emboldenWidth, glyphFont, glyphOf, syntheticFace } from './captionglyphs';
 import { familyName } from '../lettering/fonts';
+
+/**
+ * How far a caption layer's balloon and letters reach past its page (page units, 0 inside), with a
+ * margin for tails and outlines; at most half the page's longer side, so buffers stay a sane size.
+ */
+const reaches = new Map<string, { key: string; reach: number }>();
+export function captionReach(l: { id: string; kind?: string; caption?: CaptionSpec }): number {
+  const c = l.kind === 'drawings' ? l.caption : undefined, project = captionProject();
+  if (!c || !project) return 0;
+  const W = project.width, H = project.height, key = `${JSON.stringify(c)}|${W}x${H}`, hit = reaches.get(l.id);
+  if (hit?.key === key) return hit.reach;
+  const { lay, shapes } = captionBalloon(c, 0, W, H);
+  const pts = [...shapes.outline, ...shapes.joined.flat(), ...shapes.seams.flat(), ...shapes.zigzags.flat(), ...shapes.bubbles.flatMap(b => [{ x: b.x - b.r, y: b.y - b.r }, { x: b.x + b.r, y: b.y + b.r }]), ...captionLinks(c, 0, W, H).flatMap(k => k.outline)];
+  const margin = lay.size * (c.inkWidth * 2 + 1 + Math.max(Math.abs(c.underFill?.dx ?? 0), Math.abs(c.underFill?.dy ?? 0)));
+  let out = 0;
+  for (const p of pts) out = Math.max(out, -p.x, -p.y, p.x - W, p.y - H);
+  const reach = out > 0 ? Math.min(Math.max(W, H) / 2, out + margin) : 0;
+  if (reaches.size > 200) reaches.clear();
+  reaches.set(l.id, { key, reach });
+  return reach;
+}
+setLayerReach(l => captionReach(l as { id: string; kind?: string; caption?: CaptionSpec }));
 
 /** A caption's keyable setting at a layer frame (keys win over the still value), clamped to its range. */
 export function captionAt(c: CaptionSpec, key: CaptionKey, frame: number): number {

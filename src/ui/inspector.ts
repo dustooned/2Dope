@@ -12,9 +12,9 @@ import { el } from './dom';
 const OPEN_KEY = '2dope.motion.inspector';
 const TAB_KEY = '2dope.motion.inspector.tab';
 
-type Tab = 'layer' | 'timing' | 'transform' | 'drawing' | 'caption' | 'title' | 'clip' | 'camera' | 'parent' | 'path' | 'trail' | 'effects';
+type Tab = 'layer' | 'timing' | 'transform' | 'drawing' | 'movie' | 'caption' | 'title' | 'clip' | 'camera' | 'parent' | 'path' | 'trail' | 'effects';
 const TAB_LABEL: Record<Tab, string> = {
-  layer: 'Layer', timing: 'Timing', transform: 'Transform', drawing: 'Drawing', caption: 'Caption', title: 'Title', clip: 'Clip', camera: 'Camera',
+  layer: 'Layer', timing: 'Timing', transform: 'Transform', drawing: 'Drawing', movie: 'Movie', caption: 'Caption', title: 'Title', clip: 'Clip', camera: 'Camera',
   parent: 'Parenting', path: 'Path', trail: 'Trail', effects: 'Effects',
 };
 
@@ -95,7 +95,7 @@ export class MotionInspector {
       const n = this.app.project.comps.get(l.comp);
       return `${n?.asset ? 'Asset' : 'Clip'} · ${n?.name ?? '?'}`;
     }
-    const tags = [l.caption ? (l.caption.style === 'sfx' ? 'Sound effect' : 'Caption') : l.title ? 'Title' : l.adjust ? 'Adjustment' : 'Drawing'];
+    const tags = [l.caption ? (l.caption.style === 'sfx' ? 'Sound effect' : 'Caption') : l.video ? 'Movie' : l.title ? 'Title' : l.adjust ? 'Adjustment' : 'Drawing'];
     if (l.guide) tags.push(l.notes ? 'notes' : 'guide');
     if (l.still) tags.push('still');
     if (l.cel) tags.push('linked art');
@@ -107,6 +107,7 @@ export class MotionInspector {
     const tabs: Tab[] = ['layer', 'timing', 'transform'];
     if (l.kind === 'drawings') {
       if (l.caption) tabs.push('caption');
+      else if (l.video) tabs.push('movie');
       else if (l.title) tabs.push('title');
       else if (!l.adjust) tabs.push('drawing');
     }
@@ -171,6 +172,7 @@ export class MotionInspector {
       timing: () => this.timingTab(box, l),
       transform: () => this.transformTab(box, l),
       drawing: () => this.drawingTab(box, l),
+      movie: () => this.movieTab(box, l),
       caption: () => this.captionTab(box, l),
       title: () => this.titleTab(box, l),
       clip: () => this.clipTab(box, l),
@@ -470,6 +472,24 @@ export class MotionInspector {
         if (grad.kind === 'linear') this.number(g, 'Direction', grad.angle, (v) => ed.setPart(l.id, part, { grad: { ...grad, angle: v } }), { min: 0, max: 360, step: 5, unit: '°', focus: `${part}.angle`, disabled: locked });
       }
     }
+  }
+
+  /** A movie track: which movie, where in it the layer starts, and its sound (volume, mute). */
+  private movieTab(box: HTMLElement, l: Layer): void {
+    if (l.kind !== 'drawings' || !l.video) return;
+    const ed = this.ed, v = l.video, asset = this.app.project.videos.get(v.asset), locked = l.locked;
+    const set = (label: string, patch: Partial<typeof v>) => this.editLayer(l, label, (x) => { if (x.kind === 'drawings' && x.video) x.video = { ...x.video, ...patch }; });
+    const secs = (n: number) => `${Math.floor(n / 60)}:${(n % 60).toFixed(1).padStart(4, '0')}`;
+    box.append(el('p', { class: 'hint' }, asset ? `“${asset.name}”: ${secs(asset.duration)}, ${asset.width}×${asset.height}, ${asset.fps} fps.` : 'The movie file is missing.'));
+    this.number(box, 'Starts at second', Math.round(v.offset * 100) / 100, (n) => set('Movie start', { offset: n }), { min: 0, max: Math.max(0, (asset?.duration ?? 0) - 0.04), step: 0.1, unit: 's', focus: 'offset', disabled: locked });
+    box.append(el('p', { class: 'hint' }, 'Starts at shows a later part of the movie in the same place (slip). Trim its ends on the timeline; Speed and Show frame are in Timing.'));
+    const g = this.group(box, v.sound ? 'Its sound' : 'Sound');
+    if (v.sound) {
+      this.check(g, 'Mute', v.muted, (m) => set(m ? 'Mute movie' : 'Unmute movie', { muted: m }), locked);
+      this.number(g, 'Volume', Math.round(v.volume * 100), (n) => set('Movie volume', { volume: n / 100 }), { min: 0, max: 200, step: 5, unit: '%', focus: 'volume', disabled: locked });
+    } else g.append(el('p', { class: 'hint' }, 'This movie has no sound (or this browser could not read it).'));
+    const a = this.actions(box);
+    this.button(a, 'Split at the playhead', () => { ed.select(l.id); if (!ed.split([l.id])) this.app.onNotice?.('Move the playhead inside the movie to split it there.'); }, locked);
   }
 
   /** A caption: its words, lettering, balloon and colours, and every setting that animates. */

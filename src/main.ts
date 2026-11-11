@@ -3,6 +3,7 @@ import { setEffectCacheBudget, setOutlinePictureSource, setSoundPreload, setSoun
 import { assetPicture, assetStamp, preloadShotSounds, shotSoundSource } from './ui/soundsource';
 import { setPictureStamp } from './core/effects';
 import { setCaptionFontHooks } from './view/captionfonts';
+import { setVideoHooks } from './view/videoframes';
 import { CaptionEditor } from './ui/captioneditor';
 import { PaintingWorkspaceUI } from './ui/paintingworkspace';
 import { CanvasViewUI } from './ui/canvasview';
@@ -917,6 +918,8 @@ const { store, persistent } = await openStore();
 audioPlayback.bank.source = (path) => store.getAsset(path);
 // caption fonts: redraw when a face arrives; project fonts come from the project store
 setCaptionFontHooks({ redraw: () => app.requestRender(), source: (path) => store.getAsset(path), project: () => app.project });
+// movie layers decode their frames from the stored movie file, and redraw when a frame arrives
+setVideoHooks({ redraw: () => app.requestRender(), source: (path) => app.assets(path), project: () => app.project });
 // the Letter tool opens the caption editor (new captions and double-taps)
 const captionEditor = new CaptionEditor(app);
 app.letters.onEdit = (id, isNew) => captionEditor.open(id, isNew);

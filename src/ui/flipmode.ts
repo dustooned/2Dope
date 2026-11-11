@@ -468,7 +468,10 @@ export class FlipMode {
     }
   }
 
-  /** The current cel of every track: highlighted, and the active one gets its trim handle. */
+  /**
+   * The current cel of every track is highlighted. Every cel has its trim handle (not only the one
+   * under the playhead): drag any drawing's right edge to hold it longer or shorter, on any track.
+   */
   private markCels(): void {
     const app = this.app, f = app.frame, activeId = app.project.activeLayer;
     for (const r of this.rows) {
@@ -478,9 +481,11 @@ export class FlipMode {
         const here = f >= s && f < s + n;
         c.classList.toggle('on', here && mine && !app.blankPage);
         c.classList.toggle('here', here && !mine);
-        const trim = c.querySelector('.flip-trim');
-        if (here && mine && !app.playing) { if (!trim) c.append(this.trimHandle(c)); }
-        else trim?.remove();
+        const trim = c.querySelector<HTMLElement>('.flip-trim');
+        if (!app.playing && !r.layer.locked) {
+          const h = trim ?? c.appendChild(this.trimHandle(c));
+          h.classList.toggle('quiet', !(here && mine));
+        } else trim?.remove();
       }
     }
   }
@@ -734,6 +739,8 @@ export class FlipMode {
     const h = el('div', { class: 'flip-trim', title: 'Drag or use arrow keys to change the number of frames', role: 'slider', tabindex: '0', 'data-own-keys': '', 'aria-label': 'Frame duration', 'aria-orientation': 'horizontal', 'aria-valuemin': '1', 'aria-valuemax': String(Math.max(1000000, length)), 'aria-valuenow': String(length), 'aria-valuetext': `${length} frame${length === 1 ? '' : 's'}` });
     h.addEventListener('keydown', e => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const track = cell.closest<HTMLElement>('.flip-track')?.dataset.id;
+      if (track && track !== this.app.project.activeLayer && !['Enter', 'Escape', 'Tab'].includes(e.key)) this.app.pickLayer(track);
       if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); this.app.focusCanvas(); return; }
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(e.key)) return;
       e.preventDefault();
@@ -755,12 +762,17 @@ export class FlipMode {
       e.preventDefault();
       h.focus({ preventScroll: true });
       const app = this.app;
+      if (app.strokeActive || app.playing) return;
       const i = Number(cell.dataset.i);
+      // a handle on another track: draw on that track first (the strip waits to rebuild until let go)
+      this.dragging = true;
+      const track = cell.closest<HTMLElement>('.flip-track')?.dataset.id;
+      if (track && track !== app.project.activeLayer) app.pickLayer(track);
       const before = app.project.exposures;
       const len0 = before[i]?.length ?? 1;
       let after = before;
       this.dragging = this.dragged = true;
-      h.setPointerCapture(e.pointerId);
+      try { h.setPointerCapture(e.pointerId); } catch { /* a stale pointer: dragging still works over the handle */ }
       const x0 = e.clientX;
       // Free Trim (Procreate Dreams): another finger down, or Alt, and the next drawing gives or
       // takes the frames, so everything after it stays where it is

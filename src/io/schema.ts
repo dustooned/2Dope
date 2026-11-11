@@ -1,3 +1,4 @@
+import { readVideo, VIDEO_MAX_SECONDS, VIDEO_PATH, type VideoSpec } from '../core/video';
 import { FORMAT10_EFFECTS, readEffectStyleOrigin, temporalEffect, type EffectStyleOrigin } from '../core/effects';
 import { readTitle, type TitleSpec } from '../core/title';
 import { readCaption, type CaptionSpec } from '../lettering/spec';
@@ -40,7 +41,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 10;
+export const SCHEMA = 11;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -107,6 +108,8 @@ export interface LayerFile {
   title?: TitleSpec;
   /** A live caption (format 10). */
   caption?: CaptionSpec;
+  /** A movie the layer plays (format 11). */
+  video?: VideoSpec;
   id: string;
   name: string;
   kind: 'drawings' | 'comp' | 'camera' | 'null';
@@ -187,6 +190,7 @@ export interface DrawingFile {
 
 /** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
 export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comps?: Record<string, CompFile>): number {
+  if (comps && Object.values(comps).some(c => c.layers.some(l => l.video))) return 11;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.caption))) return 10;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.effects?.some(e => FORMAT10_EFFECTS.includes(e.type)) || l.styleOrigin?.effects.some(e => FORMAT10_EFFECTS.includes(e.type))))) return 10;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.transform.orient || l.transform.position.even || ('exposures' in l && l.exposures?.some(e => e.ease))))) return 9;
@@ -203,6 +207,8 @@ export interface ProjectFile {
   sounds?: Record<string, { name: string; path: string; duration: number }>;
   /** Fonts embedded for captions (format 10). */
   fonts?: Record<string, { name: string; path: string }>;
+  /** Movie files movie layers play (format 11). */
+  videos?: Record<string, { name: string; path: string; duration: number; width: number; height: number; fps: number }>;
   format: typeof FORMAT;
   schema: number;
   /** The app version that wrote the file. */
@@ -510,6 +516,7 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   }
   if (v.title !== undefined && kind !== 'drawings') throw new SchemaError(`${what}: titles must be drawing layers`);
   if (v.caption !== undefined && kind !== 'drawings') throw new SchemaError(`${what}: captions must be drawing layers`);
+  if (v.video !== undefined && kind !== 'drawings') throw new SchemaError(`${what}: movies must be drawing layers`);
   if (kind === 'drawings') {
     if (v.tweenVectors === true && !out.adjust && !out.guide && !out.notes && !v.title) out.tweenVectors = true;
     out.exposures = exposureList(v.exposures, what, drawings);
@@ -517,6 +524,9 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
     timing(v, out, what);
     if (v.caption !== undefined) {
       try { out.caption = readCaption(v.caption); } catch (e) { throw new SchemaError(`${what}: ${String(e)}`); }
+    }
+    if (v.video !== undefined) {
+      try { out.video = readVideo(v.video); } catch (e) { throw new SchemaError(`${what}: ${String(e)}`); }
     }
     if (v.title !== undefined) {
       try { out.title = readTitle(v.title); } catch (e) { throw new SchemaError(`${what}: ${String(e)}`); }
@@ -580,6 +590,8 @@ export function migrate(input: unknown): Record<string, unknown> {
   if ((raw.schema as number) < 8) raw = { ...raw, schema: 8 };
   if ((raw.schema as number) < 9) raw = { ...raw, schema: 9 };
   if ((raw.schema as number) < 10) raw = { ...raw, schema: 10 };
+  // Movie layers are additive; only files containing them need 11.
+  if ((raw.schema as number) < 11) raw = { ...raw, schema: 11 };
   return raw;
 }
 
@@ -599,7 +611,7 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     if (!isObj(raw.sounds) || Object.keys(raw.sounds).length > 64) throw new SchemaError('the project has too many audio assets');
     for (const [id, sound] of Object.entries(raw.sounds)) {
       if (!ID.test(id) || !isObj(sound) || typeof sound.path !== 'string' || !SOUND_PATH.test(sound.path)) throw new SchemaError('an audio asset has an invalid path or id');
-      sounds[id] = { name: str(sound.name, 'audio name'), path: sound.path, duration: num(sound.duration, 'audio duration', 0.001, 120) };
+      sounds[id] = { name: str(sound.name, 'audio name'), path: sound.path, duration: num(sound.duration, 'audio duration', 0.001, 600) };
     }
   }
   const fonts: NonNullable<ProjectFile['fonts']> = {};
@@ -608,6 +620,14 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     for (const [id, font] of Object.entries(raw.fonts)) {
       if (!ID.test(id) || !isObj(font) || typeof font.path !== 'string' || !FONT_PATH.test(font.path)) throw new SchemaError('a font has an invalid path or id');
       fonts[id] = { name: str(font.name, 'font name'), path: font.path };
+    }
+  }
+  const videos: NonNullable<ProjectFile['videos']> = {};
+  if (raw.videos !== undefined) {
+    if (!isObj(raw.videos) || Object.keys(raw.videos).length > 64) throw new SchemaError('the project has too many movies');
+    for (const [id, video] of Object.entries(raw.videos)) {
+      if (!ID.test(id) || !isObj(video) || typeof video.path !== 'string' || !VIDEO_PATH.test(video.path)) throw new SchemaError('a movie has an invalid path or id');
+      videos[id] = { name: str(video.name, 'movie name'), path: video.path, duration: num(video.duration, 'movie duration', 0.001, VIDEO_MAX_SECONDS + 1), width: int(video.width, 'movie width', 1, 16384), height: int(video.height, 'movie height', 1, 16384), fps: num(video.fps, 'movie fps', 1, 240) };
     }
   }
   let vectorTotal = 0;
@@ -732,6 +752,7 @@ export function validateProjectFile(rawIn: unknown): ProjectFile {
     drawings,
     ...(Object.keys(sounds).length ? { sounds } : {}),
     ...(Object.keys(fonts).length ? { fonts } : {}),
+    ...(Object.keys(videos).length ? { videos } : {}),
   };
 }
 
@@ -754,6 +775,7 @@ export function assetPaths(p: ProjectFile): Set<string> {
   }
   for (const sound of Object.values(p.sounds ?? {})) s.add(sound.path);
   for (const font of Object.values(p.fonts ?? {})) s.add(font.path);
+  for (const video of Object.values(p.videos ?? {})) s.add(video.path);
   return s;
 }
 
@@ -831,7 +853,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
       };
       const timed = { play: l.play ?? (l.loop ? 'loop' : 'once'), speed: l.speed ?? 1, single: l.single ?? 0, timeRemap: l.timeRemap ? propOf(l.timeRemap) : null } as const;
       if (l.kind === 'drawings') {
-        const layer: DrawingsLayer = { ...base, ...(l.title ? { title: structuredClone(l.title) } : {}), ...(l.caption ? { caption: structuredClone(l.caption) } : {}), kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
+        const layer: DrawingsLayer = { ...base, ...(l.title ? { title: structuredClone(l.title) } : {}), ...(l.caption ? { caption: structuredClone(l.caption) } : {}), ...(l.video ? { video: structuredClone(l.video) } : {}), kind: 'drawings', exposures: (l.exposures ?? []).map((e) => ({ ...e })), ...timed };
         if (l.parts) {
           layer.parts = {};
           for (const n of PART_NAMES) {
@@ -919,7 +941,7 @@ export function compFile(c: Comp): CompFile {
         if (l.timeRemap?.keys.length) timed.timeRemap = propFile(l.timeRemap);
       }
       if (l.kind === 'drawings') {
-        const out: LayerFile = { ...base, ...(l.title ? { title: readTitle(l.title) } : {}), ...(l.caption ? { caption: readCaption(l.caption) } : {}), exposures: l.exposures.map((e) => ({ ...e })), ...timed };
+        const out: LayerFile = { ...base, ...(l.title ? { title: readTitle(l.title) } : {}), ...(l.caption ? { caption: readCaption(l.caption) } : {}), ...(l.video ? { video: readVideo(l.video) } : {}), exposures: l.exposures.map((e) => ({ ...e })), ...timed };
         const parts: Partial<Record<PartName, PartFile>> = {};
         for (const n of PART_NAMES) {
           const pt = l.parts?.[n];

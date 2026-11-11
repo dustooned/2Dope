@@ -1,3 +1,4 @@
+import { videoFramesReady } from '../view/videoframes';
 import { makeCanvas } from '../brush/raster';
 import { frameContent } from '../core/comp';
 import type { Drawing, Project } from '../core/project';
@@ -16,6 +17,8 @@ export interface VideoPicture {
   start?: number;
   frames: number;
   drawings(frame: number): Iterable<string>;
+  /** The movie frames the frame shows (decoded at full size before painting it). */
+  videos?(frame: number): readonly { asset: string; time: number }[];
   /** Paint frame `frame` into the output canvas (identity transform, output pixels, background already filled). */
   paint(g: CanvasRenderingContext2D, frame: number, plan: VideoPlan): void;
 }
@@ -127,6 +130,7 @@ export async function exportVideo(
           pinned.push(drawing);
           await hold.pin(drawing);
         }
+        await videoFramesReady(project, picture ? picture.videos?.(frame) ?? [] : frameContent(project.comps, plan.comp, frame).videos);
         check();
         g.setTransform(1, 0, 0, 1, 0, 0);
         if (plan.options.background === 'transparent') g.clearRect(0, 0, plan.width, plan.height);

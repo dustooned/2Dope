@@ -1,3 +1,4 @@
+import { videoFramesReady } from '../view/videoframes';
 import { soundReady } from '../view/effects';
 import { captionFontsReady } from '../view/captionfonts';
 import { effectsPad } from '../core/effects';
@@ -131,6 +132,7 @@ export async function prepareBundle(owner: Project, options: BundleOptions, lite
   };
   const sounds = new SoundBank(() => lite); sounds.source = async k => captured.assets.get(k) ?? null;
   const picture: VideoPicture = { start: plan.start, frames: plan.frames, drawings: f => frameContent(project.comps, plan.comp, plan.start + f).drawings,
+    videos: f => frameContent(project.comps, plan.comp, plan.start + f).videos,
     paint(g, f, v) { g.setTransform(v.scale, 0, 0, v.scale, v.x, v.y); drawComp(g, project, plan.comp, plan.start + f, { export: true, backgrounds: true }); } };
   const encode: BundleWriter = async (step, abort, progress) => {
     check(abort); if (disposed) throw new Error('This bundle was closed.');
@@ -141,6 +143,7 @@ export async function prepareBundle(owner: Project, options: BundleOptions, lite
     const canvas = makeCanvas(plan.width, plan.height), pinned: Drawing[] = [];
     try {
       for (const id of frameContent(project.comps, plan.comp, plan.poster).drawings) { check(abort); const d = project.drawing(id); pinned.push(d); await guarded.pin(d); }
+      await videoFramesReady(project, frameContent(project.comps, plan.comp, plan.poster).videos);
       check(abort); const g = canvas.getContext('2d')!, comp = project.comps.get(plan.comp)!; g.scale(plan.width / comp.width, plan.height / comp.height); drawComp(g, project, plan.comp, plan.poster, { export: true, backgrounds: false });
       return new Blob([await encodePng(canvas) as BlobPart], { type: 'image/png' });
     } finally { for (const d of pinned) guarded.unpin(d); canvas.width = canvas.height = 0; releaseScratch(); }

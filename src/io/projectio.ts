@@ -58,6 +58,11 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
   // fonts the captions use (only those travel with the project)
   const usedFonts = new Set([...project.comps.values()].flatMap(c => c.layers.flatMap(l => (l.kind === 'drawings' && l.caption?.font.startsWith('custom:') ? [l.caption.font.slice(7)] : []))));
   const fontJobs = [...usedFonts].flatMap(id => { const font = project.fonts.get(id); return font ? [{ id, ...font }] : []; });
+  // movies the shot's movie layers play (only those travel with the project)
+  const usedVideos = new Set([...project.comps.values()].flatMap(c => c.layers.flatMap(l => (l.kind === 'drawings' && l.video ? [l.video.asset] : []))));
+  const videoJobs = [...usedVideos].flatMap(id => { const video = project.videos.get(id); return video ? [{ id, ...video }] : []; });
+  // a movie's sound is a sound asset too (kept even when no sound clip uses it)
+  for (const c of project.comps.values()) for (const l of c.layers) if (l.kind === 'drawings' && l.video?.sound && !usedSounds.has(l.video.sound) && project.sounds.has(l.video.sound)) { usedSounds.add(l.video.sound); soundJobs.push({ id: l.video.sound, ...project.sounds.get(l.video.sound)! }); }
   const main = project.comps.has(project.main) ? project.main : [...project.comps.keys()][0]!;
   const base = {
     name: project.name,
@@ -128,6 +133,16 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
           putAsset(font.path, bytes);
         }
       }
+      const videos: NonNullable<ProjectFile['videos']> = {};
+      for (const video of videoJobs) {
+        videos[video.id] = { name: video.name, path: video.path, duration: video.duration, width: video.width, height: video.height, fps: video.fps };
+        if (video.bytes) putAsset(video.path, video.bytes);
+        else if (opt.mode === 'archive') {
+          const bytes = await opt.source?.(video.path);
+          if (!bytes) throw new Error(`Movie ${video.name} is missing. The project was not exported.`);
+          putAsset(video.path, bytes);
+        }
+      }
       const keys: { d: Drawing; rev: number; line: string | null; fill: string | null }[] = [];
       for (const p of planes) {
         const line = await keyOf(p.line);
@@ -150,6 +165,7 @@ export function captureProject(project: Project, opt: CaptureOptions = { mode: '
         drawings,
         ...(soundJobs.length ? { sounds } : {}),
         ...(fontJobs.length ? { fonts } : {}),
+        ...(videoJobs.length ? { videos } : {}),
       };
       return {
         file,
@@ -185,6 +201,7 @@ export function loadProjectFile(file: ProjectFile): Loaded {
   project.activeComp = file.main;
   for (const [id, sound] of Object.entries(file.sounds ?? {})) project.sounds.set(id, { ...sound, bytes: null });
   for (const [id, font] of Object.entries(file.fonts ?? {})) project.fonts.set(id, { ...font, bytes: null });
+  for (const [id, video] of Object.entries(file.videos ?? {})) project.videos.set(id, { ...video, bytes: null });
   const ref = (key: string | null): PlaneRef | null => (key ? { key, bytes: null } : null);
   for (const [id, f] of Object.entries(file.drawings)) {
     const d = project.adopt(id, f.num, f.vectors, f.role ?? null, { rev: 0, line: ref(f.line), fill: ref(f.fill) });
