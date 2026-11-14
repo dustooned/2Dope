@@ -934,6 +934,7 @@ if (import.meta.env.DEV) (window as unknown as { __files: FileUI }).__files = fi
 exporter = new ExportUI(app, $<HTMLDialogElement>('#export'), (msg) => files?.toast(msg));
 const newUI = new NewProjectUI(app.device.lite ? app.device.limits : null);
 const gallery = new Gallery(files, newUI, $('#gallery'));
+gallery.onAbout = () => showManual('about');
 // every new project starts with its setup (size, frame rate, name), the first one too; on a
 // device's very first start, the welcome screen comes first (interface, then blank or a sample)
 let firstSample: SampleId | null = null;

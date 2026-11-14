@@ -1509,6 +1509,12 @@ body.gallery-open .dock {
   min-height: 52px;
 }
 
+.gcredit { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; color: var(--muted); font-size: 12px; }
+.gcredit button, .gcredit a { min-height: 44px; display: inline-flex; align-items: center; padding: 0 4px; background: none; border: none; color: var(--muted); font: inherit; }
+.gcredit a { text-decoration: underline; text-underline-offset: 2px; }
+.gcredit button:hover, .gcredit button:focus-visible, .gcredit a:hover, .gcredit a:focus-visible { color: var(--text); text-decoration: underline; }
+@media (max-width: 600px) { .gfoot { flex-wrap: wrap; } .gcredit { flex-basis: 100%; justify-content: center; } }
+
 .gselbar {
   display: flex;
   align-items: center;

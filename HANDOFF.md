@@ -2,6 +2,26 @@
 
 ## Current state (2026-11-14) — read this first
 
+### About / credit area (2026-11-14)
+
+- `src/about.ts` holds the credit text (`ABOUT_CREDIT`, `ABOUT_TEXT`): designed, programmed and
+  developed by Professor T at Long Beach City College; tested and updated regularly for student
+  access to creative software.
+- The manual's first section is **About 2Dope** (`ui/manual.ts`; first so `openManual('about')`
+  can scroll it to the top). Projects (`ui/gallery.ts` footer) shows the credit as a 44 px button
+  (`.gcredit`, wraps to its own line under 600 px) that opens it (`gallery.onAbout`, `main.ts`).
+- The same credit and an About section were added to inkflo (separate repo).
+- `.claude/launch.json` gains `inkflo-test` (inkflo on 127.0.0.1:5317) for checking inkflo.
+- "Long Beach City College" is a link to https://www.lbcc.edu/digitalmedia (Digital Media Arts),
+  new tab, in the Projects credit and the manual (`lbccLink`, `withLbccLinks` in `src/about.ts`);
+  the rest of the credit opens About.
+- Checks: in the browser on the 127.0.0.1:5217 test origin, the credit shows at the bottom right
+  of Projects on one row (button and link, 44 px each) and opens the manual on About 2Dope; both
+  links point to the LBCC page. `npx vitest run --dir src` 842 passed, 1 skipped; build passed;
+  full browser suite 79 of 80 (before the link change) with `paintingworkflow` failing once
+  while inkflo's tests ran on the same machine, then 21/21 twice on its own; `projectpreview`
+  7/7 and `firstrun` 5/5 on the final code.
+
 ### Merge and deploy (2026-11-14)
 
 `claude/dreams-tracks` (`b1dabf8`) merged into `main` with the four local commits since

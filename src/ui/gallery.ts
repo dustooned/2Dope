@@ -5,6 +5,7 @@ import { iconSvg } from './icons';
 import type { FileUI } from './files';
 import { SAMPLES, type SampleId } from '../io/samples';
 import { el } from './dom';
+import { ABOUT_CREDIT, LBCC_NAME, lbccLink } from '../about';
 
 const SORT_KEY = '2dope.m2.sort';
 
@@ -492,9 +493,17 @@ export class Gallery {
 
   // -------------------------------------------------------------------------------------------
 
+  /** Opens the manual's About section (set by the app). */
+  onAbout: (() => void) | null = null;
+
   private footer(): HTMLElement {
     const f = el('footer', { class: 'gfoot' });
-    f.append(el('span', { class: 'hint gstorage' }), el('span', { class: 'spacer' }));
+    // the credit opens About 2Dope; the college's name opens its Digital Media Arts page
+    const about = el('button', { type: 'button', title: 'About 2Dope' }, ABOUT_CREDIT.replace(` at ${LBCC_NAME}`, ''));
+    about.addEventListener('click', () => this.onAbout?.());
+    const credit = el('span', { class: 'gcredit' });
+    credit.append(about, ' at ', lbccLink());
+    f.append(el('span', { class: 'hint gstorage' }), el('span', { class: 'spacer' }), credit);
     const bar = el('div', { class: 'gselbar', hidden: '' });
     const label = el('span', { class: 'gsel' });
     const mk = (text: string, fn: () => Promise<void> | void, cls = '') => {

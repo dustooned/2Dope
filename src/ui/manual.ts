@@ -1,4 +1,5 @@
 import { iconSvg } from './icons';
+import { ABOUT_TEXT, withLbccLinks } from '../about';
 import { FIGURES, glyphSvg } from './manualfigs';
 import { MANUAL, UPDATES, type Block } from './manualtext';
 import { el } from './dom';
@@ -80,6 +81,7 @@ export function openManual(start: 'overview' | 'updates' | string = 'overview', 
     toc.append(a);
     pick.append(el('option', { value: id }, title));
   };
+  add('about', 'About 2Dope', ABOUT_TEXT.map((t) => { const p = el('p', {}); p.append(...withLbccLinks(t)); return p; }));
   for (const s of MANUAL) add(s.id, s.title, s.blocks.map(block));
   add(
     'updates',

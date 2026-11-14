@@ -13,6 +13,13 @@
       "runtimeArgs": ["vite", "--host", "127.0.0.1", "--port", "5217", "--strictPort"],
       "port": 5217,
       "url": "http://127.0.0.1:5217"
+    },
+    {
+      "name": "inkflo-test",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "E:/2026/Dev/Apps/inkflo/beta", "--host", "127.0.0.1", "--port", "5317", "--strictPort"],
+      "port": 5317,
+      "url": "http://127.0.0.1:5317"
     }
   ]
 }
