@@ -2,7 +2,27 @@
 
 ## Current state (2026-11-14) — read this first
 
-### Copy and paste between projects (2026-11-14, uncommitted)
+### My Assets Add copy across canvas sizes (2026-11-14, uncommitted)
+
+- `io/artwork.ts` `resizeArtwork(bundle, w, h)`: re-encodes every drawing plane centred at native
+  pixels (new asset paths `…-WxH.png`), moves vectors with `transformVector`, sets every comp to
+  the new size, and adds the offset to each layer's anchor and position (value and keys) and to
+  comp-layer `:position` / `:anchor` overrides, so the artwork looks the same, centred.
+  `resizeBlocked(file)` refuses comps of another size, camera/null layers, parenting, captions,
+  titles and movies (the old "Open it as a project" message, with the reason).
+- `ui/artworklibrary.ts`: Add copy and Add & place are enabled for other sizes (note "Other
+  canvas size · added centred", title explains). `use()` resizes before `addPackage`.
+  `ui/artworkassets.ts importArchive` (a dropped/pasted `.2dope` artwork) resizes too.
+  `addPackage` itself still refuses a size mismatch (unit test unchanged).
+- Checks: `packimport` 24/24 (new: enabled with note, 64×48 card into 80×60 shot centred at
+  (30,25)–(49,34) with anchor/position 40,30, one Undo removes it, caption artwork blocked).
+  `npx vitest run --dir src` 837 passed, 1 skipped; build passed; full browser suite 77 of 79, then
+  `artworklibrary` and `artworklibrary-responsive` 34/34 each after updating their old
+  "different canvas disables Add copy" check to the new behaviour.
+- Not verified: nested-artwork graphs with keyed positions in a real project; effects with
+  absolute positions (if any) are not moved.
+
+### Copy and paste between projects (2026-11-14, `0395ae9`)
 
 First slice of the user's "copy/paste, assets between projects, import/export, glitches,
 performance" pass.

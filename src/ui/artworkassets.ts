@@ -10,7 +10,7 @@ import { askText, pickBox } from './dialogs';
 import { decorate } from './icons';
 import { ArtworkLibraryUI } from './artworklibrary';
 import type { ArtworkStore } from '../io/artworkstore';
-import { readArtwork } from '../io/artwork';
+import { readArtwork, resizeArtwork } from '../io/artwork';
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag); e.className = className;
@@ -288,7 +288,9 @@ export class ArtworkAssetsUI {
     const a = this.app, project = a.project, comp = project.comp;
     if (file.size > 1024 * 1024 * 1024) throw new Error('This artwork file is too large.');
     if (a.playing) a.togglePlay();
-    const bundle = await readArtwork(new Uint8Array(await file.arrayBuffer()));
+    let bundle = await readArtwork(new Uint8Array(await file.arrayBuffer()));
+    // another canvas size: centred at its own pixel size, as My Assets adds it
+    if (bundle.file.canvas.width !== project.width || bundle.file.canvas.height !== project.height) bundle = await resizeArtwork(bundle, project.width, project.height);
     if (a.project !== project || project.comp !== comp || !this.assets.addPackage(bundle, frame))
       throw new Error('The timeline changed or is busy. Import the asset again.');
     this.update();

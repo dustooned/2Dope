@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import type { ArtworkAssets } from '../core/assets';
 import { isPaintingWorkspace } from '../core/workspace';
-import { captureArtwork, packArtwork, readArtwork, libraryArtwork, artworkFromImage, imageThumb, type ArtworkPackage } from '../io/artwork';
+import { captureArtwork, packArtwork, readArtwork, libraryArtwork, artworkFromImage, imageThumb, resizeArtwork, type ArtworkPackage } from '../io/artwork';
 import { decodePicture } from './media';
 import { PACK_ACCEPT, PACK_LIMITS, packImageTooLarge, packSummary, planPackImport, type PackOutcome } from '../io/packimport';
 import { DeviceArtworkStore, type ArtworkCard, type ArtworkEntry, type ArtworkStore } from '../io/artworkstore';
@@ -220,12 +220,15 @@ export class ArtworkLibraryUI {
     const actions = el('div', 'artwork-actions artwork-library-actions');
     const sameSize = card.width === this.app.project.width && card.height === this.app.project.height;
     const add = button(`Add copy of ${card.name}`, 'plus', () => void this.use(card, 'add'), 'Add copy');
-    add.disabled = !sameSize || this.app.playing;
+    add.disabled = this.app.playing;
     const place = button(`Add and place ${card.name}`, 'plus', () => void this.use(card, 'place'), 'Add & place');
-    place.hidden = !sameSize;
-    place.disabled = !sameSize || this.app.playing || !!this.app.project.comp.asset;
+    place.disabled = this.app.playing || !!this.app.project.comp.asset;
     if (this.app.project.comp.asset) place.title = 'Return to your shot before placing artwork.';
-    if (!sameSize) { add.title = 'Use Open as project to keep the original canvas size.'; info.append(el('small', 'artwork-size-note', 'Different canvas · open as project')); }
+    if (!sameSize) {
+      const where = `Centred on this ${this.app.project.width}×${this.app.project.height} canvas at its own pixel size. Open as project keeps its ${card.width}×${card.height} canvas.`;
+      add.title = where; if (!this.app.project.comp.asset) place.title = where;
+      info.append(el('small', 'artwork-size-note', 'Other canvas size · added centred'));
+    }
     const open = button(`Open ${card.name} as project`, 'draw', () => void this.use(card, 'open'), 'Open as project'); open.disabled = !this.openProject;
     const download = button(`Download ${card.name} artwork`, 'download', () => void this.use(card, 'download'), 'Download');
     download.classList.add('artwork-download');
@@ -260,8 +263,13 @@ export class ArtworkLibraryUI {
       const entry = await this.store.get(card.id);
       if (!entry) throw new Error('This artwork is no longer available.');
       if (this.dialog !== d || this.app.project !== p) return;
-      const bundle = await libraryArtwork(entry);
+      let bundle = await libraryArtwork(entry);
       if (this.dialog !== d || this.app.project !== p) return;
+      // another canvas size: centred at its own pixel size (Open as project keeps its size)
+      if ((action === 'add' || action === 'place') && (bundle.file.canvas.width !== p.width || bundle.file.canvas.height !== p.height)) {
+        bundle = await resizeArtwork(bundle, p.width, p.height);
+        if (this.dialog !== d || this.app.project !== p) return;
+      }
       if (action === 'download') {
         this.download(bundle, entry.card.name); return;
       }

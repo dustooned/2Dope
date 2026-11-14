@@ -91,7 +91,7 @@ try {
   check('Ordinary standalone project capture includes the imported layers and every image', !!backup.file.comps[copied.id]?.asset && [...Object.values(backup.file.drawings)].every(d => (!d.line || backup.assets.has(d.line)) && (!d.fill || backup.assets.has(d.fill))));
   await files.newProject({ name: 'Different size', width: 32, height: 16, frames: 24 }); app.setWorkspace('draw'); await settle();
   click('Assets (0)'); click('My Assets'); await until(() => !!document.querySelector('.artwork-library article'));
-  check('A different canvas disables Add copy and explains native-size project opening', button('Add copy of Library landscape').disabled && !!document.querySelector('.artwork-size-note') && !button('Open Library landscape as project').disabled);
+  check('A different canvas offers Add copy (centred) and still offers native-size project opening', !button('Add copy of Library landscape').disabled && !!document.querySelector('.artwork-size-note')?.textContent?.includes('added centred') && !button('Open Library landscape as project').disabled);
   click('Open Library landscape as project'); await until(() => app.project.width === 16 && app.project.comp.name === 'Library landscape'); await settle();
   check('Open as project uses actual file import and preserves its original size, layers and timing', app.project.width === 16 && app.project.height === 16 && app.project.comp.layers.length === 2 && app.project.fps === 6 && files.current?.name === 'Library landscape' && !assets.assets.editing);
   click('Assets (0)'); failSave = true; click('Save current artwork'); await until(() => !assets.library.busy);

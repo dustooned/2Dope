@@ -2,7 +2,7 @@
 import { App } from '../app';
 import { MemoryStore } from '../io/persist';
 import { DeviceArtworkStore, type ArtworkStore } from '../io/artworkstore';
-import { readArtwork, packArtwork, artworkFromImage } from '../io/artwork';
+import { readArtwork, packArtwork, artworkFromImage, resizeBlocked } from '../io/artwork';
 import { epsTextFromBytes } from '../io/eps';
 import { importVectorDocument } from '../io/vectorimport';
 import { ArtworkAssetsUI } from './artworkassets';
@@ -129,6 +129,32 @@ try {
   const picker = mediaPicker(app, null as unknown as AudioTracks);
   await picker.importAssets([new File(['%PDF-1.4'], 'Rocket.ai', { type: 'application/postscript' })], 0);
   check('An .ai file gets the Illustrator PDF notice', notices.at(-1) === `Rocket.ai: ${AI_NOTICE}`);
+  // My Assets into a project of another canvas size: centred at its own pixel size
+  assets.library.close();
+  await files.newProject({ name: 'Bigger target', width: 80, height: 60, fps: 12, frames: 12 }); app.setWorkspace('draw'); await settle(); app.history.clear();
+  click('Assets (0)'); click('My Assets'); await until(() => !!document.querySelector('[aria-label="Add copy of Red"]'));
+  const redCard = [...document.querySelectorAll<HTMLElement>('.artwork-library article')].find(a => a.textContent?.includes('Red'))!;
+  const lib = document.querySelector<HTMLElement>('dialog.artwork-library')!;
+  // an earlier step left a search or collection filter on: show every card
+  const search = lib.querySelector<HTMLInputElement>('.artwork-library-search input'); if (search) { search.value = ''; search.dispatchEvent(new Event('input', { bubbles: true })); }
+  for (const sel of lib.querySelectorAll<HTMLSelectElement>('select')) { sel.selectedIndex = 0; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  await until(() => { try { return !!button('Add copy of Red', lib); } catch { return false; } });
+  check('A card of another canvas size can be added, and says it will be centred', !button('Add copy of Red', lib).disabled && !!redCard.querySelector('.artwork-size-note')?.textContent?.includes('added centred'));
+  const compsBefore = app.project.comps.size;
+  button('Add copy of Red', lib).click(); await until(() => app.project.comps.size > compsBefore || /canvas/.test(status()));
+  const added = [...app.project.comps.values()].find(c => c.asset && c.name === 'Red')!;
+  const addedLayer = added?.layers[0], addedDrawing = addedLayer?.kind === 'drawings' ? app.project.drawing(addedLayer.exposures[0]!.drawing) : null;
+  if (addedDrawing) await app.residency.ensure(addedDrawing);
+  const fillPx = addedDrawing?.fill ? addedDrawing.fill.getContext('2d')!.getImageData(0, 0, 80, 60).data : null;
+  const at = (x: number, y: number) => fillPx ? [...fillPx.subarray((y * 80 + x) * 4, (y * 80 + x) * 4 + 4)].join() : '';
+  check('The added copy is centred on the 80×60 canvas at the same pixel size, with its layer moved to match',
+    !!added && added.width === 80 && added.height === 60 && at(30, 25) === '255,0,0,255' && at(49, 34) === '255,0,0,255' && at(29, 25).endsWith(',0') && at(50, 34).endsWith(',0')
+    && addedLayer!.transform.anchor.value.join() === '40,30' && addedLayer!.transform.position.value.join() === '40,30');
+  app.undo(); await settle();
+  check('One Undo removes the resized copy', ![...app.project.comps.values()].some(c => c.asset && c.name === 'Red'));
+  const captioned = structuredClone(redFill.bundle.file); const first = Object.values(captioned.comps)[0]!.layers[0]!;
+  (first as { caption?: unknown }).caption = { v: 1 };
+  check('Artwork with a caption, title or movie layer still asks to be opened as a project', /caption, title or movie/.test(resizeBlocked(captioned) ?? ''));
   await picker.importAssets([new File([dosEps(eps('Adobe_AGM_Utils begin 0 0 m 10 10 l S')) as BlobPart], 'Car.eps', { type: 'application/postscript' })], 0);
   check('A DOS EPS binary from Illustrator is read past its header and named', /^Car\.eps: This EPS was saved by Adobe Illustrator/.test(notices.at(-1) ?? ''));
   const plain = importVectorDocument(epsTextFromBytes(dosEps(eps('1 0 0 setrgbcolor 8 8 m 24 8 l 24 24 l h f'))), true);

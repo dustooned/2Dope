@@ -1,6 +1,7 @@
 import { artworkGraph } from '../core/assetcopy';
 import { Project, planeCanvas } from '../core/project';
 import { packPlacement } from './packimport';
+import { transformVector } from '../core/vectorstyle';
 import type { AssetSource } from '../core/residency';
 import { assetsOf } from './persist';
 import { captureProject } from './projectio';
@@ -104,6 +105,74 @@ export async function imageThumb(bitmap: Bitmap): Promise<Uint8Array> {
   const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/png')); c.width = c.height = 0;
   if (!blob) throw new Error('Could not make a preview.');
   return new Uint8Array(await blob.arrayBuffer());
+}
+
+/**
+ * Why this artwork cannot be centred on another canvas size, or null when it can. Only drawing and
+ * nested-artwork layers that sit directly in comps of the artwork's own size are moved; captions,
+ * titles, movies, cameras, nulls and parenting keep their own coordinates, so those stay refused.
+ */
+export function resizeBlocked(file: ProjectFile): string | null {
+  const { width, height } = file.canvas;
+  for (const c of Object.values(file.comps)) {
+    if (c.width !== width || c.height !== height) return 'it holds a composition of another size';
+    for (const l of c.layers) {
+      if (l.kind !== 'drawings' && l.kind !== 'comp') return `it has a ${l.kind} layer`;
+      if (l.parent) return 'it has parented layers';
+      if (l.kind === 'drawings' && (l.caption || l.title || l.video)) return 'it has a caption, title or movie layer';
+    }
+  }
+  return null;
+}
+
+/**
+ * The same artwork on a canvas of another size: every drawing is moved so the art keeps its pixel
+ * size and sits centred, and every layer's anchor and position (keys too) move with it, so it
+ * looks the same, centred. Throws when `resizeBlocked` says it cannot.
+ */
+export async function resizeArtwork(bundle: ArtworkPackage, width: number, height: number): Promise<ArtworkPackage> {
+  const file = structuredClone(bundle.file), from = file.canvas;
+  if (from.width === width && from.height === height) return bundle;
+  const blocked = resizeBlocked(file);
+  if (blocked) throw new Error(`This artwork uses a ${from.width}×${from.height} canvas and ${blocked}. Open it as a project to keep its original size.`);
+  const dx = Math.round((width - from.width) / 2), dy = Math.round((height - from.height) / 2);
+  const shift = (prop: { value: unknown; keys?: { v: unknown }[] } | undefined) => {
+    if (!prop) return;
+    const move = (v: unknown) => Array.isArray(v) && v.length === 2 ? [Number(v[0]) + dx, Number(v[1]) + dy] : v;
+    prop.value = move(prop.value); for (const k of prop.keys ?? []) k.v = move(k.v);
+  };
+  for (const c of Object.values(file.comps)) {
+    c.width = width; c.height = height;
+    for (const l of c.layers) {
+      shift(l.transform.anchor); shift(l.transform.position);
+      if (l.kind === 'comp') for (const [key, prop] of Object.entries(l.overrides ?? {})) if (/:(position|anchor)$/.test(key)) shift(prop);
+    }
+  }
+  const assets = new Map(bundle.assets), moved = new Map<string, string>();
+  const canvas = document.createElement('canvas');
+  try {
+    for (const d of Object.values(file.drawings)) {
+      for (const plane of ['line', 'fill'] as const) {
+        const path = d[plane];
+        if (!path) continue;
+        if (!moved.has(path)) {
+          const bytes = bundle.assets.get(path);
+          if (!bytes?.length) throw new Error('An artwork image is missing.');
+          const bitmap = await createImageBitmap(new Blob([bytes as BlobPart], { type: 'image/png' }));
+          canvas.width = width; canvas.height = height;
+          const g = canvas.getContext('2d')!; g.clearRect(0, 0, width, height); g.drawImage(bitmap, dx, dy); bitmap.close();
+          const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'));
+          if (!blob) throw new Error('Could not resize the artwork.');
+          const next = `${path.replace(/\.png$/i, '')}-${width}x${height}.png`;
+          assets.set(next, new Uint8Array(await blob.arrayBuffer())); moved.set(path, next);
+        }
+        d[plane] = moved.get(path)!;
+      }
+      d.vectors = d.vectors.map(v => transformVector(v, [1, 0, 0, 1, dx, dy]));
+    }
+  } finally { canvas.width = canvas.height = 0; }
+  file.canvas = { width, height };
+  return { file, assets };
 }
 
 /** Library labels also name new copies, opened projects and portable downloads. */
