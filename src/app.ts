@@ -103,6 +103,7 @@ const FILL_KEY = '2dope.m1.fill';
 type SnapPoint = { x: number; y: number; id: string; end: 'start' | 'end' | null };
 
 const FLIPBOOK_KEY = '2dope.flipbook';
+const PAINT_OVER_KEY = '2dope.paintOver';
 const FILL_MODE_KEY = '2dope.fill.mode';
 const FILL_STYLE_KEY = '2dope.fill.style';
 const COLOR2_KEY = '2dope.color2';
@@ -3509,6 +3510,28 @@ export class App {
   /** Showing the blank page after the last drawing. */
   blankPage = false;
 
+  /**
+   * Paint over: a new frame starts as a copy of the drawing before it, so a painted frame can be
+   * repainted rather than started blank (painterly animation). Per device; never in History.
+   */
+  paintOver = loadJSON<boolean>(PAINT_OVER_KEY) ?? false;
+
+  setPaintOver(on: boolean): void {
+    this.paintOver = on;
+    saveJSON(PAINT_OVER_KEY, on);
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** The drawing a new frame gets: with Paint over, a copy of `from` when its pixels are at hand; otherwise a blank one. */
+  private newFrameDrawing(from: Drawing | null): Drawing {
+    if (this.paintOver && from) {
+      if (!from.parked && this.residency.isReady(from)) return this.project.cloneDrawing(from);
+      this.onNotice?.('The frame before is still loading, so this frame starts blank.');
+    }
+    return this.project.newDrawing();
+  }
+
   setFlipbook(on: boolean): void {
     this.flipbook = on;
     saveJSON(FLIPBOOK_KEY, on);
@@ -4774,7 +4797,7 @@ export class App {
 
   addFrame(): void {
     if (this.titlePaintBlocked(false)) return;
-    const d = this.project.newDrawing();
+    const d = this.newFrameDrawing(this.project.isPlaceholder ? null : this.drawing);
     this.editTimeline('Add frame', (ex) => addAfter(ex, this.lf, d.id));
   }
 
@@ -4783,7 +4806,7 @@ export class App {
     if (this.titlePaintBlocked(false)) return;
     if (this.live || this.strokeActive) return;
     this.leaveBlankPage();
-    const d = this.project.newDrawing();
+    const d = this.newFrameDrawing(this.project.isPlaceholder ? null : this.drawing);
     this.editTimeline('Add frame', (ex) => addFrameHere(ex, this.lf, d.id, toEnd));
   }
 
@@ -5347,7 +5370,7 @@ export class App {
     }
     const tool = this.tool;
     if (this.blankPage) {
-      if (tool === 'eraser') return; // nothing to erase on a blank page
+      if (tool === 'eraser' && !this.paintOver) return; // nothing to erase on a blank page (Paint over shows the copy to come)
       this.blankPage = false;
       this.addFrame();
     }
@@ -5358,7 +5381,8 @@ export class App {
       const total = this.project.length;
       const at = this.layerFrame;
       if (l.kind === 'drawings' && !l.still && !l.guide && at >= total) {
-        const d = this.project.newDrawing();
+        const lastEx = this.project.exposures[this.project.exposures.length - 1];
+        const d = this.newFrameDrawing(lastEx ? this.project.drawing(lastEx.drawing) : null);
         this.editTimeline('New frame', (old) => {
           const last = old[old.length - 1]!;
           return { ex: [...old.slice(0, -1), { ...last, length: last.length + (at - total) }, { drawing: d.id, length: 1 }], frame: at, selection: [] };
@@ -7053,7 +7077,8 @@ export class App {
     outer('below');
     if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha, exclude, keep);
     this.drawOnion(g);
-    if (this.blankPage && !this.live && !group) {
+    // Paint over: the blank page shows the drawing the new frame will start from
+    if (this.blankPage && !this.paintOver && !this.live && !group) {
       if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, undefined, keep);
       outer('above');
       return false;
@@ -7108,7 +7133,7 @@ export class App {
       };
     };
     const paintActive = (x: CanvasRenderingContext2D, alpha = opacityAt(active, this.frame), blend = active.blend) => {
-      if (this.blankPage && !this.live) return;
+      if (this.blankPage && !this.paintOver && !this.live) return;
       drawEditingLayer(x, this.project, comp, active, this.frame, d, base, { source, editingMask: this.editingMask, alpha, blend });
     };
     if (group) {

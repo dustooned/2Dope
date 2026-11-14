@@ -5,7 +5,8 @@ import { el } from './dom';
 /**
  * Onion skin settings, one press-and-hold away: tap an Onion button to switch onion skin on or off
  * as before; hold it (or right-click) for how many drawings before and after it shows, how strong,
- * colours and keys only. Device settings (App.onion), never document History.
+ * tinted or lightbox, keys only, and whether new frames start as a copy (Paint over). Device
+ * settings (App.onion, App.paintOver), never document History.
  */
 
 let pop: HTMLElement | null = null;
@@ -51,9 +52,22 @@ function render(app: App): void {
   op.addEventListener('input', () => { o.opacity = Number(op.value); out.textContent = `${Math.round(o.opacity * 100)}%`; app.onionChanged(); });
   opRow.append(el('span', { class: 'onion-pop-name' }, 'Strength'), op, out);
   p.append(opRow);
-  sw('Colours', 'Tint earlier drawings blue and later ones red', o.tint, () => { o.tint = !o.tint; }, 'tint');
+  // Style: tinted ghosts (earlier blue, later red) or a lightbox (full colour, to match paint and texture)
+  const style = el('div', { class: 'onion-pop-row onion-pop-style', role: 'group', 'aria-label': 'Onion style' });
+  style.append(el('span', { class: 'onion-pop-name' }, 'Style'));
+  for (const [key, label, title, tint] of [['tinted', 'Tinted', 'Earlier drawings blue, later ones red', true], ['lightbox', 'Lightbox', 'Neighbouring frames in their own colours, to match paint and texture', false]] as const) {
+    const b = el('button', { type: 'button', 'aria-pressed': String(o.tint === tint), title, 'data-onion': key }, label);
+    b.addEventListener('click', () => { o.tint = tint; changed(); p.querySelector<HTMLElement>(`[data-onion="${key}"]`)?.focus(); });
+    style.append(b);
+  }
+  p.append(style);
   sw('Keys only', 'Show only drawings marked as keys', o.keysOnly, () => { o.keysOnly = !o.keysOnly; }, 'keys');
   sw('While playing', 'Keep the ghosts while scrubbing or playing', o.whileScrubbing, () => { o.whileScrubbing = !o.whileScrubbing; }, 'scrub');
+  p.append(el('strong', { class: 'onion-pop-section' }, 'New frames'));
+  const paint = el('button', { type: 'button', role: 'switch', 'aria-checked': String(app.paintOver), title: 'A new frame starts as a copy of the one before it, ready to repaint (painterly animation). Off: new frames start blank.', 'data-onion': 'paintover' });
+  paint.append(el('span', { class: 'onion-pop-name' }, 'Paint over last frame'), el('span', { class: 'onion-pop-state' }, app.paintOver ? 'On' : 'Off'));
+  paint.addEventListener('click', () => { app.setPaintOver(!app.paintOver); render(app); p.querySelector<HTMLElement>('[data-onion="paintover"]')?.focus(); });
+  p.append(paint);
   p.append(el('p', { class: 'onion-pop-note' }, 'Tap Onion to switch it on or off; hold it for these settings.'));
 }
 

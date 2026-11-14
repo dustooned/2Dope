@@ -5044,6 +5044,9 @@ body .bcard { flex-basis: 230px; }
 .onion-pop-row output { min-width: 2.5em; text-align: center; font-variant-numeric: tabular-nums; }
 .onion-pop-row input[type=range] { flex: 1; accent-color: var(--accent); }
 .onion-pop-note { margin: 4px 4px 0; font-size: 11px; color: var(--muted); }
+.onion-pop-style button { min-height: 44px; padding: 0 12px; }
+.onion-pop-style button[aria-pressed=true] { color: var(--accent); border-color: var(--accent); }
+.onion-pop .onion-pop-section { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
 
 /* Story → Present: the board full screen for pitching (only the picture, subtitle and controls) */
 body.presenting .stage-col { position: fixed; inset: 0; z-index: 70; background: #000; }

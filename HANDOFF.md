@@ -1,8 +1,30 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-13) — read this first
+## Current state (2026-11-14) — read this first
 
-### My Assets image import and EPS diagnostics (2026-11-13, uncommitted)
+### Paint over and lightbox onion (2026-11-14, uncommitted)
+
+First slice of "Painterly animation" in [next-phase.md](docs/next-phase.md). Painted frames (a
+paint stack per frame), a boiling-grain brush option and wet mixing across a frame's layers are
+**not** started.
+
+- **Paint over last frame** (`App.paintOver`, device key `2dope.paintOver`, default off, never
+  History): `newFrameDrawing(from)` clones the drawing before when its pixels are resident,
+  otherwise starts blank with a notice. Used by `addFrame`, `flipAddFrame` and the flipbook's
+  draw-past-the-end frame. On the blank page the render shows the drawing to be copied, and the
+  first stroke (eraser included) makes the copy. Linked paint layers copy their partners via the
+  existing `copiedFrom` / `partnerDrawing` path.
+- **Onion style** (`ui/onionpop.ts`): the Colours switch is now Style: Tinted | Lightbox
+  (`onion.tint`; Lightbox = full colour). A "New frames" section holds the Paint over switch.
+- Manual (onion paragraph) and an `UPDATES` entry dated 2026-11-14.
+- Checks (2026-11-14): new fixture `paintover` 10/10 (blank vs copy for + Frame and Flip add,
+  original untouched, Undo, blank page shows and copies on first stroke, eraser on blank page,
+  off again, popover state, persistence, focus, 44 px, Escape). `npm test` 837 passed,
+  1 skipped. `npm run build` passed. Full browser suite 78 of 78.
+- Not done: iPad / Pencil check; the canvas menu has no Paint over entry (only the onion
+  settings).
+
+### My Assets image import and EPS diagnostics (2026-11-13, `e5cc7bb`)
 
 These are Slices 1 and 2 of the [asset-pack brief](docs/CLAUDE-ASSET-PACK-IMPORT-HANDOFF.md). Slice 3 was not started.
 
