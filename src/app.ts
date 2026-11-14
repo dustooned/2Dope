@@ -20,6 +20,7 @@ import { prepareVectorStroke, transformVector, assertVectorBudget, selectionClip
 import { showVectorRestyle } from './ui/vectorrestyle';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
+import { adoptSnaps, snapDrawings, type DrawingSnap } from './core/transfer';
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { IDENTITY, isIdentity, matrixFor, transformMask, type Interpolation, type Rect, type XParams } from './core/selxform';
@@ -4896,6 +4897,16 @@ export class App {
 
   /** Exposures copied with Copy / Cut (drawing references and holds). Lives for the session. */
   clipboard: Exposure[] = [];
+  /**
+   * Where those frames came from, and their pictures as a snapshot made at Copy: pasted into another
+   * project they become new drawings there (the ids only mean something in their own project).
+   */
+  private clipFrom: { project: WeakRef<Project>; snaps: Promise<Map<string, DrawingSnap> | null> } | null = null;
+
+  /** Snapshots of drawings in the open project, for pasting into another one. */
+  snapDrawings(ids: string[]): Promise<Map<string, DrawingSnap> | null> {
+    return snapDrawings(this.project, ids, (k) => this.assets(k));
+  }
 
   /** A blank drawing (one frame) before the first or after the last selected exposure. */
   insertBlank(where: 'before' | 'after'): void {
@@ -4956,7 +4967,13 @@ export class App {
   copySelection(): number {
     const ex = this.project.exposures;
     this.clipboard = this.targets.map((i) => ({ drawing: ex[i]!.drawing, length: ex[i]!.length }));
+    this.clipFrom = this.clipboard.length ? { project: new WeakRef(this.project), snaps: this.snapDrawings(this.clipboard.map((e) => e.drawing)) } : null;
     return this.clipboard.length;
+  }
+
+  /** Were the copied frames copied in another project (or one closed since)? */
+  get clipboardForeign(): boolean {
+    return !!this.clipFrom && this.clipFrom.project.deref() !== this.project;
   }
 
   cutSelection(): void {
@@ -4971,6 +4988,7 @@ export class App {
    */
   async paste(copies = false): Promise<void> {
     if (this.titlePaintBlocked(false)) return;
+    if (this.clipboardForeign) return this.pasteForeign();
     const items = this.clipboard.filter((e) => this.project.drawings.has(e.drawing));
     if (this.live || !items.length) return;
     const t = this.targets;
@@ -4990,6 +5008,24 @@ export class App {
       ),
     );
   }
+
+  /** Frames copied in another project: new drawings here from the snapshot, same holds and cycles. One undo step. */
+  private async pasteForeign(): Promise<void> {
+    const from = this.clipFrom, items = this.clipboard.slice();
+    if (!from || this.live || !items.length) return;
+    const p = this.project, ex = p.exposures;
+    const snaps = await from.snaps;
+    if (!snaps) { this.onNotice?.('Those frames could not be copied. Copy them again.'); return; }
+    if (this.project !== p || p.exposures !== ex || this.live) return;
+    const ids = await adoptSnaps(p, snaps);
+    if (this.project !== p || p.exposures !== ex) return;
+    const t = this.targets;
+    const at = t.length ? t[t.length - 1]! + 1 : ex.length;
+    this.editTimeline('Paste from another project', (e) => insertAt(e, at, items.map((it) => ({ drawing: ids.get(it.drawing)!, length: it.length }))));
+    const w = snaps.values().next().value;
+    if (w && (w.w !== p.width || w.h !== p.height)) this.onNotice?.(`Pasted ${items.length} frame${items.length === 1 ? '' : 's'} from a ${w.w}×${w.h} project, centred at the same pixel size.`);
+  }
+
 
   /** Move the selected (or current) exposures earlier or later by `delta` places, as one block. */
   moveSelection(delta: number): void {

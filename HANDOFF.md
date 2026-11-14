@@ -2,6 +2,38 @@
 
 ## Current state (2026-11-14) — read this first
 
+### Copy and paste between projects (2026-11-14, uncommitted)
+
+First slice of the user's "copy/paste, assets between projects, import/export, glitches,
+performance" pass.
+
+- **Bug fixed**: frame Paste (frame menu, X-sheet) after opening another project pasted that
+  project's own drawings that happened to share the copied ids (`d1`, `d2`…). Clipboard paste
+  refused instead ("Open a drawing timeline in the original project").
+- **`core/transfer.ts`**: `snapDrawings` captures pictures the moment Copy happens
+  (`createImageBitmap` of a live canvas, or a parked drawing's stored bytes / asset key), so
+  opening another project right away is safe (`Residency.setProject` zeroes the old canvases).
+  PNG encoding finishes in the background. Max 240 drawings per copy (`SNAP_MAX`). `adoptSnaps`
+  makes new drawings: same size via `cloneStoredDrawing` (lazy decode, as My Assets), other
+  sizes centred at native pixels with vectors moved by `transformVector`.
+- **App**: `copySelection` keeps `clipFrom` (source project + snapshot promise);
+  `paste()` routes to `pasteForeign()` (one undo step "Paste from another project"; holds and
+  cycles kept; a size notice).
+- **`ui/clipboard.ts`**: frames paste in any project. Layers copied in another project
+  (`layerCopy`) carry drawing snapshots and custom caption fonts (fresh font id on a clash);
+  `pasteLayers(layers, '')` so parent links never match unrelated layers in the new comp.
+  Comp (artwork, groups) and movie layers are refused with a message pointing to My Assets or a
+  .2dope file (`crossPasteBlocked`).
+- Measured (desktop Chrome): copying 24 busy 1920×1080 frames blocks the page 4 ms; encoding
+  1.5 s in the background, 11 MB; paste 13 ms same size, 430 ms into 1280×720.
+- Checks: new fixture `crosspaste` 7/7 (other project with clashing ids, centring and notice,
+  Motion layer with drawings, caption font clash, movie refusal, same-project paste unchanged,
+  no page errors). `npm test` 837 passed, 1 skipped; build passed; full browser suite 79 of 79.
+- Not done: My Assets **Add copy** into a project of another canvas size (still refused; needs
+  centring every comp in the artwork graph, including nested layer positions and keys);
+  copy/paste between two browser tabs (each tab has its own clipboard state; only canvas art
+  crosses as PNG); a wider performance audit.
+
 ### Paint over and lightbox onion (2026-11-14, uncommitted)
 
 First slice of "Painterly animation" in [next-phase.md](docs/next-phase.md). Painted frames (a

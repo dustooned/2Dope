@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { frameContent, type Layer } from '../core/comp';
-import type { Drawing, Project } from '../core/project';
+import type { Drawing, FontAsset, Project } from '../core/project';
+import { adoptSnaps, crossPasteBlocked, layerDrawings, type DrawingSnap } from '../core/transfer';
 import { drawComp, releaseScratch } from '../view/composite';
 import { canPasteMedia } from './media';
 
@@ -13,7 +14,7 @@ const timeline = '#strip, #motion, #board, #tab-xsheet, .flip-row';
 type InternalCopy =
   | { kind: 'art' }
   | { kind: 'frames'; project: WeakRef<Project> }
-  | { kind: 'layers'; project: WeakRef<Project>; comp: string; layers: Layer[] }
+  | { kind: 'layers'; project: WeakRef<Project>; comp: string; layers: Layer[]; snaps: Promise<Map<string, DrawingSnap> | null>; fonts: Map<string, FontAsset> }
   | { kind: 'keys' };
 
 function png(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -60,10 +61,12 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
       if (app.workspace === 'draw' || app.workspace === 'animate') app.pasteArt();
       else notice('Open a drawing in Draw or Animate to paste this selection.');
     } else if (internal?.kind === 'frames') {
-      if (internal.project.deref() === app.project && app.workspace !== 'motion' && !app.arrangingAssets) void app.paste(true);
-      else notice('Open a drawing timeline in the original project to paste these frames.');
+      if (app.workspace !== 'motion' && !app.arrangingAssets) void app.paste(true);
+      else notice('Open a drawing timeline in Draw, Animate or Timing to paste these frames.');
+    } else if (internal?.kind === 'layers' && internal.project.deref() !== app.project) {
+      void pasteForeignLayers(internal);
     } else if (internal?.kind === 'layers') {
-      if (internal.project.deref() !== app.project || !app.editor.pasteLayers(internal.layers, internal.comp))
+      if (!app.editor.pasteLayers(internal.layers, internal.comp))
         notice('These layers could not be pasted into this composition.');
       else notice(internal.layers.length === 1 ? `Pasted “${internal.layers[0]!.name}” as a new layer.` : `Pasted ${internal.layers.length} layers.`);
     } else if (internal?.kind === 'keys') {
@@ -71,6 +74,35 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
       else if (!app.editor.selected.length) notice('Select the layer to paste the keyframes on.');
       else { const n = app.editor.pasteKeys(); notice(n ? `Pasted ${n} key${n === 1 ? '' : 's'} at the playhead.` : 'This layer has none of those properties.'); }
     }
+  };
+
+  /** Layers copied in another project: their drawings and caption fonts come along as copies. */
+  const pasteForeignLayers = async (copy: Extract<InternalCopy, { kind: 'layers' }>) => {
+    const blocked = crossPasteBlocked(copy.layers);
+    if (blocked) { notice(`${blocked}.`); return; }
+    const p = app.project, comp = p.comp;
+    const snaps = await copy.snaps;
+    if (!snaps) { notice('Those layers could not be copied. Copy them again.'); return; }
+    if (app.project !== p || p.comp !== comp || editing() || app.playing) return;
+    const ids = await adoptSnaps(p, snaps);
+    if (app.project !== p || p.comp !== comp) return;
+    const layers = structuredClone(copy.layers);
+    for (const l of layers) {
+      if (l.kind !== 'drawings') continue;
+      l.exposures = l.exposures.map(e => ({ ...e, drawing: ids.get(e.drawing)! }));
+      if (l.mask) l.mask = ids.get(l.mask)!;
+      if (l.caption?.font.startsWith('custom:')) {
+        const id = l.caption.font.slice(7), font = copy.fonts.get(id), here = p.fonts.get(id);
+        if (!font) continue;
+        if (!here) p.fonts.set(id, structuredClone(font));
+        else if (here.path !== font.path) {
+          let fresh = id, n = 2; while (p.fonts.has(fresh)) fresh = `${id}-${n++}`;
+          p.fonts.set(fresh, structuredClone(font)); l.caption.font = `custom:${fresh}`;
+        }
+      }
+    }
+    if (!app.editor.pasteLayers(layers, '')) { notice('These layers could not be pasted into this composition.'); return; }
+    notice(layers.length === 1 ? `Pasted “${layers[0]!.name}” from another project as a new layer.` : `Pasted ${layers.length} layers from another project.`);
   };
 
   const placeFiles = (files: File[], frame = app.frame) => {
@@ -127,6 +159,16 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     });
   };
 
+  const layerCopy = (layers: Layer[]): InternalCopy => {
+    const p = app.project, fonts = new Map<string, FontAsset>();
+    for (const l of layers) if (l.kind === 'drawings' && l.caption?.font.startsWith('custom:')) {
+      const id = l.caption.font.slice(7), font = p.fonts.get(id);
+      if (font) fonts.set(id, structuredClone(font));
+    }
+    const snaps = app.snapDrawings(layers.flatMap(layerDrawings));
+    return { kind: 'layers', project: new WeakRef(p), comp: p.activeComp, layers: structuredClone(layers), snaps, fonts };
+  };
+
   const copy = (e: ClipboardEvent, cut: boolean) => {
     const data = e.clipboardData;
     if (!data || !accepts(e) || app.strokeActive || app.playing || app.adjusting || app.editor.dragging) return;
@@ -139,7 +181,7 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
       internal = { kind: 'keys' };
     } else if (whole && active) {
       if (cut && active.locked) return;
-      internal = { kind: 'layers', project: new WeakRef(app.project), comp: app.project.activeComp, layers: structuredClone([active]) };
+      internal = layerCopy([active]);
       if (cut) app.editor.deleteLayers([active.id]);
     } else if (painting && !onTimeline && (!timelineFocused || e.target === canvas) && !app.spatialSelection && !app.copyWholeDrawing()) {
       return;
@@ -150,7 +192,7 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     } else if (app.workspace === 'motion' || app.arrangingAssets) {
       const layers = app.project.comp.layers.filter(l => app.editor.selected.includes(l.id));
       if (!layers.length || cut && layers.some(l => l.locked && l.id !== app.placedAsset?.id)) return;
-      internal = { kind: 'layers', project: new WeakRef(app.project), comp: app.project.activeComp, layers: structuredClone(layers) };
+      internal = layerCopy(layers);
       if (cut) app.editor.deleteLayers(layers.map(l => l.id));
     } else if (painting && !onTimeline && (!timelineFocused || e.target === canvas) && app.spatialSelection) {
       if (cut && app.project.layer.locked) return;
