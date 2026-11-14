@@ -4998,6 +4998,10 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .canvas-view-pop button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 12px; text-align: left; }
 .canvas-view-pop button[aria-checked=true] { background: var(--accent); color: var(--on-accent); }
 .canvas-view-state { font-size: 12px; opacity: 0.85; }
+.canvas-view-motion { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
+.canvas-view-modes { display: flex; gap: 4px; }
+.canvas-view-pop .canvas-view-modes button { flex: 1; justify-content: center; text-align: center; }
+.canvas-view-pop .canvas-view-modes button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
 .canvas-view-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
 .canvas-overview { position: absolute; z-index: 14; left: 50%; bottom: calc(var(--flip-h, 0px) + 8px); transform: translateX(-50%); display: flex; gap: 4px; max-width: calc(100% - 16px); padding: 4px; overflow-x: auto; border-radius: var(--radius-md); background: color-mix(in srgb, var(--panel) 88%, transparent); box-shadow: 0 4px 14px #0005; touch-action: pan-x; }
 .canvas-overview button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 44px; min-height: 44px; padding: 3px; border-radius: 8px; font-size: 11px; line-height: 1; }

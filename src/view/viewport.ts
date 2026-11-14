@@ -9,15 +9,28 @@ export class Viewport {
   /** Degrees. */
   rot = 0;
   flipped = false;
+  /**
+   * Draw and Animate's Show the move: the layer you draw on, moved as Motion moves it since its
+   * first frame. The page and pan/zoom stay put; pen input maps through it, so strokes still land
+   * on the drawing. Null otherwise. Set each render; never saved.
+   */
+  extra: DOMMatrix | null = null;
 
   static readonly MIN_ZOOM = 0.05;
   static readonly MAX_ZOOM = 32;
 
-  matrix(): DOMMatrix {
+  /** Screen from the page: pan, rotate, zoom and mirror only. */
+  base(): DOMMatrix {
     return new DOMMatrix()
       .translate(this.x, this.y)
       .rotate(this.rot)
       .scale(this.zoom * (this.flipped ? -1 : 1), this.zoom);
+  }
+
+  /** Screen from the drawing being edited (the page, unless Show the move shifts the layer). */
+  matrix(): DOMMatrix {
+    const m = this.base();
+    return this.extra ? m.multiply(this.extra) : m;
   }
 
   screenToDoc(sx: number, sy: number): DOMPoint {
@@ -57,10 +70,14 @@ export class Viewport {
 
   /** Fit the page in the view; `top` is kept clear (floating bars over the top of the canvas). */
   fit(docW: number, docH: number, viewW: number, viewH: number, margin = 40, top = 0, bottom = 0): void {
-    this.rot = 0;
-    const z = Math.min((viewW - margin * 2) / docW, (viewH - margin * 2 - top - bottom) / docH);
-    this.zoom = Math.min(Viewport.MAX_ZOOM, Math.max(Viewport.MIN_ZOOM, z));
-    this.anchor(new DOMPoint(docW / 2, docH / 2), viewW / 2, top + (viewH - top - bottom) / 2);
+    // frame the page, not the layer Show the move has shifted
+    const extra = this.extra; this.extra = null;
+    try {
+      this.rot = 0;
+      const z = Math.min((viewW - margin * 2) / docW, (viewH - margin * 2 - top - bottom) / docH);
+      this.zoom = Math.min(Viewport.MAX_ZOOM, Math.max(Viewport.MIN_ZOOM, z));
+      this.anchor(new DOMPoint(docW / 2, docH / 2), viewW / 2, top + (viewH - top - bottom) / 2);
+    } finally { this.extra = extra; }
   }
 
   actualSize(docW: number, docH: number, viewW: number, viewH: number): void {
@@ -69,7 +86,8 @@ export class Viewport {
   }
 
   center(docW: number, docH: number, viewW: number, viewH: number): void {
-    this.anchor(new DOMPoint(docW / 2, docH / 2), viewW / 2, viewH / 2);
+    const extra = this.extra; this.extra = null;
+    try { this.anchor(new DOMPoint(docW / 2, docH / 2), viewW / 2, viewH / 2); } finally { this.extra = extra; }
   }
 
   toggleFlip(viewW: number, viewH: number): void {

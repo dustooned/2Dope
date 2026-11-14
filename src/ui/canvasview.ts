@@ -65,6 +65,17 @@ export class CanvasViewUI {
       b.addEventListener('click', () => { this.app.setCanvasView({ [k]: !this.app.canvasView[k] }); this.render(); this.pop.querySelector<HTMLButtonElement>(`[data-view="${k}"]`)?.focus(); });
       this.pop.append(b);
     }
+    // Motion while drawing: hold a layer Motion moves still, or preview the move (strokes still land)
+    const motion = el('div', { class: 'canvas-view-motion', role: 'group', 'aria-label': 'Motion while drawing' });
+    motion.append(el('span', { class: 'canvas-view-name' }, 'Motion while drawing'));
+    const modes = el('div', { class: 'canvas-view-modes' });
+    for (const [mode, label, title] of [['hold', 'Hold still', 'Draw a layer that Motion moves on the spot: it and the shot stay still (walk cycles in place)'], ['show', 'Show the move', 'See the layer move as it plays over a still page; strokes still land on its drawing']] as const) {
+      const b = el('button', { type: 'button', 'aria-pressed': String(this.app.motionWhileDrawing === mode), title, 'data-motion': mode }, label);
+      b.addEventListener('click', () => { this.app.setMotionWhileDrawing(mode); this.render(); this.pop.querySelector<HTMLButtonElement>(`[data-motion="${mode}"]`)?.focus(); });
+      modes.append(b);
+    }
+    motion.append(modes);
+    this.pop.append(motion);
     // Fit lives here with the other view choices (F does the same), not as its own bottom-bar button
     const fit = el('button', { type: 'button', class: 'canvas-view-fit', title: 'Fit the page to the screen (F)' }, 'Fit canvas');
     decorate(fit, 'fit');

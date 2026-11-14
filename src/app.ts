@@ -105,6 +105,7 @@ type SnapPoint = { x: number; y: number; id: string; end: 'start' | 'end' | null
 
 const FLIPBOOK_KEY = '2dope.flipbook';
 const PAINT_OVER_KEY = '2dope.paintOver';
+const DRAW_MOTION_KEY = '2dope.drawMotion';
 const FILL_MODE_KEY = '2dope.fill.mode';
 const FILL_STYLE_KEY = '2dope.fill.style';
 const COLOR2_KEY = '2dope.color2';
@@ -3522,6 +3523,36 @@ export class App {
     saveJSON(PAINT_OVER_KEY, on);
     this.requestRender();
     this.onFrameChange();
+  }
+
+  /**
+   * Motion while drawing (Draw and Animate), per device and never in History. Hold still: a layer
+   * Motion moves stays where it starts while you draw it, and nothing around it slides, so a walk
+   * cycle can be drawn on the spot. Show the move: the layer moves as it will play, over a still
+   * page and shot, and strokes still land on its drawing. Neither changes a drawing or a key.
+   */
+  motionWhileDrawing: 'hold' | 'show' = loadJSON<string>(DRAW_MOTION_KEY) === 'show' ? 'show' : 'hold';
+
+  setMotionWhileDrawing(mode: 'hold' | 'show'): void {
+    this.motionWhileDrawing = mode;
+    saveJSON(DRAW_MOTION_KEY, mode);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** The comp frame whose placement of the layer being drawn is held (its first frame). */
+  private get drawRestFrame(): number {
+    const l = this.project.isPlaceholder ? null : this.project.layer;
+    return l ? Math.max(0, l.in) : this.frame;
+  }
+
+  /** Show the move: how far Motion has moved the layer being drawn since its first frame. */
+  private drawMotionExtra(): DOMMatrix | null {
+    if (this.motionWhileDrawing !== 'show' || !isPaintingWorkspace(this.workspace) || this.arrangingAssets || this.project.isPlaceholder) return null;
+    const comp = this.project.comp, l = this.project.layer;
+    const now = worldMatrix(comp, l, this.frame), rest = worldMatrix(comp, l, this.drawRestFrame);
+    const e = new DOMMatrix(invert(rest)).multiply(new DOMMatrix(now));
+    return e.isIdentity ? null : e;
   }
 
   /** The drawing a new frame gets: with Paint over, a copy of `from` when its pixels are at hand; otherwise a blank one. */
@@ -6975,8 +7006,11 @@ export class App {
     g.fillStyle = getComputedStyle(document.body).getPropertyValue('--workspace') || '#2b2b31';
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+    this.view.extra = this.drawMotionExtra();
     const m = new DOMMatrix().scale(this.dpr, this.dpr).multiply(this.view.matrix());
-    g.setTransform(m);
+    // the page, its clip and guides stay put; only Show the move shifts the layer being drawn
+    const page = this.view.extra ? new DOMMatrix().scale(this.dpr, this.dpr).multiply(this.view.base()) : m;
+    g.setTransform(page);
     // Overscan: the paper runs under the pasteboard too, so art past the edge reads before it is dimmed
     const overscan = this.canvasView.overscan && isPaintingWorkspace(this.workspace) && !this.arrangingAssets;
     g.shadowColor = overscan ? 'transparent' : 'rgba(0,0,0,0.35)';
@@ -6995,6 +7029,7 @@ export class App {
       g.fillStyle = g.createPattern(this.transparencyTile, 'repeat')!;
       g.fillRect(0, 0, this.docW, this.docH);
     }
+    g.setTransform(m);
 
     g.imageSmoothingEnabled = this.view.zoom < 2;
     this.residency.use(this.workingSet());
@@ -7022,10 +7057,12 @@ export class App {
     }
     // Draw/Animate without Overscan show the page as it exports: art past the edge stays hidden
     g.save();
-    if (isPaintingWorkspace(this.workspace) && !overscan) { g.beginPath(); g.rect(0, 0, this.docW, this.docH); g.clip(); }
+    if (isPaintingWorkspace(this.workspace) && !overscan) { g.setTransform(page); g.beginPath(); g.rect(0, 0, this.docW, this.docH); g.clip(); g.setTransform(m); }
     const full = this.renderPainting(g);
     g.restore();
+    g.setTransform(page);
     this.drawCanvasView(g, true);
+    g.setTransform(m);
     if (!full) return;
     this.drawFillPath(g);
     this.drawGradHandles(g);
@@ -7094,6 +7131,10 @@ export class App {
     // notes (draw-over corrections) always show, whatever Others and the storyboard slider say
     const hasNotes = comp.layers.some((l) => l.notes && l.visible);
     const around = others > 0 || this.boardAlpha > 0 || keep.size > 0 || hasNotes;
+    // Hold still: the rest of the shot is placed against the layer's first frame, so nothing slides.
+    // Show the move: view.extra moves the layer, so the rest is placed against the current frame
+    // (which cancels that move for it, keeping the shot still).
+    const rel = this.view.extra ? this.frame : this.drawRestFrame;
     // a clipping group the layer you draw on belongs to is drawn as one unit, live
     const idx = comp.layers.findIndex((l) => l.id === activeId);
     let group: { base: number; members: number[] } | null = null;
@@ -7105,17 +7146,18 @@ export class App {
       const ctx = around && !comp.asset ? this.editor.context() : null;
       if (!ctx) return;
       g.save();
-      const m = invert(worldMatrix(ctx.parent, ctx.layer, ctx.frame));
-      g.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
-      drawLayersAround(g, this.project, ctx.parent, ctx.frame, ctx.layer.id, side, others, this.boardAlpha);
+      // the shot around an artwork you edit stays still: placed against its placement's first
+      // frame (drawLayersAround applies that placement once; Show the move's shift is undone)
+      if (this.view.extra) { const x = this.view.extra.inverse(); g.transform(x.a, x.b, x.c, x.d, x.e, x.f); }
+      drawLayersAround(g, this.project, ctx.parent, ctx.frame, ctx.layer.id, side, others, this.boardAlpha, undefined, undefined, Math.max(0, ctx.layer.in));
       g.restore();
     };
     outer('below');
-    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha, exclude, keep);
+    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'below', others, this.boardAlpha, exclude, keep, rel);
     this.drawOnion(g);
     // Paint over: the blank page shows the drawing the new frame will start from
     if (this.blankPage && !this.paintOver && !this.live && !group) {
-      if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, undefined, keep);
+      if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, undefined, keep, rel);
       outer('above');
       return false;
     }
@@ -7177,7 +7219,7 @@ export class App {
       const strength = (i: number) => i === idx || keep.has(layerAt(i).id) ? 1 : others;
       const draw = (i: number, alpha: number) => (x: CanvasRenderingContext2D) => {
         if (i === idx) paintActive(x, alpha, 'normal');
-        else drawLayerAround(x, this.project, comp, this.frame, activeId, { ...layerAt(i), blend: 'normal' }, alpha, base);
+        else drawLayerAround(x, this.project, comp, this.frame, activeId, { ...layerAt(i), blend: 'normal' }, alpha, base, rel);
       };
       if (layerAt(group.base).visible) drawClipGroup(
         g,
@@ -7216,7 +7258,7 @@ export class App {
       g.restore();
     }
 
-    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude, keep);
+    if (around) drawLayersAround(g, this.project, comp, this.frame, activeId, 'above', others, this.boardAlpha, exclude, keep, rel);
     outer('above');
     return true;
   }

@@ -2,6 +2,31 @@
 
 ## Current state (2026-11-14) — read this first
 
+### Motion while drawing: Hold still / Show the move (2026-11-14)
+
+User problem: a walk cycle animated in place in Animate, then moved in Motion, slid around (or
+dragged the shot with it) while drawing. Editing was already separate (Animate's Transform moves
+pixels; drawing never writes keys); only the view mixed them.
+
+- `App.motionWhileDrawing` (`'hold' | 'show'`, device key `2dope.drawMotion`, default hold,
+  never History). View → Motion while drawing (`ui/canvasview.ts`, two 44 px buttons).
+- Hold still: `renderPainting` places the layers around against the drawn layer's first frame
+  (`drawRestFrame` = `max(0, layer.in)`) via the new `relFrame` argument of `drawLayersAround` /
+  `drawLayerAround` (`view/composite.ts`), so nothing slides; the drawn layer stays in its own space.
+- Show the move: `Viewport.extra` = inverse(world at first frame) × world now, set each render by
+  `drawMotionExtra()`; `matrix()` includes it, so drawing, onion and pen input follow the moved
+  layer and strokes land in drawing space; `base()` (page, page clip, canvas guides) does not.
+  The layers around use the current frame, which cancels the shift for them. `fit`/`center` ignore
+  it. Motion, arranging assets and exports never use it.
+- Fix: editing inside a placed artwork, the outer shot was offset twice (an explicit inverse
+  placement plus `drawLayersAround`'s own); now once, held at the placement's first frame.
+- Checks: new fixture `drawmotion` 9/9 (Draw and Flipbook in both modes at frames 0 and 10, a
+  stroke at frame 10 in Show the move lands 100 px back on the drawing and undoes, keys unchanged,
+  Motion export still walks, View switch state/saving/focus/44 px/no History).
+  `npx vitest run --dir src` 842 passed, 1 skipped; build passed; full browser suite 81 of 81.
+- Not verified: artwork editing with a moved placement by eye; scaled or rotated Motion in Show
+  the move (the matrix handles it, untested); iPad.
+
 ### About / credit area (2026-11-14)
 
 - `src/about.ts` holds the credit text (`ABOUT_CREDIT`, `ABOUT_TEXT`): designed, programmed and
