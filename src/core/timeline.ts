@@ -463,3 +463,62 @@ export function repeatCycle(ex: Exposure[], indices: number[], times: number, fi
   out.splice(at, 0, ...items);
   return { ex: out, frame: startOf(out, at), selection: items.map((_, i) => at + i) };
 }
+
+// ---------------------------------------------------------------------------------------------
+// The rail's direct edits (Procreate Dreams-style): trim a drawing's start, snap an edge, and
+// scroll while a finger drags near the edge. Pure, so the flipbook and tests share them.
+
+/**
+ * Trim the start of drawing `index` by `delta` frames (negative = earlier), keeping its end and
+ * everything after it in place: the drawing before gives or takes the frames (a roll of the cut).
+ * Both keep at least one frame. The first drawing has no cut before it and is returned unchanged.
+ */
+export function trimStart(ex: Exposure[], index: number, delta: number): Exposure[] {
+  if (index <= 0 || index >= ex.length) return ex;
+  const prev = ex[index - 1]!, cur = ex[index]!;
+  const d = Math.max(1 - prev.length, Math.min(cur.length - 1, Math.round(delta)));
+  if (!d) return ex;
+  const out = ex.slice();
+  out[index - 1] = { ...prev, length: prev.length + d };
+  out[index] = { ...cur, length: cur.length - d };
+  return out;
+}
+
+/**
+ * Snap a dragged edge (in fractional frames) to the nearest magnet within `radius` frames.
+ * Without a magnet in reach it rounds to the nearest whole frame. `snapped` names the magnet used.
+ */
+export function snapEdge(at: number, magnets: readonly number[], radius: number): { frame: number; snapped: number | null } {
+  let best: number | null = null;
+  let dist = Math.max(0, radius);
+  for (const m of magnets) {
+    const d = Math.abs(m - at);
+    if (d <= dist && (best === null || d < Math.abs(best - at))) best = m;
+  }
+  return best === null ? { frame: Math.round(at), snapped: null } : { frame: Math.round(best), snapped: best };
+}
+
+/** Cut points of a track: every frame where a drawing starts or ends (from `start`, in shot frames). */
+export function cutPoints(ex: readonly Exposure[], start = 0): number[] {
+  const out = [start];
+  let f = start;
+  for (const e of ex) out.push((f += e.length));
+  return out;
+}
+
+/**
+ * How fast to scroll while a drag is near an edge: 0 outside the `zone` (px) at each end, rising to
+ * `max` px per frame at the edge itself (negative = towards the left).
+ */
+export function edgeScrollSpeed(x: number, left: number, right: number, zone = 40, max = 18): number {
+  if (right - left < zone * 2) return 0;
+  if (x < left + zone) return -max * Math.min(1, (left + zone - x) / zone);
+  if (x > right - zone) return max * Math.min(1, (x - (right - zone)) / zone);
+  return 0;
+}
+
+/** One step of a flick's glide: the speed (px per ms) after `dt` ms of friction; 0 once it is slow. */
+export function glide(speed: number, dt: number, friction = 0.0035, stop = 0.03): number {
+  const next = speed * Math.exp(-friction * dt);
+  return Math.abs(next) < stop ? 0 : next;
+}

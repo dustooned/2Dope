@@ -5860,3 +5860,75 @@ body.ws-motion .minspector:not([hidden]) { display: flex; }
 .mi-order-btn { width: 36px; padding: 0; font-size: 14px; }
 .mi-names { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .mi-kind { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Flipbook tracks, closer to Procreate Dreams (2026-11-14) ------------------------------
+   A readable header per track, a colour per kind of track (a colour tag wins), cels as rounded
+   content blocks with the drawing at the front of the hold, a playhead with a frame tab on the
+   ruler, frame ticks and second bands, and trim grips at both ends of the current drawing. */
+.flip-grid { --flip-label: 104px; --kind: #5b8cff; }
+.flip-track[data-kind="anim"] { --kind: #5b8cff; }
+.flip-track[data-kind="still"] { --kind: #3fbf8f; }
+.flip-track[data-kind="movie"] { --kind: #e0a43a; }
+.flip-track[data-kind="text"] { --kind: #b07cff; }
+.flip-track[data-kind="notes"] { --kind: #9a9aa8; }
+.flip-row .flip-track { height: 58px; align-items: stretch; }
+.flip-row .flip-track:nth-of-type(even) .flip-cells { background-color: color-mix(in srgb, var(--text) 2.5%, transparent); }
+.flip-row .flip-track.active { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+/* the header: colour bar, check, name and kind; never the accent fill of a pressed button */
+.flip-row .flip-eye, .flip-row .flip-eye[aria-pressed] {
+  flex: 0 0 var(--flip-label); width: var(--flip-label); height: 50px; min-height: 50px; margin: 4px 0;
+  display: grid; grid-template-columns: 22px 1fr; grid-template-rows: 1fr 1fr; column-gap: 6px; align-items: center; justify-items: start;
+  padding: 0 6px 0 8px; box-sizing: border-box; text-align: left; color: var(--text);
+  background: var(--panel-2); border: 0; border-left: 4px solid var(--kind) !important; border-radius: var(--radius);
+}
+.flip-row .flip-eye .flip-check { grid-row: 1 / span 2; width: 20px; height: 20px; border-radius: var(--pill); font-size: 12px; }
+.flip-row .flip-eye[aria-pressed="true"] .flip-check { background: var(--kind); border-color: var(--kind); color: #fff; }
+.flip-row .flip-name { align-self: end; max-width: 100%; font-size: 12px; font-weight: 600; color: var(--text); }
+.flip-row .flip-kind { align-self: start; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; color: var(--muted); }
+.flip-row .flip-track.active .flip-eye { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+.flip-row .flip-track.off .flip-eye .flip-name { color: var(--muted); }
+@media (max-width: 700px) {
+  .flip-row .flip-eye, .flip-row .flip-eye[aria-pressed] { grid-template-columns: 1fr; justify-items: center; padding: 0 2px; column-gap: 0; }
+  .flip-row .flip-eye .flip-check { grid-row: 1; align-self: end; }
+  .flip-row .flip-name { justify-self: center; align-self: start; font-size: 10px; font-weight: 500; color: var(--muted); }
+  .flip-row .flip-kind { display: none; }
+}
+/* the lane: a faint band every other second */
+.flip-row .flip-cells { background-image: repeating-linear-gradient(90deg, transparent 0 var(--flip-sec, 1056px), color-mix(in srgb, var(--text) 3%, transparent) var(--flip-sec, 1056px) calc(var(--flip-sec, 1056px) * 2)); }
+/* cels: a content block in the track's colour, the drawing's page at the front of the hold */
+.flip-row .flip-cel {
+  top: 4px; height: 50px; border: 0; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--kind) 26%, var(--panel-2));
+  box-shadow: inset 0 -3px 0 var(--kind);
+}
+.flip-row .flip-cel img { height: calc(100% - 3px); max-width: 66px; border-radius: var(--radius) 0 0 0; }
+.flip-row .flip-cel.empty::before { content: ''; position: absolute; left: 0; top: 0; bottom: 3px; width: min(66px, 100%); background: #fff; opacity: .92; border-radius: var(--radius) 0 0 0; }
+.flip-row .flip-track:not(.active) .flip-cel { opacity: .8; }
+.flip-row .flip-cel.here { box-shadow: inset 0 -3px 0 var(--kind), inset 0 0 0 2px color-mix(in srgb, var(--text) 45%, transparent); }
+.flip-row .flip-cel.on { opacity: 1; box-shadow: inset 0 -3px 0 var(--kind), 0 0 0 2px var(--accent); }
+.flip-row .flip-hold { left: 70px; right: auto; bottom: 7px; color: var(--text); background: transparent; font-weight: 700; }
+.flip-row .flip-role { left: 4px; top: 2px; color: var(--key); text-shadow: 0 0 2px #000; }
+/* trim grips: a pill at each end of the current drawing, a quiet one on the others' ends */
+.flip-row .flip-trim { width: 14px; border-radius: 0 var(--radius) var(--radius) 0; background: var(--accent); }
+.flip-row .flip-trim.start { left: 0; right: auto; border-radius: var(--radius) 0 0 var(--radius); }
+.flip-row .flip-trim::after { left: 5px; top: 32%; bottom: 32%; width: 2px; border: 0; border-radius: 2px; background: #fff; }
+.flip-row .flip-trim.quiet { width: 10px; background: transparent; }
+.flip-row .flip-trim.quiet::after { left: 4px; background: color-mix(in srgb, var(--text) 55%, transparent); opacity: 1; }
+.flip-row .flip-cel:hover .flip-trim.quiet, .flip-row .flip-trim.quiet:active { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+/* on touch, the current drawing's grips reach 44 px wide into a long enough drawing */
+@media (pointer: coarse) { .flip-row .flip-cel.roomy .flip-trim:not(.quiet)::before { content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 22px; } .flip-row .flip-cel.roomy .flip-trim.start:not(.quiet)::before { right: auto; left: 100%; } }
+@media (pointer: coarse) { .flip-row .flip-trim { width: 22px; } .flip-row .flip-trim.quiet { width: 14px; } .flip-row .flip-trim::after { left: 10px; } .flip-row .flip-trim.quiet::after { left: 6px; } }
+.flip-row .flip-grid.thin .flip-cel { box-shadow: inset 0 -2px 0 var(--kind); border-radius: var(--radius-xs); }
+.flip-row .flip-grid.thin .flip-cel.empty::before { display: none; }
+/* the ruler: a tick per frame (when there is room), seconds bold */
+.flip-row .flip-ruler { background: linear-gradient(var(--panel), var(--panel)) 0 0 / var(--flip-label) 100% no-repeat, repeating-linear-gradient(90deg, color-mix(in srgb, var(--muted) 45%, transparent) 0 1px, transparent 1px var(--flip-cell, 44px)) var(--flip-label) 100% / 100% 4px repeat-x; }
+.flip-row .flip-grid.thin .flip-ruler { background: none; }
+/* the playhead: a line with a tab showing the frame number on the ruler */
+.flip-row .flip-playhead { background: color-mix(in srgb, var(--accent) 9%, transparent); border-left: 2px solid var(--accent); }
+.flip-row .flip-playhead::before { content: attr(data-f); position: absolute; left: -2px; top: 0; min-width: max(100%, 24px); height: 18px; box-sizing: border-box; padding: 0 4px; border-radius: 0 var(--radius-xs) var(--radius-xs) 0; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.flip-row .flip-snap { position: absolute; top: 18px; bottom: 0; width: 2px; margin-left: -1px; background: var(--key); box-shadow: 0 0 6px var(--key); pointer-events: none; z-index: 4; display: none; }
+.flip-row .flip-snap.show { display: block; }
+/* lift and drag: the picked-up drawing rises; the others slide aside */
+.flip-row .flip-cells.lifting .flip-cel:not(.held) { transition: left 150ms ease-out; }
+.flip-row .flip-cel.lifted { z-index: 5; opacity: 1; box-shadow: inset 0 -3px 0 var(--kind), 0 0 0 2px var(--accent), 0 10px 22px rgba(0, 0, 0, .5); transition: none; }
+@media (prefers-reduced-motion: reduce) { .flip-row .flip-cells.lifting .flip-cel:not(.held) { transition: none; } }

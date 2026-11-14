@@ -67,7 +67,7 @@ try {
   app.setFrame(4); click('Set start to current frame'); app.setFrame(7); click('Set end to current frame'); apply();
   check('Use current plus Apply creates one saved range command with one autosave notification', !dialog() && hasRange(4,8) && app.project.comp.playbackRange?.start === 4 && app.history.peekUndo()?.label === 'Playback range' && changed === changes + 1);
   const band = flip.row.querySelector<HTMLElement>('.playback-range-band')!;
-  check('Flipbook labels and ruler band show the selected interval', flip.row.querySelector('.playback-range-button')!.textContent === 'Range 5–8' && parseFloat(band.style.width) === 44 * 4 && parseFloat(band.style.left) === 46 + 44 * 4);
+  check('Flipbook labels and ruler band show the selected interval', flip.row.querySelector('.playback-range-button')!.textContent === 'Range 5–8' && parseFloat(band.style.width) === 44 * 4 && parseFloat(band.style.left) === flipLabel() + 44 * 4);
   app.undo(); await settle(); check('Undo restores whole playback', !app.project.comp.playbackRange && hasRange(0,24));
   app.redo(); await settle(); check('Redo restores the exact selected edges', hasRange(4,8));
   const beforeNoop = changed, cmd = app.history.peekUndo(); open(); apply();
@@ -106,6 +106,8 @@ try {
   const bytes = writeZip([{name:'project.json',data:new TextEncoder().encode(stringifyProjectFile(snapshot.file))},...[...snapshot.assets].map(([name,data])=>({name,data}))]);
   await files.importFile(new File([bytes as BlobPart],'range.2dope')); await settle();
   check('Portable project import restores range without trimming content', hasRange(4,8) && app.compEnd === 24);
+/** The Flipbook's track header width (the frames start after it). */
+function flipLabel(): number { return parseFloat(getComputedStyle(document.querySelector('.flip-grid')!).getPropertyValue('--flip-label')) || 46; }
   app.setWorkspace('motion'); refresh(); open(document.querySelector('#motion')!);
   check('Motion exposes the same range and clock', field('Start').value === '5' && field('End').value === '8'); click('Cancel');
   app.setWorkspace('animate'); flip.set(true); refresh(); open(); app.project.activeComp='child'; refresh();
@@ -147,7 +149,7 @@ try {
   const point = (frame:number, clips=false) => {
     const parent = document.querySelector<HTMLElement>(clips ? '.strip-inner' : '.flip-grid')!, rect=parent.getBoundingClientRect();
     const cell = clips ? parseFloat(document.querySelector<HTMLElement>('.strip-playhead')!.style.width) : 44;
-    return {x:rect.left+(clips?0:46)+(frame-(clips?app.project.layer.start:0)+.5)*cell,y:rect.top+9};
+    return {x:rect.left+(clips?0:flipLabel())+(frame-(clips?app.project.layer.start:0)+.5)*cell,y:rect.top+9};
   };
   const send = (type:string,frame:number,clips=false,id=91,primary=true) => {
     const p=point(frame,clips), target=clips?document.querySelector<HTMLElement>('.strip-ruler')!:ruler();
