@@ -1,6 +1,56 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-13) — read this first
+## Current state (2026-11-14) — read this first
+
+### Flipbook tracks after the Dreams / Procreate research (2026-11-14, branch `claude/dreams-tracks`)
+
+Scope: the Flipbook rail (`ui/flipmode.ts`) and its styling. Clips / the Time strip (`ui/strip.ts`,
+`ui/rails.ts`) were compared but not changed. Read for this: next-phase.md ("Animate: closer to
+Procreate Dreams", "What Dreams' own app package confirms", "The rail", Phase 4), the three
+`TIMELINE-*` docs, `research/procreate-dreams-1.0.11`, feature-deconstruction 07/08, and inkflo's
+`dreams-1.0.15-motion.md` / `procreate-ui-style.md` (read only). Nothing from either app was copied.
+
+**Gap list (research vs. the rail before this pass), and what was done:**
+
+| Research says | Rail before | This pass |
+|---|---|---|
+| Tracks named by kind with a colour (Dreams: drawing/video/text/… types, 8 highlight colours) | 46 px box, name cut to ~4 letters, pressed-button pink fill; colour tag only as a thin bar | **Done.** 104 px header (56 px under 700 px): check, name, kind line; colour per kind (Animation, Still, Movie, Text, Notes); a colour tag replaces it on header and cels |
+| Content as blocks with previews along the track; rows big enough to touch | 44 px cels, grey when empty, accent border on every current cel | **Done.** 58 px rows, 50 px rounded blocks tinted with the track colour, page at the front of the hold, hold count beside it, kind bar along the bottom |
+| Playhead as a line with a readout; ruler ticks | Full-frame tint, numbers only | **Done.** Line + frame-number tab on the ruler, frame ticks, a band every other second |
+| Pinch zooms **and** pans, anchored under the fingers | Zoom only, anchored at the pinch start | **Done** (`zoomTo(cell, frame, at)`) |
+| A flick pans with momentum | Scrub stops dead | **Done.** A flick keeps scrubbing (`glide`), stops at the shot's ends or on a touch. No edge bounce |
+| Touch and hold to lift, drag in time, others slide aside, one undo | No moving drawings in the Flipbook (Clips only) | **Done** within a track (reorder by `dropIndex` / `moveExposure`, 150 ms slide, reduced-motion respected). Hold + release without moving = frame options (replaces the old hold menu); right-click unchanged |
+| Trim both ends | End only | **Done:** start grip on the current drawing (not the first), rolling the cut with the drawing before (`trimStart`); arrows on it too |
+| Snapping to playhead / other edges; fast moves skip it | None | **Done** for trims: playhead edges and other tracks' cuts, 10 px radius (so it acts when zoomed out), yellow line; Shift or >1.2 px/ms skips. Not for lift-and-drag |
+| Auto-scroll near the edges | None | **Done** for trims and lifts (`edgeScrollSpeed`, up to 18 px/frame) |
+| 44 px targets | Trim grips 20 px wide on touch | Grips 22 px; on touch the current drawing's grips reach 44 px into drawings ≥ 132 px wide (`roomy`) |
+
+**Not done (still gaps):** carrying several drawings at once (tap more while lifted); dragging a drawing
+to another track (see `CROSS-RAIL-MOVE-PROPOSAL.md`); trimming the first drawing's start (would move
+`layer.start`); a snapping toggle; three-finger time/row-height stretch and vertical pinch for row
+height; flick-the-timeline-away; edge bounce; canvas-drawn rail (the DOM rail is already windowed);
+the 1,000-frame / 8-track throttled performance measurement; Clips/strip and rails restyle to match.
+Grips on 1–2-frame drawings stay 22 px wide on touch so the drawing can still be tapped.
+
+**Changed:** `src/core/timeline.ts` (+`trimStart`, `snapEdge`, `cutPoints`, `edgeScrollSpeed`,
+`glide`) and tests; `src/ui/flipmode.ts`; `src/style.css` (one appended block); new fixture
+`tests/fliptracks.html` + `src/ui/fliptracks.browser.ts`; `src/ui/playbackrange.browser.ts` (header width); manual gesture list, Flipbook section and
+a 2026-11-14 `UPDATES` entry. No schema change, no new dependency.
+
+**Checks (2026-11-14, in the worktree, own dev server `127.0.0.1:5247`):** `npm test` 842 passed,
+1 skipped (5 new). `npm run build` passed. `fliptracks` 14/14 (setup, headers, kind/tag colours, playhead
+tab, start grip drag + arrows + Undo, snap and Shift, lift-and-drag + Undo, hold-and-release menu,
+pinch zoom+pan anchor, flick glide and stop, edge auto-scroll + Undo, tap on another track, no
+errors), `fliptrim` 4/4, `flipbooksource` 30/30. The first full run found `playbackrange` and
+`playbackrange-responsive` hard-coding the old 46 px header; they now read `--flip-label` and pass
+50/50 each. Full suite after that: 78 of 78 (`npm run test:browser` against `127.0.0.1:5247`). Phone width (375×812
+emulation): no horizontal scroll, headers 56×50, buttons 44 px. Glide and edge scroll need
+`requestAnimationFrame`, so they only pass in a visible tab (the headless runner is fine; the hidden
+desktop-app pane is not). **Not verified:** iPad, Pencil and real touch; feel of the glide friction.
+
+**Merge note:** the shared `beta/` checkout has an uncommitted 2026-11-14 paint-over entry in
+`HANDOFF.md`, `manualtext.ts` and `style.css`; merging this branch will need both `UPDATES` lines and
+both handoff sections kept.
 
 ### My Assets image import and EPS diagnostics (2026-11-13, uncommitted)
 

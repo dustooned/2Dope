@@ -336,3 +336,44 @@ describe('repeat cycle', () => {
     expect(repeatCycle(walk, [0], 0, 3).ex).toBe(walk);
   });
 });
+
+describe('rail edits (trim start, snapping, edge scroll, glide)', () => {
+  const ex = (...n: number[]) => n.map((length, i) => ({ drawing: `d${i}`, length }));
+  it('trimStart rolls the cut before a drawing and keeps its end', async () => {
+    const { trimStart } = await import('./timeline');
+    expect(trimStart(ex(2, 3, 1), 1, 1).map((e) => e.length)).toEqual([3, 2, 1]);
+    expect(trimStart(ex(2, 3, 1), 1, -1).map((e) => e.length)).toEqual([1, 4, 1]);
+    // both keep a frame
+    expect(trimStart(ex(2, 3, 1), 1, 9).map((e) => e.length)).toEqual([4, 1, 1]);
+    expect(trimStart(ex(2, 3, 1), 1, -9).map((e) => e.length)).toEqual([1, 4, 1]);
+    // the first drawing has no cut before it
+    const a = ex(2, 3);
+    expect(trimStart(a, 0, 1)).toBe(a);
+    expect(trimStart(a, 1, 0)).toBe(a);
+  });
+  it('snapEdge pulls to the nearest magnet in reach, otherwise rounds', async () => {
+    const { snapEdge } = await import('./timeline');
+    expect(snapEdge(10.4, [12, 30], 1)).toEqual({ frame: 10, snapped: null });
+    expect(snapEdge(11.3, [12, 30], 1)).toEqual({ frame: 12, snapped: 12 });
+    expect(snapEdge(11.3, [11, 12], 2)).toEqual({ frame: 11, snapped: 11 });
+    expect(snapEdge(11.3, [12], 0)).toEqual({ frame: 11, snapped: null });
+  });
+  it('cutPoints lists where drawings start and end', async () => {
+    const { cutPoints } = await import('./timeline');
+    expect(cutPoints(ex(2, 3), 4)).toEqual([4, 6, 9]);
+  });
+  it('edgeScrollSpeed rises towards each edge', async () => {
+    const { edgeScrollSpeed } = await import('./timeline');
+    expect(edgeScrollSpeed(200, 0, 400)).toBe(0);
+    expect(edgeScrollSpeed(0, 0, 400)).toBe(-18);
+    expect(edgeScrollSpeed(380, 0, 400)).toBeCloseTo(9);
+    expect(edgeScrollSpeed(10, 0, 60)).toBe(0); // too narrow to have zones
+  });
+  it('glide slows a flick and stops it', async () => {
+    const { glide } = await import('./timeline');
+    const v = glide(2, 16);
+    expect(v).toBeLessThan(2);
+    expect(v).toBeGreaterThan(1.8);
+    expect(glide(0.031, 16)).toBe(0);
+  });
+});
