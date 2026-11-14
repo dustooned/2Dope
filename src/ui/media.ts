@@ -5,6 +5,9 @@ import { readOra } from '../io/ora';
 import { readPsd } from '../io/psd';
 import type { AudioTracks } from './audiotracks';
 import { importVectorDocument } from '../io/vectorimport';
+import { epsTextFromBytes } from '../io/eps';
+
+export const AI_NOTICE = 'Illustrator .ai files are PDFs; export an SVG or a PNG.';
 
 /** What the media picker offers: pictures (also animated GIFs and layered PSD / OpenRaster), movies and sounds. */
 export const MEDIA_ACCEPT = 'image/*,video/*,audio/*,.svg,.eps,.psd,.ora,.gif,.mov,.mp4,.m4v,.webm,.wav,.mp3,.m4a,.aac,.ogg,.flac';
@@ -48,11 +51,13 @@ export function mediaPicker(app: App, audio: AudioTracks) {
           catch (e) { app.onNotice?.(`${f.name}: ${(e as Error).message}`); }
           continue;
         }
+        if (/\.ai$/i.test(f.name)) { app.onNotice?.(`${f.name}: ${AI_NOTICE}`); continue; }
         if (assetFrame !== undefined && !canPasteMedia(f)) { app.onNotice?.(`${f.name}: use Import media for this file.`); continue; }
         const kind = mediaKind(f.name, f.type);
         if (kind === 'vector') {
           try {
-            const doc = importVectorDocument(await f.text(), /\.eps$/i.test(f.name) || f.type === 'application/postscript');
+            const eps = /\.eps$/i.test(f.name) || f.type === 'application/postscript';
+            const doc = importVectorDocument(eps ? epsTextFromBytes(new Uint8Array(await f.arrayBuffer())) : await f.text(), eps);
             checkTarget();
             app.importVectors(f.name, doc, assetFrame);
             if (assetFrame === undefined) app.onNotice?.(`${f.name}: ${doc.strokes.length} scalable vector paths. Arrange in Motion; Rasterize imported vectors in the Vector tools enables pixel painting.`);

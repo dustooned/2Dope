@@ -1,5 +1,6 @@
 import { artworkGraph } from '../core/assetcopy';
-import { Project } from '../core/project';
+import { Project, planeCanvas } from '../core/project';
+import { packPlacement } from './packimport';
 import type { AssetSource } from '../core/residency';
 import { assetsOf } from './persist';
 import { captureProject } from './projectio';
@@ -73,6 +74,36 @@ export async function readArtwork(bytes: Uint8Array): Promise<ArtworkPackage> {
   if (!file.comps[file.main]?.asset) throw new Error('Choose a .2dope artwork saved from My Assets.');
   requireAssets(file, entries);
   return { file, assets: new Map([...assetsOf(file)].map(path => [path, entries.get(path)!])) };
+}
+
+/** A decoded picture and its pixel size (an ImageBitmap's, or an <img>'s natural size). */
+type Bitmap = { source: CanvasImageSource; width: number; height: number };
+
+/**
+ * One picture as a one-frame drawing source on a transparent canvas the size of the open project,
+ * so My Assets can add it as a copy. The picture is centred at native pixels and only scaled down
+ * to fit. It sits on the Colour plane, as + Media puts pictures.
+ */
+export async function artworkFromImage(name: string, bitmap: Bitmap, canvasW: number, canvasH: number): Promise<ArtworkPackage> {
+  const p = new Project(canvasW, canvasH), comp = p.comp, layer = comp.layers[0]!;
+  comp.asset = true; comp.name = name; layer.name = name; p.name = name; p.main = p.activeComp = comp.id;
+  if (layer.kind !== 'drawings') throw new Error('A new artwork has no drawing layer.');
+  const d = p.drawing(layer.exposures[0]!.drawing), fill = planeCanvas(d, 'fill');
+  const at = packPlacement(bitmap.width, bitmap.height, canvasW, canvasH);
+  const g = fill.getContext('2d')!; g.imageSmoothingQuality = 'high'; g.drawImage(bitmap.source, at.x, at.y, at.w, at.h);
+  d.rev++;
+  try { return await captureArtwork(p, comp.id, async () => null); }
+  finally { d.line.width = d.line.height = 0; fill.width = fill.height = 0; }
+}
+
+/** A PNG preview of the picture itself, longest side at most 320 px. */
+export async function imageThumb(bitmap: Bitmap): Promise<Uint8Array> {
+  const k = Math.min(1, 320 / Math.max(bitmap.width, bitmap.height));
+  const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(bitmap.width * k)); c.height = Math.max(1, Math.round(bitmap.height * k));
+  c.getContext('2d')!.drawImage(bitmap.source, 0, 0, c.width, c.height);
+  const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/png')); c.width = c.height = 0;
+  if (!blob) throw new Error('Could not make a preview.');
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
 /** Library labels also name new copies, opened projects and portable downloads. */

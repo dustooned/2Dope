@@ -1,4 +1,26 @@
-# The .2dope project format (schemas 3–9)
+# The .2dope project format (schemas 3–11)
+
+## Movie tracks (schema 11)
+
+`project.json` can contain a `videos` map keyed by movie asset ID. Each record stores `name`, `path`,
+`duration` in seconds, `width`, `height`, and source `fps`. The original movie bytes live at
+`assets/<hash>.<ext>` (`mp4`, `m4v`, `mov`, or `webm`). A drawings layer can carry a `video` object
+with `v: 1`, `asset` (movie ID), `offset` (source seconds at layer frame zero), `sound` (a project
+sound ID or `null`), `volume` (0–2), and `muted` (boolean). A standalone archive includes the movie
+bytes and the referenced sound asset, even if that sound is used only by the movie layer.
+
+The drawings layer retains an exposure and drawing so paint can sit over the decoded movie.
+Layer timing and playback determine the source frame. Movie picture and sound follow layer edits
+together. A saved comp graph with a movie layer requires reader 11. Older supported files migrate
+to runtime schema 11 when loaded, and captures without movies keep the minimum their features require.
+
+## Comic captions and effects (schema 10)
+
+A drawings layer can carry a versioned `caption` object for editable text, lettering, balloon
+geometry, tails, and animation. The drawing can still hold artwork. Layer effects `fill`, `outline`,
+`blinds`, `kaleido`, and `soundwave` also require schema 10, including when an effect occurs in
+the layer's applied style snapshot. A capture uses schema 10 when one of these features is present
+and the graph contains no movie layers.
 
 ## Even speed and Orient along path (2026-11-08)
 
@@ -9,7 +31,7 @@ layer's `transform` may carry `orient: true`. The layer then also rotates by the
 its position (`atan2` of the path tangent, in degrees, 0 = facing right), added to its rotation value.
 Writers require reader 9 only when a saved comp uses either flag; other captures keep their earlier
 minimum. `even` on a 1D property is rejected. Blender export bakes even-speed positions and oriented
-rotation to per-frame keys. Loading migrates every supported file to runtime schema 9.
+rotation to per-frame keys.
 
 ## Vector poses and temporal effects
 

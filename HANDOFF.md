@@ -1,8 +1,113 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-08) — read this first
+## Current state (2026-11-13) — read this first
 
-### Movie tracks, long sounds, sound split, Flipbook handles, caption edge, copy and paste (2026-11-10, uncommitted)
+### My Assets image import and EPS diagnostics (2026-11-13, uncommitted)
+
+These are Slices 1 and 2 of the [asset-pack brief](docs/CLAUDE-ASSET-PACK-IMPORT-HANDOFF.md). Slice 3 was not started.
+
+- **Import images… in My Assets** (`ui/artworklibrary.ts` `importImages` / `chooseImages`):
+  - Multi-file PNG/JPG/WebP picker, then a collection prompt (`askText`).
+  - `io/packimport.ts` plans from file metadata only. It refuses more than 50 images or
+    100 MiB before writing anything, skips non-images, and names cards after files (80 chars).
+    It adds ` (2)`, ` (3)` against cards already in that collection and earlier ones in the
+    same batch.
+  - One image at a time: `decodePicture` from `ui/media.ts` (the bitmap decoder, then an
+    `<img>` fallback, as + Media), skip over 8192 px a side or 40 MP, `artworkFromImage`,
+    `packArtwork`, `imageThumb` (longest side 320), then `store.put`. The picture is closed and
+    the scratch canvases are zeroed after each image. `artworkFromImage` / `imageThumb` take
+    `{ source, width, height }`.
+  - It stops before a card that would push the batch past 200 MiB of archives. A failed
+    `put` stops with "Storage is full after N cards".
+  - Progress row (`.artwork-import-progress`, `role="status"`) with Cancel, and `aria-busy`
+    on the dialog. Cancel or closing the dialog stops before the next image and keeps the cards
+    already stored. The summary goes to the library status line and `onNotice`.
+  - No `app.history` entry and no change to the open shot.
+- **`artworkFromImage`** (`io/artwork.ts`): a blank `Project` at the open project's size, with
+  the comp marked as an asset and named after the card. The picture is centred at native pixels,
+  scaled down only. It sits on the **Colour (fill) plane**, matching `App.paintMedia` for
+  **+ Media**. The brief said Line; Colour keeps Line free for inking. Capture goes through
+  `captureArtwork`.
+- **EPS** (`io/eps.ts`):
+  - `epsTextFromBytes` reads the PostScript section of a DOS EPS binary (`C5 D0 D3 C6`,
+    offset and length bounds-checked, otherwise "This EPS file is incomplete"). Plain EPS bytes
+    are read as ISO-8859-1. Both have an 8 MB cap.
+  - `epsToSvg` names Adobe Illustrator (`Adobe_AGM_Utils/Core`, `Adobe_CoolType`) or
+    CorelDRAW (`wCorel`, `CorelDRAW`) and suggests an SVG or the PNG.
+  - `ui/media.ts` decodes `.eps` from bytes. `vectorimport.ts` keeps its text API. A `.ai`
+    file gets `AI_NOTICE` ("Illustrator .ai files are PDFs; export an SVG or a PNG.").
+- Manual (My Assets and vector-import sections) and an `UPDATES` entry are added. The brief's
+  status line is updated.
+- Checks (2026-11-13):
+  - `npm test`: 837 passed, 1 skipped. New: `packimport.test.ts` (7), plus 4 EPS byte tests.
+  - `npm run build` passed.
+  - New fixture `packimport` 20/20. It covers three cards in a collection, progress, Cancel
+    and busy state, the summary, no history, card metadata, the bitmap thumbnail, centred
+    native and scaled-down placement, suffixes in a second batch, Cancel after one card, the
+    51-file refusal, an unreadable file, a storage failure, 90×157 on 1920×1080, the `.ai`
+    notice, the Illustrator DOS EPS message, and a plain DOS EPS importing.
+  - `artworklibrary` 34/34.
+  - Full browser suite: 77 of 77 (`npm run test:browser` against `127.0.0.1:5217`).
+  - By eye: in desktop Chrome on the `127.0.0.1:5217` test origin, the button sits in the
+    My Assets nav row.
+- Not done or not verified:
+  - Not tried on iPad Safari.
+  - Nothing committed.
+- Follow-up the same day:
+  - The import now uses + Media's `decodePicture`, so a file the bitmap decoder rejects gets an
+    `<img>` try. After that: `npm test` 837 passed, 1 skipped; build passed; `packimport` 20/20,
+    `artworklibrary` 34/34.
+  - Phone width (375×812 emulation, desktop Chrome, test origin): the three My Assets nav buttons
+    fit (rightmost ends at 350 px), the page has no horizontal scroll, and the buttons are 55 px
+    tall. Checked by measurement; no screenshot (the window was hidden).
+  - Real-pack check, done (desktop Chrome, `127.0.0.1:5217` test origin, 1920×1080 project):
+    - Source: the extracted bundle at `G:\T\AM\6.28.2025\Downloads\Documents\RetroLab\Retro Car`
+      (its PNGs are 700–1967 px wide). Twelve PNGs were copied to the session scratchpad and
+      fed through the real Import images… picker. Nothing was copied into the repo, and the
+      scratch copies were deleted afterwards.
+    - Batch 1 (1–8.png) into a new "Retro Car" collection: "Added 8 of 8 images to Retro Car."
+      in about 6 s, with progress counting up.
+    - Batch 2 (6–12.png): the prompt kept "Retro Car". "Added 7 of 7…", and the repeats became
+      `6 (2)`, `7 (2)`, `8 (2)`. That makes 15 cards, each 1920×1080, 1 layer, Still drawing,
+      with its thumbnail loaded.
+    - Add copy of `5` put one project asset in the shot, and its thumbnail shows the car line art.
+      One Ctrl+Z took the project back to Assets (0).
+    - The 15 test cards remain in that test origin's My Assets.
+
+### Maintenance review (2026-11-11)
+
+- The README describes the current workspaces, video with sound, and local project storage.
+  The [format guide](docs/project-format.md) covers captions and movie tracks through schema 11.
+  The in-app audio help now shows the current ten-minute import limit.
+- The [asset-pack brief](docs/CLAUDE-ASSET-PACK-IMPORT-HANDOFF.md) now scopes My Assets import
+  to batches of extracted images. Extract the Retro ZIP outside the repo and use **+ Media** today
+  to bring the PNG/JPG files into a shot as object layers. My Assets batch import is planned.
+- Desktop Chrome on an isolated origin passed `movies`, `clipboardassets`, `fliptrim`, `inspector`,
+  and `captions` (70 checks total). `npm test` passed (826 passed, one skipped) and `npm run build`
+  passed. Local `main` and the last fetched `origin/main` both point to `32fb708`. The current
+  Pages deployment has not been verified.
+- Brushes → Import accepted the purchased Stipple `.abr` in an isolated Chrome profile. All 14
+  brushes had image tips, and the collection reopened after reload.
+- Import media accepted a Retro PNG and JPG in the same selection and created two object layers
+  in the temporary project.
+
+#### iPad movie check for the next device session
+
+1. On the same Wi-Fi, run `npm run dev:lan -- --port 5227 --strictPort` from `beta/` and open the
+   printed HTTPS **Network** address in iPad Safari. Use a fresh test project on that origin. Make
+   a 1280 × 720 shot at 24 fps and have a 3–5 minute MP4 with sound available in Files.
+2. Import the MP4 through **+ Media**. Check picture and audio at the beginning, middle, and end.
+   Scrub backward and forward, then play a stretch across a dialogue or music cue. Trim or split the
+   track and check the same cue. Note any blank previews, audio drift, or Safari reloads.
+3. Reopen the project from Projects and check the cue again. Export a `.2dope` backup and import it
+   as a separate project to check that the movie and its audio travel with the file.
+4. Try **Share → Video** at 720p, Standard, MP4. Record the exact message if the full shot is refused.
+   Trim a separate test copy to about 30 seconds and export it with the same settings. Open the saved
+   MP4 in Files and check picture, audio, duration, and sync. Record the iPad model, iPadOS version,
+   Lite setting, and source clip duration and size. Desktop Chrome passed the short movie fixture.
+   The physical iPad run is pending.
+
+### Movie tracks, long sounds, sound split, Flipbook handles, caption edge, copy and paste (2026-11-10, `32fb708`)
 
 - **Movie tracks** (format 11):
   - Model: `core/video.ts` (`VideoAsset`, `VideoSpec`, `readVideo`, limits of 10 minutes and 500 MB).
@@ -74,7 +179,7 @@
   - Movie bytes stay in memory after import until the project is reopened.
   - Painting on a movie layer paints one drawing for all of its frames.
 
-### Motion stack order, group-layer menus, whisper dashes, animated-caption warning (2026-11-09, uncommitted)
+### Motion stack order, group-layer menus, whisper dashes, animated-caption warning (2026-11-09, `707f793`)
 
 - **Stack order**:
   - `CompEditor.restack(ids, 'up' | 'down' | 'top' | 'bottom')` moves the selected layers as a
@@ -103,7 +208,7 @@
   - Not checked by eye: the ▲ ▼ row layout (the pane window was hidden).
   - Full results: unit tests 826 passed (1 skipped), build passed, browser suite 74 of 74 (run alone).
 
-### Delete any layer from the Layers panel (2026-11-09, uncommitted)
+### Delete any layer from the Layers panel (2026-11-09, `3294687`)
 
 - The problem: in Draw and Animate, the Layers panel's "Other layers in this shot" rows had only a name
   and an eye, so those layers (and guides and groups, which were not listed at all) could not be
@@ -121,7 +226,7 @@
   layers popover (active layer), Flipbook track menus, rails (top level), and Motion.
   - Layers inside a group are deleted after going inside.
 
-### Inspector per layer kind, captions to vectors, exact fake bold/italic, WOFF2 outlines (2026-11-09, uncommitted)
+### Inspector per layer kind, captions to vectors, exact fake bold/italic, WOFF2 outlines (2026-11-09, `7790182`)
 
 - **Inspector** (`ui/inspector.ts`) now covers all layer data:
   - Every layer has Layer, Timing and Transform tabs.
@@ -171,7 +276,7 @@
     and convert to vectors with Undo.
   - Full browser suite: 73 of 73 (run alone).
 
-### Motion Inspector, moving letters, Write on, caption SVG, Story imports (2026-11-09, uncommitted)
+### Motion Inspector, moving letters, Write on, caption SVG, Story imports (2026-11-09, `5fceeb9`)
 
 - **Motion Inspector** (`ui/inspector.ts`, owned by `MotionPanel.inspector`):
   - A right-hand `aside.minspector`, appended to `.workspace`, so the stage's ResizeObserver resizes

@@ -4776,6 +4776,9 @@ body.painting-workspace.flipmode .painting-brush-handle { bottom: calc(var(--fli
 .artwork-library-search button[hidden], .artwork-library-undo[hidden], .artwork-card[hidden], .artwork-empty[hidden] { display: none; }
 .artwork-library-undo { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 0 12px 8px; font-size: 12px; }
 .artwork-library-undo span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artwork-import-progress { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; font-size: 12px; }
+.artwork-import-progress span { flex: 1; min-width: 0; }
+.artwork-import-progress button { min-width: 44px; min-height: 44px; }
 .artwork-library-manage { margin-top: 4px; }
 .artwork-library-manage summary { min-height: 44px; padding: 12px 4px; cursor: pointer; color: var(--muted); font-size: 12px; }
 .artwork-actions button { min-width: 44px; }

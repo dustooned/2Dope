@@ -1,7 +1,33 @@
+const EPS_MAX = 8_000_000;
+const latin1 = (bytes: Uint8Array) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return s; };
+
+/**
+ * EPS text from file bytes, read as ISO-8859-1 so binary previews cannot garble it. A DOS EPS
+ * binary (C5 D0 D3 C6) holds the PostScript at the little-endian offset and length in bytes 4–11;
+ * only that section is read.
+ */
+export function epsTextFromBytes(bytes: Uint8Array): string {
+  if (bytes.length >= 4 && bytes[0] === 0xc5 && bytes[1] === 0xd0 && bytes[2] === 0xd3 && bytes[3] === 0xc6) {
+    if (bytes.length < 30) throw new Error('This EPS file is incomplete');
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const start = view.getUint32(4, true), length = view.getUint32(8, true);
+    if (start < 30 || length === 0 || start + length > bytes.length) throw new Error('This EPS file is incomplete');
+    if (length > EPS_MAX) throw new Error('Vector import is limited to 8 MB per file');
+    return latin1(bytes.subarray(start, start + length));
+  }
+  if (bytes.length > EPS_MAX) throw new Error('Vector import is limited to 8 MB per file');
+  return latin1(bytes);
+}
+
+const VENDORS: [RegExp, string][] = [[/Adobe_AGM_(?:Utils|Core)|Adobe_CoolType/, 'Adobe Illustrator'], [/wCorel|CorelDRAW/, 'CorelDRAW']];
+
 /** Read a bounded EPS path subset as data; never execute PostScript or embedded programs. */
 export function epsToSvg(text: string): string {
   const unsupported = (op: string): never => { throw new Error(`EPS uses unsupported “${op}”. Save it as plain SVG with text outlined and appearances expanded`); };
   if (!text.startsWith('%!PS-Adobe') || !/EPSF/.test(text.slice(0, 100))) throw new Error('This is not a readable EPS file');
+  // These apps' EPS bodies call procedures defined in their own prologs, which 2Dope does not run.
+  for (const [mark, app] of VENDORS) if (mark.test(text))
+    throw new Error(`This EPS was saved by ${app} with its own PostScript procedures, which 2Dope does not run. Export an SVG (text outlined, effects expanded) or use the PNG`);
   const box = text.match(/%%(?:HiResBoundingBox|BoundingBox):\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/);
   if (!box) throw new Error('EPS needs a numeric BoundingBox');
   const [x0, y0, x1, y1] = box.slice(1).map(Number) as [number, number, number, number];

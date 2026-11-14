@@ -1,10 +1,11 @@
 # 2Dope (beta)
 
-A small, free 2D animation tool for 3D animators: draw, time, tweak, send to Blender.
-The current app has **Board, Draw, Time, and Motion** workspaces, a local project library,
-frame-by-frame animation, layers/keyframes/precomps, storyboard export, PNG sequences, and Blender export.
-This branch also adds **Menu → Export video…** for silent MP4/WebM sharing, with size, quality,
-background, progress/cancel, preview and download. See [the Claude feature handoff](docs/CLAUDE-VIDEO-EXPORT-HANDOFF.md).
+A free browser-based tool for drawing, animating, lettering, and storyboarding in 2D.
+
+- **Story** for storyboard panels, shot timing, and animatics. **Draw** and **Animate** for pressure-sensitive raster and vector drawing, the Flipbook, and the X-sheet.
+- **Motion** for arranging layers, editing keyframes in the Inspector, and working with cameras and reusable clips. Comic captions support animated lettering and SVG export.
+- Import movies as tracks with their sound, then move, trim, or split them together. Use **Share** for MP4/WebM video with sound, GIF, PNG sequences, or a Blender package.
+- Projects autosave to this browser's local library. Export a `.2dope` file to back up or move a project to another device.
 
 For development or continuing work with another coding assistant, start with **[HANDOFF.md](HANDOFF.md)**
 and **[AGENTS.md](AGENTS.md)**. The milestone sections below record how the app grew;
@@ -13,7 +14,7 @@ older "comes next" descriptions are historical. See [ARCHITECTURE.md](ARCHITECTU
 ## Run it
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 

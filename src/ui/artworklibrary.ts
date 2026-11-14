@@ -1,7 +1,9 @@
 import type { App } from '../app';
 import type { ArtworkAssets } from '../core/assets';
 import { isPaintingWorkspace } from '../core/workspace';
-import { captureArtwork, packArtwork, readArtwork, libraryArtwork, type ArtworkPackage } from '../io/artwork';
+import { captureArtwork, packArtwork, readArtwork, libraryArtwork, artworkFromImage, imageThumb, type ArtworkPackage } from '../io/artwork';
+import { decodePicture } from './media';
+import { PACK_ACCEPT, PACK_LIMITS, packImageTooLarge, packSummary, planPackImport, type PackOutcome } from '../io/packimport';
 import { DeviceArtworkStore, type ArtworkCard, type ArtworkEntry, type ArtworkStore } from '../io/artworkstore';
 import { newId } from '../io/persist';
 import { mainLength } from '../io/schema';
@@ -101,7 +103,8 @@ export class ArtworkLibraryUI {
     const head = el('header', 'artwork-head'), title = el('h2', '', 'My Assets'); title.id = 'my-artwork-title';
     const close = button('Close My Assets', 'close', () => this.close()); close.classList.add('icon-only'); head.append(title, close);
     const nav = el('nav', 'artwork-library-nav'); nav.setAttribute('aria-label', 'Asset collections');
-    nav.append(button('In this project', 'gallery', () => { this.close(); this.back(); }), button('Import artwork file', 'import', () => this.chooseFile()));
+    nav.append(button('In this project', 'gallery', () => { this.close(); this.back(); }), button('Import artwork file', 'import', () => this.chooseFile()),
+      button('Import images into My Assets', 'image', () => this.chooseImages(), 'Import images…'));
     const searchRow = el('div', 'artwork-library-search');
     const search = el('input', 'textbox'); search.type = 'search'; search.placeholder = 'Search My Assets'; search.setAttribute('aria-label', 'Search My Assets');
     search.setAttribute('data-own-keys', '');
@@ -278,6 +281,66 @@ export class ArtworkLibraryUI {
     if (this.busy || !this.dialog) return;
     const input = el('input', ''); input.type = 'file'; input.accept = '.2dope';
     input.addEventListener('change', () => { const file = input.files?.[0]; if (file) void this.importFile(file); }); input.click();
+  }
+  private chooseImages(): void {
+    if (this.busy || !this.dialog) return;
+    const input = el('input', ''); input.type = 'file'; input.accept = PACK_ACCEPT; input.multiple = true;
+    input.addEventListener('change', () => { const files = [...input.files ?? []]; if (files.length) void this.importImages(files); }); input.click();
+  }
+  /**
+   * Picked images become drawing-source cards in one collection, one image at a time. The open
+   * shot and its history are untouched. Cancel, or closing My Assets, stops before the next image
+   * and keeps the cards already stored.
+   */
+  async importImages(files: File[], collection?: string): Promise<void> {
+    if (this.busy || !this.dialog) return;
+    const d = this.dialog; this.busy = true; d.setAttribute('aria-busy', 'true');
+    const body = d.querySelector<HTMLElement>('.artwork-body')!;
+    const row = el('div', 'artwork-import-progress'), text = el('span', '', 'Preparing images…'); text.setAttribute('role', 'status');
+    let cancelled = false;
+    const cancel = button('Cancel image import', 'close', () => { cancelled = true; cancel.disabled = true; text.textContent = 'Stopping after this image…'; }, 'Cancel');
+    try {
+      if (collection === undefined) {
+        const chosen = [...new Set(this.cards.map(c => c.collection).filter((c): c is string => !!c))];
+        const value = await askText('Collection for these images', this.collection !== '*' ? this.collection : chosen[0] ?? '', 'Import',
+          'Use the pack folder’s name. Each image becomes a card in this collection, sized to this project’s canvas.');
+        if (value === null || this.dialog !== d) return;
+        collection = value;
+      }
+      const plan = planPackImport(files, collection, await this.store.list());
+      if (this.dialog !== d) return;
+      body.querySelector('.artwork-library-status')?.remove();
+      row.append(text, cancel); body.prepend(row);
+      const width = this.app.project.width, height = this.app.project.height;
+      const outcome: PackOutcome = { added: 0, unreadable: 0, tooLarge: 0, unsupported: plan.skipped.length };
+      let stored = 0;
+      for (const [n, item] of plan.items.entries()) {
+        if (cancelled || this.dialog !== d) { outcome.stop = 'cancel'; break; }
+        text.textContent = `Adding image ${n + 1} of ${plan.items.length}… ${outcome.added} added`;
+        let picture: Awaited<ReturnType<typeof decodePicture>> | null = null, entry: ArtworkEntry;
+        try {
+          // + Media's decoder: the bitmap decoder first, an <img> when a device rejects the file
+          picture = await decodePicture(files[item.index]!);
+          if (packImageTooLarge(picture.width, picture.height)) { outcome.tooLarge++; continue; }
+          const bundle = await artworkFromImage(item.name, picture, width, height), archive = packArtwork(bundle), now = Date.now();
+          entry = { archive, card: { id: newId('art'), name: item.name, collection: plan.collection, created: now, updated: now, width, height,
+            fps: 12, frames: 1, layers: 1, kind: 'drawing', thumb: await imageThumb(picture) } };
+        } catch { outcome.unreadable++; continue; }
+        finally { picture?.close(); }
+        if (stored + entry.archive.length > PACK_LIMITS.archives) { outcome.stop = 'budget'; break; }
+        try { await this.store.put(entry); } catch { outcome.stop = 'storage'; break; }
+        stored += entry.archive.length; outcome.added++;
+      }
+      if (!outcome.stop && cancelled) outcome.stop = 'cancel';
+      const summary = packSummary(outcome, plan.total, plan.collection);
+      if (this.dialog === d) {
+        row.remove(); if (outcome.added) this.collection = plan.collection;
+        await this.reload(d);
+        if (this.dialog === d) this.error(summary);
+      }
+      this.app.onNotice?.(summary);
+    } catch (e) { if (this.dialog === d) this.error(e); else this.app.onNotice?.(e instanceof Error ? e.message : String(e)); }
+    finally { row.remove(); this.busy = false; d.removeAttribute('aria-busy'); }
   }
   async importFile(file: File): Promise<void> {
     if (this.busy || !this.dialog) return;
