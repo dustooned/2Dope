@@ -2,6 +2,41 @@
 
 ## Current state (2026-11-14) — read this first
 
+### Grain that boils or holds (2026-11-15, branch `claude/boil-grain-8cea35`)
+
+Part of "Painterly animation" (next-phase.md, "Texture that boils or holds"). Brush only.
+
+- **Setting:** `BrushSettings.grainBoil?: 1 | 2 | 3` (missing = Fixed, today's behaviour). Optional,
+  validated in `sanitizeBrushExtras` (so `readBrush`, My brushes and file brushes drop bad values).
+  No `SCHEMA` change; existing brushes and projects stay Fixed.
+- **Shift:** `core/grainboil.ts` `grainBoilShift(boil, frame)`: step = floor(frame / boil); the grain
+  tile slides by the R2 low-discrepancy sequence (fractions of the tile, in the tile's own space, so
+  scale and rotation are kept). Step 0 = no shift (a boil's first step equals Fixed). Pure and
+  deterministic; neighbouring steps are always ≥ 0.2 tile apart (unit-tested).
+- **Which frame:** `StrokeRecord.grainFrame?` (optional), set at pen-down from `App.grainFrame` =
+  the first frame of the current drawing's exposure in layer time. Raster paint is baked when you
+  paint, so the grain belongs to the drawing: anywhere in a hold gives the same grain, moving the
+  layer in time/Motion does not change it, and export reads the baked pixels (equals preview).
+  QuickShape re-renders reuse the record, so they keep it. Changing the setting affects new strokes only.
+- **Engine:** `brush/raster.ts` `paperMatrix`/`paperPattern` take the shift (also the tilt-shade grain).
+- **Vector strokes:** not affected; they have no paper grain today (the option is hidden for the Pen).
+  A per-frame re-render of vector grain would need vector grain first.
+- **UI:** Brush Studio → Paint → "Grain on each frame": Fixed / Boil / On 2s / On 3s, four 44 px
+  buttons (`.grain-boil-seg`, appended block in `style.css`), hint when Paper grain is 0. The Studio
+  has no Simple/Advanced split of its own, so the control is in the one Paint section (not a new
+  fieldset: `main.ts` remembers fieldset folding by index). The Studio preview uses the current frame.
+- **Manual:** brush section paragraph and a 2026-11-15 `UPDATES` entry.
+- **Checks (own dev server 127.0.0.1:5264):** `npx vitest run --dir src` 850 passed, 1 skipped
+  (8 new in `core/grainboil.test.ts`); `npm run build` passed; new fixture `grainboil` 12/12
+  (engine: Boil frames 0/1/2 differ, coverage unchanged, Fixed identical incl. a stroke with no
+  frame, boil step 0 = Fixed, repeatable on two engines, On 2s/On 3s hold; app: real pen strokes on
+  frames 0/1/2 differ with Boil and match with Fixed, hold uses its first frame, repainting the shot
+  gives identical pixels, `drawComp` export = preview on every frame and boils; Studio buttons 44 px,
+  saved with the brush, hidden for the Pen; no errors). Full browser suite `npm run test:browser` against 127.0.0.1:5264: 82 of 82.
+- **Not verified / gaps:** iPad and Pencil; picture grains imported from Procreate (same code path,
+  not separately tested); Smudge/wet mix do not use grain so are unaffected; Paint over the last
+  frame copies the previous frame's grain and only new strokes get the new one (by design); no per-stroke override after painting.
+
 ### Motion while drawing: Hold still / Show the move (2026-11-14)
 
 User problem: a walk cycle animated in place in Animate, then moved in Motion, slid around (or

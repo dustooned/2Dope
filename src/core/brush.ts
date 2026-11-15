@@ -115,6 +115,11 @@ export interface BrushSettings {
   grainFollow?: number;
   /** The brush size the grain scale was set at (for `grainFollow`). */
   grainRef?: number;
+  /**
+   * Grain over time: missing = fixed to the canvas on every frame; 1 / 2 / 3 = the grain moves
+   * with the frame the stroke is painted on, every frame / 2nd / 3rd frame (`core/grainboil.ts`).
+   */
+  grainBoil?: 1 | 2 | 3;
   /** Stabilizer amount 0..1. */
   smoothing: number;
   /** Pulled-string (lazy mouse) stabilizer instead of exponential smoothing. */
@@ -418,5 +423,6 @@ export function sanitizeBrushExtras(b: BrushSettings): BrushSettings {
   if (b.grainRotation !== undefined && !(typeof b.grainRotation === 'number' && Number.isFinite(b.grainRotation))) delete b.grainRotation;
   if (b.grainRef !== undefined && !(typeof b.grainRef === 'number' && Number.isFinite(b.grainRef) && b.grainRef > 0)) delete b.grainRef;
   if (b.grainMode !== undefined && b.grainMode !== 'height') delete b.grainMode;
+  if (b.grainBoil !== undefined && b.grainBoil !== 1 && b.grainBoil !== 2 && b.grainBoil !== 3) delete b.grainBoil;
   return b;
 }
