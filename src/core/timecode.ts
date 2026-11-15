@@ -50,3 +50,15 @@ export function rulerStep(cellPx: number, fps: number, format: FrameFormat): num
 export function isSecondBoundary(frame: number, fps: number): boolean {
   return frame % Math.max(1, Math.round(fps)) === 0;
 }
+
+/**
+ * The text the Timecode effect burns into the picture: the frame (0-based, plus `offset` frames)
+ * in one of the frame formats, after an optional label. Frames count from 1 like the rest of the
+ * app, seconds + frames read 1+01, SMPTE timecode is non-drop HH:MM:SS:FF. Before zero it shows −.
+ */
+export function burnInLabel(frame: number, fps: number, format: FrameFormat, offset = 0, prefix = ''): string {
+  const f = Math.round(frame) + Math.round(offset);
+  const label = format === 'frames' ? String(f + 1).replace('-', '−') : f < 0 ? `−${frameLabel(-f, fps, format)}` : frameLabel(f, fps, format);
+  const p = prefix.trim();
+  return p ? `${p} ${label}` : label;
+}

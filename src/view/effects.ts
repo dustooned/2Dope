@@ -4,6 +4,7 @@ import { applyBlur } from '../core/adjust';
 import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
 import { blindsEffect, fillEffect, kaleidoEffect, outlineEffect, soundwaveEffect } from './fxextra';
+import { timecodeEffect } from './fxtimecode';
 export { setOutlinePictureSource, setSoundPreload, setSoundSource, soundReady } from './fxextra';
 
 /**
@@ -81,6 +82,8 @@ export function drawEffected(
   // keyframed settings take their value at this frame (and, in Fast preview, pixel sizes shrink with the page)
   const fx = activeEffects(l).filter(e => !temporalEffect(e.type)).map((e) => scaled(effectAt(flattened ? { ...e, target: 'layer' } : e, frame), scale));
   if (!fx.length) return null;
+  // where the layer starts in its shot (Timecode counts shot time)
+  const start = (l as { start?: number }).start ?? 0;
   // shadows and glows reach past the art: work on a page grown by the pad
   const full = effectsPad(l), pad = full * scale;
   w = Math.max(1, Math.round((w + 2 * full) * scale));
@@ -110,11 +113,11 @@ export function drawEffected(
       pg.setTransform(scale, 0, 0, scale, pad, pad);
       paint(pg, part);
       pg.setTransform(1, 0, 0, 1, 0, 0);
-      for (const e of per(part === 'ink' ? 'line' : part)) applyEffect(c, e, frame, pad, fps, l.id);
+      for (const e of per(part === 'ink' ? 'line' : part)) applyEffect(c, e, frame, pad, fps, l.id, start);
       og.drawImage(c, 0, 0);
     }
   }
-  for (const e of fx.filter((e) => e.target === 'layer')) applyEffect(out, e, frame, pad, fps, l.id);
+  for (const e of fx.filter((e) => e.target === 'layer')) applyEffect(out, e, frame, pad, fps, l.id, start);
   if (!key || w * h * 4 > effectCacheBudget / 4) return out;
   const keep = makeCanvas(w, h);
   keep.getContext('2d')!.drawImage(out, 0, 0);
@@ -150,7 +153,7 @@ function scaled(e: LayerEffect, s: number): LayerEffect {
   return out;
 }
 
-function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number, pad = 0, fps = 24, layerId = ''): void {
+function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number, pad = 0, fps = 24, layerId = '', start = 0): void {
   const tick = effectTick(e, frame);
   if (e.type === 'boil') displace(c, e, tick, 1);
   else if (e.type === 'roughen') roughen(c, e, tick);
@@ -179,6 +182,7 @@ function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number, pad = 
   else if (e.type === 'blinds') blindsEffect(c, e, pad);
   else if (e.type === 'kaleido') kaleidoEffect(c, e, frame, fps, pad, (cv, from) => warp(cv, from));
   else if (e.type === 'soundwave') soundwaveEffect(c, e, frame, fps, pad, layerId, blurCanvas);
+  else if (e.type === 'timecode') timecodeEffect(c, e, param<string>(e, 'from') === 'layer' ? frame : frame + start, fps, pad);
 }
 
 /** Change every painted pixel's colour in place (straight RGBA; alpha kept). */

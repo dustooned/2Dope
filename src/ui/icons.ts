@@ -71,6 +71,9 @@ const P: Record<string, string> = {
   graph: '<path d="M4 4v16h16M7 16c5 0 5-8 11-8"/><circle cx="7" cy="16" r="1.4"/><circle cx="18" cy="8" r="1.4"/>',
   layout: '<path d="M4 4v16M8 6h10v4H8zM8 14h6v4H8z"/>',
   splitview: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18M8 16h8"/>',
+  // where Story's panel sits: a filled strip on the right, or along the bottom
+  dockright: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16"/><path d="M16.5 8h2M16.5 11h2M16.5 14h2" stroke-width="1.6"/>',
+  dockbottom: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18"/><path d="M7 17h2M11 17h2M15 17h2" stroke-width="1.6"/>',
   text: '<path d="M4 7V4h16v3M12 4v16M8 20h8"/>',
   // lettering: the Letter tool, each balloon style, and the caption presets
   letter: '<path d="M12 3.5c5 0 9 2.8 9 6.3S17 16 12 16c-.9 0-1.8-.1-2.6-.3L5 19l1.2-4C4.3 13.9 3 12 3 9.8 3 6.3 7 3.5 12 3.5z"/><path d="M9.3 12.5l2.7-6 2.7 6M10.2 10.6h3.6"/>',

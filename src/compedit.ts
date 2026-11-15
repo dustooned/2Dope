@@ -839,6 +839,28 @@ export class CompEditor {
     if (!(this.comp.audio ?? []).length) this.app.onNotice?.('Add a sound to this shot to see its wave. Effects you add after Sound wave act on the wave.');
   }
 
+  /**
+   * A layer on top that burns the shot's timecode into the picture (an empty drawing for the whole
+   * shot with a Timecode effect), with its effect open. One Undo step.
+   */
+  addTimecodeLayer(select = true): void {
+    const p = this.app.project;
+    if (this.comp.layers.length >= MAX_LAYERS) { this.app.onNotice?.(`A shot holds up to ${MAX_LAYERS} layers.`); return; }
+    let id = '';
+    this.edit('Add timecode layer', (cc) => {
+      const d = p.newDrawing();
+      id = p.newId('L');
+      const made = drawingsLayer(id, 'Timecode', [{ drawing: d.id, length: Math.max(1, this.app.compEnd) }], p.width, p.height, cc.width, cc.height);
+      made.effects = [newEffect('timecode', `fx${Date.now().toString(36)}`, newSeed())];
+      cc.layers.unshift(made);
+    });
+    if (!id || !this.comp.layers.some((l) => l.id === id)) return;
+    this.open.add(id);
+    // Story keeps sketching on its board: only Motion selects the new layer
+    if (select) this.select(id);
+    this.app.openEffects?.(id);
+  }
+
   addLayer(kind: 'drawings' | 'null' | 'camera' | 'adjustment', above?: string): void {
     const c = this.comp;
     const p = this.app.project;

@@ -188,6 +188,7 @@ export class MotionPanel {
       { label: 'Title…', icon: 'text', run: () => app.editTitle?.() },
       ...([['drawings', 'Drawing', 'draw'], ['adjustment', 'Adjustment', 'fx'], ['null', 'Anchor', 'centrecross'], ['camera', 'Camera', 'camera']] as const).map(([kind, label, icon]) => ({ label, icon, run: () => ed.addLayer(kind, ed.primary?.id) })),
       { label: 'Sound wave', icon: 'fx', run: () => ed.addSoundWaveLayer() },
+      { label: 'Timecode', icon: 'time', run: () => ed.addTimecodeLayer() },
     ]);
     const layer = menu('Layer', 'Layer actions', 'layers', () => ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
     const tools = menu('Animation', 'Motion tools', 'motion', () => this.animationItems());

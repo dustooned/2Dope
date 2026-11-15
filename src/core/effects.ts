@@ -11,10 +11,14 @@
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
-export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave' | 'timecode';
 
 /** Effects added in format 10: older readers drop unknown effect types, so saving one needs reader 10. */
 export const FORMAT10_EFFECTS: readonly EffectType[] = ['fill', 'outline', 'blinds', 'kaleido', 'soundwave'];
+/** Effects added in format 12 (Timecode): older readers would drop them, so saving one needs reader 12. */
+export const FORMAT12_EFFECTS: readonly EffectType[] = ['timecode'];
+/** Longest label a text setting keeps (the Timecode prefix). */
+export const EFFECT_TEXT_MAX = 40;
 /** What an effect works on: Ink, Colour, the whole layer, or (captions only) the letters. */
 export type EffectTarget = 'line' | 'fill' | 'layer' | 'text';
 export const MAX_LAYER_EFFECTS = 16;
@@ -52,13 +56,21 @@ export interface LayerEffect {
 }
 
 /** A further setting of an effect kind, stored in `LayerEffect.params`. */
-export type ExtraDef =
+export type ExtraDef = (
   | { key: string; label: string; kind: 'range'; min: number; max: number; step: number; unit: string; def: number }
   | { key: string; label: string; kind: 'choice'; options: { id: string; label: string }[]; def: string }
   | { key: string; label: string; kind: 'color'; def: string }
   | { key: string; label: string; kind: 'toggle'; def: boolean }
   /** One of the project's Assets (its first frame), by its comp id; '' = none. */
-  | { key: string; label: string; kind: 'asset'; def: string };
+  | { key: string; label: string; kind: 'asset'; def: string }
+  /** A short line of text (up to EFFECT_TEXT_MAX characters). */
+  | { key: string; label: string; kind: 'text'; def: string; placeholder?: string }
+  /** A whole number typed in a box (a slider would be too coarse), not keyframed. */
+  | { key: string; label: string; kind: 'number'; min: number; max: number; unit: string; def: number }
+) & {
+  /** Shown in Simple mode too (the settings an effect cannot do without). */
+  simple?: boolean;
+};
 
 export const TEXTURE_STYLES: { id: TextureStyle; label: string }[] = [
   { id: 'paper', label: 'Paper' },
@@ -85,6 +97,8 @@ export interface EffectDef {
   animated: boolean;
   /** The pattern comes from the seed (shows New pattern); default: when animated. */
   seeded?: boolean;
+  /** The Size slider shows in Simple mode too (Timecode's opacity). */
+  sizeSimple?: boolean;
   /** Further settings (Advanced). */
   extras?: ExtraDef[];
   /** How far the effect can reach past the art, in document pixels (the layer is padded by it). */
@@ -246,6 +260,24 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'mix', label: 'Mix with original', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
     ],
     frameDependent: (e) => Number(param<number>(e, 'spin')) !== 0 },
+  { id: 'timecode', label: 'Timecode', hint: 'Burns a frame counter or timecode into the picture, for animatics, dailies and reviews (timecode, burn-in)', target: 'layer', amount: 48, size: 100, hold: 1, amountRange: [6, 400], sizeRange: [0, 100], amountLabel: 'Text size', sizeLabel: 'Opacity', amountUnit: ' px', sizeUnit: '%', animated: false, seeded: false, sizeSimple: true,
+    extras: [
+      { key: 'format', label: 'Format', kind: 'choice', simple: true, options: [{ id: 'frames', label: 'Frames' }, { id: 'secFrames', label: 'Sec + frames' }, { id: 'timecode', label: 'hh:mm:ss:ff' }], def: 'timecode' },
+      { key: 'anchor', label: 'Place', kind: 'choice', simple: true, options: [['tl', '↖'], ['tc', '↑'], ['tr', '↗'], ['ml', '←'], ['mc', '·'], ['mr', '→'], ['bl', '↙'], ['bc', '↓'], ['br', '↘']].map(([id, label]) => ({ id: id!, label: label! })), def: 'bc' },
+      { key: 'start', label: 'Start at', kind: 'number', simple: true, min: -999999, max: 9999999, unit: ' frames', def: 0 },
+      { key: 'prefix', label: 'Label', kind: 'text', simple: true, def: '', placeholder: 'e.g. SC 1 or TC' },
+      { key: 'from', label: 'Count', kind: 'choice', options: [{ id: 'shot', label: 'Shot time' }, { id: 'layer', label: 'From this layer' }], def: 'shot' },
+      { key: 'color', label: 'Colour', kind: 'color', simple: true, def: '#ffffff' },
+      { key: 'box', label: 'Backing box', kind: 'toggle', def: true },
+      { key: 'boxColor', label: 'Box colour', kind: 'color', def: '#000000' },
+      { key: 'boxOpacity', label: 'Box opacity', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 60 },
+      { key: 'font', label: 'Font', kind: 'choice', options: [{ id: 'mono', label: 'Mono' }, { id: 'sans', label: 'Sans' }, { id: 'serif', label: 'Serif' }], def: 'mono' },
+      { key: 'x', label: 'Move across', kind: 'range', min: -100, max: 100, step: 0.5, unit: '%', def: 0 },
+      { key: 'y', label: 'Move down', kind: 'range', min: -100, max: 100, step: 0.5, unit: '%', def: 0 },
+      { key: 'scale', label: 'Scale', kind: 'range', min: 10, max: 400, step: 1, unit: '%', def: 100 },
+      { key: 'margin', label: 'Edge margin', kind: 'range', min: 0, max: 25, step: 0.5, unit: '%', def: 4 },
+    ],
+    frameDependent: () => true },
   { id: 'soundwave', label: 'Sound wave', hint: 'Draws the shot’s sound as a moving wave or spectrum bars; effects after it act on the wave (audio waveform, audio spectrum)', target: 'layer', amount: 80, size: 3, hold: 1, amountRange: [0, 1000], sizeRange: [0.5, 60], amountLabel: 'Height', sizeLabel: 'Thickness', amountUnit: ' px', sizeUnit: ' px', animated: false, seeded: false,
     extras: [
       { key: 'type', label: 'Type', kind: 'choice', options: [{ id: 'waveform', label: 'Waveform' }, { id: 'spectrum', label: 'Spectrum' }], def: 'waveform' },
@@ -385,8 +417,15 @@ function readParams(def: EffectDef, v: unknown): Record<string, number | string 
     else if (x.kind === 'color' && typeof y === 'string' && /^#[0-9a-f]{6}$/i.test(y)) out[x.key] = y;
     else if (x.kind === 'toggle' && typeof y === 'boolean') out[x.key] = y;
     else if (x.kind === 'asset' && typeof y === 'string' && /^[A-Za-z0-9_:-]{0,80}$/.test(y)) out[x.key] = y;
+    else if (x.kind === 'text' && typeof y === 'string') out[x.key] = cleanEffectText(y);
+    else if (x.kind === 'number' && typeof y === 'number' && Number.isFinite(y)) out[x.key] = Math.round(Math.min(x.max, Math.max(x.min, y)));
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/** A text setting as stored: one line, no control characters, at most EFFECT_TEXT_MAX characters. */
+export function cleanEffectText(v: string): string {
+  return [...v.replace(/[\u0000-\u001f\u007f]+/g, ' ')].slice(0, EFFECT_TEXT_MAX).join('');
 }
 
 export const TARGET_NAMES: Record<EffectTarget, string> = { line: 'Ink', fill: 'Colour', layer: 'Whole layer', text: 'Text' };
@@ -530,7 +569,8 @@ export function setPictureStamp(f: (id: string) => string): void { pictureStamp 
 
 export function effectsKey(l: { id: string; effects?: LayerEffect[] }, frame: number): string {
   const fx = activeEffects(l);
-  return fx.length ? fx.map((e) => effectAt(e, frame)).map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${effectDef(e.type).frameDependent?.(e) ? `@${frame}` : ''}${e.params ? `:${JSON.stringify(e.params)}` : ''}${e.type === 'outline' && param<string>(e, 'paint') === 'picture' && param<string>(e, 'picture') ? `~${pictureStamp(param<string>(e, 'picture'))}` : ''}`).join(',') : '';
+  const start = fx.some((e) => e.type === 'timecode') ? `|s${(l as { start?: number }).start ?? 0}` : '';
+  return fx.length ? start + fx.map((e) => effectAt(e, frame)).map((e) => `${e.type}:${e.target}:${e.amount}:${e.size}:${e.style ?? ''}:${e.palette ?? ''}:${e.method ?? ''}:${e.gray ? 'g' : ''}:${e.seed}:${effectTick(e, frame)}${effectDef(e.type).frameDependent?.(e) ? `@${frame}` : ''}${e.params ? `:${JSON.stringify(e.params)}` : ''}${e.type === 'outline' && param<string>(e, 'paint') === 'picture' && param<string>(e, 'picture') ? `~${pictureStamp(param<string>(e, 'picture'))}` : ''}`).join(',') : '';
 }
 
 // ---------------------------------------------------------------------------------------------

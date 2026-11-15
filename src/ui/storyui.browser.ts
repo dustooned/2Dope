@@ -161,6 +161,26 @@ await check('Wide screens put sketch and writing side by side; compact screens r
   if (innerWidth >= 1100 && innerHeight >= 650) expect(editorBox.left >= stageBox.right - 1 && editorBox.height > innerHeight * .7 && stageBox.width > 300, 'wide Story still uses bottom-docked editor');
   else expect(editorBox.left >= -1 && editorBox.right <= innerWidth + 1 && stageBox.height >= 60, 'compact Story exceeds viewport');
 });
+await check('The dock toggle moves Story under the canvas and back, remembered on the device, never an Undo step', async () => {
+  if (!(innerWidth >= 1100 && innerHeight >= 650)) return; // the toggle shows only where the side layout fits
+  let saved: string | null = null; try { saved = localStorage.getItem('2dope.story.dock'); } catch { /* none */ }
+  const undoBefore = app.history.canUndo, toggle = document.querySelector<HTMLButtonElement>('.story-dock-toggle')!;
+  const t = toggle.getBoundingClientRect();
+  expect(t.width >= 44 && t.height >= 44 && toggle.getAttribute('aria-pressed') === 'false', `toggle ${t.width}×${t.height} pressed ${toggle.getAttribute('aria-pressed')}`);
+  toggle.click(); await wait(150);
+  const s = stage.getBoundingClientRect(), b = document.querySelector('#board')!.getBoundingClientRect();
+  expect(board.currentDock === 'bottom' && document.body.classList.contains('story-dock-bottom') && toggle.getAttribute('aria-pressed') === 'true', 'not docked at the bottom');
+  expect(getComputedStyle(toggle).backgroundColor !== getComputedStyle(toggle).color, 'the pressed toggle hides its icon (same colour as its background)');
+  expect(b.top >= s.bottom - 1 && s.width > innerWidth * .8 && b.bottom <= innerHeight + 1 && s.height >= 150, `bottom layout: stage ${Math.round(s.width)}×${Math.round(s.height)} to ${Math.round(s.bottom)}, board from ${Math.round(b.top)} to ${Math.round(b.bottom)}`);
+  expect([...document.querySelectorAll<HTMLElement>('#board .btl, #board .bgrid-wrap, #board .story-panel-workspace')].some((e) => e.offsetHeight > 40), 'nothing of Story shows under the canvas');
+  let stored: string | null = null; try { stored = localStorage.getItem('2dope.story.dock'); } catch { /* none */ }
+  expect(stored === 'bottom' && app.history.canUndo === undoBefore, `stored ${stored}, undo changed ${app.history.canUndo !== undoBefore}`);
+  expect(document.documentElement.scrollWidth <= innerWidth, 'horizontal page scroll');
+  toggle.click(); await wait(150);
+  const s2 = stage.getBoundingClientRect(), b2 = document.querySelector('#board')!.getBoundingClientRect();
+  expect(board.currentDock === 'right' && b2.left >= s2.right - 1, 'did not return to the right');
+  try { if (saved === null) localStorage.removeItem('2dope.story.dock'); else localStorage.setItem('2dope.story.dock', saved); } catch { /* none */ }
+});
 await check('Leaving Story restores regular modes, Share and canvas layout', async () => {
   app.setWorkspace('draw'); await wait(); expect(!document.querySelector<HTMLElement>('.bub-modes [data-mode=share]')!.hidden && getComputedStyle(document.querySelector('.story-canvas-status')!).display === 'none', 'Story UI leaked into Draw');
   app.setWorkspace('board'); await wait(); expect(app.project.activeLayer === app.board!.id && document.querySelector<HTMLElement>('.bub-modes [data-mode=share]')!.hidden, 'return lost Story ownership');

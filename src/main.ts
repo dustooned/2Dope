@@ -393,6 +393,8 @@ const loadBoard = lazy(async () => {
     b.setAudio(audioPlayback);
     b.setSoundMenu((id) => audioTracks.soundMenu(id));
     b.onView = () => bubbles.update();
+    // the canvas gets new room when Story moves beside or under it: fit the page to it
+    b.onDock = () => requestAnimationFrame(() => { bubbles.update(); app.fit(); app.requestRender(); });
     boardPanel = b;
   }
   boardPanel.update();
