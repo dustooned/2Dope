@@ -2,6 +2,72 @@
 
 ## Current state (2026-11-14) — read this first
 
+### Story dock and the Timecode effect (2026-11-14, branch `claude/story-timecode`, not merged)
+
+Scope: Story layout polish and one new effect. Phase 7 items (Strip on the shared rail, scenes,
+framing guides, panel moves) are **not** started; this only adds the dock choice and cleans what
+was in the way.
+
+- **Story dock** (`ui/board.ts`, `ui/icons.ts` `dockright`/`dockbottom`, `main.ts`, Story rules in
+  `style.css`): a 44 px toggle beside Story help moves the Story panel (header, views, timeline)
+  from the right of the canvas (default, unchanged) to under it, and back. Device key
+  `2dope.story.dock` (`right` | `bottom`), body class `story-dock-bottom`; no History, no `.2dope`
+  change. The side-by-side grid now needs `:not(.story-dock-bottom)`; the toggle only shows where
+  that grid applies (≥1100×650: desktop, iPad Air/Pro landscape). `board.onDock` makes main refresh
+  the bubbles' header clearance and fit the canvas.
+- **Story cleanups found on the way**: under the canvas on wide screens (both the new bottom dock and
+  the existing 960–1099 px / short-landscape layout, e.g. iPad 1024×768) the header is one row
+  (title + actions · views · playback) instead of three stacked rows: at 1024×768 the canvas went
+  from 259 to 363 px tall. Story help is 44×44 (was 38 wide on desktop). Timeline panel blocks keep a
+  fixed height (112 px, 72 in Split) with the sound lane right under them, instead of stretching to
+  the bottom of a tall timeline. The tool row no longer sits on the mode row when docked at the bottom.
+- **Timecode effect** (`core/effects.ts` def `timecode`, `view/fxtimecode.ts`, `view/effects.ts`
+  wiring, `core/timecode.ts` `burnInLabel`): a generator like Sound wave. Text size (Amount, px),
+  Opacity (Size, % — shown in Simple via new `EffectDef.sizeSimple`), Format (frames from 1 /
+  sec+frames / non-drop hh:mm:ss:ff), Place (3×3 anchor grid, 44 px cells), Start at (frames, new
+  `number` extra kind), Label (new `text` extra kind, max 40 chars, control characters removed),
+  Colour; Advanced: Count (shot time, default, or from the layer's start), Backing box + colour +
+  opacity, Font (mono/sans/serif), Move across/down and Scale (keyable), Edge margin. New
+  `ExtraDef.simple` shows a setting in Simple mode. `effectsKey` adds the layer start so the cache
+  follows a moved layer. `CompEditor.addTimecodeLayer(select)` adds a whole-shot layer on top (one
+  Undo); Motion → New layer → Timecode, Story tools → Burn in timecode (keeps Story drawing on its
+  board).
+- **Format 12** (`io/schema.ts`): `SCHEMA = 12`, a no-op migrate step; `minimumDrawingSchema`
+  returns 12 only when a Timecode effect (or a style origin holding one) is saved, so other files
+  stay readable by older builds. Older readers would otherwise drop the effect silently.
+- **Effects card fix** (`ui/effectspanel.ts`): after Undo/Redo or a change from Motion the open card
+  kept the old values, and its next change re-applied them (e.g. Undo of a label brought back a
+  value set before). `follow()` now re-renders when the layer's effects differ from what the card
+  drew (not while typing in a text or number box).
+- Manual: Effects (Timecode paragraph), Story layout paragraph, a 2026-11-14 `UPDATES` entry.
+- Shared notes: `side-session-notes/local_fdd69f83-…/story-timecode.md`. No other effects session
+  was running when this started; anyone adding effect kinds should append to the same lists.
+
+**Checks (2026-11-14, worktree, own dev server 127.0.0.1:5257):** `npm test` 849 passed, 1 skipped
+(7 new in `view/fxtimecode.test.ts`). `npm run build` passed. New fixtures: `timecode` 13/13 (Motion
+menu adds one layer + Undo/Redo; bottom-centre default and frame-to-frame change; preview = export
+pixels at 4 frames; formats, start, label; shot vs layer count with a moved layer; colour, opacity
+0/50, box; place presets, move, scale; save → format 12 → load renders the same, format 13 refused;
+PNG sequence pixel-exact; GIF and WebM video decoded back and compared with the canvas; effect card
+controls in Simple with 44 px targets, label Undo restores the card; no page errors), `storydock`
+8/8 and `storydock-responsive` 40/40 (375×812, 768×1024, 1024×768, 1180×820, 1366×1024: default
+right where it fits, toggle hidden where it cannot apply, no overlap, no sideways scroll, page fits,
+44 px header targets, every view in both docks, choice survives a reload, no History/project change).
+`storydock` also checks Story tools → Burn in timecode (layer on top, one Undo, Story keeps
+drawing on its board, offered once). `storyui` gained a dock-toggle check from a sibling session
+(toggle 44 px, bottom bounds, stored key without Undo, back to the right, visible pressed icon);
+its pressed style is a tinted background with an accent icon (it was pink on pink). Full browser
+suite: first run 82 of 83 (`timecode`'s card check failed because an earlier fixture left
+`2dope.fx.tab = add`; the fixture now resets and restores the `2dope.fx.*` keys), final run on
+this tree 83 of 83 (`timecode` 13/13, `storydock` 9/9, `storydock-responsive` 45/45, `storyui`
+26/26, `storyui-responsive` 78/78).
+
+**Not verified / gaps:** real iPad, Pencil and touch (Chromium emulation only); dragging the
+timecode on the canvas (position is by Place + Move sliders); drop-frame timecode for 29.97/59.94
+(non-drop only, labelled hh:mm:ss:ff); the burn-in is a normal layer, so it also shows in the
+Projects thumbnail and Blender plates; a Timecode layer made before the shot gets longer stops at
+the old end (like adjustment layers); Story's narrow-screen layouts (<960 px) are unchanged.
+
 ### About / credit area (2026-11-14)
 
 - `src/about.ts` holds the credit text (`ABOUT_CREDIT`, `ABOUT_TEXT`): designed, programmed and

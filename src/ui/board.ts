@@ -29,6 +29,9 @@ const CAMERA_PICKS = ['Wide', 'Medium', 'Close-up', 'Extreme close-up', 'Over th
 /** Story's views of the one board: Grid (pictures), Panels (cards to write on), Timeline, or Both. */
 export type BoardView = 'grid' | 'panels' | 'timeline' | 'split';
 const BOARD_VIEWS: BoardView[] = ['grid', 'panels', 'timeline', 'split'];
+/** Where Story's panel sits on a wide screen: beside the canvas (default) or under it. A device preference, not part of the project. */
+export type StoryDock = 'right' | 'bottom';
+const DOCK_KEY = '2dope.story.dock';
 
 export class BoardPanel {
   private readonly bar = el('div', { class: 'board-bar' });
@@ -56,6 +59,8 @@ export class BoardPanel {
   private readonly timeline: BoardTimeline;
   private readonly viewSelect = el('select', { class: 'story-view-select', 'aria-label': 'Story view' });
   private readonly viewBtns: HTMLButtonElement[] = [];
+  private dock: StoryDock = 'right';
+  private readonly dockBtn: HTMLButtonElement;
 
   constructor(
     private readonly app: App,
@@ -124,11 +129,20 @@ export class BoardPanel {
         { sep: true }, { title: 'Use this story' },
         { label: 'Present storyboard', icon: 'play', disabled: !hasBoard, run: () => this.present() },
         { label: 'Animate this shot', icon: 'flipbook', disabled: !hasBoard || app.playing, run: () => app.animateShot() },
+        // a frame counter in every export of the animatic (a normal layer: Motion moves or removes it)
+        { label: 'Burn in timecode', icon: 'time', disabled: !hasBoard || app.playing || app.project.comp.layers.some((l) => l.effects?.some((e) => e.type === 'timecode')), run: () => app.editor.addTimecodeLayer(false) },
       ]);
     }, 'more');
     this.storyTools.setAttribute('aria-haspopup', 'menu');
     this.shareBtn = btn('Share', 'Share storyboard sheets, panel images or an animatic video', () => this.exportStory(), 'export');
     this.shareBtn.setAttribute('aria-label', 'Share storyboard');
+    try {
+      if (localStorage.getItem(DOCK_KEY) === 'bottom') this.dock = 'bottom';
+    } catch {
+      // default: on the right
+    }
+    this.dockBtn = btn('Story at the bottom', '', () => this.setDock(this.dock === 'right' ? 'bottom' : 'right'), 'dockbottom');
+    this.dockBtn.classList.add('icon-only', 'story-dock-toggle');
     const help = btn('Story help', 'Story help', () => app.onOpenManual('board'), 'help'); help.classList.add('panel-help', 'icon-only');
     const transport = el('div', { class: 'story-transport', role: 'group', 'aria-label': 'Story playback' });
     transport.append(this.playBtn, this.prevBtn, this.readout, this.nextBtn);
@@ -138,7 +152,7 @@ export class BoardPanel {
     heading.append(identity, actions);
     const controls = el('div', { class: 'story-controls', role: 'toolbar', 'aria-label': 'Story views' });
     controls.append(views, this.viewSelect);
-    const playback = el('div', { class: 'story-playback-row' }); playback.append(transport, help);
+    const playback = el('div', { class: 'story-playback-row' }); const extras = el('div', { class: 'story-row-end' }); extras.append(this.dockBtn, help); playback.append(transport, extras);
     this.bar.append(heading, controls, playback);
     this.grid = new BoardGrid(app, (c, id) => this.paintThumb(c, id), (i) => this.writeOn(i));
     this.navigator = new StoryNavigator(app, (c, id) => this.paintThumb(c, id));
@@ -146,6 +160,7 @@ export class BoardPanel {
     root.append(this.bar, this.timeline.root, this.grid.root, this.panelWorkspace, this.fileIn);
     if (root.parentElement?.classList.contains('stage-col')) root.parentElement.querySelector('.stage')?.append(this.canvasStatus);
     this.applyView();
+    this.applyDock();
     attachContextMenu(this.cards, ({ target }) => {
       const card = (target as HTMLElement | null)?.closest<HTMLElement>('.bcard');
       if (!card || (target as HTMLElement).closest('textarea, input')) return null;
@@ -194,6 +209,38 @@ export class BoardPanel {
     this.applyView();
     this.update();
     this.onView();
+  }
+
+  /** Where Story's panel sits on a wide screen (right of the canvas, or under it). */
+  get currentDock(): StoryDock {
+    return this.dock;
+  }
+
+  /** Move Story's panel beside or under the canvas: remembered on this device, never an undo step or a project change. */
+  setDock(d: StoryDock): void {
+    if (d === this.dock) return;
+    this.dock = d;
+    try {
+      localStorage.setItem(DOCK_KEY, d);
+    } catch {
+      // not remembered
+    }
+    this.applyDock();
+    this.update();
+    this.onDock();
+  }
+
+  /** Told when the dock changes (main refits the canvas to the new room). */
+  onDock: () => void = () => {};
+
+  private applyDock(): void {
+    const bottom = this.dock === 'bottom';
+    document.body.classList.toggle('story-dock-bottom', bottom);
+    this.root.dataset.dock = this.dock;
+    setLabel(this.dockBtn, bottom ? 'Story on the right' : 'Story at the bottom', bottom ? 'dockright' : 'dockbottom');
+    this.dockBtn.title = bottom ? 'Move the Story panel and its timeline back to the right of the canvas' : 'Move the Story panel and its timeline under the canvas (more room for the timeline)';
+    this.dockBtn.setAttribute('aria-pressed', String(bottom));
+    this.dockBtn.setAttribute('aria-label', 'Story timeline at the bottom');
   }
 
   /** Told when the view changes (the Story chips in the options row follow it). */

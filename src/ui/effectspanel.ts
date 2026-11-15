@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
 import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
-import { canMerge, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, CAPTION_TARGET_NAMES, TARGET_NAMES, temporalEffect, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
+import { canMerge, cleanEffectText, EFFECT_TEXT_MAX, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, CAPTION_TARGET_NAMES, TARGET_NAMES, temporalEffect, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { setKey } from '../core/anim';
 import { showContextMenu, type CtxItem } from './contextmenu';
@@ -79,7 +79,13 @@ export class EffectsPanel {
   follow(): void {
     if (this.root.hidden) return;
     const id = this.target(), picks = this.app.editor.picks;
-    if (id === this.openedAt && picks === this.openedPicks) return;
+    // the same layer, but its effects changed elsewhere (Undo, Redo, Motion): show what is there now,
+    // so the next change is made to the stored settings (unless you are typing in the card)
+    if (id === this.openedAt && picks === this.openedPicks) {
+      const typing = this.root.contains(document.activeElement) && (document.activeElement as HTMLElement).matches('input:not([type=range]), textarea');
+      if (!typing && JSON.stringify(this.effects()) !== this.shown) this.render();
+      return;
+    }
     this.openedAt = id;
     this.openedPicks = picks;
     if (id && id !== this.layerId && ['drawings', 'comp'].includes(this.layer(id)?.kind ?? '')) this.show(id);
@@ -219,10 +225,14 @@ export class EffectsPanel {
     showContextMenu(x, y, items);
   }
 
+  /** The effects as the card last drew them. */
+  private shown = '';
+
   private render(): void {
     const l = this.layer();
     if (!l || (l.kind !== 'drawings' && l.kind !== 'comp')) { this.close(); return; }
     const list = this.effects();
+    this.shown = JSON.stringify(list);
     const keepScroll = this.root.querySelector('.fx-list')?.scrollTop ?? 0;
     const oldTab = this.root.dataset.tab as 'layer' | 'add' | undefined;
     if (oldTab) this.scrolls[oldTab] = this.root.querySelector('.fx-content')?.scrollTop ?? 0;
@@ -283,7 +293,7 @@ export class EffectsPanel {
       const sections = new Map<string, HTMLElement>();
       for (const t of EFFECT_TYPES) {
         if (l.adjust && temporalEffect(t.id)) continue;
-        const category = temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'kaleido', 'offset', 'wave'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv'].includes(t.id) ? 'Texture and retro' : ['outline', 'fill'].includes(t.id) ? 'Outline and fill' : ['blinds'].includes(t.id) ? 'Transitions' : ['soundwave'].includes(t.id) ? 'Generate' : 'Colour and style';
+        const category = temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'kaleido', 'offset', 'wave'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv'].includes(t.id) ? 'Texture and retro' : ['outline', 'fill'].includes(t.id) ? 'Outline and fill' : ['blinds'].includes(t.id) ? 'Transitions' : ['soundwave', 'timecode'].includes(t.id) ? 'Generate' : 'Colour and style';
         let section = sections.get(category);
         if (!section) { section = el('section', { class: 'fx-category' }); section.append(el('strong', {}, category)); sections.set(category, section); add.append(section); }
         const b = el('button', { type: 'button', title: t.hint, 'aria-label': `Add ${plainName(t)}`, 'data-effect': t.id });
@@ -447,10 +457,10 @@ export class EffectsPanel {
       }
     }
     slider(def.amountLabel, 'amount', def.amountRange, def.amountUnit === '%' ? 1 : 0.1, def.amountUnit);
-    if (adv && def.sizeRange[1] > 0) slider(def.sizeLabel, 'size', def.sizeRange, 1, def.sizeUnit);
+    if ((adv || def.sizeSimple) && def.sizeRange[1] > 0) slider(def.sizeLabel, 'size', def.sizeRange, 1, def.sizeUnit);
     // the kind's further settings: each change is one undo step (sliders preview while dragged)
     const setParam = (key: string, v: number | string | boolean, label: string) => this.patch(i, { params: { ...e.params, [key]: v } }, `${name} ${label.toLowerCase()}`);
-    for (const x of adv ? def.extras ?? [] : []) {
+    for (const x of (def.extras ?? []).filter((x) => adv || x.simple)) {
       const row = el('label', { class: 'fx-row' });
       row.append(el('span', {}, x.label));
       if (x.kind === 'range') {
@@ -466,7 +476,8 @@ export class EffectsPanel {
         input.addEventListener('change', () => { if (keyed(x.key)) commitKeyed(x.key, Number(input.value), x.label); else setParam(x.key, Number(input.value), x.label); });
         row.append(input, out, keyButton(x.key, x.label));
       } else if (x.kind === 'choice') {
-        const seg = el('div', { class: 'fx-seg small', role: 'group', 'aria-label': x.label });
+        // nine places (corners, edges, centre) read as a 3 by 3 grid
+        const seg = el('div', { class: `fx-seg small${x.options.length === 9 ? ' fx-grid3' : ''}`, role: 'group', 'aria-label': x.label });
         for (const o of x.options) {
           const b = el('button', { type: 'button', 'aria-pressed': String(param<string>(e, x.key) === o.id) }, o.label);
           b.addEventListener('click', () => { if (param<string>(e, x.key) !== o.id) setParam(x.key, o.id, `${x.label} ${o.label}`); });
@@ -482,6 +493,22 @@ export class EffectsPanel {
         if (pick.options.length === 1) { pick.disabled = true; pick.title = 'Make or import an asset first (Assets): its first frame becomes the paint'; }
         pick.addEventListener('change', () => setParam(x.key, pick.value, x.label));
         row.append(pick);
+      } else if (x.kind === 'text') {
+        const input = el('input', { type: 'text', maxlength: String(EFFECT_TEXT_MAX), placeholder: x.placeholder ?? '', 'aria-label': x.label, autocomplete: 'off', spellcheck: 'false' });
+        input.value = String(param<string>(e, x.key) ?? '');
+        input.addEventListener('keydown', (k) => { k.stopPropagation(); if (k.key === 'Enter') input.blur(); });
+        input.addEventListener('change', () => { const v = cleanEffectText(input.value); if (v !== param<string>(e, x.key)) setParam(x.key, v, x.label); });
+        row.append(input);
+      } else if (x.kind === 'number') {
+        const input = el('input', { type: 'number', inputmode: 'numeric', step: '1', min: String(x.min), max: String(x.max), 'aria-label': `${x.label}${x.unit}`, title: x.unit.trim() });
+        input.value = String(param<number>(e, x.key));
+        input.addEventListener('keydown', (k) => { k.stopPropagation(); if (k.key === 'Enter') input.blur(); });
+        input.addEventListener('change', () => {
+          const v = Math.round(Math.min(x.max, Math.max(x.min, Number(input.value) || 0)));
+          input.value = String(v);
+          if (v !== Number(param<number>(e, x.key))) setParam(x.key, v, x.label);
+        });
+        row.append(input, el('output', {}, x.unit.trim()));
       } else if (x.kind === 'color') {
         const input = el('input', { type: 'color', 'aria-label': x.label });
         input.value = param<string>(e, x.key);
