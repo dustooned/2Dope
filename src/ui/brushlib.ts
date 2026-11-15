@@ -3,7 +3,7 @@ import { loadGrain, loadTip } from '../brush/raster';
 import { loadBrushes, saveBrushes } from '../io/brushstore';
 import type { App } from '../app';
 import { cloneBrush, PRESETS, type BrushSettings, type Dynamic } from '../core/brush';
-import { addSet, allCategories, categoryOf, forget, isBuiltIn, moveTo, readBrush, readSets, removeSet, renamedIn, renameSet, uniqueName, type BrushCategory, type BrushSets } from '../core/brushlib';
+import { addSet, allCategories, categoryOf, forget, isBuiltIn, moveTo, readBrush, readSets, removeSet, renamedIn, renameSet, uniqueName, GRAIN_DATA_LIMIT, TIP_DATA_LIMIT, type BrushCategory, type BrushSets } from '../core/brushlib';
 import type { StrokePoint, StrokeRecord } from '../core/stroke';
 import { strokeLength } from '../core/stroke';
 import { dabsForStroke } from '../brush/dabs';
@@ -34,6 +34,18 @@ export class BrushLibrary {
   private readonly root = el('div', { class: 'brushlib', role: 'dialog', 'aria-label': 'Brush library', hidden: '' });
   private readonly cats = el('div', { class: 'bl-cats', role: 'tablist' });
   private readonly list = el('div', { class: 'bl-list', role: 'listbox', 'aria-label': 'Brushes' });
+  private readonly previewBrushes = new WeakMap<HTMLCanvasElement, BrushSettings>();
+  private readonly previewObserver = new IntersectionObserver((entries) => {
+    for (const { isIntersecting, target } of entries) {
+      if (!isIntersecting || !(target instanceof HTMLCanvasElement)) continue;
+      this.previewObserver.unobserve(target);
+      const brush = this.previewBrushes.get(target);
+      if (!brush) continue;
+      void Promise.all([brush.tipImage && loadTip(brush.tipImage), brush.grainImage && loadGrain(brush.grainImage)]).then(() => {
+        if (this.open && target.isConnected) this.drawPreview(target, brush);
+      });
+    }
+  }, { root: this.list, rootMargin: '100px' });
   private anchor: HTMLElement | null = null;
   private anchorParent: HTMLElement | null = null;
   private anchorLabel: string | null = null;
@@ -59,7 +71,6 @@ export class BrushLibrary {
       .then((list) => {
         if (list) {
           this.mine = this.readList(list);
-          for (const b of this.mine) { if (b.tipImage) void loadTip(b.tipImage); if (b.grainImage) void loadGrain(b.grainImage); }
           this.render();
         } else if (this.mine.length) this.saveMine();
       })
@@ -96,7 +107,10 @@ export class BrushLibrary {
     picker.addEventListener('change', () => {
       const files = [...(picker.files ?? [])];
       picker.value = '';
-      if (files.length) void this.importFiles(files);
+      if (files.length) {
+        imp.disabled = true;
+        void this.importFiles(files).finally(() => { imp.disabled = false; });
+      }
     });
     const imp = el('button', { type: 'button', title: 'Bring in brushes from Procreate (.brushset, .brush) or Photoshop (.abr)' }, 'Import');
     decorate(imp, 'import');
@@ -167,6 +181,7 @@ export class BrushLibrary {
   }
 
   close(returnToCanvas = false): void {
+    this.previewObserver.disconnect();
     this.cancelDrag();
     this.dragged = false;
     this.lastTap = { name: '', at: 0 };
@@ -263,19 +278,24 @@ export class BrushLibrary {
     let reader: typeof import('../io/brushimport');
     try { reader = await import('../io/brushimport'); }
     catch { this.app.onNotice?.('Brush import could not load. Reload 2Dope and try again.'); return; }
-    const { BrushImportError, readBrushFile } = reader;
+    const { BrushImportError, readBrushFile, readProcreateBrushes } = reader;
     for (const f of files) {
       const before = names.length;
       try {
-        if (f.size > 256 * 1024 * 1024) throw new BrushImportError(`${f.name} is too large to bring in.`);
-        const found = await readBrushFile(new Uint8Array(await f.arrayBuffer()), f.name);
-        for (const ib of found) {
-          if (this.mine.length >= MINE_MAX) { full++; continue; }
+        this.app.onNotice?.(`Importing ${f.name}…`);
+        const head = new Uint8Array(await f.slice(0, 2).arrayBuffer());
+        const procreate = /\.(brushset|brush|zip)$/i.test(f.name) || (!/\.abr$/i.test(f.name) && head[0] === 0x50 && head[1] === 0x4b);
+        const fileLimit = procreate ? 1024 : 256;
+        if (f.size > fileLimit * 1024 * 1024) throw new BrushImportError(`${f.name} exceeds the ${fileLimit} MB brush import limit.`);
+        const found = procreate ? readProcreateBrushes(f, f.name) : await readBrushFile(new Uint8Array(await f.arrayBuffer()), f.name);
+        for await (const ib of found) {
+          if (this.mine.length >= MINE_MAX) { full++; break; }
           // a tip picture that will not decode: the brush still comes in, with the round tip
-          const tip = ib.tip ? await picDataUrl(ib.tip, 128, ib.tipInvert) : null;
+          const tip = ib.tip ? await picDataUrl(ib.tip, TIP_DATA_LIMIT, ib.tipInvert) : null;
           if (ib.tip && !tip) failed++;
-          const grain = ib.grain ? await picDataUrl({ kind: 'png', bytes: ib.grain.bytes }, 256, ib.grain.invert) : null;
-          const b = importedBrush(ib, tip, grain, [...this.names(), ...names]);
+          const grain = ib.grain ? await picDataUrl({ kind: 'png', bytes: ib.grain.bytes }, GRAIN_DATA_LIMIT, ib.grain.invert, ib.grain) : null;
+          if (ib.grain && !grain) failed++;
+          const b = importedBrush(ib, tip?.url ?? null, grain, this.names());
           // the debug report: every archive key is mapped or listed as not supported, with why
           if (ib.report) console.debug(`[brush import] ${b.name}`, ib.report);
           this.mine = [...this.mine, b];
@@ -283,8 +303,6 @@ export class BrushLibrary {
           added++;
           if (!tip) round++;
           if (grain) grained++;
-          if (tip) void loadTip(tip);
-          if (grain) void loadGrain(grain);
         }
       } catch (e) {
         this.app.onNotice?.(e instanceof BrushImportError ? e.message : `${f.name} could not be read as a brush file.`);
@@ -301,9 +319,8 @@ export class BrushLibrary {
     this.saveMine();
     this.cat = lastSet ?? 'mine';
     this.render();
-    const bits = [round ? `${round} with the round tip` : '', grained ? `${grained} with their grain` : '', failed ? `${failed} tip picture${failed === 1 ? '' : 's'} could not be read` : '', full ? `${full} left out (My brushes is full)` : ''].filter(Boolean);
+    const bits = [round ? `${round} with the round tip` : '', grained ? `${grained} with their grain` : '', failed ? `${failed} tip or grain image${failed === 1 ? '' : 's'} could not be read` : '', full ? 'My brushes is full' : ''].filter(Boolean);
     this.app.onNotice?.(`${added} brush${added === 1 ? '' : 'es'} added to My brushes${bits.length ? ` (${bits.join(', ')})` : ''}. Close to the originals, not identical: wet mixing and dual brushes are not carried over.`);
-    setTimeout(() => this.render(), 300); // previews again once the tips have decoded
   }
 
   private add(b: BrushSettings, into: BrushCategory = this.sets.sets.some((s) => s.id === this.cat) ? this.cat : 'mine'): void {
@@ -481,6 +498,7 @@ export class BrushLibrary {
 
   private render(): void {
     if (this.root.hidden) return;
+    this.previewObserver.disconnect();
     const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusName = focused?.closest<HTMLElement>('.bl-card')?.dataset.name;
     const focusCat = focused?.closest<HTMLElement>('[data-cat]')?.dataset.cat;
@@ -548,8 +566,17 @@ export class BrushLibrary {
   /** A stroke drawn with the brush: thin to thick to thin, in the current colour. */
   private preview(b: BrushSettings): HTMLCanvasElement {
     const c = el('canvas', { class: 'bl-preview', width: String(PW), height: String(PH) });
+    if (b.tipImage || b.grainImage) {
+      this.previewBrushes.set(c, b);
+      this.previewObserver.observe(c);
+    } else this.drawPreview(c, b);
+    return c;
+  }
+
+  private drawPreview(c: HTMLCanvasElement, b: BrushSettings): void {
     const g = c.getContext('2d');
-    if (!g) return c;
+    if (!g) return;
+    g.clearRect(0, 0, c.width, c.height);
     const pts: StrokePoint[] = [];
     const N = 60;
     for (let i = 0; i <= N; i++) {
@@ -567,20 +594,34 @@ export class BrushLibrary {
       g.drawImage(this.engine.displaySource(), 0, 0);
       this.engine.cancel();
     }
-    return c;
   }
 }
 
 /** My brushes holds at most this many (kept on the device, in IndexedDB). */
 const MINE_MAX = 600;
 
-/** A picture (tip or grain) as a small PNG data URL, at most `max` px across; null if it will not decode. */
-async function picDataUrl(tip: ImportedTip, max: number, invert = false): Promise<string | null> {
+interface ImportPicture {
+  url: string;
+  /** Keep the existing grain repeat size even when the stored tile has more samples. */
+  grainScaleFactor: number;
+}
+
+function oversizePng(bytes: Uint8Array): boolean {
+  if (bytes.length < 24) return false;
+  const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return header.getUint32(0) === 0x89504e47 && header.getUint32(12) === 0x49484452 &&
+    (header.getUint32(16) > 4096 || header.getUint32(20) > 4096);
+}
+
+/** Store a tip or grain as a PNG within the brush library's save limits. */
+async function picDataUrl(tip: ImportedTip, limit: number, invert = false, grain?: ImportedBrush['grain']): Promise<ImportPicture | null> {
+  let bmp: ImageBitmap | null = null;
   try {
     let src: CanvasImageSource;
     let w: number, h: number;
     if (tip.kind === 'png') {
-      const bmp = await createImageBitmap(new Blob([tip.bytes as BlobPart], { type: 'image/png' }));
+      if (oversizePng(tip.bytes)) return null;
+      bmp = await createImageBitmap(new Blob([tip.bytes as BlobPart], { type: 'image/png' }));
       src = bmp;
       w = bmp.width;
       h = bmp.height;
@@ -600,46 +641,66 @@ async function picDataUrl(tip: ImportedTip, max: number, invert = false): Promis
       w = tip.w;
       h = tip.h;
     }
-    const k = Math.min(1, max / Math.max(w, h));
+    const side = Math.max(w, h);
+    if (side > 4096) return null;
     const out = document.createElement('canvas');
-    out.width = Math.max(1, Math.round(w * k));
-    out.height = Math.max(1, Math.round(h * k));
     const og = out.getContext('2d')!;
-    og.drawImage(src, 0, 0, out.width, out.height);
-    if (invert) {
-      // Procreate's Invert: dark becomes light (an opaque picture reads its brightness)
-      const d = og.getImageData(0, 0, out.width, out.height);
-      for (let i = 0; i < d.data.length; i += 4) { d.data[i] = 255 - d.data[i]!; d.data[i + 1] = 255 - d.data[i + 1]!; d.data[i + 2] = 255 - d.data[i + 2]!; }
-      og.putImageData(d, 0, 0);
+    for (let cap = grain ? 512 : 256; cap >= 128; cap = Math.floor(cap * 0.8)) {
+      const k = Math.min(1, cap / side);
+      out.width = Math.max(1, Math.round(w * k));
+      out.height = Math.max(1, Math.round(h * k));
+      og.imageSmoothingQuality = 'high';
+      og.drawImage(src, 0, 0, out.width, out.height);
+      if (grain || invert) {
+        const image = og.getImageData(0, 0, out.width, out.height);
+        const d = image.data;
+        const opaqueTip = !grain && d.every((v, i) => i % 4 !== 3 || v >= 250);
+        const gain = 2 ** (2 * (grain?.contrast ?? 0));
+        const brightness = grain?.brightness ?? 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const luminance = (d[i]! * 0.3 + d[i + 1]! * 0.59 + d[i + 2]! * 0.11) / 255;
+          const alpha = d[i + 3]! / 255;
+          const level = grain ? luminance * alpha : opaqueTip ? luminance : alpha;
+          const value = invert ? 1 - level : level;
+          const adjusted = (value - 0.5) * gain + 0.5 + brightness;
+          d[i] = d[i + 1] = d[i + 2] = adjusted * 255;
+          d[i + 3] = 255;
+        }
+        og.putImageData(image, 0, 0);
+      }
+      const url = out.toDataURL('image/png');
+      if (url.length < limit) return { url, grainScaleFactor: Math.min(256, side) / Math.max(out.width, out.height) };
     }
-    return out.toDataURL('image/png');
+    return null;
   } catch {
     return null;
+  } finally {
+    bmp?.close();
   }
 }
 
 /** 2Dope brush settings for an imported brush: its tip and grain pictures on a plain base, plus what maps. */
-function importedBrush(ib: ImportedBrush, tip: string | null, grain: string | null, taken: string[]): BrushSettings {
+function importedBrush(ib: ImportedBrush, tip: string | null, grain: ImportPicture | null, taken: string[]): BrushSettings {
   const b = cloneBrush(PRESETS[0]!);
   b.name = uniqueName(ib.name, taken);
   if (tip) b.tipImage = tip;
   else delete b.tipImage;
-  b.hardness = tip ? 1 : 0.85;
+  b.hardness = tip ? 1 : (ib.tipHardness ?? 0.85);
   b.roundness = ib.roundness ?? 1;
   b.angle = 0;
   b.followDirection = ib.follow ?? false;
   // the grain picture is the paper texture; its depth is how strongly it holds paint back
   if (grain) {
     const g = ib.grain;
-    b.grainImage = grain;
+    b.grainImage = grain.url;
     b.grain = g?.depth ?? 0.8;
-    b.grainScale = Math.max(0.1, Math.min(4, g?.scale ? g.scale * 2 : 1));
+    b.grainScale = Math.max(0.1, Math.min(4, g?.scale ? g.scale * 2 : 1)) * grain.grainScaleFactor;
     if (g?.mode) b.grainMode = g.mode;
     if (g?.depthMin) b.grainMin = g.depthMin;
     if (g?.movement !== undefined && g.movement < 1) b.grainMovement = g.movement;
     if (g?.rotation) b.grainRotation = g.rotation;
     // Procreate's zoom: the grain grows and shrinks with the brush from the imported size
-    if (g?.zoom) { b.grainFollow = g.zoom; b.grainRef = ib.size ?? b.size; }
+    if (g?.followSize) { b.grainFollow = g.followSize; b.grainRef = ib.size ?? b.size; }
   } else {
     delete b.grainImage;
     b.grain = 0;

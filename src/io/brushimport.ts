@@ -16,7 +16,8 @@
  * - .abr v6+: 8BIM sections; "samp" holds the sampled tips.
  */
 
-import { readZip } from './zip';
+import { BlobReader, Uint8ArrayReader, Uint8ArrayWriter, ZipReader, type FileEntry } from '@zip.js/zip.js';
+import { safeName } from './zip';
 import { readCurvePoints } from '../core/brush';
 
 /** A tip as alpha (0..255, 255 paints) or as a PNG to decode. */
@@ -29,9 +30,12 @@ export interface ImportedBrush {
   /**
    * A grain (texture) picture: white lets paint through, black holds it back. `mode` 'height' is
    * Procreate's grain blend 27 or 28; `depthMin` the depth minimum; `movement` 1 = fixed to the paper,
-   * 0 = rolls with the stroke; `rotation` in degrees; `zoom` 0..1 how far the scale follows size.
+   * 0 = rolls with the stroke; `rotation` in degrees; `followSize` 0..1 how far the grain follows size.
    */
-  grain?: { bytes: Uint8Array; scale?: number; depth?: number; invert?: boolean; mode?: 'height'; depthMin?: number; movement?: number; rotation?: number; zoom?: number };
+  grain?: {
+    bytes: Uint8Array; scale?: number; depth?: number; invert?: boolean; mode?: 'height';
+    depthMin?: number; movement?: number; rotation?: number; followSize?: number; brightness?: number; contrast?: number;
+  };
   /** The pressure response curves (input, output) for size and opacity; missing = straight. */
   sizeCurve?: [number, number][];
   opacityCurve?: [number, number][];
@@ -51,6 +55,8 @@ export interface ImportedBrush {
   report?: BrushImportReport;
   /** Procreate's Invert shape: black paints instead of white. */
   tipInvert?: boolean;
+  /** An equivalent round tip for a standard Procreate shape referenced by name. */
+  tipHardness?: number;
   /** Rotate the tip with the stroke. */
   follow?: boolean;
   /** Random size / opacity per dab (0..1). */
@@ -90,6 +96,8 @@ export class BrushImportError extends Error {}
 
 const MAX_BRUSHES = 300;
 const MAX_TIP = 4096;
+const MAX_BRUSH_MEMBER = 32 * 1024 * 1024;
+const MAX_BRUSH_MEMBERS = 50_000;
 
 // ---------------------------------------------------------------------------------------------
 // Property lists
@@ -342,7 +350,7 @@ const NOT_MAPPED: [RegExp, string][] = [
   [/^dynamicsPressure\w+Curve$|^dynamicsPressureShapeRoundness\w*$/, 'pressure on a setting 2Dope does not vary with pressure (roundness, grain, scatter, count)'],
   [/^plotFFT\w+$/, "motion filtering (FFT): the mapping to 2Dope's motion filter is not confirmed"],
   [/^shape(Count|CountJitter|FlipXJitter|FlipYJitter|Randomise|Azimuth|Angle|Filter|FilterMode|Orientation|Scatter)$|^oriented$/, 'tip variation (count, flips, randomise, scatter angle, filtering)'],
-  [/^(grainDepthJitter|grainOrientation|textureOffsetJitter|textureFilter|textureFilterMode|textureBrightness|textureContrast|textureApplication)$/, 'grain detail (jitter, filtering, brightness / contrast)'],
+  [/^(grainDepthJitter|grainOrientation|textureOffsetJitter|textureFilter|textureFilterMode|textureApplication)$/, 'grain detail (jitter, filtering or application mode)'],
   [/^(taperPressure|pencilTaperPressure)$/, 'taper pressure (2Dope tapers do not simulate pressure)'],
   [/^(taper|pencilTaper)\w+$/, 'taper detail for a taper of length 0'],
   [/^dynamicsJitter\w+$|^dynamicsSpeed\w+$|^dynamicsPressure(Size|Opacity)$/, 'zero or off in this brush'],
@@ -364,14 +372,42 @@ function reportKeys(info: Record<string, unknown> | null, used: Set<string>, why
   return out;
 }
 
-/** The brushes in a Procreate .brushset or .brush (a zip). */
-export async function readProcreate(bytes: Uint8Array, fileName: string): Promise<ImportedBrush[]> {
-  let files: Map<string, Uint8Array>;
+/** The brushes in a Procreate .brushset or .brush. Read only the entries each brush needs. */
+export async function* readProcreateBrushes(input: Uint8Array | Blob, fileName: string): AsyncGenerator<ImportedBrush> {
+  const reader = new ZipReader(input instanceof Blob ? new BlobReader(input) : new Uint8ArrayReader(input), { useWebWorkers: false });
   try {
-    files = await readZip(bytes, { lenient: true });
+    yield* readProcreateEntries(reader, fileName);
   } catch (e) {
+    if (e instanceof BrushImportError) throw e;
     throw new BrushImportError(`${fileName} is not a Procreate brush file (${e instanceof Error ? e.message : 'unreadable'}).`);
+  } finally {
+    await reader.close();
   }
+}
+
+export async function readProcreate(bytes: Uint8Array, fileName: string): Promise<ImportedBrush[]> {
+  const out: ImportedBrush[] = [];
+  for await (const brush of readProcreateBrushes(bytes, fileName)) out.push(brush);
+  return out;
+}
+
+async function* readProcreateEntries(reader: ZipReader<unknown>, fileName: string): AsyncGenerator<ImportedBrush> {
+  const files = new Map<string, FileEntry>();
+  let count = 0;
+  for await (const entry of reader.getEntriesGenerator()) {
+    if (++count > MAX_BRUSH_MEMBERS) throw new BrushImportError(`${fileName} has too many ZIP members.`);
+    if (!entry.directory && !entry.encrypted && entry.uncompressedSize <= MAX_BRUSH_MEMBER && safeName(entry.filename) && !files.has(entry.filename)) {
+      files.set(entry.filename, entry);
+    }
+  }
+  const data = async (key: string | undefined): Promise<Uint8Array | undefined> => {
+    const entry = key && files.get(key);
+    if (entry) {
+      try { return await entry.getData(new Uint8ArrayWriter()); }
+      catch { /* A damaged member can be skipped without losing the rest of a set. */ }
+    }
+    return undefined;
+  };
   const lower = new Map([...files.keys()].map((k) => [k.toLowerCase(), k]));
   // Procreate keeps a backup of each brush in Reset/: that is not a brush of its own
   const archives = [...files.keys()].filter((k) => /(^|\/)brush\.archive$/i.test(k) && !/(^|\/)(reset|__macosx)\//i.test(k));
@@ -381,8 +417,9 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
   let order: string[] = [];
   if (setPlist) {
     try {
-      const s = parsePlist(files.get(setPlist)!) as { brushes?: unknown };
-      if (Array.isArray(s.brushes)) order = s.brushes.map((x) => str(x)).filter((x): x is string => !!x);
+      const plist = await data(setPlist);
+      const s = (plist ? parsePlist(plist) : null) as { brushes?: unknown } | null;
+      if (Array.isArray(s?.brushes)) order = s.brushes.map((x) => str(x)).filter((x): x is string => !!x);
     } catch {
       // no order: zip order
     }
@@ -394,13 +431,14 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
   });
   const base = fileName.replace(/\.[a-z]+$/i, '');
   const find = (dir: string, file: string) => lower.get(`${dir}${file}`.toLowerCase()) ?? lower.get(`${dir}reset/${file}`.toLowerCase());
-  const out: ImportedBrush[] = [];
+  let imported = 0;
   let unreadable = 0;
   for (const arch of archives.slice(0, MAX_BRUSHES)) {
     const dir = dirOf(arch);
     let info: Record<string, unknown> | null = null;
     try {
-      info = unarchive(parsePlist(files.get(arch)!));
+      const plist = await data(arch);
+      if (plist) info = unarchive(parsePlist(plist));
     } catch {
       info = null;
     }
@@ -424,13 +462,24 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
       else if (want) why.set(pathKey, `${want} is one of Procreate's own pictures and is not in the file (the brush's own ${file}, or the built-in one, is used)`);
       return hit ?? find(dir, file);
     };
-    const shapeKey = named('bundledShapePath', 'shape.png');
-    const grainKey = named('bundledGrainPath', 'grain.png');
+    const shape = await data(named('bundledShapePath', 'shape.png'));
+    const grain = await data(named('bundledGrainPath', 'grain.png'));
     const brushName = str(info?.name)?.trim();
     if (brushName) used.add('name');
-    const b: ImportedBrush = { name: (brushName || (archives.length === 1 ? base : `${base} ${out.length + 1}`)).slice(0, 60), tip: shapeKey ? { kind: 'png', bytes: files.get(shapeKey)! } : null };
-    if (grainKey) {
-      const g: NonNullable<ImportedBrush['grain']> = { bytes: files.get(grainKey)!, scale: get(['textureScale', 'grainScale']), depth: get(['grainDepth', 'textureDepth']), invert: (get(['textureInverted', 'grainInverted', 'textureInvert']) ?? 0) > 0 };
+    const b: ImportedBrush = { name: (brushName || (archives.length === 1 ? base : `${base} ${imported + 1}`)).slice(0, 60), tip: shape ? { kind: 'png', bytes: shape } : null };
+    const shapeInverted = (get(['shapeInverted', 'shapeInvert']) ?? 0) > 0;
+    if (shapeInverted) b.tipInvert = true;
+    if (!shape && !shapeInverted) {
+      const name = str(info.bundledShapePath)?.trim().split(/[\\/]/).at(-1)?.toLowerCase();
+      const round = /^brush-preset-(hard|soft|ultra-soft)\.(?:png|jpe?g)$/.exec(name ?? '');
+      if (round) {
+        const hardness = { hard: 1, soft: 0.25, 'ultra-soft': 0.02 };
+        b.tipHardness = hardness[round[1] as keyof typeof hardness];
+        why.set('bundledShapePath', 'uses an equivalent 2Dope round tip');
+      }
+    }
+    if (grain) {
+      const g: NonNullable<ImportedBrush['grain']> = { bytes: grain, scale: get(['textureScale', 'grainScale']), depth: get(['grainDepth', 'textureDepth']), invert: (get(['textureInverted', 'grainInverted', 'textureInvert']) ?? 0) > 0 };
       const mode = num(info?.grainBlendMode);
       // Procreate's grain blends: 1 multiplies (2Dope's grain); 27 and 28 (Procreate's two height blends,
       // seen on low-depth canvas textures) are read as a height map. Others are not mapped yet.
@@ -445,13 +494,17 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
       // kept as -1..1 of a half turn (assumed: no reference render to check it against)
       if (rot !== undefined) g.rotation = clamp(rot, -1, 1) * 180;
       const zoom = get(['textureZoom']);
-      if (zoom !== undefined) g.zoom = clamp(zoom, 0, 1);
+      // The right endpoint is Cropped (fixed grain); the left endpoint follows brush size.
+      if (zoom !== undefined) g.followSize = 1 - clamp(zoom, 0, 1);
+      const brightness = get(['textureBrightness']);
+      if (brightness !== undefined) g.brightness = clamp(brightness, -1, 1);
+      const contrast = get(['textureContrast']);
+      if (contrast !== undefined) g.contrast = clamp(contrast, -1, 1);
       const orient = num(info?.textureOrientation);
       if (orient === 1) used.add('textureOrientation');
       else if (orient !== undefined) why.set('textureOrientation', `orientation ${orient} is not supported (the grain stays on the canvas)`);
       b.grain = g;
-    } else for (const k of ['grainBlendMode', 'grainDepth', 'grainDepthMinimum', 'textureScale', 'textureMovement', 'textureZoom', 'textureRotation', 'textureOrientation', 'textureInverted']) if (k in (info ?? {})) why.set(k, 'no grain picture in the file');
-    if ((get(['shapeInverted', 'shapeInvert']) ?? 0) > 0) b.tipInvert = true;
+    } else for (const k of ['grainBlendMode', 'grainDepth', 'grainDepthMinimum', 'textureScale', 'textureMovement', 'textureZoom', 'textureRotation', 'textureOrientation', 'textureInverted', 'textureBrightness', 'textureContrast']) if (k in (info ?? {})) why.set(k, 'no grain picture in the file');
     const size = get(['paintSize', 'maxSize']);
     if (size !== undefined) b.size = clamp(Math.round(size * 100), 2, 200);
     const op = get(['paintOpacity', 'maxOpacity']);
@@ -538,10 +591,10 @@ export async function readProcreate(bytes: Uint8Array, fileName: string): Promis
     const pull = get(['wetMixPull', 'dynamicsPull', 'paintPull', 'pull']);
     if (pull !== undefined && pull > 0) b.wetPull = clamp(pull, 0, 1);
     b.report = reportKeys(info, used, why);
-    out.push(b);
+    imported++;
+    yield b;
   }
-  if (!out.length) throw new BrushImportError(unreadable ? `${fileName}: the brush settings could not be read (the file may be damaged).` : `${fileName} has no Procreate brushes in it.`);
-  return out;
+  if (!imported) throw new BrushImportError(unreadable ? `${fileName}: the brush settings could not be read (the file may be damaged).` : `${fileName} has no Procreate brushes in it.`);
 }
 
 // ---------------------------------------------------------------------------------------------

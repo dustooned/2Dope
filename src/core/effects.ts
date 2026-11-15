@@ -22,7 +22,19 @@ export const EFFECT_TEXT_MAX = 40;
 /** What an effect works on: Ink, Colour, the whole layer, or (captions only) the letters. */
 export type EffectTarget = 'line' | 'fill' | 'layer' | 'text';
 export const MAX_LAYER_EFFECTS = 16;
-export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave';
+export const PAPER_FINISHES = [
+  { id: 'newsprint', label: 'Comic Newsprint', amount: 59, size: 16 },
+  { id: 'cold-press', label: 'Cold Press Paper', amount: 68, size: 14 },
+  { id: 'recycled-kraft', label: 'Recycled Kraft', amount: 72, size: 20 },
+  { id: 'gesso', label: 'Brushed Gesso', amount: 53, size: 19 },
+  { id: 'riso-paper', label: 'Thin Riso Paper', amount: 52, size: 12 },
+  { id: 'riso-dry', label: 'Dry Riso Ink', amount: 82, size: 21 },
+] as const;
+export type PaperFinish = (typeof PAPER_FINISHES)[number]['id'];
+export type TextureStyle = 'paper' | 'hatch' | 'dots' | 'weave' | PaperFinish;
+export function isPaperFinish(style: TextureStyle | undefined): style is PaperFinish {
+  return PAPER_FINISHES.some((finish) => finish.id === style);
+}
 export interface EffectStyleOrigin { v: 1; name: string; effects: LayerEffect[] }
 
 export interface LayerEffect {
@@ -77,6 +89,7 @@ export const TEXTURE_STYLES: { id: TextureStyle; label: string }[] = [
   { id: 'hatch', label: 'Hatch' },
   { id: 'dots', label: 'Dots' },
   { id: 'weave', label: 'Canvas' },
+  ...PAPER_FINISHES,
 ];
 
 export interface EffectDef {
@@ -193,7 +206,7 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
       { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
     ] },
-  { id: 'texture', label: 'Texture', hint: 'Paper, hatching, dots or canvas weave in the paint (best on the Fill)', target: 'fill', amount: 60, size: 14, hold: 1, amountRange: [0, 100], sizeRange: [3, 80], amountLabel: 'Strength', sizeLabel: 'Scale', amountUnit: '%', sizeUnit: ' px', animated: false },
+  { id: 'texture', label: 'Texture', hint: 'Paper tooth, print grain, hatching and weave in the paint. Start with Colour.', target: 'fill', amount: 60, size: 14, hold: 1, amountRange: [0, 100], sizeRange: [3, 80], amountLabel: 'Strength', sizeLabel: 'Scale', amountUnit: '%', sizeUnit: ' px', animated: false },
   { id: 'dither', label: 'Retro pixels', hint: 'Old-console look: chunky pixels and a few colours, mixed with a dot pattern (dither)', target: 'layer', amount: 100, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Mix', sizeLabel: 'Pixel size', amountUnit: '%', sizeUnit: ' px', animated: false,
     extras: [
       { key: 'tr', label: 'Red threshold', kind: 'range', min: -100, max: 100, step: 1, unit: '', def: 0 },

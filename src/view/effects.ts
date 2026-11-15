@@ -1,5 +1,5 @@
 import { makeCanvas } from '../brush/raster';
-import { activeEffects, effectAt, effectDef, effectsKey, effectsPad, effectTick, param, temporalEffect, type LayerEffect } from '../core/effects';
+import { activeEffects, effectAt, effectDef, effectsKey, effectsPad, effectTick, isPaperFinish, param, temporalEffect, type LayerEffect, type PaperFinish } from '../core/effects';
 import { applyBlur } from '../core/adjust';
 import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
@@ -811,8 +811,18 @@ function grain(c: HTMLCanvasElement, e: LayerEffect, tick: number): void {
 // Paper tiles are made once per look: a periodic value-noise tile (256 px) repeats without seams.
 const TILE = 256;
 const tiles = new Map<string, Float32Array>();
-function paperTile(size: number, seed: number): Float32Array {
-  const key = `${size}|${seed}`;
+const TILE_MASK = TILE - 1;
+const soft = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+const tileIndex = (x: number, y: number) => (y & TILE_MASK) * TILE + (x & TILE_MASK);
+
+function rememberTile(key: string, tile: Float32Array): Float32Array {
+  if (tiles.size >= 10) tiles.delete(tiles.keys().next().value!);
+  tiles.set(key, tile);
+  return tile;
+}
+
+function paperTile(size: number, seed: number, aspect = 1): Float32Array {
+  const key = `${size}|${seed}|${aspect}`;
   const hit = tiles.get(key);
   if (hit) return hit;
   const t = new Float32Array(TILE * TILE);
@@ -820,15 +830,16 @@ function paperTile(size: number, seed: number): Float32Array {
   const norm = octs.reduce((a, b) => a + b, 0);
   octs.forEach((amp, o) => {
     // whole cells per tile, so the noise repeats exactly at the tile's edge
-    const cells = Math.max(1, Math.round(TILE / (Math.max(2, size) / 2 ** o)));
-    const lat = new Float32Array(cells * cells);
+    const width = Math.max(1, Math.round(TILE / (Math.max(2, size * aspect) / 2 ** o)));
+    const height = Math.max(1, Math.round(TILE / (Math.max(2, size) / 2 ** o)));
+    const lat = new Float32Array(width * height);
     for (let i = 0; i < lat.length; i++) lat[i] = hash01(seed, i, 11 + o);
     for (let y = 0; y < TILE; y++) {
-      const fy = (y / TILE) * cells; const j = Math.floor(fy); const ty = fy - j; const sy = ty * ty * (3 - 2 * ty);
-      const j0 = (j % cells) * cells, j1 = ((j + 1) % cells) * cells;
+      const fy = (y / TILE) * height; const j = Math.floor(fy); const ty = fy - j; const sy = ty * ty * (3 - 2 * ty);
+      const j0 = (j % height) * width, j1 = ((j + 1) % height) * width;
       for (let x = 0; x < TILE; x++) {
-        const fx = (x / TILE) * cells; const i = Math.floor(fx); const tx = fx - i; const sx = tx * tx * (3 - 2 * tx);
-        const i0 = i % cells, i1 = (i + 1) % cells;
+        const fx = (x / TILE) * width; const i = Math.floor(fx); const tx = fx - i; const sx = tx * tx * (3 - 2 * tx);
+        const i0 = i % width, i1 = (i + 1) % width;
         const v = (lat[j0 + i0]! * (1 - sx) + lat[j0 + i1]! * sx) * (1 - sy) + (lat[j1 + i0]! * (1 - sx) + lat[j1 + i1]! * sx) * sy;
         t[y * TILE + x] = t[y * TILE + x]! + (v * amp) / norm;
       }
@@ -836,9 +847,67 @@ function paperTile(size: number, seed: number): Float32Array {
   });
   // noise bunches around the middle: spread it so the paper has real tooth
   for (let i = 0; i < t.length; i++) t[i] = Math.min(1, Math.max(0, 0.5 + (t[i]! - 0.5) * 2.4));
-  if (tiles.size >= 6) tiles.delete(tiles.keys().next().value as string);
-  tiles.set(key, t);
-  return t;
+  return rememberTile(key, t);
+}
+
+/** Short, irregular pulp fibers on a wrapping tile. All marks are generated from the seed. */
+function fiberTile(size: number, seed: number): Float32Array {
+  const tile = new Float32Array(TILE * TILE);
+  const length = Math.max(2, Math.min(28, size * 0.65));
+  for (let i = 0; i < 420; i++) {
+    const x = hash01(seed, i, 31) * TILE, y = hash01(seed, i, 32) * TILE;
+    const angle = hash01(seed, i, 33) * 2 * Math.PI;
+    const span = Math.ceil(length * (0.25 + 0.75 * hash01(seed, i, 34)));
+    const dx = Math.cos(angle), dy = Math.sin(angle);
+    const weight = 0.35 + 0.6 * hash01(seed, i, 35);
+    for (let j = 0; j <= span; j++) {
+      const px = x + j * dx, py = y + j * dy + Math.sin(j * 0.55) * 0.65;
+      const left = Math.floor(px), top = Math.floor(py);
+      const strength = weight * Math.sin(Math.PI * (j + 1) / (span + 2));
+      for (let iy = top; iy <= top + 1; iy++) for (let ix = left; ix <= left + 1; ix++) {
+        const at = tileIndex(ix, iy);
+        const coverage = (1 - Math.abs(px - ix)) * (1 - Math.abs(py - iy));
+        tile[at] = Math.max(tile[at]!, coverage * strength);
+      }
+    }
+  }
+  return tile;
+}
+
+function finishTile(style: PaperFinish, size: number, seed: number): Float32Array {
+  const key = `${style}|${size}|${seed}`;
+  const hit = tiles.get(key);
+  if (hit) return hit;
+  const broad = paperTile(size * 0.9, seed);
+  const aspect = style === 'gesso' ? 4.5 : style === 'riso-paper' ? 1.5 : 1;
+  const fine = paperTile(size * 0.22, seed ^ 0x352ab, aspect);
+  const fibers = style === 'recycled-kraft' ? fiberTile(size, seed) : null;
+  const tile = new Float32Array(TILE * TILE);
+  for (let i = 0; i < tile.length; i++) {
+    const tooth = broad[i]!, detail = fine[i]!, speck = hash01(seed, i, 38);
+    const pits = soft((speck - 0.89) * 9);
+    switch (style) {
+      case 'newsprint':
+        tile[i] = 0.99 - 0.09 * tooth - 0.16 * detail - 0.5 * pits * (0.3 + 0.7 * tooth);
+        break;
+      case 'cold-press':
+        tile[i] = 0.98 - 0.12 * speck - 0.78 * soft((0.49 - detail) * 2.7) * (0.38 + 0.62 * tooth);
+        break;
+      case 'recycled-kraft':
+        tile[i] = Math.max(0, 0.98 - 0.16 * detail - 0.13 * tooth - 0.11 * pits - 0.69 * fibers![i]!);
+        break;
+      case 'gesso':
+        tile[i] = 0.98 - 0.7 * soft((detail - 0.23) * 1.8) * (0.32 + 0.68 * tooth) - 0.1 * speck;
+        break;
+      case 'riso-paper':
+        tile[i] = 0.99 - 0.11 * tooth - 0.25 * detail ** 1.5 - 0.12 * speck;
+        break;
+      case 'riso-dry':
+        tile[i] = 0.97 - 0.14 * detail - 0.66 * soft((speck - (0.77 - 0.29 * tooth)) * 4);
+        break;
+    }
+  }
+  return rememberTile(key, tile);
 }
 
 /** Texture: a pattern that eats into the paint. Static: the same on every frame. */
@@ -847,11 +916,10 @@ function texture(c: HTMLCanvasElement, e: LayerEffect): void {
   if (amt <= 0) return;
   const s = Math.max(2, e.size);
   const style = e.style ?? 'paper';
-  const soft = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
   let level: (x: number, y: number) => number; // 1 keeps the paint, 0 removes it
-  if (style === 'paper') {
-    const t = paperTile(s, e.seed);
-    level = (x, y) => t[(y & (TILE - 1)) * TILE + (x & (TILE - 1))]!;
+  if (style === 'paper' || isPaperFinish(style)) {
+    const t = style === 'paper' ? paperTile(s, e.seed) : finishTile(style, s, e.seed);
+    level = (x, y) => t[tileIndex(x, y)]!;
   } else if (style === 'hatch') {
     level = (x, y) => { const f = (((x + y) % s) + s) % s / s; return soft((0.5 - Math.abs(f - 0.3)) * 6); };
   } else if (style === 'dots') {

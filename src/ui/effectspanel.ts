@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import type { Layer } from '../core/comp';
 import { DITHER_METHODS, PALETTES, type DitherMethod, type PaletteId } from '../core/dither';
-import { canMerge, cleanEffectText, EFFECT_TEXT_MAX, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, CAPTION_TARGET_NAMES, TARGET_NAMES, temporalEffect, TEXTURE_STYLES, type EffectTarget, type LayerEffect, type TextureStyle } from '../core/effects';
+import { canMerge, cleanEffectText, EFFECT_TEXT_MAX, duplicateEffect, EFFECT_TYPES, effectAt, effectDef, effectPreview, isPaperFinish, MAX_LAYER_EFFECTS, mergeDown, moveEffect, newEffect, param, plainName, resetEffect, CAPTION_TARGET_NAMES, TARGET_NAMES, temporalEffect, TEXTURE_STYLES, type EffectTarget, type LayerEffect } from '../core/effects';
 import { newSeed } from '../core/rng';
 import { setKey } from '../core/anim';
 import { showContextMenu, type CtxItem } from './contextmenu';
@@ -426,14 +426,20 @@ export class EffectsPanel {
       body.append(row);
     };
     if (e.type === 'texture') {
-      const look = el('div', { class: 'fx-row' });
+      const look = el('label', { class: 'fx-row' });
       look.append(el('span', {}, 'Look'));
-      const looks = el('div', { class: 'fx-seg small' });
+      const looks = el('select', { class: 'fx-texture-look', 'aria-label': 'Texture look' });
+      const finishes = el('optgroup', { label: 'Paper and print finishes' });
       for (const t of TEXTURE_STYLES) {
-        const b = el('button', { type: 'button', 'aria-pressed': String((e.style ?? 'paper') === t.id) }, t.label);
-        b.addEventListener('click', () => { if ((e.style ?? 'paper') !== t.id) this.patch(i, { style: t.id as TextureStyle }, `Texture ${t.label.toLowerCase()}`); });
-        looks.append(b);
+        const group = isPaperFinish(t.id) ? finishes : looks;
+        group.append(el('option', { value: t.id }, t.label));
       }
+      looks.append(finishes);
+      looks.value = e.style ?? 'paper';
+      looks.addEventListener('change', () => {
+        const style = TEXTURE_STYLES.find((t) => t.id === looks.value);
+        if (style) this.patch(i, { style: style.id }, `Texture ${style.label.toLowerCase()}`);
+      });
       look.append(looks);
       body.append(look);
     }
@@ -535,7 +541,7 @@ export class EffectsPanel {
       hold.append(holds);
       body.append(hold);
     }
-    if (adv && ((def.seeded ?? def.animated) || (e.type === 'texture' && (e.style ?? 'paper') === 'paper'))) {
+    if (adv && ((def.seeded ?? def.animated) || (e.type === 'texture' && ((e.style ?? 'paper') === 'paper' || isPaperFinish(e.style))))) {
       const reseed = el('button', { type: 'button', class: 'fx-reseed', title: 'A different random pattern' }, 'New pattern');
       reseed.addEventListener('click', () => this.patch(i, { seed: newSeed() }, `${name} new pattern`));
       body.append(reseed);

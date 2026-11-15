@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, param, readEffects, resetEffect, setPictureStamp, temporalSamples } from './effects';
+import { activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, PAPER_FINISHES, param, readEffects, resetEffect, setPictureStamp, temporalSamples } from './effects';
+import { drawingsLayer, newComp } from './comp';
+import { compFile, minimumDrawingSchema } from '../io/schema';
 
 describe('layer effects', () => {
   it('samples Echo oldest first and keeps its trails and shutter inside the layer trim', () => {
@@ -55,6 +57,24 @@ describe('layer effects', () => {
     const n = { id: 'L', effects: [newEffect('grain', 'a', 1)] };
     expect(effectsKey(n, 0)).not.toBe(effectsKey(n, 1));
     expect(effectsKey({ id: 'L', effects: [{ ...t.effects[0]!, style: 'dots' as const }] }, 0)).not.toBe(effectsKey(t, 0));
+  });
+
+  it('preserves paper finishes in archives and requires reader 13 only when they are used', () => {
+    const c = newComp('c', 'Shot', 64, 64, 12);
+    const l = drawingsLayer('a', 'Art', [{ drawing: 'd', length: 4 }], 64, 64);
+    c.layers = [l];
+    const plain = newEffect('texture', 'texture', 123);
+    l.effects = [plain];
+    expect(minimumDrawingSchema({}, { c: compFile(c) })).toBe(3);
+    for (const { id, label } of PAPER_FINISHES) {
+      const finish = { ...plain, style: id };
+      l.effects = [finish];
+      expect(readEffects(compFile(c).layers[0]!.effects)).toEqual([finish]);
+      expect(minimumDrawingSchema({}, { c: compFile(c) })).toBe(13);
+      l.effects = [];
+      l.styleOrigin = { v: 1, name: label, effects: [finish] };
+      expect(minimumDrawingSchema({}, { c: compFile(c) })).toBe(13);
+    }
   });
 
   it('has a roughen-edges effect and a gaussian blur, each with its own defaults', () => {

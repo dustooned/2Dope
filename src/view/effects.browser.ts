@@ -1,6 +1,6 @@
 /** Real-browser pixel checks for Roughen edges and Gaussian blur, opened through /tests/effects.html. */
 import { App } from '../app';
-import { effectsPad, newEffect, type EffectType, type LayerEffect } from '../core/effects';
+import { effectsPad, newEffect, PAPER_FINISHES, type EffectType, type LayerEffect } from '../core/effects';
 import { drawingsLayer } from '../core/comp';
 import { Project, planeCanvas } from '../core/project';
 import { EffectsPanel } from '../ui/effectspanel';
@@ -121,6 +121,23 @@ check('Ink roughen leaves the Colour untouched; Colour roughen leaves the Ink un
 check('Whole-layer blur works on both Ink and Colour', () => {
   const base = run([], split.line, split.fill), blur = run([fx('blur', { amount: 4 })], split.line, split.fill);
   return (differs(base, blur, 0, 0, 32) && differs(base, blur, 32, 0, 64)) || 'one side was not blurred';
+});
+
+check('Paper finishes differ and remain static, with seed and scale controls and no effect at zero', () => {
+  const base = run([], split.line, split.fill);
+  const samples: Uint8ClampedArray[] = [];
+  for (const { id, amount, size } of PAPER_FINISHES) {
+    const e = fx('texture', { style: id, amount, size });
+    const finished = run([e], split.line, split.fill);
+    if (!differs(base, finished, 0, 0, 32) || differs(base, finished, 32, 0, 64)) return `${id}: affected the wrong pixels`;
+    if (!same(finished, run([e], split.line, split.fill, 8))) return `${id}: grain moved between frames`;
+    if (same(finished, run([{ ...e, seed: 8080 }], split.line, split.fill))) return `${id}: seed had no effect`;
+    if (same(finished, run([{ ...e, size: 34 }], split.line, split.fill))) return `${id}: scale had no effect`;
+    if (!same(base, run([{ ...e, amount: 0 }], split.line, split.fill))) return `${id}: changed the art at zero`;
+    if (samples.some((prior) => same(prior, finished))) return `${id}: copied another preset’s pixels`;
+    samples.push(finished);
+  }
+  return true;
 });
 
 // 5. The editing layer stays clean while painting
@@ -271,6 +288,26 @@ const app = new App(canvas, stage), panel = new EffectsPanel(app);
 let docChanges = 0;
 const dirty = app.onDocChanged; app.onDocChanged = () => { docChanges++; dirty(); };
 const effects = () => { const l = app.project.layer; return l.kind === 'drawings' ? l.effects ?? [] : []; };
+check('Texture Look offers the paper finishes and selection is one undo step', () => {
+  panel.show(app.project.layer.id);
+  const root = document.querySelector<HTMLElement>('.fxpanel')!;
+  addButtons(root).find((b) => b.querySelector('strong')?.textContent === 'Texture')?.click();
+  const select = root.querySelector<HTMLSelectElement>('[aria-label="Texture look"]');
+  if (!select || select.value !== 'paper') return 'Texture Look is missing or lost its default';
+  if (select.getBoundingClientRect().height < 44) return 'Texture Look is too small to tap';
+  for (const { id } of PAPER_FINISHES) {
+    if (!Array.from(select.options).some((o) => o.value === id)) return `missing ${id}`;
+  }
+  select.value = 'cold-press';
+  select.dispatchEvent(new Event('change'));
+  if (effects().at(-1)?.style !== 'cold-press') return 'look did not apply';
+  app.history.undo();
+  if (effects().at(-1)?.style !== 'paper') return 'one undo did not restore Paper';
+  app.history.undo();
+  panel.close();
+  return !effects().length || 'undo did not remove Texture';
+});
+
 check('Adding an effect, moving its slider and New pattern are one undo step each', () => {
   panel.show(app.project.layer.id);
   const root = document.querySelector<HTMLElement>('.fxpanel')!;

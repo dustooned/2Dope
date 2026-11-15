@@ -4475,6 +4475,7 @@ body.ui-full.bar-collapsed:not(.quick) .paint-target, body.ui-full.tools-folded:
 
 .fx-row[hidden], .fx-reseed[hidden] { display: none !important; }
 .fx-row select { flex: 1; min-width: 0; min-height: 34px; background: var(--panel-2); color: inherit; border: 1px solid var(--line); border-radius: var(--radius); padding: 0 8px; }
+.fx-row select.fx-texture-look { min-height: 44px; }
 /* the mode and tool rows stacked when they do not fit side by side (a tablet upright) */
 #stage.bub-stack .bub-tools { top: 62px; right: 8px; left: auto; max-width: calc(100% - 16px); }
 #stage.bub-stack .bub-ctx { top: var(--tools-bottom, 116px); right: 8px; max-width: calc(100% - 16px); }

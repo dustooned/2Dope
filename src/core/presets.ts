@@ -1,4 +1,4 @@
-import { effectAt, EFFECT_TYPES, MAX_LAYER_EFFECTS, newEffect, readEffects, temporalEffect, type LayerEffect } from './effects';
+import { effectAt, EFFECT_TYPES, MAX_LAYER_EFFECTS, newEffect, PAPER_FINISHES, readEffects, temporalEffect, TEXTURE_STYLES, type LayerEffect } from './effects';
 import { EASED, valueAt, type Key, type Prop, type Side, type Value, type Vec2 } from './anim';
 import type { Comp, Layer } from './comp';
 import { DITHER_METHODS, PALETTES } from './dither';
@@ -25,7 +25,7 @@ function effect(v: unknown): LayerEffect {
   number(v.amount, ...d.amountRange); number(v.size, ...d.sizeRange);
   if (!Number.isInteger(v.hold) || !Number.isInteger(v.seed)) fail('invalid effect pattern.');
   number(v.hold, 1, 8); number(v.seed, 0, 4294967295);
-  if (v.style !== undefined && (d.id !== 'texture' || !['paper', 'hatch', 'dots', 'weave'].includes(String(v.style)))) fail('invalid texture style.');
+  if (v.style !== undefined && (d.id !== 'texture' || !TEXTURE_STYLES.some((t) => t.id === v.style))) fail('invalid texture style.');
   if (v.palette !== undefined && (d.id !== 'dither' || !PALETTES.some(p => p.id === v.palette))) fail('unknown palette.');
   if (v.method !== undefined && (d.id !== 'dither' || !DITHER_METHODS.some(m => m.id === v.method))) fail('unknown dither method.');
   if (v.gray !== undefined && (d.id !== 'dither' || typeof v.gray !== 'boolean')) fail('invalid dither setting.');
@@ -139,4 +139,7 @@ export const BUILTIN_PRESETS: Preset[] = [
   motion('camera-push', 'Camera push', 'zoom', [0, 15], true), motion('camera-pan', 'Camera pan', 'position', [[0, 0], [.08, 0]], true),
   { ...base('sticker-shadow', 'Sticker shadow'), kind: 'effects', effects: [newEffect('shadow', 'shadow', 1)] },
   { ...base('soft-glow', 'Soft glow'), kind: 'effects', effects: [newEffect('glow', 'glow', 1)] },
+  ...PAPER_FINISHES.map(({ id, label, amount, size }): Preset => ({
+    ...base(id, label), kind: 'effects', effects: [{ ...newEffect('texture', 'texture', 1), target: 'layer', style: id, amount, size }],
+  })),
 ];

@@ -65,7 +65,7 @@ describe('format 12 gate', () => {
     expect(minimumDrawingSchema({}, { c: compFile(c) })).toBeLessThan(12);
     l.effects = [tc()];
     expect(minimumDrawingSchema({}, { c: compFile(c) })).toBe(12);
-    expect(SCHEMA).toBe(12);
-    expect(migrate({ format: '2dope', schema: 11 }).schema).toBe(12);
+    expect(SCHEMA).toBeGreaterThanOrEqual(12);
+    expect(migrate({ format: '2dope', schema: 11 }).schema).toBe(SCHEMA);
   });
 });

@@ -88,6 +88,13 @@ try {
   paint(rotated, record({ ...base, flow: 1, size: 80, tipImage, angle: 90 }, [point(64, 64)]));
   check('Opaque rectangular grayscale tips retain their shape without painting black background', alpha(upright, 64, 94) > 200 && alpha(upright, 78, 64) === 0);
   check('Image-tip rotation works at full roundness', alpha(rotated, 94, 64) > 200 && alpha(rotated, 64, 94) === 0);
+  const fineTip = makeCanvas(256, 256), fineSource = ctx2d(fineTip);
+  fineSource.fillStyle = '#000'; fineSource.fillRect(0, 0, 256, 256);
+  fineSource.fillStyle = '#fff'; fineSource.fillRect(128, 0, 1, 256);
+  const fineImage = fineTip.toDataURL(); await loadTip(fineImage);
+  const fineStamp = makeCanvas(256, 256);
+  paint(fineStamp, record({ ...base, flow: 1, size: 256, tipImage: fineImage }, [point(128, 128)]));
+  check('A 256 px image tip keeps a one-pixel line at its native stamp size', alpha(fineStamp, 128, 128) > 250 && alpha(fineStamp, 127, 128) === 0 && alpha(fineStamp, 129, 128) === 0);
   const square = makeCanvas(32, 32); ctx2d(square).fillStyle = '#fff'; ctx2d(square).fillRect(0, 0, 32, 32);
   const squareImage = square.toDataURL(); await loadTip(squareImage);
   const squareCanvas = makeCanvas(128, 128), squareResult = paint(squareCanvas, record({ ...base, flow: 1, size: 80, tipImage: squareImage, angle: 45 }, [point(64, 64)]));

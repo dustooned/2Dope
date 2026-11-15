@@ -88,7 +88,8 @@ export function loadTip(url: string): Promise<void> {
     img.onload = () => {
       // Inspect the source without transparent letterboxing: an opaque rectangular grayscale
       // tip still uses brightness, even though its final square sprite has transparent margins.
-      const scale = Math.min(TIP / img.width, TIP / img.height);
+      const res = Math.min(256, Math.max(TIP, img.width, img.height));
+      const scale = Math.min(res / img.width, res / img.height);
       const c = makeCanvas(Math.max(1, Math.round(img.width * scale)), Math.max(1, Math.round(img.height * scale)));
       const g = ctx2d(c);
       g.drawImage(img, 0, 0, c.width, c.height);
@@ -102,8 +103,8 @@ export function loadTip(url: string): Promise<void> {
         d.data[i + 3] = a;
       }
       g.putImageData(d, 0, 0);
-      const mask = makeCanvas(TIP, TIP);
-      ctx2d(mask).drawImage(c, (TIP - c.width) / 2, (TIP - c.height) / 2);
+      const mask = makeCanvas(res, res);
+      ctx2d(mask).drawImage(c, (res - c.width) / 2, (res - c.height) / 2);
       tipMasks.set(url, mask);
       resolve();
     };
@@ -124,13 +125,13 @@ export function imageTipSprite(url: string, color: string): HTMLCanvasElement | 
   const key = `${id}|${color}`;
   const hit = tipColored.get(key);
   if (hit) return hit;
-  if (tipColored.size > 600) tipColored.clear();
-  const c = makeCanvas(TIP, TIP);
+  if (tipColored.size >= 240) tipColored.clear();
+  const c = makeCanvas(mask.width, mask.height);
   const g = ctx2d(c);
   g.drawImage(mask, 0, 0);
   g.globalCompositeOperation = 'source-in';
   g.fillStyle = color;
-  g.fillRect(0, 0, TIP, TIP);
+  g.fillRect(0, 0, c.width, c.height);
   tipColored.set(key, c);
   return c;
 }
@@ -201,40 +202,60 @@ function grainCanvas(): HTMLCanvasElement {
 }
 
 // Grain pictures (Procreate's grain source): decoded once into a "hold back" mask, black = most.
-const grainMasks = new Map<string, HTMLCanvasElement | 'loading' | 'failed'>();
+const grainMasks = new Map<string, HTMLCanvasElement | 'failed'>();
+const loadingGrains = new Map<string, Promise<void>>();
+const MAX_GRAIN_CACHE_PIXELS = 16 * 1024 * 1024;
+let grainCachePixels = 0;
 
 /** Decode a grain picture (cached). Resolves when it can be used; the built-in grain stands in until then. */
 export function loadGrain(url: string): Promise<void> {
-  const have = grainMasks.get(url);
-  if (have && have !== 'loading') return Promise.resolve();
-  grainMasks.set(url, 'loading');
-  return new Promise<void>((resolve) => {
+  if (grainMasks.has(url)) return Promise.resolve();
+  const pending = loadingGrains.get(url);
+  if (pending) return pending;
+  const result = new Promise<void>((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const w = Math.max(1, Math.min(512, img.width)), h = Math.max(1, Math.min(512, img.height));
-      const c = makeCanvas(w, h);
-      const g = ctx2d(c);
-      g.drawImage(img, 0, 0, w, h);
-      const d = g.getImageData(0, 0, w, h);
-      for (let i = 0; i < d.data.length; i += 4) {
-        // light paper takes paint, dark paper holds it back (see-through counts as dark)
-        const lum = (d.data[i]! * 0.3 + d.data[i + 1]! * 0.59 + d.data[i + 2]! * 0.11) * (d.data[i + 3]! / 255);
-        d.data[i] = d.data[i + 1] = d.data[i + 2] = 0;
-        d.data[i + 3] = 255 - lum;
+      try {
+        const w = Math.max(1, Math.min(512, img.width)), h = Math.max(1, Math.min(512, img.height));
+        const c = makeCanvas(w, h);
+        const g = ctx2d(c);
+        g.drawImage(img, 0, 0, w, h);
+        const d = g.getImageData(0, 0, w, h);
+        for (let i = 0; i < d.data.length; i += 4) {
+          // light paper takes paint, dark paper holds it back (see-through counts as dark)
+          const lum = (d.data[i]! * 0.3 + d.data[i + 1]! * 0.59 + d.data[i + 2]! * 0.11) * (d.data[i + 3]! / 255);
+          d.data[i] = d.data[i + 1] = d.data[i + 2] = 0;
+          d.data[i + 3] = 255 - lum;
+        }
+        g.putImageData(d, 0, 0);
+        grainMasks.set(url, c);
+        grainCachePixels += w * h;
+        for (const [key, saved] of grainMasks) {
+          if (grainCachePixels <= MAX_GRAIN_CACHE_PIXELS) break;
+          if (saved === 'failed') continue;
+          grainMasks.delete(key);
+          grainCachePixels -= saved.width * saved.height;
+        }
+      } catch {
+        grainMasks.set(url, 'failed');
       }
-      g.putImageData(d, 0, 0);
-      grainMasks.set(url, c);
       resolve();
     };
     img.onerror = () => { grainMasks.set(url, 'failed'); resolve(); };
     img.src = url;
-  });
+  }).finally(() => loadingGrains.delete(url));
+  loadingGrains.set(url, result);
+  return result;
 }
 
 function grainFor(url: string | undefined): HTMLCanvasElement {
   if (!url) return grainCanvas();
   const m = grainMasks.get(url);
-  if (m && m !== 'loading' && m !== 'failed') return m;
+  if (m && m !== 'failed') {
+    grainMasks.delete(url);
+    grainMasks.set(url, m);
+    return m;
+  }
   if (!m) void loadGrain(url);
   return grainCanvas();
 }

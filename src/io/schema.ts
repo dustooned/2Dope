@@ -1,5 +1,5 @@
 import { readVideo, VIDEO_MAX_SECONDS, VIDEO_PATH, type VideoSpec } from '../core/video';
-import { FORMAT10_EFFECTS, FORMAT12_EFFECTS, readEffectStyleOrigin, temporalEffect, type EffectStyleOrigin } from '../core/effects';
+import { FORMAT10_EFFECTS, FORMAT12_EFFECTS, isPaperFinish, readEffectStyleOrigin, temporalEffect, type EffectStyleOrigin } from '../core/effects';
 import { readTitle, type TitleSpec } from '../core/title';
 import { readCaption, type CaptionSpec } from '../lettering/spec';
 import { MAX_PROJECT_FONTS } from '../lettering/fonts';
@@ -41,7 +41,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 12;
+export const SCHEMA = 13;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -190,11 +190,12 @@ export interface DrawingFile {
 
 /** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
 export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comps?: Record<string, CompFile>): number {
-  const uses = (list: readonly string[]) => !!comps && Object.values(comps).some(c => c.layers.some(l => l.effects?.some(e => list.includes(e.type)) || l.styleOrigin?.effects.some(e => list.includes(e.type))));
-  if (uses(FORMAT12_EFFECTS)) return 12;
+  const uses = (test: (effect: LayerEffect) => boolean) => !!comps && Object.values(comps).some(c => c.layers.some(l => l.effects?.some(test) || l.styleOrigin?.effects.some(test)));
+  if (uses((e) => e.type === 'texture' && isPaperFinish(e.style))) return 13;
+  if (uses((e) => FORMAT12_EFFECTS.includes(e.type))) return 12;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.video))) return 11;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.caption))) return 10;
-  if (comps && Object.values(comps).some(c => c.layers.some(l => l.effects?.some(e => FORMAT10_EFFECTS.includes(e.type)) || l.styleOrigin?.effects.some(e => FORMAT10_EFFECTS.includes(e.type))))) return 10;
+  if (uses((e) => FORMAT10_EFFECTS.includes(e.type))) return 10;
   if (comps && Object.values(comps).some(c => c.layers.some(l => l.transform.orient || l.transform.position.even || ('exposures' in l && l.exposures?.some(e => e.ease))))) return 9;
   if (comps && Object.values(comps).some(c => c.layers.some(l =>
     l.tweenVectors || l.effects?.some(e => temporalEffect(e.type)) || l.styleOrigin?.effects.some(e => temporalEffect(e.type))))) return 8;
@@ -596,6 +597,8 @@ export function migrate(input: unknown): Record<string, unknown> {
   if ((raw.schema as number) < 11) raw = { ...raw, schema: 11 };
   // The Timecode effect is additive; only files using it need 12 (older readers would drop it).
   if ((raw.schema as number) < 12) raw = { ...raw, schema: 12 };
+  // Older readers would silently substitute the original paper look for a new finish.
+  if ((raw.schema as number) < 13) raw = { ...raw, schema: 13 };
   return raw;
 }
 

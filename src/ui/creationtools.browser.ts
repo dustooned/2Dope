@@ -1,7 +1,7 @@
 import { App } from '../app';
 import { Project } from '../core/project';
 import { staticProp } from '../core/anim';
-import { cameraLayer, type DrawingsLayer } from '../core/comp';
+import { cameraLayer, drawingsLayer, type DrawingsLayer } from '../core/comp';
 import { newEffect } from '../core/effects';
 import { BUILTIN_PRESETS, readPreset } from '../core/presets';
 import { DevicePresetStore } from '../io/presetstore';
@@ -94,6 +94,57 @@ await check('Effect presets replace or append with fresh identities and reject I
   const l = app.editor.primary!; l.effects = [newEffect('glow', 'old', 12)]; app.history.clear(); presets.show('effects'); click('Sticker shadow'); await until(() => !button('Apply preset').disabled); click('Apply preset'); expect(app.editor.primary!.effects?.length === 1 && app.editor.primary!.effects[0]!.type === 'shadow' && app.editor.primary!.effects[0]!.id !== 'shadow', 'replace was duplicated or linked'); app.undo(); await wait(150); expect(app.editor.primary!.effects?.[0]?.id === 'old' && !app.history.canUndo, 'look Undo wrong');
   presets.show('effects'); click('Soft glow'); const mode = field<HTMLSelectElement>('Effect preset application'); mode.value = 'append'; mode.dispatchEvent(new Event('change')); await until(() => !button('Apply preset').disabled); click('Apply preset'); expect(app.editor.primary!.effects?.length === 2, 'append unavailable'); app.undo(); await wait(150);
   const ink = readPreset({ ...BUILTIN_PRESETS.find(p => p.id === 'sticker-shadow'), id: 'ink', name: 'Ink look', effects: [{ ...newEffect('shadow', 's', 1), target: 'line' }] }); await store.put(ink); presets.show('effects'); await until(() => !!document.querySelector('.preset-list')?.textContent?.includes('Ink look')); click('Ink look'); await wait(); expect(button('Apply preset').disabled && document.querySelector('.preset-status')!.textContent!.includes('Colour'), 'Ink title target silently accepted'); presets.close();
+});
+await check('Paper preset previews, applies and reopens with identical export pixels', async () => {
+  const project = app.project;
+  const d = project.newDrawing();
+  const layer = drawingsLayer('paper-fixture', 'Paper fixture', [{ drawing: d.id, length: 72 }], 320, 180);
+  const ink = d.line.getContext('2d')!;
+  ink.fillStyle = '#b43529';
+  ink.fillRect(40, 25, 240, 130);
+  d.rev++;
+  app.history.clear();
+  project.comp.layers.unshift(layer);
+  app.editor.select(layer.id);
+  try {
+    const before = pixels();
+    expect(before.some((v, i) => i % 4 === 3 && v > 0), 'test art is empty');
+    presets.show('effects');
+    click('Cold Press Paper');
+    await until(() => !button('Apply preset').disabled);
+    expect(!app.editor.primary!.effects?.length && !app.history.canUndo, 'preview edited the project');
+    click('Apply preset');
+    const applied = app.editor.primary!;
+    const look = applied.effects?.[0];
+    expect(look?.style === 'cold-press' && look.target === 'layer', 'paper look was not applied to the whole layer');
+    const finished = pixels();
+    expect(finished.some((v, i) => v !== before[i]), 'export did not show the new finish');
+    const capture = await captureProject(app.project, { mode: 'archive' }).settle();
+    expect(capture.file.schema === 13, 'paper look did not require reader 13');
+    const loaded = loadProjectFile(validateProjectFile(capture.file)).project;
+    const saved = loaded.comp.layers.find((l) => l.id === applied.id);
+    expect(saved?.effects?.[0]?.style === 'cold-press' && saved.styleOrigin?.effects[0]?.style === 'cold-press', 'saved look was not preserved');
+    for (const d of loaded.drawings.values()) {
+      for (const ref of [d.parked?.line, d.parked?.fill]) if (ref?.key) ref.bytes = capture.assets.get(ref.key) ?? null;
+      await app.residency.pin(d);
+      app.residency.unpin(d);
+      d.rev += 1000;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = 320; canvas.height = 180;
+    const g = canvas.getContext('2d')!;
+    drawComp(g, loaded, loaded.comp, app.frame, { export: true, camera: false });
+    const reopened = g.getImageData(0, 0, 320, 180).data;
+    expect(reopened.every((v, i) => v === finished[i]), 'reopened project exported different pixels');
+    app.undo();
+    await until(() => !app.history.canUndo);
+    expect(!app.editor.primary!.effects?.length && !app.history.canUndo, 'one undo did not restore the earlier look');
+  } finally {
+    project.comp.layers = project.comp.layers.filter((l) => l.id !== layer.id);
+    project.drawings.delete(d.id);
+    app.history.clear();
+    app.editor.select(titleId);
+  }
 });
 await check('Malformed import is atomic and retains the open draft name', async () => {
   presets.show(); input('New preset name', 'Keep my draft'); let picker: HTMLInputElement | null = null; const original = HTMLInputElement.prototype.click;

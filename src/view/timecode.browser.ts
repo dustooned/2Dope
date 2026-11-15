@@ -164,7 +164,7 @@ await check('Place presets, Move across / down and Scale', () => {
 await check('Saved in the project (format 12) and read back the same; newer formats refused', async () => {
   setTc({ params: { prefix: 'TC', start: 24, format: 'timecode' } });
   const cap = await captureProject(app.project, { mode: 'archive' }).settle();
-  expect(cap.file.schema === 12 && SCHEMA === 12, `schema ${cap.file.schema}`);
+  expect(cap.file.schema === 12, `schema ${cap.file.schema}`);
   const stored = Object.values(cap.file.comps).flatMap((c) => c.layers).flatMap((l) => l.effects ?? []).find((e) => e.type === 'timecode')!;
   expect(stored && stored.params?.prefix === 'TC' && stored.params?.start === 24 && stored.amount === 16, `stored ${JSON.stringify(stored)}`);
   const json = JSON.parse(JSON.stringify(cap.file));
@@ -176,8 +176,8 @@ await check('Saved in the project (format 12) and read back the same; newer form
   for (const d of loaded.drawings.values()) if (d.parked) { d.parked = null; d.line.width = W; d.line.height = H; const src = app.project.drawings.get(d.id); if (src?.line.width) d.line.getContext('2d')!.drawImage(src.line, 0, 0); d.rev += 1000; }
   const off = (p: Project) => { const c = render(13, true, p).getContext('2d')!; return c.getImageData(0, 0, W, H).data; };
   expect(same(off(loaded), off(app.project)), 'loaded project draws another picture');
-  let refused = false; try { validateProjectFile({ ...json, schema: 13 }); } catch { refused = true; }
-  expect(refused, 'format 13 was not refused');
+  let refused = false; try { validateProjectFile({ ...json, schema: SCHEMA + 1 }); } catch { refused = true; }
+  expect(refused, 'newer format was not refused');
   setTc({ params: { prefix: '', start: 0 } });
 });
 

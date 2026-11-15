@@ -1,4 +1,18 @@
-# The .2dope project format (schemas 3–11)
+# The .2dope project format (schemas 3–13)
+
+## Paper and print finishes (schema 13)
+
+Texture effects store one of `newsprint`, `cold-press`, `recycled-kraft`, `gesso`, `riso-paper`,
+or `riso-dry`
+in `style` when a paper or print finish is selected. These static seeded finishes generate their
+grain from the existing seed and scale and require no bitmap assets. Projects and artwork
+containing these styles in a layer's live effects or applied style snapshot require reader 13.
+Older Texture styles keep their existing minimum.
+
+## Timecode (schema 12)
+
+A capture requires reader 12 when its saved comp graph contains the `timecode` effect,
+including in an applied style snapshot.
 
 ## Movie tracks (schema 11)
 

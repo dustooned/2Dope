@@ -8,4 +8,8 @@ The corresponding TypeScript source and license are included in the exact npm pa
 https://registry.npmjs.org/mediabunny/-/mediabunny-1.61.4.tgz
 Project: https://github.com/Vanilagy/mediabunny
 
+zip.js 2.25.0, by Gildas Lormeau
+License: BSD 3-Clause (see zip-js-LICENSE.txt)
+Project: https://github.com/gildas-lormeau/zip.js
+
 This notice and license are included in the production distribution under third-party/.

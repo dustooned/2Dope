@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BrushImportError, curvePoints, parseBplist, parseXmlPlist, readAbr, readBrushFile, readProcreate, unarchive } from './brushimport';
+import { BrushImportError, curvePoints, parseBplist, parseXmlPlist, readAbr, readBrushFile, readProcreate, readProcreateBrushes, unarchive } from './brushimport';
 import { TEST_BRUSH_B64 } from './fixtures/testbrush';
 import { cloneBrush, dyn, evalDynamic, PRESETS } from '../core/brush';
 import { readBrush } from '../core/brushlib';
@@ -104,12 +104,13 @@ describe('Procreate brushes', () => {
       { name: 'A1/Shape.png', data: PNG },
       { name: 'B2/Brush.archive', data: keyedArchive({ name: 'First' }) },
       { name: 'B2/Shape.png', data: PNG },
-      { name: 'C3/Brush.archive', data: keyedArchive({ name: 'Round only' }) },
+      { name: 'C3/Brush.archive', data: keyedArchive({ name: 'Round only', bundledShapePath: 'Brush-Preset-Hard.png' }) },
     ]);
     const out = await readProcreate(zip, 'Kit.brushset');
     // a brush with Procreate's own round shape comes in too, with the round tip
     expect(out.map((b) => b.name)).toEqual(['First', 'Second', 'Round only']);
     expect(out[2]!.tip).toBeNull();
+    expect(out[2]!.tipHardness).toBe(1);
     expect(out[1]).toMatchObject({ size: 30, opacity: 0.8, spacing: 0.12, scatter: 0.4, pressureSize: 0.6 });
     expect(out[1]!.tip).toEqual({ kind: 'png', bytes: PNG });
   });
@@ -119,6 +120,23 @@ describe('Procreate brushes', () => {
     expect((await readBrushFile(one, 'Solo.brush')).map((b) => b.name)).toEqual(['Solo']);
     await expect(readProcreate(writeZip([{ name: 'x.txt', data: enc('hi') }]), 'x.brushset')).rejects.toBeInstanceOf(BrushImportError);
     await expect(readProcreate(enc('not a zip at all, sorry'), 'x.brushset')).rejects.toBeInstanceOf(BrushImportError);
+  });
+
+  it('reads only the active pictures and keeps grain levels and zoom from a browser file', async () => {
+    const zip = writeZip([
+      { name: '1/Brush.archive', data: keyedArchive({ name: 'Cropped', textureZoom: 1, textureBrightness: -0.2, textureContrast: 0.8 }) },
+      { name: '1/Grain.png', data: PNG },
+      { name: '1/Reset/Brush.archive', data: keyedArchive({ name: 'Reset copy' }) },
+      { name: '2/Brush.archive', data: keyedArchive({ name: 'Follow', textureZoom: 0, textureBrightness: 0.3, textureContrast: -0.2 }) },
+      { name: '2/Reset/Grain.png', data: PNG },
+    ]);
+    const reader = readProcreateBrushes(new Blob([zip as BlobPart]), 'Kit.brushset');
+    const first = await reader.next();
+    expect(first.value).toMatchObject({ name: 'Cropped', grain: { followSize: 0, brightness: -0.2, contrast: 0.8 } });
+    expect(first.value?.report?.mapped).toEqual(expect.arrayContaining(['textureZoom', 'textureBrightness', 'textureContrast']));
+    const second = await reader.next();
+    expect(second.value).toMatchObject({ name: 'Follow', grain: { followSize: 1, brightness: 0.3, contrast: -0.2 } });
+    expect(await reader.next()).toMatchObject({ done: true });
   });
 });
 
@@ -208,7 +226,7 @@ describe('Procreate import accuracy', () => {
     expect(b!.speedSize).toBeUndefined();
     // the picture bundledGrainPath names, from the brush folder, and the named shape
     expect(b!.tip?.kind).toBe('png');
-    expect(b!.grain).toMatchObject({ mode: 'height', depth: 0.2, depthMin: 0.05, scale: 0.5, movement: 0.4, zoom: 1, rotation: 45, invert: false });
+    expect(b!.grain).toMatchObject({ mode: 'height', depth: 0.2, depthMin: 0.05, scale: 0.5, movement: 0.4, followSize: 0, rotation: 45, invert: false });
     expect(String.fromCharCode(...b!.grain!.bytes.subarray(1, 4))).toBe('PNG');
   });
 

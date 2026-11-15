@@ -1,6 +1,31 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-14) — read this first
+## Current state (2026-11-15) — read this first
+
+### Paper finishes and brush import fidelity (2026-11-15)
+
+- Effects → Texture → Look and Effects → Presets offer Comic Newsprint, Cold Press Paper,
+  Recycled Kraft, Brushed Gesso, Thin Riso Paper, and Dry Riso Ink. Texture applies editable,
+  static ink coverage. The starter presets target the whole layer and set Strength and Scale.
+- The textures use separate, seeded profiles for paper tooth, pulp fibers, gesso ridges,
+  soft Riso paper grain, and dry ink dropout. The local LP Traditionalizer and Phantom Paper
+  references, RetroSupply Risograph Dry and Wet brush grain, and Super Riso's `ThinCheapPaper.jpg`
+  were sampled visually. The presets generate their own pixels.
+- Projects and reusable artwork containing these Texture styles require reader 13, including
+  effects in an applied preset snapshot. Existing effects still keep the minimum their project
+  needs. Preview, render, project IO, and portable presets share the style definitions.
+- Procreate import reads individual entries from sets up to 1 GiB, preserves grain brightness,
+  contrast and cropped/follow-size zoom, and stores up to 256 px tips and 512 px grain.
+  Standard unbundled hard, soft and ultra-soft shapes get equivalent round tips.
+  Grain resolution increases at the same repeat size. Brush Library decodes previews as they
+  are reached, with a bounded grain cache. Photoshop ABR import still works.
+- Checks on the local worktree: 857 source tests passed and 1 skipped, and production build
+  passed. Chromium effects, creationtools, creationtools-responsive, and timecode fixtures passed
+  (150 assertions). The paper preset was previewed, applied, captured and reopened with identical
+  exported pixels. The brush pass imported and reloaded 332 real presets, including ten LP
+  Traditionalizer brushes, 64 AF Watercolor brushes and 126 Watercolor Experience brushes from
+  an 857 MB archive. Four Brush fixtures passed 95 assertions. Procreate stroke-by-stroke
+  parity and iPad/Apple Pencil input remain unverified.
 
 ### Motion while drawing: Hold still / Show the move (2026-11-14)
 
