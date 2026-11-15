@@ -4,12 +4,16 @@ import type { Drawing, FontAsset, Project } from '../core/project';
 import { adoptSnaps, crossPasteBlocked, layerDrawings, type DrawingSnap } from '../core/transfer';
 import { drawComp, releaseScratch } from '../view/composite';
 import { canPasteMedia } from './media';
+import { headFor, isToken, messages, newToken, receive, share, sweep } from '../io/crosstab';
 
 const TEXT = 'text/plain';
 const SVG = 'image/svg+xml';
 const PNG = 'image/png';
 const editable = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 const timeline = '#strip, #motion, #board, #tab-xsheet, .flip-row';
+
+/** What a layer copy offers other 2Dope tabs. */
+interface LayersBody { layers: Layer[]; snaps: Map<string, DrawingSnap> | null; fonts: Map<string, FontAsset> }
 
 type InternalCopy =
   | { kind: 'art' }
@@ -48,6 +52,7 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
   const blocked = () => !!document.querySelector('dialog[open]') || document.body.matches('.gallery-open, .share-open, .presenting');
   const accepts = (e: Event) => !e.defaultPrevented && !blocked() && !(e.target instanceof Element && e.target.closest(editable));
   const editing = () => app.strokeActive || app.transforming || app.adjusting || app.editor.dragging;
+  void sweep();
 
   document.addEventListener('pointerdown', e => {
     if (!(e.target instanceof Element)) return;
@@ -77,7 +82,7 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
   };
 
   /** Layers copied in another project: their drawings and caption fonts come along as copies. */
-  const pasteForeignLayers = async (copy: Extract<InternalCopy, { kind: 'layers' }>) => {
+  const pasteForeignLayers = async (copy: Pick<Extract<InternalCopy, { kind: 'layers' }>, 'layers' | 'snaps' | 'fonts'>) => {
     const blocked = crossPasteBlocked(copy.layers);
     if (blocked) { notice(`${blocked}.`); return; }
     const p = app.project, comp = p.comp;
@@ -103,6 +108,33 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     }
     if (!app.editor.pasteLayers(layers, '')) { notice('These layers could not be pasted into this composition.'); return; }
     notice(layers.length === 1 ? `Pasted “${layers[0]!.name}” from another project as a new layer.` : `Pasted ${layers.length} layers from another project.`);
+  };
+
+  /**
+   * The clipboard holds another 2Dope tab's token: paste that tab's stored copy (`io/crosstab.ts`).
+   * Canvas art crosses as the PNG it put on the clipboard; frames and layers come from the record.
+   */
+  const pasteFromTab = async (text: string, files: File[], frame = app.frame) => {
+    const project = app.project, comp = project.activeComp;
+    const head = await headFor(text);
+    if (app.project !== project || project.activeComp !== comp || blocked()) return;
+    if (typeof head === 'string' || head.kind === 'art') {
+      if (files.some(canPasteMedia)) placeFiles(files, frame);
+      else if (typeof head === 'string') notice(messages[head]);
+      else notice('No supported artwork on the clipboard. Try copying it again.');
+      return;
+    }
+    if (head.kind === 'keys') { notice('Keyframes paste only in the 2Dope tab that copied them.'); return; }
+    if (editing() || app.playing) { notice('Finish the current edit before pasting.'); return; }
+    if (head.kind === 'frames') {
+      if (app.workspace !== 'motion' && !app.arrangingAssets) await app.pasteFromTab(head);
+      else notice('Open a drawing timeline in Draw, Animate or Timing to paste these frames.');
+      return;
+    }
+    const got = await receive<LayersBody>(head, notice);
+    if ('message' in got) { notice(got.message); return; }
+    if (app.project !== project || project.activeComp !== comp) return;
+    await pasteForeignLayers({ layers: got.body.layers, fonts: got.body.fonts, snaps: Promise.resolve(got.body.snaps) });
   };
 
   const placeFiles = (files: File[], frame = app.frame) => {
@@ -159,13 +191,14 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     });
   };
 
-  const layerCopy = (layers: Layer[]): InternalCopy => {
+  const layerCopy = (layers: Layer[], token: string): InternalCopy => {
     const p = app.project, fonts = new Map<string, FontAsset>();
     for (const l of layers) if (l.kind === 'drawings' && l.caption?.font.startsWith('custom:')) {
       const id = l.caption.font.slice(7), font = p.fonts.get(id);
       if (font) fonts.set(id, structuredClone(font));
     }
-    const snaps = app.snapDrawings(layers.flatMap(layerDrawings));
+    const snaps = app.snapDrawings(layers.flatMap(layerDrawings)), copied = structuredClone(layers);
+    share('layers', token, snaps.then((s): LayersBody => ({ layers: copied, snaps: s, fonts })));
     return { kind: 'layers', project: new WeakRef(p), comp: p.activeComp, layers: structuredClone(layers), snaps, fonts };
   };
 
@@ -176,12 +209,13 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     const onTimeline = e.target instanceof Element && e.target.closest(timeline);
     // a layer that is not paint (a caption, a movie, a title, a clip): copy the layer itself, from any workspace
     const active = app.project.comp.layers.find(l => l.id === app.project.activeLayer);
+    const next = newToken();
     const whole = painting && !onTimeline && !app.spatialSelection && !!active && (active.kind !== 'drawings' || !!active.caption || !!active.video || !!active.title);
     if (app.workspace === 'motion' && !cut && app.editor.keys.size && app.editor.copyKeys()) {
       internal = { kind: 'keys' };
     } else if (whole && active) {
       if (cut && active.locked) return;
-      internal = layerCopy([active]);
+      internal = layerCopy([active], next);
       if (cut) app.editor.deleteLayers([active.id]);
     } else if (painting && !onTimeline && (!timelineFocused || e.target === canvas) && !app.spatialSelection && !app.copyWholeDrawing()) {
       return;
@@ -192,7 +226,7 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
     } else if (app.workspace === 'motion' || app.arrangingAssets) {
       const layers = app.project.comp.layers.filter(l => app.editor.selected.includes(l.id));
       if (!layers.length || cut && layers.some(l => l.locked && l.id !== app.placedAsset?.id)) return;
-      internal = layerCopy(layers);
+      internal = layerCopy(layers, next);
       if (cut) app.editor.deleteLayers(layers.map(l => l.id));
     } else if (painting && !onTimeline && (!timelineFocused || e.target === canvas) && app.spatialSelection) {
       if (cut && app.project.layer.locked) return;
@@ -200,11 +234,12 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
       if (cut) app.deleteSelectedArt('Cut');
       internal = { kind: 'art' };
     } else {
-      if (!app.copySelection()) return;
-      if (cut) app.cutSelection();
+      if (!app.copySelection(next)) return;
+      if (cut) app.cutSelection(next);
       internal = { kind: 'frames', project: new WeakRef(app.project) };
     }
-    token = `2Dope clipboard ${crypto.randomUUID()}`;
+    token = next;
+    if (internal.kind === 'art' || internal.kind === 'keys') share(internal.kind, token);
     e.preventDefault();
     data.setData(TEXT, token);
     if (internal.kind === 'art') writeImage(() => {
@@ -226,7 +261,8 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
       pasteInternal();
       return;
     }
-    const files = mediaFiles(e.clipboardData);
+    const files = mediaFiles(e.clipboardData), text = e.clipboardData.getData(TEXT);
+    if (isToken(text)) { e.preventDefault(); void pasteFromTab(text, files); return; }
     if (!files.length && !e.clipboardData.getData(TEXT)) return;
     e.preventDefault();
     placeFiles(files);
@@ -240,8 +276,15 @@ export function installClipboard(app: App, stage: HTMLElement, importAssets: (fi
       const files: File[] = [];
       try {
         for (const item of await navigator.clipboard.read()) {
-          if (internal && item.types.includes(TEXT) && await (await item.getType(TEXT)).text() === token) {
+          const text = item.types.includes(TEXT) ? await (await item.getType(TEXT)).text() : '';
+          if (internal && text === token) {
             if (app.project === project && project.activeComp === comp && !blocked()) pasteInternal();
+            return;
+          }
+          if (isToken(text)) {
+            const art: File[] = [];
+            for (const type of item.types) if (canPasteMedia(new File([], '', { type }))) art.push(new File([await item.getType(type)], 'Pasted artwork', { type }));
+            if (app.project === project && project.activeComp === comp && !blocked()) void pasteFromTab(text, art, frame);
             return;
           }
           const preferred = [SVG, 'image/gif', ...item.types].find(type => item.types.includes(type) && canPasteMedia(new File([], '', { type })));
