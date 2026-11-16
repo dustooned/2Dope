@@ -21,6 +21,9 @@ import { AudioPlayback } from './audio';
 import { AudioTracks } from './ui/audiotracks';
 import { mediaPicker } from './ui/media';
 import { installClipboard } from './ui/clipboard';
+import { onUpdateReady, registerOffline } from './offline';
+registerOffline();
+onUpdateReady(() => files?.toast('A new version of 2Dope is ready. Reload this page to use it.'));
 
 // Tells the page's start-up watchdog (index.html) that the app code loaded.
 (window as unknown as { __2dopeBooted?: boolean }).__2dopeBooted = true;
@@ -685,6 +688,7 @@ const menuActions: Record<string, () => void> = {
   settings: () => openSettings(),
   manual: () => showManual(),
   updates: () => showManual('updates'),
+  offline: () => void import('./ui/offlinedialog').then((m) => m.openOfflineDialog((t) => files?.toast(t)), loadFailed),
   quick: () => quick.toggle(),
   reference: () => reference.toggle(),
   panel: () => setPanel(!document.body.classList.contains('panel-open')),

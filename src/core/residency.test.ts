@@ -166,4 +166,30 @@ describe('residency', () => {
     expect(d.saved).toEqual({ rev: 3, line: 'assets/x.png', fill: null });
     expect(referencedKeys(project([d]))).toEqual(new Set(['assets/x.png']));
   });
+
+  it('parks an unchanged drawing again from the bytes it was loaded from, without re-encoding', async () => {
+    const log: string[] = [];
+    const ops = fakeOps(log);
+    let reads = 0;
+    const isBlank = ops.isBlank;
+    ops.isBlank = (c) => { reads++; return isBlank(c); };
+    const bytes = new TextEncoder().encode('a');
+    const d = drawing('d1', '', { rev: 0, line: { key: null, bytes }, fill: null });
+    d.thumbRev = 0; // no thumbnail work
+    const r = new Residency(ops, async () => null, 0);
+    r.setProject(project([d]));
+    await r.ensure(d);
+    expect(px(d)).toBe('a');
+    await r.settle(); // over budget (0): parked again
+    expect(d.parked?.line?.bytes).toBe(bytes);
+    expect(log.filter((l) => l.startsWith('encode'))).toEqual([]);
+    expect(reads).toBe(0);
+    // once it changes, parking compresses the new pixels
+    await r.ensure(d);
+    (d.line as unknown as FakeCanvas).px = 'b'; d.rev++;
+    r.schedule(); await r.settle();
+    expect(log).toContain('encode b');
+    await r.ensure(d);
+    expect(px(d)).toBe('b');
+  });
 });

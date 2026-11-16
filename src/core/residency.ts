@@ -1,4 +1,4 @@
-import type { Drawing, PlaneRef, Project } from './project';
+import type { Drawing, Parked, PlaneRef, Project } from './project';
 
 /**
  * Keeps memory flat however long the shot is.
@@ -28,6 +28,9 @@ export interface PlaneOps {
   /** Run soon, after the current work (lets the UI breathe between heavy steps). */
   defer(fn: () => void): void;
 }
+
+/** Drawings decoded at once while filling in thumbnails. */
+const THUMB_BATCH = 4;
 
 export type AssetSource = (key: string) => Promise<Uint8Array | null>;
 
@@ -88,6 +91,12 @@ export class Residency {
   private readonly loading = new Map<Drawing, Promise<void>>();
   private readonly parking = new Set<Drawing>();
   private readonly pins = new Map<Drawing, number>();
+  /**
+   * What a drawing was loaded from, while it has not changed since (same `rev`). Parking it again
+   * reuses these bytes or keys instead of reading every pixel back (isBlank) and re-encoding a
+   * PNG, which made opening and scrubbing a long shot spend most of its time compressing.
+   */
+  private readonly clean = new WeakMap<Drawing, Parked>();
   private readonly thumbQueue: Drawing[] = [];
   private pumpScheduled = false;
   private pumping = false;
@@ -219,6 +228,7 @@ export class Residency {
       if (fill) await this.decode(d, d.fill, fill, 'fill');
     }
     d.parked = null;
+    this.clean.set(d, { rev: d.rev, line: p.line, fill: p.fill });
     // What we just decoded is exactly what is stored, so the next save can skip it.
     if (!d.saved || d.saved.rev !== d.rev) {
       const k = (r: PlaneRef | null) => r?.key ?? null;
@@ -283,13 +293,17 @@ export class Residency {
       const rev = d.rev;
       this.refreshThumb(d);
       const saved = d.saved && d.saved.rev === rev ? d.saved : null;
-      const plane = async (c: HTMLCanvasElement | null, key: string | null | undefined): Promise<PlaneRef | null> => {
+      const kept = this.clean.get(d);
+      if (kept && kept.rev !== rev) this.clean.delete(d);
+      const loaded = !saved && kept?.rev === rev ? kept : null;
+      const plane = async (c: HTMLCanvasElement | null, key: string | null | undefined, from: PlaneRef | null | undefined): Promise<PlaneRef | null> => {
         if (!c) return null;
         if (saved) return key ? { key, bytes: null } : null;
+        if (loaded) return from ?? null;
         if (this.ops.isBlank(c)) return null;
         return { key: null, bytes: await this.ops.encode(c) };
       };
-      const [line, fill] = await Promise.all([plane(d.line, saved?.line), plane(d.fill, saved?.fill)]);
+      const [line, fill] = await Promise.all([plane(d.line, saved?.line, loaded?.line), plane(d.fill, saved?.fill, loaded?.fill)]);
       this.parking.delete(d);
       if (d.rev !== rev || !this.canPark(d)) return false;
       d.parked = { rev, line, fill };
@@ -307,11 +321,16 @@ export class Residency {
     this.thumbing = true;
     try {
       while (this.thumbQueue.length) {
-        const d = this.thumbQueue.shift()!;
         const proj = this.project;
-        if (!proj || !proj.drawings.has(d.id) || d.thumbRev === d.rev) continue;
-        if (d.parked) await this.ensure(d);
-        else this.refreshThumb(d);
+        // a few at a time: decoding waits on the browser, so one by one left the thread idle
+        const batch: Drawing[] = [];
+        while (batch.length < THUMB_BATCH && this.thumbQueue.length) {
+          const d = this.thumbQueue.shift()!;
+          if (!proj || !proj.drawings.has(d.id) || d.thumbRev === d.rev) continue;
+          if (d.parked) batch.push(d);
+          else this.refreshThumb(d);
+        }
+        await Promise.all(batch.map((d) => this.ensure(d)));
         if (this.project !== proj) return;
         // keep memory flat while working through a long shot
         if (this.liveBytes() > this.budget) await this.pump();

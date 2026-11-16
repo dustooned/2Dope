@@ -27,6 +27,50 @@
   an 857 MB archive. Four Brush fixtures passed 95 assertions. Procreate stroke-by-stroke
   parity and iPad/Apple Pencil input remain unverified.
 
+### Offline use, like inkflo (2026-11-15, same branch)
+
+- Build: `scripts/offline-plugin.mjs` writes `dist/sw.js` from `scripts/sw-template.js`: a cache-first precache of every emitted file (84 files, about 5.9 MB, versioned by content hash). `ignoreVary: true` matters: `vite preview` sends `Vary: Origin`, which made module requests miss the cache offline.
+- App: `src/offline.ts` registers the worker (production build on https or localhost only); Menu → Help → **Offline** opens `src/ui/offlinedialog.ts` (status, Install, steps per device, backup reminder). `public/manifest.webmanifest`, `public/icons/`, links in `index.html`.
+- Checks: headless Chrome on `vite preview` (127.0.0.1:5262): worker cached 84 files; with the server stopped the app booted, the dialog said Ready, the manual opened. vitest and build run at commit.
+- Lab kit: `npm run package:offline` (after `npm run build`) writes `dist-offline/2dope-offline.zip`: the build plus `Start 2Dope (Windows).bat` (+ `serve.ps1`, no install), `Start 2Dope (Mac).command` (**untested**) and `READ ME FIRST.txt` (sources in `scripts/offline-kit/`), serving on fixed port 5192 so saved projects stay with the same address. Verified on Windows: unzipped kit served index, sw.js, manifest and the PDF worker with the right types, refused `../` paths, and the worker cached 84 files from `localhost:5192`. The zip is written with the system bsdtar (Git Bash's GNU tar makes a bad .zip).
+- Manual: a **Working offline** section (`manualtext.ts`, id `offline`).
+- Update prompt: when a new worker takes over (`controllerchange`, only if one already controlled the page) a toast asks for a reload, because the new worker deletes the old cache and this page's lazy chunks would be gone. `scripts/offline-plugin.test.ts` (3 tests, runs under `npm test`, not `--dir src`: it needs node modules the app typecheck does not have) guards the generated worker: every file listed, no `sw.js`/`404.html`, version changes only with content, `ignoreVary` kept.
+- Not done: a browser-level offline fixture (needs a built app; checked by hand above), iPad Safari. The worker only takes effect on 2dope.xyz after the next deploy (not done here).
+
+
+### New project: Open length and Custom length (2026-11-15, same branch)
+
+- `core/newproject.ts`: the `frame` length is now labelled **Open** ("as you go", still one blank frame, same id so saved choices keep working); new **Custom** length (`customSeconds`, 0.5 s steps, up to 600 s; `clampSeconds`, `framesFor(choice, fps, customSeconds)`). `NewSettings` gains `customSeconds` (read with a default, so older saved settings load).
+- `ui/newdialog.ts`: Open shows a one-line explanation and the summary says "open length"; Custom shows a seconds field (44 px chips); `style.css` keeps Create/Cancel stuck to the bottom of the dialog on short screens.
+- Checks: `npx vitest run --dir src` 843 passed, 1 skipped (newproject tests extended); `npm run build` passed; dialog checked in the browser pane on `127.0.0.1:5261` (Open hint and summary, Custom field, chips 44 px). Not run: full browser suite, iPad.
+
+
+### Performance audit (2026-11-15, branch `claude/perf-audit-842bf3`)
+
+Measured in headless desktop Chrome on `127.0.0.1:5261` with generated projects (parked PNG drawings, as opened from the library) using the new fixture `tests/perfaudit.html` (`node scripts/fixtures.mjs --base http://127.0.0.1:5261 perfaudit`; `?frames=500&layers=20&big=0&export=0` to vary). 900 MB residency budget.
+
+| What | Before | Cause | After |
+|---|---|---|---|
+| Open 1,000 frames at 1920×1080, until every thumbnail exists | 60 s (strip rebuilt per thumbnail: 11.5 s; re-encoding PNGs on park: 17 s) | `Strip.update` signature included every `thumbRev`, so each filled thumbnail rebuilt ~5,000 DOM nodes; `park` re-read pixels (`isBlank`) and re-encoded a PNG for a drawing that was only decoded for its thumbnail | **15 s** |
+| Peak live canvases, 240 / 500 frames, scrubbing + 20 layers | 2,610 / 2,879 MB; 20 layers 6,565 MB (budget 900) | parking was lazy and re-encoding was slow, so the pump fell behind | 1,107 MB; 20 layers 1,392 MB |
+| Autosave of the 240-frame shot | long task 395 ms (500 f) / 915 ms (1,000 f) | encode of everything unsaved | 237 ms long task at 240 f (similar order, not otherwise changed) |
+| Scrub Draw / Motion (1,000 f, 120 steps) | p50 16 ms, 56 fps | fine | unchanged |
+| Playback 24 fps with onion 2+2 | 91–94 of 96 frames | fine | unchanged |
+| Workspace switch (1,000 f) | Timing 278 ms (xsheet 106 ms + `motion.keepVisible` 95 ms, 6,000 xsheet rows) | not fixed | — |
+| 20 layers scrub | ~110 ms/step (9–11 fps) | not investigated | — |
+| 4K page, 2 layers scrub | p50 40–115 ms | not investigated | — |
+| Exports 48 f 1080p×2: PNG seq / GIF / WebM 720p | 34–41 ms/frame / 0.6–0.75 s / 1.7–2.0 s | fine (WebM 5 s in the last noisy run, long tasks of 99 ms) | — |
+| Reopen ×4, DOM | 2,601 → 2,601 elements | no leak | — |
+
+Fixes (all behaviour-preserving):
+- `core/residency.ts`: a drawing that was loaded and not changed since (`rev` equal) parks again from the bytes/keys it came from, with no `isBlank` read-back or PNG encode (new `clean` WeakMap; unit test added). Thumbnail pass decodes 4 at a time (`THUMB_BATCH`).
+- `ui/strip.ts`: a thumbnail change redraws the existing thumbnail canvases in place (`refreshThumbs`) instead of rebuilding the strip; `thumbRev` left the rebuild signature.
+
+Checks: `npx vitest run --dir src` 843 passed, 1 skipped; `npm run build` passed; `perfaudit` 11/11 on the final code. The full browser suite was not run (the merge will do that once).
+
+Not done / gaps: Time/xsheet and Motion build one row per frame, so switching to Timing on a 1,000-frame shot is ~280 ms (window the rows); 20-layer and 4K scrubbing are ~100 ms/step (per-layer decode and composite; not profiled); peak canvases still exceed the budget transiently (pins/working set); autosave of a long unsaved shot is still one big encode; iPad Safari memory and real touch were not measured. The fixture's thresholds are generous, and its heap number is only valid with `--enable-precise-memory-info`.
+
+
 ### Motion while drawing: Hold still / Show the move (2026-11-14)
 
 User problem: a walk cycle animated in place in Animate, then moved in Motion, slid around (or

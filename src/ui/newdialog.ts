@@ -1,4 +1,4 @@
-import { ASPECTS, clampFps, clampSide, framesFor, FPS_NAMES, LENGTHS, planeBytes, readNewSettings, fitPixels, sizeFor, sizeNote, TIERS, type NewSettings } from '../core/newproject';
+import { ASPECTS, clampFps, clampSeconds, MAX_CUSTOM_SECONDS, clampSide, framesFor, FPS_NAMES, LENGTHS, planeBytes, readNewSettings, fitPixels, sizeFor, sizeNote, TIERS, type NewSettings } from '../core/newproject';
 import type { NewProjectOptions } from './files';
 import { el } from './dom';
 
@@ -177,8 +177,38 @@ export class NewProjectUI {
     );
 
     d.append(
-      row('Length', ...LENGTHS.map((l) => chip(l.label, s.length === l.id, () => ((s.length = l.id), this.render()), l.seconds ? `The first drawing is held for ${l.label}` : 'One blank frame'))),
+      row(
+        'Length',
+        ...LENGTHS.map((l) =>
+          chip(
+            l.label,
+            s.length === l.id,
+            () => ((s.length = l.id), this.render()),
+            l.seconds === 0 ? 'Start with one blank frame and set the timing as you go' : l.seconds < 0 ? 'Type your own length in seconds' : `The first drawing is held for ${l.label}`,
+            l.seconds === 0 ? 'as you go' : '',
+          ),
+        ),
+        ...(s.length === 'custom'
+          ? [
+              (() => {
+                const i = el('input', { type: 'number', min: '0.5', max: String(MAX_CUSTOM_SECONDS), step: '0.5', value: String(s.customSeconds), 'aria-label': 'Length in seconds', class: 'exp-input num' });
+                i.addEventListener('input', () => {
+                  if (i.value !== '') s.customSeconds = clampSeconds(Number(i.value));
+                  this.summary();
+                });
+                i.addEventListener('change', () => {
+                  i.value = String(s.customSeconds);
+                });
+                i.addEventListener('keydown', (e) => e.stopPropagation());
+                i.addEventListener('keyup', (e) => e.stopPropagation());
+                return i;
+              })(),
+              el('span', { class: 'hint' }, 'seconds'),
+            ]
+          : []),
+      ),
     );
+    if (s.length === 'frame') d.append(el('p', { class: 'hint nopen' }, 'Starts as one blank frame. Keep drawing: the Flipbook adds a page after the last one, and Timing sets the holds as you go.'));
 
     d.append(el('p', { class: 'hint nsummary', 'aria-live': 'polite' }), el('p', { class: 'nnote', hidden: '' }));
 
@@ -207,10 +237,10 @@ export class NewProjectUI {
   private summary(): void {
     const sz = this.size();
     const len = LENGTHS.find((l) => l.id === this.s.length) ?? LENGTHS[0]!;
-    const frames = framesFor(len, this.s.fps);
+    const frames = framesFor(len, this.s.fps, this.s.customSeconds);
     const sum = this.dialog.querySelector<HTMLElement>('.nsummary');
     if (sum)
-      sum.textContent = `${sz.width}×${sz.height} · ${this.s.fps} fps · ${frames} frame${frames === 1 ? '' : 's'} · about ${mb(planeBytes(sz.width, sz.height))} of memory per drawing plane while it is on screen${this.limits ? ` · Lite mode: up to ${this.limits.maxShort}p` : ''}`;
+      sum.textContent = `${sz.width}×${sz.height} · ${this.s.fps} fps · ${len.seconds === 0 ? 'open length (grows as you draw)' : `${frames} frame${frames === 1 ? '' : 's'}`} · about ${mb(planeBytes(sz.width, sz.height))} of memory per drawing plane while it is on screen${this.limits ? ` · Lite mode: up to ${this.limits.maxShort}p` : ''}`;
     const note = this.dialog.querySelector<HTMLElement>('.nnote');
     const n = sizeNote(sz.width, sz.height);
     if (note) {
@@ -225,7 +255,7 @@ export class NewProjectUI {
     this.save();
     const sz = this.size();
     const len = LENGTHS.find((l) => l.id === s.length) ?? LENGTHS[0]!;
-    const opts: NewProjectOptions = { name: this.name, width: sz.width, height: sz.height, fps: s.fps, frames: framesFor(len, s.fps), folder: this.folder };
+    const opts: NewProjectOptions = { name: this.name, width: sz.width, height: sz.height, fps: s.fps, frames: framesFor(len, s.fps, s.customSeconds), folder: this.folder };
     const res = this.resolve;
     this.resolve = null;
     this.dialog.close();

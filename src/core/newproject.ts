@@ -86,16 +86,27 @@ export interface LengthChoice {
 }
 
 export const LENGTHS: LengthChoice[] = [
-  { id: 'frame', label: '1 frame', seconds: 0 },
+  // "frame" is the open-ended start: one blank frame, timing grows as the student draws
+  { id: 'frame', label: 'Open', seconds: 0 },
   { id: '1s', label: '1 second', seconds: 1 },
   { id: '2s', label: '2 seconds', seconds: 2 },
   { id: '5s', label: '5 seconds', seconds: 5 },
   { id: '10s', label: '10 seconds', seconds: 10 },
+  // seconds come from NewSettings.customSeconds
+  { id: 'custom', label: 'Custom', seconds: -1 },
 ];
 
+export const MAX_CUSTOM_SECONDS = 600;
+
+export function clampSeconds(n: number): number {
+  return Math.min(MAX_CUSTOM_SECONDS, Math.max(0.5, Math.round(n * 2) / 2));
+}
+
 /** Frames a new project's first drawing is held for. */
-export function framesFor(choice: LengthChoice, fps: number): number {
-  return choice.seconds === 0 ? 1 : Math.max(1, Math.round(choice.seconds * fps));
+export function framesFor(choice: LengthChoice, fps: number, customSeconds = 5): number {
+  if (choice.seconds === 0) return 1;
+  const seconds = choice.seconds < 0 ? clampSeconds(customSeconds) : choice.seconds;
+  return Math.max(1, Math.round(seconds * fps));
 }
 
 /** The settings the dialog remembers between uses. */
@@ -105,9 +116,11 @@ export interface NewSettings {
   custom: { width: number; height: number };
   fps: number;
   length: string;
+  /** Seconds for the Custom length. */
+  customSeconds: number;
 }
 
-export const DEFAULT_NEW: NewSettings = { aspect: '16:9', tier: 1080, custom: { width: 1920, height: 1080 }, fps: 12, length: 'frame' };
+export const DEFAULT_NEW: NewSettings = { aspect: '16:9', tier: 1080, custom: { width: 1920, height: 1080 }, fps: 12, length: 'frame', customSeconds: 5 };
 
 /** Read remembered settings, ignoring anything that no longer makes sense. */
 export function readNewSettings(raw: unknown): NewSettings {
@@ -123,5 +136,6 @@ export function readNewSettings(raw: unknown): NewSettings {
     },
     fps: Number.isFinite(o.fps) ? clampFps(o.fps as number) : DEFAULT_NEW.fps,
     length: LENGTHS.some((l) => l.id === o.length) ? (o.length as string) : DEFAULT_NEW.length,
+    customSeconds: Number.isFinite(o.customSeconds) ? clampSeconds(o.customSeconds as number) : DEFAULT_NEW.customSeconds,
   };
 }

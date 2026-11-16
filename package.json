@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:browser": "node scripts/fixtures.mjs"
+    "test:browser": "node scripts/fixtures.mjs",
+    "package:offline": "node scripts/make-offline-kit.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^2.3.0",
