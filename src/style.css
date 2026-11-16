@@ -6000,3 +6000,10 @@ body.ws-motion .minspector:not([hidden]) { display: flex; }
 .board[data-view='split'] .btl-panel { height: 72px; }
 .board[data-view='split'] .btl-thumb { max-height: 48px; }
 .board[data-view='split'] .btl-audio { top: 100px; }
+/* Brush Studio: grain on each frame (fixed / boil / on 2s / on 3s), 44 px targets */
+.grain-boil { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.grain-boil .name { font-size: 12px; opacity: .85; }
+.grain-boil-seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.grain-boil-seg button { min-height: 44px; min-width: 44px; padding: 0 4px; border-radius: var(--radius); font-size: 12px; }
+.grain-boil-seg button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.grain-boil .hint { margin: 0; }

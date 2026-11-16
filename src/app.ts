@@ -3491,6 +3491,15 @@ export class App {
     return this.project.drawingAtFrame(this.lf);
   }
 
+  /**
+   * The frame a boiling grain paints with: the first frame of the current drawing's exposure (layer
+   * time). Raster paint is baked when you paint, so the grain belongs to the drawing: painting
+   * anywhere in a hold gives the same grain, and moving the layer in time or Motion keeps it.
+   */
+  get grainFrame(): number {
+    return locate(this.project.exposures, this.lf)?.start ?? this.lf;
+  }
+
   /** Mark a drawing changed (thumbnails, render). */
   private touch(d: Drawing): void {
     d.rev += 1;
@@ -5484,6 +5493,7 @@ export class App {
       color: combined ? this.inkPaint.ink : this.color,
       seed: newSeed(),
       points: [],
+      ...(tool !== 'pen' && this.brush.grainBoil ? { grainFrame: this.grainFrame } : {}),
       ...(this.symmetry !== 'off' ? { sym: { mode: this.symmetry, cx: this.docW / 2, cy: this.docH / 2 } } : {}),
     };
     const t0 = e.timeStamp;

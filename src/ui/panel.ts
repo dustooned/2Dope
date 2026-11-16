@@ -7,6 +7,7 @@ import { dabsForStroke } from '../brush/dabs';
 import { RasterEngine } from '../brush/raster';
 import { drawVectorStroke } from '../brush/vector';
 import { el } from './dom';
+import { GRAIN_BOIL_OPTIONS, readGrainBoil } from '../core/grainboil';
 
 type NumKey = {
   [K in keyof BrushSettings]-?: NonNullable<BrushSettings[K]> extends number ? K : never;
@@ -192,6 +193,7 @@ export function buildPanel(app: App, root: HTMLElement): void {
     }
     for (const key of section.dyn ?? []) {const editor=dynamicEditor(app,key,refreshers);fs.append(editor);refreshers.push(()=>{editor.hidden=!supported(key);});}
     if (section.tilt) fs.append(tiltEditor(app, refreshers));
+    if (section.title === 'Paint') { const boil = grainBoilEditor(app, refreshers); fs.append(boil); refreshers.push(() => { boil.hidden = app.tool === 'pen'; }); }
     refreshers.push(()=>{fs.hidden=app.tool==='pen' && (section.tilt===true || section.title==='Colour and wet mix');});
     body.append(fs);
   }
@@ -307,7 +309,8 @@ export function buildPanel(app: App, root: HTMLElement): void {
         t: i * (6 + 10 * t),
       });
     }
-    const rec: StrokeRecord = { id: 'preview', tool: app.tool, brush: app.brush, color: app.color, seed: 42, points: pts };
+    // a boiling grain previews as it will paint on this frame
+    const rec: StrokeRecord = { id: 'preview', tool: app.tool, brush: app.brush, color: app.color, seed: 42, points: pts, ...(app.brush.grainBoil ? { grainFrame: app.grainFrame } : {}) };
     const len = strokeLength(pts);
     if (app.tool === 'pen') {
       drawVectorStroke(g, rec, len);
@@ -507,6 +510,34 @@ function tiltEditor(app: App, refreshers: (() => void)[]): HTMLElement {
   refreshers.push(() => {
     box.checked = app.brush.tiltShade.enabled;
     for (const s of syncs) s();
+  });
+  return wrap;
+}
+
+/** Grain over time: fixed to the canvas, or moving with the frame (every frame / 2nd / 3rd). */
+function grainBoilEditor(app: App, refreshers: (() => void)[]): HTMLElement {
+  const wrap = el('div', { class: 'grain-boil' });
+  const id = 'grain-boil-label';
+  wrap.append(el('span', { class: 'name', id }, 'Grain on each frame'));
+  const seg = el('div', { class: 'grain-boil-seg', role: 'group', 'aria-labelledby': id });
+  const buttons = GRAIN_BOIL_OPTIONS.map((o) => {
+    const b = el('button', { type: 'button', title: o.title, 'data-boil': String(o.value ?? 0) }, o.label);
+    b.addEventListener('click', () => {
+      if (o.value) app.brush.grainBoil = o.value;
+      else delete app.brush.grainBoil;
+      app.brushChanged();
+    });
+    seg.append(b);
+    return { b, value: o.value };
+  });
+  const hint = el('p', { class: 'hint' });
+  wrap.append(seg, hint);
+  refreshers.push(() => {
+    const now = readGrainBoil(app.brush.grainBoil);
+    for (const { b, value } of buttons) b.setAttribute('aria-pressed', String(value === now));
+    hint.textContent = app.brush.grain > 0
+      ? now ? 'New strokes take the grain of the frame they are painted on, so the texture boils as the frames play.' : 'The grain stays still on every frame.'
+      : 'Turn Paper grain up to see it.';
   });
   return wrap;
 }
