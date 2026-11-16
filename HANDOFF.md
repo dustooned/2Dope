@@ -2,6 +2,32 @@
 
 ## Current state (2026-11-14) — read this first
 
+### Performance audit (2026-11-15, branch `claude/perf-audit-842bf3`)
+
+Measured in headless desktop Chrome on `127.0.0.1:5261` with generated projects (parked PNG drawings, as opened from the library) using the new fixture `tests/perfaudit.html` (`node scripts/fixtures.mjs --base http://127.0.0.1:5261 perfaudit`; `?frames=500&layers=20&big=0&export=0` to vary). 900 MB residency budget.
+
+| What | Before | Cause | After |
+|---|---|---|---|
+| Open 1,000 frames at 1920×1080, until every thumbnail exists | 60 s (strip rebuilt per thumbnail: 11.5 s; re-encoding PNGs on park: 17 s) | `Strip.update` signature included every `thumbRev`, so each filled thumbnail rebuilt ~5,000 DOM nodes; `park` re-read pixels (`isBlank`) and re-encoded a PNG for a drawing that was only decoded for its thumbnail | **15 s** |
+| Peak live canvases, 240 / 500 frames, scrubbing + 20 layers | 2,610 / 2,879 MB; 20 layers 6,565 MB (budget 900) | parking was lazy and re-encoding was slow, so the pump fell behind | 1,107 MB; 20 layers 1,392 MB |
+| Autosave of the 240-frame shot | long task 395 ms (500 f) / 915 ms (1,000 f) | encode of everything unsaved | 237 ms long task at 240 f (similar order, not otherwise changed) |
+| Scrub Draw / Motion (1,000 f, 120 steps) | p50 16 ms, 56 fps | fine | unchanged |
+| Playback 24 fps with onion 2+2 | 91–94 of 96 frames | fine | unchanged |
+| Workspace switch (1,000 f) | Timing 278 ms (xsheet 106 ms + `motion.keepVisible` 95 ms, 6,000 xsheet rows) | not fixed | — |
+| 20 layers scrub | ~110 ms/step (9–11 fps) | not investigated | — |
+| 4K page, 2 layers scrub | p50 40–115 ms | not investigated | — |
+| Exports 48 f 1080p×2: PNG seq / GIF / WebM 720p | 34–41 ms/frame / 0.6–0.75 s / 1.7–2.0 s | fine (WebM 5 s in the last noisy run, long tasks of 99 ms) | — |
+| Reopen ×4, DOM | 2,601 → 2,601 elements | no leak | — |
+
+Fixes (all behaviour-preserving):
+- `core/residency.ts`: a drawing that was loaded and not changed since (`rev` equal) parks again from the bytes/keys it came from, with no `isBlank` read-back or PNG encode (new `clean` WeakMap; unit test added). Thumbnail pass decodes 4 at a time (`THUMB_BATCH`).
+- `ui/strip.ts`: a thumbnail change redraws the existing thumbnail canvases in place (`refreshThumbs`) instead of rebuilding the strip; `thumbRev` left the rebuild signature.
+
+Checks: `npx vitest run --dir src` 843 passed, 1 skipped; `npm run build` passed; `perfaudit` 11/11 on the final code. The full browser suite was not run (the merge will do that once).
+
+Not done / gaps: Time/xsheet and Motion build one row per frame, so switching to Timing on a 1,000-frame shot is ~280 ms (window the rows); 20-layer and 4K scrubbing are ~100 ms/step (per-layer decode and composite; not profiled); peak canvases still exceed the budget transiently (pins/working set); autosave of a long unsaved shot is still one big encode; iPad Safari memory and real touch were not measured. The fixture's thresholds are generous, and its heap number is only valid with `--enable-precise-memory-info`.
+
+
 ### Motion while drawing: Hold still / Show the move (2026-11-14)
 
 User problem: a walk cycle animated in place in Animate, then moved in Motion, slid around (or
