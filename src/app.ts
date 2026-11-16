@@ -5,7 +5,7 @@ import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection,
 import { adjustHex, applyBlur, applyHSB, isNoHSB, keepOutside, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
 import { loadGrain, loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, simplifyPoints, smoothPoints, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
-import { celMembers, syncExposures } from './core/cellink';
+import { celMembers, groupOf, isPainted, moveGroup, PAINTED_MAX, paintedLead, railTracks, setPainted, stackAt, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
 import { readBrush } from './core/brushlib';
 import { History, type Command } from './core/history';
@@ -309,6 +309,8 @@ export class App {
   setWorkspace(w: Workspace): void {
     if (this.gradEdit) this.applyGradEdit();
     if (w === this.workspace || this.live) return;
+    // leaving Draw another way ends painting a frame (Done is no longer there)
+    if (w !== 'draw') this.paintingFrame = null;
     this.settleTemporaryEdits();
     if (this.editor.anchorEditing) this.editor.setAnchorEditing(false);
     if (this.editor.pathEditing) this.editor.setPathEditing(false);
@@ -3625,6 +3627,7 @@ export class App {
     const partner = from ? partnerOf(from) : undefined;
     const d = partner ? this.project.drawings.get(partner) : undefined;
     if (d && !d.parked) return this.project.cloneDrawing(d).id;
+    if (d && this.paintOver) this.onNotice?.('A layer of the frame before is still loading, so it starts blank in the new frame.');
     return this.project.newDrawing().id;
   }
 
@@ -3661,6 +3664,89 @@ export class App {
     this.focusLayer(id);this.onCompChanged();this.requestRender();this.onFrameChange();
   }
 
+  /** Layers a painted frame may hold on this device. */
+  get paintedMax(): number { return this.device.lite ? PAINTED_MAX.lite : PAINTED_MAX.full; }
+
+  /**
+   * Painted track (painterly animation): every frame of this track is a small paint stack. Its
+   * layers are the track's linked paint layers; the rail shows them as one track. One undo step.
+   */
+  setTrackPainted(id: string, on: boolean): void {
+    if (this.live || this.strokeActive) return;
+    const out = setPainted(this.project.comp.layers, id, on);
+    if (!out) return;
+    const members = groupOf(out, id);
+    if (on && members.length > this.paintedMax) { this.onNotice?.(`This track has ${members.length} linked layers; a painted frame holds up to ${this.paintedMax}${this.device.lite ? ' in Lite' : ''}.`); return; }
+    const ids = new Set(members.map((m) => m.id));
+    const group = members[0]?.cel ?? id;
+    this.editor.edit(on ? 'Make track painted' : 'Make track plain', (cc) => {
+      for (const l of cc.layers) if (l.kind === 'drawings' && ids.has(l.id)) { l.cel = group; if (on) l.painted = true; else delete l.painted; }
+    });
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** Show or hide a whole painted track (every frame layer), one undo step; a plain track flips its own eye. */
+  setTrackVisible(id: string, visible: boolean): void {
+    const me = this.project.comp.layers.find((l) => l.id === id);
+    if (!isPainted(me)) { this.editor.setFlag(id, 'visible', visible); return; }
+    const ids = new Set(groupOf(this.project.comp.layers, id).map((m) => m.id));
+    this.editor.edit(visible ? 'Show painted track' : 'Hide painted track', (cc) => { for (const l of cc.layers) if (ids.has(l.id)) l.visible = visible; });
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** The layers a rail track stands for: a painted track's every frame layer, else itself. */
+  trackLayerIds(id: string): string[] {
+    const me = this.project.comp.layers.find((l) => l.id === id);
+    return isPainted(me) ? groupOf(this.project.comp.layers, id).map((m) => m.id) : [id];
+  }
+
+  /** Where Done goes back to after painting a frame (a double-tap on a painted cel), or null. */
+  paintingFrame: { workspace: Workspace; flipbook: boolean; onion: boolean } | null = null;
+  /** Set by the UI: Draw's bottom view (true = flipbook). */
+  drawFlipbook: { get: () => boolean; set: (on: boolean) => void } | null = null;
+
+  /**
+   * Paint one frame of a painted track in Draw: go to it, show Draw's canvas with the onion skin
+   * of the frames around. Done (doneFrame) goes back to where it was opened, on the same frame.
+   */
+  paintFrame(layerId: string, frame: number): void {
+    if (this.live || this.strokeActive) return;
+    const back = this.paintingFrame ?? { workspace: this.workspace, flipbook: this.drawFlipbook?.get() ?? false, onion: this.onion.enabled };
+    if (this.playing) this.togglePlay();
+    if (this.workspace !== 'draw') this.setWorkspace('draw');
+    if (!groupOf(this.project.comp.layers, layerId).some((m) => m.id === this.project.activeLayer)) this.pickLayer(layerId);
+    this.setFrame(frame);
+    this.drawFlipbook?.set(false);
+    if (!this.onion.enabled) this.toggleOnion();
+    this.paintingFrame = back;
+    this.onToolChange();
+    this.focusCanvas();
+  }
+
+  /** Done painting a frame: back to the workspace and view it was opened from, on the same frame. */
+  doneFrame(): void {
+    const back = this.paintingFrame;
+    if (!back || this.strokeActive) return;
+    this.paintingFrame = null;
+    const frame = this.frame;
+    if (back.onion !== this.onion.enabled) this.toggleOnion();
+    if (back.workspace !== this.workspace) this.setWorkspace(back.workspace);
+    if (back.workspace === 'draw' && back.flipbook) this.drawFlipbook?.set(true);
+    this.setFrame(frame);
+    this.onToolChange();
+  }
+
+  /** A painted cel's drawings for the active layer's drawing `id` (bottom first), for the onion skin. */
+  private onionStack(id: string): string[] {
+    const p = this.project;
+    if (p.isPlaceholder || !isPainted(p.layer)) return [id];
+    const i = p.layer.exposures.findIndex((e) => e.drawing === id);
+    return i < 0 ? [id] : stackAt(p.comp.layers, p.layer, i);
+  }
+
   addCelLayer(): void {
     if (this.strokeActive || this.project.isPlaceholder) return;
     const p = this.project;
@@ -3668,14 +3754,20 @@ export class App {
     if (src.kind !== 'drawings' || src.guide) return;
     if (src.title) { this.editor.addLayer('drawings', src.id); return; }
     const group = src.cel ?? src.id;
-    const id = p.newId('L');
     const count = this.celLayers.length;
+    const painted = isPainted(src);
+    if (painted) {
+      const max = this.paintedMax;
+      if (count >= max) { this.onNotice?.(`A painted frame holds up to ${max} layers${this.device.lite ? ' in Lite' : ''}. Merge or delete one to add another.`); return; }
+      if (count + 1 === max) this.onNotice?.(`That is the last layer this painted frame can hold (${max}${this.device.lite ? ' in Lite, to keep memory low' : ''}).`);
+    }
+    const id = p.newId('L');
     this.editor.edit('Add art layer', (cc) => {
       const s = cc.layers.find((l) => l.id === src.id);
       if (!s || s.kind !== 'drawings') return;
       s.cel = group;
       // in a background or object stack the new one is a paint layer; for animation, an art layer
-      const name = this.workspace==='draw' || s.still || cc.asset ? `Paint ${count + 1}` : `${s.name} \u00b7 ${count + 1}`;
+      const name = painted || this.workspace==='draw' || s.still || cc.asset ? `Paint ${count + 1}` : `${s.name} \u00b7 ${count + 1}`;
       const made = drawingsLayer(id, name, s.exposures.map((e) => ({ drawing: p.newDrawing().id, length: e.length })), p.width, p.height, cc.width, cc.height);
       if (s.still) { made.still = true; made.play = s.play; }
       if(cc.asset) {made.play=s.play;made.speed=s.speed;made.single=s.single;made.timeRemap=structuredClone(s.timeRemap);}
@@ -3686,6 +3778,7 @@ export class App {
       made.parent = s.parent;
       made.label = s.label;
       made.cel = group;
+      if (painted) made.painted = true;
       cc.layers.splice(cc.layers.indexOf(s), 0, made);
     });
     this.focusLayer(id);
@@ -3906,6 +3999,19 @@ export class App {
 
   /** Move a flipbook track up (-1) or down (+1) past the next track (other layers are stepped over). */
   moveTrack(id: string, steps: number): void {
+    const layers = this.project.comp.layers;
+    const rail = railTracks(layers, this.drawLayers().filter((l) => !l.guide));
+    const me = layers.find((l) => l.id === id);
+    if (me && me.kind === 'drawings' && rail.some((t) => isPainted(t))) {
+      const out = moveGroup(layers, rail, paintedLead(layers, me).id, steps);
+      if (!out) return;
+      const ids = out.map((l) => l.id);
+      this.editor.edit(isPainted(me) ? 'Move painted track' : 'Move track', (cc) => { cc.layers = ids.map((x) => cc.layers.find((l) => l.id === x)).filter((l): l is Layer => !!l); });
+      this.onCompChanged();
+      this.requestRender();
+      this.onFrameChange();
+      return;
+    }
     const tracks = this.drawLayers().filter((l) => !l.guide);
     const i = tracks.findIndex((l) => l.id === id);
     const j = Math.max(0, Math.min(tracks.length - 1, i + steps));
@@ -5227,6 +5333,26 @@ export class App {
     const compId = this.project.comp.id;
     const layerId = this.project.editLayer().id;
     const rip = this.rippleFor(layerId, before, after);
+    // linked art and painted layers follow a drag or trim too (their exposures were not previewed)
+    const linked = celMembers(this.project.comp, layerId).map((m) => ({
+      id: m.id,
+      before: m.exposures,
+      after: syncExposures(before, after, m.exposures, (src, partnerOf) => this.partnerDrawing(src, partnerOf)),
+    }));
+    const setLinked = (which: 'before' | 'after') => {
+      for (const k of linked) {
+        const m = this.project.comps.get(compId)?.layers.find((x) => x.id === k.id);
+        if (m && m.kind === 'drawings') m.exposures = k[which];
+      }
+    };
+    if (rip && linked.length) {
+      const fix = (ls: Layer[], which: 'before' | 'after') => ls.map((l) => {
+        const k = linked.find((x) => x.id === l.id);
+        return k && l.kind === 'drawings' ? ({ ...l, exposures: k[which] } as Layer) : l;
+      });
+      rip.after = fix(rip.after, 'after');
+      rip.before = fix(rip.before, 'before');
+    }
     if (rip) {
       const set = (layers: Layer[], dur: number | null) => {
         this.blankPage = false;
@@ -5252,12 +5378,15 @@ export class App {
       this.project.activeComp = compId;
       this.focusLayer(layerId);
       this.project.exposures = ex;
+      setLinked(ex === after ? 'after' : 'before');
       this.frame = Math.min(this.frame, this.compEnd - 1);
       this.requestRender();
       this.onFrameChange();
       this.onDocChanged();
     };
     this.history.push({ label, do: () => set(after), undo: () => set(before) }, true);
+    // the drag already showed the edited layer; its linked layers take the change now
+    if (linked.length) { setLinked('after'); this.requestRender(); this.onFrameChange(); }
     this.onDocChanged();
   }
 
@@ -7338,7 +7467,7 @@ export class App {
     const o = this.onion;
     if (o.enabled) {
       const n = this.onionNeighbors();
-      for (const nb of [...n.before, ...n.after]) out.add(p.drawing(nb.drawing));
+      for (const nb of [...n.before, ...n.after]) for (const id of this.onionStack(nb.drawing)) out.add(p.drawing(id));
     }
     if (this.playing) {
       const ahead = Math.ceil(p.fps * 1.5);
@@ -7379,11 +7508,14 @@ export class App {
     }
     const draw = (list: typeof n.before, color: string) => {
       for (const nb of list) {
-        const d = this.project.drawing(nb.drawing);
-        const ghost = this.onionCache.ghost(d, o.tint ? color : null);
-        if (!ghost) continue; // still coming back; drawn on the next frame
-        g.globalAlpha = o.opacity * Math.pow(o.falloff, nb.distance - 1);
-        g.drawImage(ghost, 0, 0);
+        // a painted frame ghosts every visible layer of the frame
+        for (const id of this.onionStack(nb.drawing)) {
+          const d = this.project.drawing(id);
+          const ghost = this.onionCache.ghost(d, o.tint ? color : null);
+          if (!ghost) continue; // still coming back; drawn on the next frame
+          g.globalAlpha = o.opacity * Math.pow(o.falloff, nb.distance - 1);
+          g.drawImage(ghost, 0, 0);
+        }
       }
     };
     // Farther ghosts first so the nearest sits on top.

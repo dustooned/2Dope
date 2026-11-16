@@ -138,6 +138,8 @@ export interface LayerFile {
   /** A notes layer (draw-over corrections; added without a schema bump). */
   notes?: boolean;
   cel?: string;
+  /** A painted track's paint layers (added without a schema bump: older builds see linked art layers). */
+  painted?: boolean;
   still?: boolean;
   clip?: boolean;
   alphaLock?: boolean;
@@ -502,6 +504,7 @@ function layer(v: unknown, what: string, drawings: Record<string, DrawingFile>, 
   if (v.guideExport === true) out.guideExport = true;
   if (v.notes === true) out.notes = true;
   if (typeof v.cel === 'string' && ID.test(v.cel)) out.cel = v.cel;
+  if (v.painted === true && out.cel) out.painted = true;
   if (v.still === true) out.still = true;
   if (v.clip === true) out.clip = true;
   if (v.alphaLock === true) out.alphaLock = true;
@@ -841,6 +844,7 @@ export function compsFromFile(file: Pick<ProjectFile, 'comps'>): Map<string, Com
         ...(l.guideExport ? { guideExport: true } : {}),
         ...(l.notes ? { notes: true } : {}),
         ...(l.cel ? { cel: l.cel } : {}),
+        ...(l.painted && l.cel ? { painted: true } : {}),
         ...(l.still ? { still: true } : {}),
         ...(l.clip ? { clip: true } : {}),
         ...(l.alphaLock ? { alphaLock: true } : {}),
@@ -924,6 +928,7 @@ export function compFile(c: Comp): CompFile {
       if (l.guideExport) base.guideExport = true;
       if (l.notes) base.notes = true;
       if (l.cel) base.cel = l.cel;
+      if (l.painted && l.cel) base.painted = true;
       if (l.still) base.still = true;
       if (l.clip) base.clip = true;
       if (l.alphaLock) base.alphaLock = true;
