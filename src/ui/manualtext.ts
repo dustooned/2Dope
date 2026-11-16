@@ -526,6 +526,15 @@ export const MANUAL: ManualSection[] = [
     ],
   },
   {
+    id: 'offline',
+    title: 'Working offline',
+    blocks: [
+      'Menu > Offline saves 2Dope on this device so it opens with no internet. Open 2Dope once while you are online, wait until the dialog says Ready, then use the Install button (Chrome or Edge), Add to Home Screen (iPad Safari) or Install app (Chromebook). Updates arrive by themselves the next time you open 2Dope online.',
+      'Your drawings are saved in this browser on this device, never on a server. Use the same browser each time. On a lab computer that is wiped when you log off, export a .2dope file (Menu > Export .2dope) before you leave and keep it on a USB stick or cloud drive; Menu > Import .2dope brings it back.',
+      'For computers that never go online, your instructor can hand out the offline kit: a zip with a start file for Windows or Mac and a READ ME FIRST.',
+    ],
+  },
+  {
     id: 'device',
     title: 'Phones and older tablets (Lite mode)',
     blocks: [

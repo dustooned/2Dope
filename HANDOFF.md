@@ -8,7 +8,8 @@
 - App: `src/offline.ts` registers the worker (production build on https or localhost only); Menu → Help → **Offline** opens `src/ui/offlinedialog.ts` (status, Install, steps per device, backup reminder). `public/manifest.webmanifest`, `public/icons/`, links in `index.html`.
 - Checks: headless Chrome on `vite preview` (127.0.0.1:5262): worker cached 84 files; with the server stopped the app booted, the dialog said Ready, the manual opened. vitest and build run at commit.
 - Lab kit: `npm run package:offline` (after `npm run build`) writes `dist-offline/2dope-offline.zip`: the build plus `Start 2Dope (Windows).bat` (+ `serve.ps1`, no install), `Start 2Dope (Mac).command` (**untested**) and `READ ME FIRST.txt` (sources in `scripts/offline-kit/`), serving on fixed port 5192 so saved projects stay with the same address. Verified on Windows: unzipped kit served index, sw.js, manifest and the PDF worker with the right types, refused `../` paths, and the worker cached 84 files from `localhost:5192`. The zip is written with the system bsdtar (Git Bash's GNU tar makes a bad .zip).
-- Not done: a manual section, an automated fixture, iPad Safari, an in-app "update ready" prompt. The worker only takes effect on 2dope.xyz after the next deploy (not done here).
+- Manual: a **Working offline** section (`manualtext.ts`, id `offline`).
+- Not done: an automated fixture, iPad Safari, an in-app "update ready" prompt. The worker only takes effect on 2dope.xyz after the next deploy (not done here).
 
 
 ### New project: Open length and Custom length (2026-11-15, same branch)
