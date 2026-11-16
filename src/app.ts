@@ -34,7 +34,7 @@ import { tweenStrokes } from './core/vectortween';
 import { LetterTool } from './lettertool';
 import { captionValue, MAX_CAPTION_CHARS, type BalloonStyle, type CaptionKey, type CaptionSpec, type CaptionTrack } from './lettering/spec';
 import { artClipCanvas, artClipMask, clearedPixels, stampArtClip, type ArtClip } from './artclip';
-import { beginTransformDrag, dragTransform, drawTransformHandles, fitParams, paintTransform, patchParams, restoreTransform, transformChange, transformFrame, transformGrab, transformedPoints, transformSize, type TransformFrame, type TransformOptions, type TransformState } from './drawtransform';
+import { beginTransformDrag, dragTransform, drawTransformHandles, fitParams, insideTransformFrame, paintTransform, patchParams, restoreTransform, transformChange, transformFrame, transformGrab, transformedPoints, transformSize, type TransformFrame, type TransformOptions, type TransformState } from './drawtransform';
 import { MAX_COMPS, MAX_DRAWINGS, MAX_FRAMES, MAX_LAYERS } from './io/schema';
 import type { SoundAsset } from './core/audio';
 import { playbackBounds, loopFrame, RANGE_GESTURE_KEY, readRangeGesture, type PlaybackRange } from './core/playback';
@@ -310,6 +310,7 @@ export class App {
     if (this.gradEdit) this.applyGradEdit();
     if (w === this.workspace || this.live) return;
     this.settleTemporaryEdits();
+    this.lassoDraft = [];
     if (this.editor.anchorEditing) this.editor.setAnchorEditing(false);
     if (this.editor.pathEditing) this.editor.setPathEditing(false);
     if (this.playing) this.togglePlay();
@@ -462,6 +463,7 @@ export class App {
   private live: LiveStroke | null = null;
   private readonly touches = new Map<number, TouchInfo>();
   private pinch: PinchState | null = null;
+  private transformPinch: { owner: TransformState; a: number; b: number; dist: number; base: XParams } | null = null;
   private tapSession: { start: number; maxTouches: number; moved: boolean; view: { x: number; y: number; zoom: number; rot: number }; x?: number; y?: number } | null = null;
   /** The last one-finger tap (for a double-tap). */
   private lastFingerTap: { at: number; x: number; y: number } | null = null;
@@ -704,6 +706,10 @@ export class App {
     if (this.adjusting) this.applyAdjust();
     if (this.gradEdit) this.applyGradEdit();
     if (this.fillG) this.endFill(true);
+    if (t !== 'fill' && this.lassoDraft.length) {
+      this.lassoDraft = [];
+      this.requestRender();
+    }
     if (t !== 'brush') this.smudging = false;
     if (t !== 'pen') this.exitPointEdit();
     this.tool = t;
@@ -946,6 +952,7 @@ export class App {
   /** Temporary spatial selection, independent of the timeline's exposure selection. */
   /** `exact`: the mask is the selection (Automatic, combined, Select contents); the points are only its box. */
   private spatial: SpatialSel | null = null;
+  private lassoDraft: [number, number][] = [];
 
   get spatialSelection(): Area | null {
     const s = this.spatial;
@@ -962,6 +969,7 @@ export class App {
     if (this.fillG || this.fillBusy || this.wandG) return;
     // Reselect can bring it back while you stay on this drawing
     if (this.spatialSelection) this.lastSpatial = this.spatial;
+    this.lassoDraft = [];
     this.spatial = null;
     this.requestRender();
     this.onToolChange();
@@ -1569,6 +1577,7 @@ export class App {
 
   toggleDrawTransform(): void {
     if (this.xf) { this.applyTransform(); return; }
+    if (this.lassoDraft.length) this.finishLasso();
     // a caption has no pixels to transform: it gets a Transform box that moves, scales and turns it whole
     if (this.selectedCaption && !this.spatialSelection) {
       const id = this.project.activeLayer;
@@ -1707,6 +1716,7 @@ export class App {
     cancelAnimationFrame(this.transformPreview);
     this.transformPreview = 0;
     this.xf = null;
+    this.transformPinch = null;
     if (x.whole) this.spatial = null;
     if (restoreTransform(x)) this.touch(x.d);
     this.requestRender();
@@ -1724,6 +1734,7 @@ export class App {
     }
     const pts = transformedPoints(x);
     this.xf = null;
+    this.transformPinch = null;
     const d = x.d, W = this.docW, H = this.docH;
     const { lineBefore, lineAfter, fillBefore, fillAfter } = transformChange(x, region, W);
     const vBefore = x.vectors, vAfter = d.vectors;
@@ -1815,6 +1826,11 @@ export class App {
   private artClip: ArtClip | null = null;
 
   setSelectShape(s: SelectShape): void {
+    if (this.selectShape !== s) {
+      if (this.fillG?.mode === 'lasso') this.endFill(true);
+      this.lassoDraft = [];
+      this.requestRender();
+    }
     this.selectShape = s;
     saveJSON(SELECT_SHAPE_KEY, s);
     this.onToolChange();
@@ -2493,6 +2509,10 @@ export class App {
 
   setFillMode(m: FillMode): void {
     if (this.fillG) this.endFill(true);
+    if (m !== 'lasso' && this.lassoDraft.length) {
+      this.lassoDraft = [];
+      this.requestRender();
+    }
     this.fillMode = m;
     saveJSON(FILL_MODE_KEY, m);
     this.onToolChange();
@@ -2907,9 +2927,18 @@ export class App {
     const d = g.d;
     if (g.mode === 'lasso') {
       if (!cancel) {
-        const shaped = this.selectShape === 'rect' || this.selectShape === 'ellipse';
-        const pts = shaped ? (g.points.length > 1 ? this.shapePoints(g.points[0]!, g.points[g.points.length - 1]!) : []) : g.points;
-        this.takeSelection(polygonMask(pts, this.docW, this.docH), pts, false);
+        if (this.selectShape === 'free') {
+          const [sx, sy] = this.lassoDraft[0] ?? g.points[0]!;
+          const [ex, ey] = g.points.at(-1)!;
+          const closing = this.lassoDraft.length >= 3 && Math.hypot(ex - sx, ey - sy) <= 14 / this.view.zoom;
+          const hadDraft = this.lassoDraft.length > 0;
+          this.lassoDraft = [...this.lassoDraft, ...g.points];
+          if (closing || (!hadDraft && g.points.length >= 3)) this.finishLasso();
+        } else if (g.points.length > 1) {
+          const pts = this.shapePoints(g.points[0]!, g.points.at(-1)!);
+          const area = polygonMask(pts, this.docW, this.docH);
+          if (area) this.takeSelection(area, pts, false);
+        }
       }
       this.requestRender();
       // a new selection stays a selection; Transform is its own action
@@ -2964,6 +2993,15 @@ export class App {
     const label = g.mode === 'leftover' ? 'Fill leftovers' : g.seeds.length > 1 ? 'Drag fill' : 'Fill';
     if (this.fillAcross > 0 && !g.selection && g.mode !== 'leftover') void this.fillFollowing(d, g.seeds, color, entries, label, g.grad ?? null);
     else this.pushFill(label, entries);
+  }
+
+  private finishLasso(): void {
+    const points = this.lassoDraft;
+    this.lassoDraft = [];
+    const area = polygonMask(points, this.docW, this.docH);
+    if (area) this.takeSelection(area, points, false);
+    this.requestRender();
+    this.onToolChange();
   }
 
   /** Before / after of the changed box of a drawing's fill plane (the plane already shows "after"). */
@@ -3059,6 +3097,27 @@ export class App {
     if (this.lettering) this.letters.drawOverlay(g);
     const selected = this.spatialSelection ? this.spatial : null;
     if (selected?.exact && !this.fillG && !this.xf) this.drawSelectionTint(g, selected.area);
+    const free = this.fillG?.mode === 'lasso' && this.selectShape === 'free' ? this.fillG.points : [];
+    const draft = this.lassoDraft.length || free.length === 1 ? [...this.lassoDraft, ...free] : [];
+    if (draft.length) {
+      const z = this.view.zoom;
+      g.save();
+      g.strokeStyle = '#ff5a8a';
+      g.lineWidth = 1.5 / z;
+      g.setLineDash([6 / z, 4 / z]);
+      g.beginPath();
+      g.moveTo(...draft[0]!);
+      for (const p of draft.slice(1)) g.lineTo(...p);
+      g.stroke();
+      g.setLineDash([]);
+      g.beginPath();
+      g.arc(...draft[0]!, 6 / z, 0, 2 * Math.PI);
+      g.fillStyle = '#fff';
+      g.fill();
+      g.stroke();
+      g.restore();
+      return;
+    }
     let f = this.fillG ?? (selected ? { mode: 'lasso', points: this.transformedPoints() ?? selected.points } : null);
     if (f && this.fillG && f.mode === 'lasso' && (this.selectShape === 'rect' || this.selectShape === 'ellipse') && f.points.length > 1) f = { ...f, points: this.shapePoints(f.points[0]!, f.points[f.points.length - 1]!) };
     if (!f || f.mode === 'tap' || f.points.length < 2) return;
@@ -3398,6 +3457,7 @@ export class App {
     this.wBase = null;
     this.pointModes.clear();this.pointHandles.clear();this.anchorCache.clear();
     if (this.fillG) this.endFill(true);
+    this.lassoDraft = [];
     this.spatial = null;
     if (this.live) this.endStroke(true);
     this.playing = false;
@@ -4249,11 +4309,11 @@ export class App {
 
   setPanelDuration(index: number, frames: number): void {
     if (!Number.isFinite(frames) || frames < 1) return;
-    this.editTimeline('Panel duration', (ex) => ({ ex: setHolds(ex, [index], Math.round(frames)), frame: this.lf }), true);
+    this.editTimeline('Panel duration', (ex) => ({ ex: setHolds(ex, [index], Math.round(frames)), frame: this.lf }), { keepSelection: true });
   }
 
   setCaption(index: number, field: CaptionField, text: string, label = 'Edit caption'): void {
-    this.editTimeline(label, (ex) => ({ ex: setCaption(ex, index, field, text), frame: this.lf }), true);
+    this.editTimeline(label, (ex) => ({ ex: setCaption(ex, index, field, text), frame: this.lf }), { keepSelection: true });
   }
 
   /** Start a new scene at this panel: every panel's Shot / scene is renumbered ("Sc 2 · Sh 1"), one Undo step. */
@@ -4261,7 +4321,7 @@ export class App {
     this.editTimeline('New scene', (ex) => {
       const shots = renumberScenes(ex.map((e) => e.shot), index);
       return { ex: shots.reduce((out, s, i) => setCaption(out, i, 'shot', s), ex), frame: this.lf };
-    }, true);
+    }, { keepSelection: true });
   }
 
   /** Images (board sketches, photos) as new two-second panels after the current one: one undo step. */
@@ -4437,6 +4497,7 @@ export class App {
     const range = this.playbackRange;
     if (this.playing && (next < range.start || next >= range.end)) next = range.start;
     if (next === this.frame) return;
+    this.lassoDraft = [];
     this.spatial = null;
     this.frame = next;
     if (this.playing) this.playClock = { t0: performance.now(), f0: next };
@@ -4556,6 +4617,7 @@ export class App {
    */
   focusLayer(id: string): void {
     if (this.project.activeLayer === id) return;
+    this.lassoDraft = [];
     this.project.activeLayer = id;
     this.selection = [];
     this.onionCache.clear();
@@ -4696,7 +4758,7 @@ export class App {
     return { before: undoTo(), after: r.layers, durBefore: comp.duration, durAfter: r.duration };
   }
 
-  private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, keepSelection = false): void {
+  private editTimeline(label: string, fn: (ex: Exposure[]) => Edit, { keepSelection = false, ripple = true } = {}): void {
     if (this.titlePaintBlocked(false)) return;
     if (this.live) return;
     const layer = this.project.editLayer();
@@ -4707,7 +4769,7 @@ export class App {
     const beforeSel = [...this.selection];
     const r = fn(beforeEx);
     if (r.ex === beforeEx) return;
-    const rip = this.rippleFor(layerId, beforeEx, r.ex);
+    const rip = ripple ? this.rippleFor(layerId, beforeEx, r.ex) : null;
     // linked art layers: every layer in this cel group takes the same cels (each keeps its own art)
     const linked = celMembers(this.project.comp, layerId).map((m) => ({
       id: m.id,
@@ -4830,7 +4892,7 @@ export class App {
   addFrame(): void {
     if (this.titlePaintBlocked(false)) return;
     const d = this.newFrameDrawing(this.project.isPlaceholder ? null : this.drawing);
-    this.editTimeline('Add frame', (ex) => addAfter(ex, this.lf, d.id));
+    this.editTimeline('Add frame', (ex) => addAfter(ex, this.lf, d.id), { ripple: false });
   }
 
   /** Flip's Add frame (Procreate Dreams style): ends a hold here, or with `toEnd` adds after the whole hold. */
@@ -4839,7 +4901,7 @@ export class App {
     if (this.live || this.strokeActive) return;
     this.leaveBlankPage();
     const d = this.newFrameDrawing(this.project.isPlaceholder ? null : this.drawing);
-    this.editTimeline('Add frame', (ex) => addFrameHere(ex, this.lf, d.id, toEnd));
+    this.editTimeline('Add frame', (ex) => addFrameHere(ex, this.lf, d.id, toEnd), { ripple: false });
   }
 
   /** Fill duration: the current drawing holds until the end of the shot. */
@@ -4946,7 +5008,7 @@ export class App {
     if (!t.length) return this.addFrame();
     const d = this.project.newDrawing();
     const at = where === 'before' ? t[0]! : t[t.length - 1]! + 1;
-    this.editTimeline('Insert frame', (ex) => insertAt(ex, at, [{ drawing: d.id, length: 1 }]));
+    this.editTimeline('Insert frame', (ex) => insertAt(ex, at, [{ drawing: d.id, length: 1 }]), { ripple: false });
   }
 
   /** New drawings copied from the selected ones, placed right after them with the same holds. */
@@ -4992,7 +5054,7 @@ export class App {
         return next;
       });
       return { ex: out, frame: this.lf };
-    }, true);
+    }, { keepSelection: true });
   }
 
   copySelection(): number {
@@ -5135,7 +5197,7 @@ export class App {
 
   /** Set the exposure-sheet note on one exposure. */
   setExposureNote(index: number, text: string): void {
-    this.editTimeline('Edit note', (ex) => ({ ex: setNote(ex, index, text), frame: this.lf }), true);
+    this.editTimeline('Edit note', (ex) => ({ ex: setNote(ex, index, text), frame: this.lf }), { keepSelection: true });
   }
 
   /** Make each selected drawing last N frames (1s, 2s, 3s...). Never deletes a drawing. */
@@ -5186,11 +5248,11 @@ export class App {
   }
 
   setExposure(n: number): void {
-    this.editTimeline(n === 1 ? 'Exposure on ones' : `Exposure on ${n}s`, (ex) => ({ ex: setHolds(ex, this.targets, n), frame: this.lf }), true);
+    this.editTimeline(n === 1 ? 'Exposure on ones' : `Exposure on ${n}s`, (ex) => ({ ex: setHolds(ex, this.targets, n), frame: this.lf }), { keepSelection: true });
   }
 
   changeHold(delta: number): void {
-    this.editTimeline(delta > 0 ? 'Longer hold' : 'Shorter hold', (ex) => ({ ex: adjustHolds(ex, this.targets, delta), frame: this.lf }), true);
+    this.editTimeline(delta > 0 ? 'Longer hold' : 'Shorter hold', (ex) => ({ ex: adjustHolds(ex, this.targets, delta), frame: this.lf }), { keepSelection: true });
   }
 
   /** Mark the selected (or current) drawings as key / breakdown / inbetween; marking again clears it. */
@@ -5453,7 +5515,7 @@ export class App {
         this.editTimeline('New frame', (old) => {
           const last = old[old.length - 1]!;
           return { ex: [...old.slice(0, -1), { ...last, length: last.length + (at - total) }, { drawing: d.id, length: 1 }], frame: at, selection: [] };
-        });
+        }, { ripple: false });
       }
     }
     // drawing on a comp's placeholder makes it a real layer of that comp
@@ -5889,11 +5951,22 @@ export class App {
         this.tapSession = null;
         this.touches.set(e.pointerId, { ...p, sx: p.x, sy: p.y });
         if (this.touches.size > 1) {
+          if (this.transformPinch) return;
           const drag = x.drag;
           if (drag) {
             x.drag = null;
             x.nodes = drag.nodes;
             this.setTransform(drag.base, false);
+          }
+          if (!this.pinch && this.touches.size === 2 && (this.transformMode === 'uniform' || this.transformMode === 'freeform')) {
+            const pair = [...this.touches];
+            const [a, ta] = pair[0]!, [b, tb] = pair[1]!;
+            const pa = this.view.screenToDoc(ta.x, ta.y), pb = this.view.screenToDoc(tb.x, tb.y);
+            const frame = this.transformFrame()!;
+            if (insideTransformFrame(frame, [pa.x, pa.y]) && insideTransformFrame(frame, [pb.x, pb.y])) {
+              this.transformPinch = { owner: x, a, b, dist: Math.max(1, Math.hypot(tb.x - ta.x, tb.y - ta.y)), base: { ...x.params } };
+              return;
+            }
           }
           this.startPinchIfNeeded();
           return;
@@ -5957,7 +6030,11 @@ export class App {
         if (this.assetDown(e)) return;
       } else if (this.touches.size === 1 && this.workspace === 'motion') {
         if (this.motionDown(e)) return;
-      } else if (this.touches.size === 1 && this.fingerPaint) {
+      } else if (this.touches.size === 1 && (this.fingerPaint || (this.tool === 'fill' && this.fillMode === 'lasso'))) {
+        if (this.tool === 'fill' && this.fillMode === 'lasso') {
+          if (this.tapSession) this.tapSession.moved = true;
+          this.disarmHold();
+        }
         this.beginStroke(e);
         this.requestRender();
         return;
@@ -6318,6 +6395,8 @@ export class App {
       const p = this.toPoint(e, e.timeStamp);
       const touch = this.touches.get(e.pointerId);
       if (touch) Object.assign(touch, this.local(e));
+      if (!xd.moved && Math.hypot(p.x - xd.x, p.y - xd.y) < 3 / this.view.zoom) return;
+      xd.moved = true;
       const x = this.xf!;
       const next = dragTransform(x, xd, this.transformOptions, p.x, p.y, e.shiftKey, this.view.zoom, this.docW, this.docH);
       if (next.nodes !== undefined) { x.nodes = next.nodes; this.queueTransformPreview(); }
@@ -6369,6 +6448,12 @@ export class App {
       const p = this.local(e);
       t.x = p.x;
       t.y = p.y;
+      const scale = this.transformPinch;
+      if (scale?.owner === this.xf) {
+        const a = this.touches.get(scale.a), b = this.touches.get(scale.b);
+        if (a && b) this.setTransform({ scale: scale.base.scale * Math.hypot(b.x - a.x, b.y - a.y) / scale.dist }, false);
+        return;
+      }
       if (this.held_ === e.pointerId) return; // the finger that opened a menu does not pan
       if (this.scrub3) {
         this.scrub3Move();
@@ -6437,6 +6522,20 @@ export class App {
       this.requestRender();
       return;
     }
+    const scale = this.transformPinch;
+    if (scale && this.touches.delete(e.pointerId)) {
+      if (scale.a === e.pointerId || scale.b === e.pointerId) {
+        this.transformPinch = null;
+        if (scale.owner === this.xf) {
+          if (cancelled) this.setTransform(scale.base);
+          else {
+            if (this.transformPreview) this.renderTransform();
+            this.onToolChange();
+          }
+        }
+      }
+      return;
+    }
     if (this.xf?.drag && e.pointerId === this.xf.drag.id) {
       const drag = this.xf.drag;
       this.xf.drag = null;
@@ -6451,7 +6550,10 @@ export class App {
       }
       return;
     }
-    if (this.fillG && e.pointerId === this.fillG.pointerId) this.endFill(cancelled);
+    if (this.fillG && e.pointerId === this.fillG.pointerId) {
+      if (!cancelled && this.fillG.mode === 'lasso') this.fillMove(e);
+      this.endFill(cancelled);
+    }
     if (this.wandG && e.pointerId === this.wandG.pointerId) this.endWand(cancelled);
     if (this.holdPick && this.holdPick.id === e.pointerId) this.endHoldPick(cancelled);
     this.disarmHold();
@@ -6752,6 +6854,12 @@ export class App {
     if (this.xf && (e.code === 'Escape' || e.code === 'Enter')) {
       if (e.code === 'Enter') this.applyTransform();
       else this.cancelTransform();
+      return;
+    }
+    if (!this.fillG && this.lassoDraft.length && (e.code === 'Escape' || e.code === 'Enter')) {
+      e.preventDefault();
+      if (e.code === 'Enter') this.finishLasso();
+      else { this.lassoDraft = []; this.requestRender(); }
       return;
     }
     if (this.xf && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) {

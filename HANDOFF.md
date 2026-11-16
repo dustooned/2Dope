@@ -2,6 +2,36 @@
 
 ## Current state (2026-11-15) — read this first
 
+### Blender camera framing and manual keyframes (2026-11-15)
+
+- The bundled add-on (0.2.0) uses the topmost visible camera in range. If it changes, Blender
+  camera markers switch at the corresponding frames. A centered camera covers gaps. Updated
+  exports sample parented cameras in shot space so the framing follows the rig.
+- With **Import Camera Animation** off, the add-on keeps the opening framing on a single
+  ortho camera without importing camera keys or cuts. Key location to pan and Orthographic
+  Scale to zoom. Re-export to pick up corrected parented-camera motion in existing shots.
+- Changes are in `blender/2dope_import.py`, `src/core/comp.ts`, `src/io/blender.ts` and its
+  regression test, and `src/io/blenderpack.ts`. The package README, manual and `docs/blender.md`
+  explain how to update and use the add-on.
+- Checks: 858 app tests passed, 1 skipped; production build passed. Chromium Story Export and
+  Precision passed 67 checks. Blender 4.5.4 and 5.1.1 verified cuts, a no-camera gap, zoom
+  holds, opening framing and new manual keys. A browser-generated ZIP matched 2Dope's
+  projected art position at five frames in Blender 5.1.1. Checks used test scenes.
+
+### Independent animation frames and drawing gestures (2026-11-15)
+
+- Adding or inserting a drawing changes the active track. A frame created by drawing past
+  the active track's end follows the same rule. Add Frame skips composition ripple, while
+  explicit cel-linked art layers share their exposures and keep their own drawings.
+- Freehand Select accepts a continuous stroke, tapped vertices or both. Tap the first dot
+  to close a tapped path, or press Enter. Pen and touch selection use the same path.
+- In Transform, pinching with both fingers inside the Uniform or Freeform box scales the
+  artwork around its centre. Pinching outside navigates the canvas. Smaller handle hit
+  zones and a short drag threshold help avoid unintended changes on small selections.
+- Checks include the source suite and build, plus Chromium multi-track Add Frame/Undo/Redo,
+  mixed lasso paths, touch selection, inside/outside pinch, and transform undo. Physical
+  iPad and Apple Pencil gestures remain unverified.
+
 ### Paper finishes and brush import fidelity (2026-11-15)
 
 - Effects → Texture → Look and Effects → Presets offer Comic Newsprint, Cold Press Paper,

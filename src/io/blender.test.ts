@@ -57,6 +57,27 @@ describe('Blender plan', () => {
     expect(plan.renders).toHaveLength(0);
   });
 
+  it('exports a parented camera in shot space and retains its cut range', () => {
+    const p = project();
+    const camera = p.shot.layers[0]!;
+    const handle = p.shot.layers[1]!;
+    camera.parent = handle.id;
+    camera.in = 1;
+    camera.out = 3;
+    camera.transform.position = staticProp([250, 150]);
+    handle.transform.anchor = staticProp([200, 150]);
+    handle.transform.rotation = staticProp(90);
+    handle.transform.position = setKey(setKey(staticProp<Vec2>([200, 150]), 1, [200, 150]), 2, [220, 150]);
+    const exported = plannedLayers(planBlender(p, 'test'), 'c1').cam!;
+    expect(exported).toMatchObject({ parent: null, in: 1, out: 3 });
+    expect(exported.channels['position.x']?.keys?.map(k => [k.frame, k.value])).toEqual([[1, 200], [2, 220]]);
+    expect(exported.channels['position.y']?.value).toBeCloseTo(200);
+    expect(exported.channels.rotation).toEqual({ value: 90 });
+    expect(exported.channels.zoom).toEqual({ value: 100 });
+    camera.visible = false;
+    expect(plannedLayers(planBlender(p, 'test'), 'c1').cam).toBeUndefined();
+  });
+
   it('exports the timeline Share shows: the shot while a group in it is open, an asset opened on its own by itself', () => {
     const p = project();
     expect(planBlender({ ...p, activeComp: 'c2' }, 'test').scene.main).toBe('c1');

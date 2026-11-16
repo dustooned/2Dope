@@ -374,7 +374,8 @@ export const MANUAL: ManualSection[] = [
         list: [
           'Gradient fills: in Fill options pick Linear or Radial and a second colour (Swap flips them). After a fill, drag the round handles to set where it starts and ends; tap ✓ (or do anything else) to keep it, ✕ to cancel.',
           'Fill options also fill the next drawings at once, close small gaps in your lines, fill Leftovers (missed specks), and Use lines from other layers (ink on one layer, colour on another).',
-          'Use Select to mark an area with Freehand, Rectangle, Ellipse, Automatic or Colour. New, Add and Subtract let you refine it. You can then transform, copy, fill or delete the selection.',
+          'Use Select to mark an area with Freehand, Rectangle, Ellipse, Automatic or Colour. In Freehand, draw a loop or tap corners, and mix drawn and straight segments. Tap the starting dot to close a tapped path. New, Add and Subtract let you refine the selection.',
+          'In Draw and Animate, drag inside or outside the Transform box to move the artwork. In Uniform and Freeform, pinch with both fingers inside the box to scale the artwork about its centre. Start the pinch outside the box to navigate the canvas.',
           'Transform works on the selection or, with nothing selected, the visible artwork bounds of the current drawing. Uniform keeps proportions. Freeform lets you stretch the width or height with the side handles. Distort moves one corner at a time. Warp bends the artwork using a nine-point grid.',
           'Drag to move or use the top handle to rotate. The canvas shows a size or angle readout while you drag. Use two fingers to navigate while Transform is open. Tap Transform options for exact Width, Height and Angle, flips, Fit, Reset and interpolation. Snapping catches canvas edges, center and 15° turns. Increase Snap distance to catch sooner. Magnetics limits a move to one axis.',
           'Tap Apply, tap Transform again or switch drawing tools to keep the edit as one Undo step. Cancel restores the original. Enter applies, Escape cancels and the arrow keys nudge by one pixel, or ten with Shift. Distort and Warp convert affected vectors to ink pixels. Undo restores the original vectors.',
@@ -440,7 +441,7 @@ export const MANUAL: ManualSection[] = [
         ],
       },
       { figure: 'ripple' },
-      { tip: 'Ripple (on by default): make something longer or shorter and everything after it moves too, on every layer, so nothing slips out of step. Shift+R switches it; hold Alt for one edit without it.' },
+      { tip: 'Add Frame and Insert Frame work on the active animation track. Layers explicitly linked into one cel still share timing. Ripple applies to timeline retiming: Shift+R switches it, and Alt reverses it for one edit.' },
       'While you drag an edge or type a new length, a yellow line marks the frame you are changing. Tap any time readout to switch between frames, seconds + frames and timecode.',
     ],
   },
@@ -519,6 +520,7 @@ export const MANUAL: ManualSection[] = [
           ['Project file', 'A .2dope backup of the whole project, to keep or move to another device.', 'play'],
         ],
       },
+      'For Blender, turn off Import Camera Animation in the Blender import dialog to start with the opening framing and key the camera yourself. Press Numpad 0 to see the render camera. Key the imported camera’s location to pan and its Orthographic Scale to zoom.',
       'With a storyboard, Video, GIF, Animated PNG, PNG frames and Picture offer Put the storyboard in it. That is one project setting (with an Undo step), so every export and the Blender package follow it, whichever mode you set it from.',
       'Advanced (under the settings) has the size, quality and file format. 🎓 Hand in puts your name, class and today’s date in the corner of a video, GIF, animated PNG or picture (PNG frames stay clean).',
       'Your work saves itself on this device as you go. Menu > Versions… keeps restore points (one every 10 minutes and before risky edits), and you can save your own with a name and go back to any of them. Menu > Export .2dope and Import .2dope… move a project between devices.',
@@ -598,6 +600,8 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-11-15', title: 'Camera framing in Blender', items: ['The updated Blender importer follows 2Dope’s camera cuts and uses the opening framing as a clean starting point when Import Camera Animation is off. For zoom in Blender, key Orthographic Scale.'] },
+  { date: '2026-11-15', title: 'Independent new frames and easier selection', items: ['Adding or inserting a drawing keeps holds on other animation tracks in place. Cel-linked layers still share their frames.', 'Freehand Select combines drawn lines and tapped corners. Tap the first dot to close a tapped path. With the Transform box open, pinch inside to scale the artwork or pinch outside to navigate the canvas.'] },
   { date: '2026-11-15', title: 'Larger and sharper Procreate brush imports', items: ['Brushes → Import can read Procreate sets up to 1 GiB. Tips keep up to 256 px and grain up to 512 px, with grain brightness, contrast and zoom behaviour carried into the raster brush. Textured previews load as you reach them in the library.'] },
   { date: '2026-11-15', title: 'Paper and print finishes', items: ['Motion → Effects → Texture → Look adds Comic Newsprint, Cold Press Paper, Recycled Kraft, Brushed Gesso, Thin Riso Paper, and Dry Riso Ink. Effects → Presets has whole-layer versions with starting Strength and Scale settings.', 'The generated grain stays still across frames and appears in exports. Saved artwork and projects using the new looks require file format 13.'] },
   { date: '2026-11-14', title: 'Animate on the spot while Motion moves it', items: ['View → Motion while drawing: Hold still keeps a layer that Motion moves, and the shot around it, still while you draw, so walk cycles stay in place. Show the move lets you watch it travel as you draw, and strokes still land on the drawing.', 'Fixed: editing inside a placed artwork that Motion moves could show the shot around it shifted twice.'] },

@@ -15,6 +15,14 @@ README.txt           install steps, plus notes for this scene
 1. Edit → Preferences → Add-ons → the ⌄ menu → **Install from Disk…** → `2dope_import.py`. Enable it. Once.
 2. **File → Import → 2Dope scene** → pick the `.zip` (it unpacks next to itself) or `scene.json`.
    Option: *Pixels per metre* (default 100).
+   Leave **Import Camera Animation** on to keep 2Dope's camera moves and cuts. Turn it off
+   to start with one camera at the shot's opening framing and create your own keys in Blender.
+   An empty Blender scene avoids interference from existing geometry or camera-bound timeline
+   markers. The default Cube can cover imported artwork.
+3. Press **Numpad 0** to see the render camera. Select the imported **2Dope** camera in the
+   Outliner. Key its location to pan across the art and **Camera Data → Lens → Orthographic
+   Scale** to zoom. Smaller values give a tighter shot. For a 3D dolly, switch to Perspective
+   and reframe the shot before keying camera depth.
 
 ## What you get
 
@@ -23,7 +31,7 @@ README.txt           install steps, plus notes for this scene
 | Drawings layer | A plane facing the camera (front view, XZ plane), origin at the layer's anchor, with an **image sequence** that already contains its timing: holds, loops, ping-pong, held frames and swaps. Frames where it shows nothing use a transparent image. |
 | Position, scale, rotation, opacity keys | **F-curves** with the same Bezier handles (Linear, Ease in/out, Hold → CONSTANT), so motion matches frame for frame. Opacity drives a value node in the plane's material. |
 | Null | An empty; children keep their parent. |
-| Camera | An **orthographic camera** (pan, roll; zoom becomes ortho scale, keyed every frame because it is 1/zoom). No camera in 2Dope → one that frames the shot exactly. |
+| Camera | **Orthographic cameras** preserve pan and roll. Zoom becomes Orthographic Scale, sampled through changing zooms. Camera-bound timeline markers switch cameras at the same frames as 2Dope. In gaps or without a camera, Blender uses a camera that frames the full shot. A camera riding a parent is sampled in shot space. |
 | Precomp shown as is (starts with the shot, normal speed, plays once, same fps, no pinned overrides) | A **collection instance**: the comp is built once in a hidden "2Dope comps" collection and every such instance shares it. |
 | Precomp on its own clock (offset in time, looping, retimed, frame-picked, or with pinned overrides) | A plane with frames **rendered by 2Dope** (identical frames once). Blender collection instances cannot run on their own clock. |
 | In / out points | `hide_render` / `hide_viewport` keys (on the instance object too: hiding a parent does not hide its children in Blender). |

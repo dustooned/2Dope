@@ -18,6 +18,7 @@ export interface TransformDrag {
   id: number; kind: TransformGrab['kind']; x: number; y: number; base: XParams;
   anchor: Point; anchorLocal: Point; d0: number; a0: number; lx: number; ly: number;
   handle: number; nodes: Point[] | null; nodeStart: Point[] | null; guides?: [number | null, number | null];
+  moved?: boolean;
 }
 
 /** A live selection transform: the selected pixels (and whole vector strokes inside) are previewed on the canvases, one undo step on Apply. */
@@ -68,11 +69,22 @@ export function transformFrame(x: TransformState, mode: TransformMode, zoom: num
 
 /** What a touch at document point (px, py) grabs: a handle scales or deforms, the knob rotates, anywhere else moves. */
 export function transformGrab(f: TransformFrame, mode: TransformMode, zoom: number, px: number, py: number): TransformGrab {
-  const r = 26 / zoom;
-  if (Math.hypot(px - f.knob[0], py - f.knob[1]) <= r) return { kind: 'rotate', handle: -1 };
+  // On small selections a generous hit area should not turn a centre drag into a resize.
+  const gap = Math.min(...f.handles.map((p, i) => Math.hypot(p[0] - f.handles[(i + 1) % f.handles.length]![0], p[1] - f.handles[(i + 1) % f.handles.length]![1])));
+  const r = Math.min(20 / zoom, Math.max(3 / zoom, gap * 0.45));
   let nearest = r, handle = -1;
   f.handles.forEach((p, i) => { const distance = Math.hypot(px - p[0], py - p[1]); if (distance < nearest) { nearest = distance; handle = i; } });
+  const knobDistance = Math.hypot(px - f.knob[0], py - f.knob[1]);
+  if (knobDistance <= 18 / zoom && (handle < 0 || knobDistance < nearest)) return { kind: 'rotate', handle: -1 };
   return { kind: handle < 0 ? 'move' : mode === 'warp' || mode === 'distort' ? 'deform' : 'scale', handle };
+}
+
+export function insideTransformFrame(frame: TransformFrame, p: Point): boolean {
+  const cross = frame.corners.map(([x, y], i) => {
+    const [nx, ny] = frame.corners[(i + 1) % frame.corners.length]!;
+    return (nx - x) * (p[1] - y) - (ny - y) * (p[0] - x);
+  });
+  return cross.every((c) => c >= 0) || cross.every((c) => c <= 0);
 }
 
 /** The selection outline where the transform would leave it. */

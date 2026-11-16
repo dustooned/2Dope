@@ -74,6 +74,38 @@ const reset = async () => { closeContextMenu(); app.history.clear(); app.pickLay
 
 await check('Setup', () => { expect(lengths(A) === '2,2,2,2' && lengths(B) === '7,3' && layer(A).start === 0, `A ${lengths(A)} @${layer(A).start}, B ${lengths(B)}, ${app.project.comp.layers.map((l) => l.id + ':' + l.name).join(' ')}`); });
 
+await check('Adding or splitting a new frame with Ripple on keeps the other track at the same frames', async () => {
+  const ripple = app.ripple;
+  const untouched = JSON.stringify(layer(A));
+  const before = JSON.stringify(layer(B).exposures);
+  try {
+    app.setRipple(true);
+    app.pickLayer(B);
+    app.setFrame(1);
+    document.querySelector<HTMLButtonElement>('.flip-add')!.click();
+    expect(lengths(B) === '7,1,3' && app.frame === 7, 'new drawing did not go after the full hold');
+    expect(JSON.stringify(layer(A)) === untouched, 'adding after the hold changed the other layer');
+    app.undo(); await wait();
+    expect(JSON.stringify(layer(B).exposures) === before, 'Undo did not restore the active layer');
+    app.setFrame(1);
+    app.flipAddFrame(false);
+    expect(lengths(B) === '2,1,3' && app.frame === 2, 'splitting the current hold did not add the requested drawing');
+    expect(JSON.stringify(layer(A)) === untouched, 'splitting the hold changed the other layer');
+    app.undo(); await wait();
+    app.redo(); await wait();
+    expect(lengths(B) === '2,1,3' && JSON.stringify(layer(A)) === untouched, 'Redo changed the other layer');
+    app.undo(); await wait();
+    app.setFrame(6);
+    app.addFrame();
+    expect(lengths(B) === '7,1,3' && JSON.stringify(layer(A)) === untouched, 'the regular Add frame changed the other layer');
+    app.undo(); await wait();
+  } finally {
+    if (app.history.peekUndo()?.label.startsWith('Add frame')) { app.undo(); await wait(); }
+    app.setRipple(ripple);
+    await reset();
+  }
+});
+
 await check('Track headers are readable and at least 44 px tall; each track kind has its own colour', () => {
   const eye = row(A).querySelector<HTMLElement>('.flip-eye')!.getBoundingClientRect();
   expect(eye.width >= 90 && eye.height >= 44, `header ${eye.width}×${eye.height}`);

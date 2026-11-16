@@ -594,6 +594,16 @@ export function activeCamera(c: Comp, compFrame: number, comps: ReadonlyMap<stri
   return null;
 }
 
+export function cameraPose(c: Comp, cam: CameraLayer, compFrame: number): { position: Vec2; rotation: number; zoom: number } {
+  const f = layerFrame(cam, compFrame);
+  const world = worldMatrix(c, cam, compFrame);
+  return {
+    position: apply(world, valueAt(cam.transform.anchor, f)),
+    rotation: Math.atan2(world[1], world[0]) * (180 / Math.PI),
+    zoom: Math.max(1, valueAt(cam.zoom, f)),
+  };
+}
+
 /**
  * Comp space → what the frame shows. With no camera it is the identity. A camera at the comp
  * centre, unrotated, at zoom 100 % is also the identity; moving it right moves the picture left.
@@ -602,14 +612,8 @@ export function activeCamera(c: Comp, compFrame: number, comps: ReadonlyMap<stri
 export function viewMatrix(c: Comp, compFrame: number, comps: ReadonlyMap<string, Comp>): Mat {
   const cam = activeCamera(c, compFrame, comps);
   if (!cam) return [...IDENTITY];
-  const f = layerFrame(cam, compFrame);
-  // the camera's place in the comp, through its parents (a camera can ride a null)
-  const world = worldMatrix(c, cam, compFrame);
-  const anchor = valueAt(cam.transform.anchor, f);
-  const [px, py] = apply(world, anchor);
-  const rot = Math.atan2(world[1], world[0]) * (180 / Math.PI);
-  const zoom = Math.max(1, valueAt(cam.zoom, f)) / 100;
-  return mul(mul(mul(translate(c.width / 2, c.height / 2), scaling(zoom, zoom)), rotating(-rot)), translate(-px, -py));
+  const { position: [px, py], rotation, zoom } = cameraPose(c, cam, compFrame);
+  return mul(mul(mul(translate(c.width / 2, c.height / 2), scaling(zoom / 100, zoom / 100)), rotating(-rotation)), translate(-px, -py));
 }
 
 // ---------------------------------------------------------------------------------------------

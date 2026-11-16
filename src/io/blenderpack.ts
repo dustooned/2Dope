@@ -18,13 +18,16 @@ const README = `2Dope scene for Blender
 =======================
 
 1. In Blender (4.2 or newer): Edit > Preferences > Add-ons > the (v) menu > Install from Disk...
-   and pick 2dope_import.py (in this folder). Tick it to enable it. Once is enough.
+   and pick 2dope_import.py (in this folder). Enable it. Use this version to update an older install.
 2. File > Import > 2Dope scene, and pick this .zip (or scene.json after unzipping).
+   Turn off Import Camera Animation to start with the opening framing and key the camera yourself.
+3. Press Numpad 0 to see the render camera. Select the imported 2Dope camera in the Outliner.
+   Key its location to pan and Camera Data > Lens > Orthographic Scale to zoom.
 
 What you get: every drawing layer as an image plane facing the camera (front view, XZ plane),
 with its timing (holds, loops, swaps) as an image sequence; nulls as empties; the 2Dope camera
-as an orthographic camera; precomps as collection instances; all keyframes as F-curves with
-the same easing. 100 pixels = 1 metre (change it in the import options).
+as an orthographic camera; and eligible precomps as collection instances. Camera cuts use
+timeline markers. 100 pixels = 1 metre (change it in the import options).
 Each drawing layer's plane is the size of its art (with a 2 pixel margin), not the whole page,
 so its PNGs are small; the plane sits exactly where the art is in 2Dope.
 `;

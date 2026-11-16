@@ -1,6 +1,6 @@
 import { blenderHandles, LINEAR, staticProp, valueAt, type Prop, type Value, type Vec2 } from '../core/anim';
 import { activeEffects, temporalEffect } from '../core/effects';
-import { compLength, exportComp, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type Comp, type CompLayer, type DrawingsLayer, type Layer, partsActive, rotationAt, skippedInExport, type Transform } from '../core/comp';
+import { cameraPose, compLength, exportComp, layerEnd, drawingOf, frameContent, instanceComp, nestedFrame, type CameraLayer, type Comp, type CompLayer, type DrawingsLayer, type Layer, partsActive, rotationAt, skippedInExport, type Transform } from '../core/comp';
 
 /**
  * The Blender handoff (spec principle 4). 2Dope writes a package: `scene.json` (this file's
@@ -211,6 +211,31 @@ export function channels(p: Prop<Value>, names: [ChannelName] | [ChannelName, Ch
   return out;
 }
 
+/** A camera inherits its parent's motion in 2Dope, but the Blender camera needs a rigid pose. */
+function parentedCameraChannels(c: Comp, cam: CameraLayer, length: number): BlenderLayer['channels'] {
+  const first = Math.max(0, cam.in);
+  const end = Math.min(length, cam.out ?? length);
+  if (end - first > 100001) throw new Error('Parented camera motion exceeds the Blender bake limit. Shorten this composition.');
+  const names = ['position.x', 'position.y', 'rotation', 'zoom'] as const;
+  const samples = names.map((): ChannelKey[] => []);
+  let previousRotation = 0;
+  for (let frame = first; frame < end; frame++) {
+    const { position: [x, y], rotation, zoom } = cameraPose(c, cam, frame);
+    // Keep rolls continuous when atan2 crosses ±180°.
+    previousRotation = rotation + 360 * Math.round((previousRotation - rotation) / 360);
+    [x, y, previousRotation, zoom].forEach((value, i) => {
+      samples[i]!.push({ frame, value, interp: 'LINEAR', left: null, right: null });
+    });
+  }
+  const out: BlenderLayer['channels'] = {};
+  names.forEach((name, i) => {
+    const keys = samples[i]!;
+    const initial = keys[0];
+    if (initial) out[name] = { value: initial.value, ...(keys.some(k => k.value !== initial.value) ? { keys } : {}) };
+  });
+  return out;
+}
+
 /** Collapse a per-frame list into runs. */
 export function runs(perFrame: (string | null)[]): FrameRun[] {
   const out: FrameRun[] = [];
@@ -250,6 +275,7 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
     const bc: BlenderComp = { name: c.name, width: c.width, height: c.height, fps: c.fps, length, background: c.background, layers: [] };
     for (const l of c.layers) {
       if (skippedInExport(l)) continue; // the storyboard / guides stay in 2Dope
+      if (l.kind === 'camera' && (id !== main.id || !l.visible || l.in >= length || (l.out !== null && l.out <= Math.max(0, l.in)))) continue;
       if (l.kind === 'drawings' && l.title) notes.add(`“${l.name}”: Title exported as an image.`);
       const t = l.transform;
       const temporal = activeEffects(l).some(e => temporalEffect(e.type));
@@ -281,8 +307,9 @@ export function planBlender(project: { name: string; main: string; activeComp?: 
       };
       if (l.kind === 'null') bc.layers.push(base);
       else if (l.kind === 'camera') {
-        if (id === main.id) bc.layers.push({ ...base, kind: 'camera', channels: { ...ch, ...channels(l.zoom, ['zoom'], l.start) } });
-        // cameras inside precomps only matter in 2Dope (the shot's camera frames Blender's render)
+        const cameraChannels = l.parent ? parentedCameraChannels(c, l, length) : { ...ch, ...channels(l.zoom, ['zoom'], l.start) };
+        if (l.parent) notes.add(`“${l.name}”: camera motion inherited from a parent is sampled in shot space.`);
+        bc.layers.push({ ...base, kind: 'camera', parent: null, channels: cameraChannels });
       } else if (l.kind === 'drawings' && l.adjust) {
         notes.add(`“${l.name}” is an adjustment layer: its effects change everything below it, so it stays in 2Dope (Blender gets the layers without them).`);
       } else if (temporal || l.kind === 'drawings' && (clips(l) || l.mask || l.tweenVectors || activeEffects(l).length > 0 || partsActive(l))) {

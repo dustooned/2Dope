@@ -16,7 +16,7 @@
 bl_info = {
     "name": "2Dope importer",
     "author": "2Dope",
-    "version": (0, 1, 0),
+    "version": (0, 2, 0),
     "blender": (4, 2, 0),
     "location": "File > Import > 2Dope scene",
     "description": "Image planes, cameras, precomps and keyframes from a 2Dope animation",
@@ -30,7 +30,7 @@ import shutil
 import zipfile
 
 import bpy
-from bpy.props import FloatProperty, StringProperty
+from bpy.props import BoolProperty, FloatProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 
 FORMAT = "2dope-blender"
@@ -116,18 +116,19 @@ def apply_keys(id_data, data_path, index, keys, convert, frame_start):
     if fc is None:
         return
     by_frame = {round(p.co[0]): p for p in fc.keyframe_points}
-    for k in keys:
+    for i, k in enumerate(keys):
         p = by_frame.get(k["frame"] + frame_start)
         if p is None:
             continue
         p.interpolation = k["interp"]
         if k["interp"] == "BEZIER":
-            p.handle_left_type = "FREE"
             p.handle_right_type = "FREE"
             if k.get("right"):
                 p.handle_right = (k["right"][0] + frame_start, convert(k["right"][1]))
             else:
                 p.handle_right = (p.co[0] + 1, p.co[1])
+        if i > 0 and keys[i - 1]["interp"] == "BEZIER":
+            p.handle_left_type = "FREE"
             if k.get("left"):
                 p.handle_left = (k["left"][0] + frame_start, convert(k["left"][1]))
             else:
@@ -300,9 +301,6 @@ class Builder:
         for l in layers:
             kind = l["kind"]
             name = l["name"]
-            if kind == "camera":
-                objects[l["id"]] = self.camera(l, comp, collection)
-                continue
             if kind == "null":
                 obj = bpy.data.objects.new(name, None)
                 obj.empty_display_type = "PLAIN_AXES"
@@ -365,44 +363,87 @@ class Builder:
         self.build_comp(comp_id, coll)
         return coll
 
-    def camera(self, layer, comp, collection):
+    def camera(self, layer, comp, collection, animate):
         W, H = comp["width"], comp["height"]
-        cam = bpy.data.cameras.new(layer["name"])
+        name = "2Dope " + layer["name"] if layer else "2Dope Camera"
+        cam = bpy.data.cameras.new(name)
         cam.type = "ORTHO"
-        obj = bpy.data.objects.new(layer["name"], cam)
+        obj = bpy.data.objects.new(name, cam)
         collection.objects.link(obj)
         obj.rotation_euler = (math.pi / 2, 0.0, 0.0)
-        ch = layer["channels"]
+        ch = layer["channels"] if layer else {}
         base = max(W, H)
 
+        def opening_value(channel, default):
+            keys = channel.get("keys")
+            return self.channel_at(keys, 0) if keys else channel.get("value", default)
+
         def put(name, path, index, convert, default):
-            c = ch.get(name)
+            c = ch.get(name, {})
             vec = getattr(obj, path)
-            vec[index] = convert(c["value"] if c else default)
-            if c and c.get("keys"):
+            vec[index] = convert(opening_value(c, default))
+            if animate and c.get("keys"):
                 apply_keys(obj, path, index, c["keys"], convert, self.fs)
 
         put("position.x", "location", 0, lambda v: self.px(v - W / 2), W / 2)
         put("position.y", "location", 2, lambda v: -self.px(v - H / 2), H / 2)
         obj.location[1] = -50.0
         put("rotation", "rotation_euler", 1, lambda v: math.radians(v), 0)
-        zoom = ch.get("zoom", {"value": 100})
-        cam.ortho_scale = self.px(base) / max(0.01, zoom["value"] / 100)
-        if zoom.get("keys"):
-            # ortho scale is 1/zoom, not a straight line: key every frame between the first and last key
-            first = zoom["keys"][0]["frame"]
-            last = zoom["keys"][-1]["frame"]
-            for f in range(first, last + 1):
-                v = self.zoom_at(zoom["keys"], f)
-                cam.ortho_scale = self.px(base) / max(0.01, v / 100)
-                cam.keyframe_insert(data_path="ortho_scale", frame=f + self.fs)
+        zoom = ch.get("zoom", {})
+        to_scale = lambda v: self.px(base) / max(0.01, v / 100)
+        cam.ortho_scale = to_scale(opening_value(zoom, 100))
+        if animate and zoom.get("keys"):
+            # Sample 1/zoom once per frame. Preserve holds without adding keys across them.
+            keys = zoom["keys"]
+            samples = []
+            for a, b in zip(keys, keys[1:]):
+                if a["interp"] == "CONSTANT" or a["value"] == b["value"] and a["interp"] == "LINEAR":
+                    samples.append({**a, "interp": "CONSTANT"})
+                else:
+                    for f in range(a["frame"], b["frame"]):
+                        samples.append({"frame": f, "value": self.channel_at((a, b), f), "interp": "LINEAR"})
+            samples.append({**keys[-1], "interp": "LINEAR"})
+            apply_keys(cam, "ortho_scale", -1, samples, to_scale, self.fs)
         cam.clip_end = 1000
-        bpy.context.scene.camera = obj
         return obj
 
+    def build_cameras(self, comp, collection, scene, animate):
+        cameras = [l for l in comp["layers"] if l["kind"] == "camera" and l["visible"]]
+        last = comp["length"]
+
+        def active(frame):
+            return next((l for l in cameras if l["in"] <= frame and (l["out"] is None or frame < l["out"])), None)
+
+        if not animate:
+            scene.camera = self.camera(active(0), comp, collection, False)
+            return
+
+        boundaries = {0}
+        for layer in cameras:
+            boundaries.update(f for f in (layer["in"], layer["out"]) if f is not None and 0 < f < last)
+        cuts = []
+        previous = object()
+        for frame in sorted(boundaries):
+            layer = active(frame)
+            if layer is not previous:
+                cuts.append((frame, layer))
+                previous = layer
+
+        objects = {}
+        for frame, layer in cuts:
+            key = layer["id"] if layer else None
+            if key not in objects:
+                objects[key] = self.camera(layer, comp, collection, True)
+            camera = objects[key]
+            if frame == 0:
+                scene.camera = camera
+            if len(cuts) > 1:
+                marker = scene.timeline_markers.new(camera.name, frame=frame + self.fs)
+                marker.camera = camera
+
     @staticmethod
-    def zoom_at(keys, f):
-        """Evaluate a zoom track at a frame (Bezier between keys, like 2Dope)."""
+    def channel_at(keys, f):
+        """Evaluate a numeric 2Dope track in comp time."""
         if f <= keys[0]["frame"]:
             return keys[0]["value"]
         for a, b in zip(keys, keys[1:]):
@@ -425,13 +466,14 @@ class Builder:
                 return (1 - u) ** 3 * p0[1] + 3 * (1 - u) ** 2 * u * p1[1] + 3 * (1 - u) * u * u * p2[1] + u ** 3 * p3[1]
         return keys[-1]["value"]
 
-    def build(self):
+    def build(self, animate_camera=True):
         s = self.s
         main = s["comps"][s["main"]]
         scene = bpy.context.scene
         scene.render.resolution_x = int(main["width"])
         scene.render.resolution_y = int(main["height"])
         scene.render.resolution_percentage = 100
+        scene.render.pixel_aspect_x = scene.render.pixel_aspect_y = 1.0
         fps = float(main["fps"])
         scene.render.fps = int(round(fps))
         scene.render.fps_base = scene.render.fps / fps if fps else 1.0
@@ -457,18 +499,9 @@ class Builder:
         top = bpy.data.collections.new(s.get("name") or main["name"])
         scene.collection.children.link(top)
         objects = self.build_comp(s["main"], top)
-        if not any(l["kind"] == "camera" for l in main["layers"]):
-            # no camera in 2Dope: one that frames the shot exactly
-            cam = bpy.data.cameras.new("Camera")
-            cam.type = "ORTHO"
-            cam.ortho_scale = self.px(max(main["width"], main["height"]))
-            obj = bpy.data.objects.new("Camera", cam)
-            top.objects.link(obj)
-            obj.location = (0.0, -50.0, 0.0)
-            obj.rotation_euler = (math.pi / 2, 0.0, 0.0)
-            cam.clip_end = 1000
-            scene.camera = obj
+        self.build_cameras(main, top, scene, animate_camera)
         self.storyboard(scene)
+        scene.frame_set(self.fs)
         return objects
 
     def storyboard(self, scene):
@@ -497,10 +530,10 @@ class Builder:
         text.write("\n".join(lines))
 
 
-def import_2dope(path, ppu=None):
+def import_2dope(path, ppu=None, animate_camera=True):
     scene, folder = open_package(path)
     b = Builder(scene, folder, ppu or scene.get("pixelsPerUnit", 100))
-    b.build()
+    b.build(animate_camera)
     return scene
 
 
@@ -513,10 +546,15 @@ class IMPORT_OT_2dope(bpy.types.Operator, ImportHelper):
 
     filter_glob: StringProperty(default="*.zip;*.json", options={"HIDDEN"})
     pixels_per_unit: FloatProperty(name="Pixels per metre", default=100.0, min=1.0, max=100000.0, description="How many 2Dope pixels make one Blender unit")
+    animate_camera: BoolProperty(
+        name="Import Camera Animation",
+        default=True,
+        description="Bring in 2Dope camera keys and cuts. Turn off to start with the opening framing and animate the camera in Blender",
+    )
 
     def execute(self, context):
         try:
-            s = import_2dope(self.filepath, self.pixels_per_unit)
+            s = import_2dope(self.filepath, self.pixels_per_unit, self.animate_camera)
         except Exception as e:  # report, never crash Blender
             self.report({"ERROR"}, "2Dope import failed: %s" % e)
             return {"CANCELLED"}

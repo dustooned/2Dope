@@ -143,6 +143,40 @@ try {
   check('Cut to layer is one undo step', app.history.peekUndo()?.label === 'Cut to new layer');
   app.undo(); await settle();
   check('One Undo puts the cut pixels back and removes the layer', app.history.peekUndo() === top && alphaOf(srcDrawing.line, 20, 20) === 255 && !app.project.comp.layers.some((x) => x.id === cutLayer.id));
+
+  await fresh();
+  paint([['#246', 20, 20, 34, 34]]);
+  app.setSelectShape('free');
+  tap(16, 16); tap(64, 16);
+  pointer('pointerdown', 64, 29); pointer('pointermove', 61, 48); pointer('pointerup', 64, 65);
+  tap(16, 65);
+  check('Freehand can add a drawn edge to an open tapped polygon', !app.spatialSelection);
+  tap(16, 16);
+  check('Tapping the start node closes the polygon without an undo entry', sel(35, 35) === 1 && sel(70, 70) === 0 && !app.history.canUndo);
+
+  app.toggleDrawTransform();
+  const touch = (type: string, id: number, x: number, y: number) => {
+    const r = canvas.getBoundingClientRect(), p = app.view.docToScreen(x, y);
+    canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: id, button: 0, buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1, clientX: r.left + p.x, clientY: r.top + p.y }));
+  };
+  const zoom = app.view.zoom;
+  touch('pointerdown', 10, 31, 38); touch('pointerdown', 11, 49, 38);
+  touch('pointermove', 10, 22, 38); touch('pointermove', 11, 58, 38);
+  touch('pointerup', 10, 22, 38); touch('pointerup', 11, 58, 38);
+  check('Pinching inside Transform scales the selection around its centre', Math.abs((app.transformParams?.scale ?? 0) - 2) < 0.05 && app.view.zoom === zoom && app.transformParams?.dx === 0);
+  touch('pointerdown', 10, 82, 78); touch('pointerdown', 11, 102, 78);
+  touch('pointermove', 11, 111, 78);
+  touch('pointerup', 10, 82, 78); touch('pointerup', 11, 111, 78);
+  check('Pinching outside Transform navigates the canvas', app.view.zoom > zoom && Math.abs((app.transformParams?.scale ?? 0) - 2) < 0.05);
+  app.applyTransform(); await settle();
+  check('The Transform commits as one Undo', !!app.history.canUndo);
+  app.undo(); await settle();
+  check('Undo restores the original artwork dimensions', alphaOf(srcDrawing.line, 18, 18) === 0 && alphaOf(srcDrawing.line, 25, 25) === 255);
+  app.clearSpatialSelection();
+  app.setFingerPaint(false);
+  const fingerTap = (x: number, y: number) => { touch('pointerdown', 20, x, y); touch('pointerup', 20, x, y); };
+  fingerTap(16, 16); fingerTap(64, 16); fingerTap(64, 64); fingerTap(16, 64); fingerTap(16, 16);
+  check('A finger can tap a lasso even with finger painting switched off', sel(35, 35) === 1 && sel(70, 70) === 0 && !app.history.canUndo);
 } catch (e) {
   check(String(e), false);
 } finally {
