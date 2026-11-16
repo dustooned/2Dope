@@ -595,6 +595,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-11-15', title: 'Use 2Dope with no internet', items: ['Menu → Offline saves 2Dope on this device so it opens with no internet, and shows how to install it on a computer, iPad or Chromebook. Open 2Dope once online and wait for Ready. Export a .2dope backup before leaving a lab computer. Updates arrive the next time you open it online.'] },
   { date: '2026-11-15', title: 'New project: open length or your own', items: ['New project → Length: Open starts as one blank frame so you set the timing as you go (the Flipbook adds a page after the last one, Timing sets the holds). Custom takes any length in seconds, up to ten minutes. The Create button stays in view on small screens.'] },
   { date: '2026-11-14', title: 'Animate on the spot while Motion moves it', items: ['View → Motion while drawing: Hold still keeps a layer that Motion moves, and the shot around it, still while you draw, so walk cycles stay in place. Show the move lets you watch it travel as you draw, and strokes still land on the drawing.', 'Fixed: editing inside a placed artwork that Motion moves could show the shot around it shifted twice.'] },
   { date: '2026-11-14', title: 'About 2Dope', items: ['The manual opens with About 2Dope: who designed, programmed and developed it, and why it is kept free and up to date for students. The credit at the bottom of Projects opens it.'] },

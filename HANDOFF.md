@@ -2,6 +2,14 @@
 
 ## Current state (2026-11-14) — read this first
 
+### Offline use, like inkflo (2026-11-15, same branch)
+
+- Build: `scripts/offline-plugin.mjs` writes `dist/sw.js` from `scripts/sw-template.js`: a cache-first precache of every emitted file (84 files, about 5.9 MB, versioned by content hash). `ignoreVary: true` matters: `vite preview` sends `Vary: Origin`, which made module requests miss the cache offline.
+- App: `src/offline.ts` registers the worker (production build on https or localhost only); Menu → Help → **Offline** opens `src/ui/offlinedialog.ts` (status, Install, steps per device, backup reminder). `public/manifest.webmanifest`, `public/icons/`, links in `index.html`.
+- Checks: headless Chrome on `vite preview` (127.0.0.1:5262): worker cached 84 files; with the server stopped the app booted, the dialog said Ready, the manual opened. vitest and build run at commit.
+- Not done: inkflo's offline kit zip, a manual section, an automated fixture, iPad Safari, an in-app "update ready" prompt. The worker only takes effect on 2dope.xyz after the next deploy (not done here).
+
+
 ### New project: Open length and Custom length (2026-11-15, same branch)
 
 - `core/newproject.ts`: the `frame` length is now labelled **Open** ("as you go", still one blank frame, same id so saved choices keep working); new **Custom** length (`customSeconds`, 0.5 s steps, up to 600 s; `clampSeconds`, `framesFor(choice, fps, customSeconds)`). `NewSettings` gains `customSeconds` (read with a default, so older saved settings load).
