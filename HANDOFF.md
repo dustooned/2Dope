@@ -106,6 +106,59 @@ Part of "Painterly animation" (next-phase.md, "Texture that boils or holds"). Br
   not separately tested); Smudge/wet mix do not use grain so are unaffected; Paint over the last
   frame copies the previous frame's grain and only new strokes get the new one (by design); no per-stroke override after painting.
 
+### Copy and paste between browser tabs (2026-11-15)
+
+Follow-up to "Copy and paste between projects" below: frames and layers now cross between two
+2Dope tabs of the same origin. Same-tab behaviour is unchanged (the clipboard token that matches
+this tab's own copy still pastes synchronously from memory).
+
+- **`io/crosstab.ts`** (new): every Copy writes a small header to the IndexedDB database
+  `2dope-clipboard` (store `copy`, keys `head` and `body`; only the newest copy is kept, a copy
+  older than a day is swept when 2Dope opens). Frames and layers also write their body (the
+  `DrawingSnap` map, exposures or layer JSON, caption fonts) once the PNGs are encoded. The copying
+  tab holds a Web Lock `2dope-clipboard:<copy id>` until the body is written.
+- **Why IndexedDB + Web Locks, not a BroadcastChannel handshake**: a handshake needs the copying
+  tab awake to answer. Browsers freeze background tabs (iPad Safari almost at once, desktop Chrome
+  after a while) and a closed tab never answers, while a stored record can still be read; it also
+  means closing the copying tab after the copy is ready loses nothing. The lock tells the pasting
+  tab "still encoding" (lock held: wait up to 20 s, `crossTab.timeout`) from "closed before it
+  finished" (lock released, header still pending). Without Web Locks it polls the header.
+- **Nothing leaves the origin**: the system clipboard only holds the token
+  (`2Dope clipboard <uuid>`, as before); IndexedDB and locks are per-origin.
+- **Routing**: `ui/clipboard.ts` paste event: own token → unchanged; another `2Dope clipboard`
+  token → `pasteFromTab` (`headFor`: the newest record when its token matches; an X-sheet copy
+  from another tab, which writes no token, counts when newer than this tab's own last copy);
+  ordinary text/images → unchanged. Art from another tab still pastes as the PNG it put on the
+  clipboard; keyframes are refused ("paste only in the tab that copied them"). `pasteMedia` (the
+  Paste menu with `navigator.clipboard.read`) follows the same rules.
+- **App**: `copySelection(token?)` / `cutSelection(token?)` share frames; `paste()` first takes
+  frames another tab copied after this tab's last copy (`newerElsewhere`, 500 ms cap on the
+  read), so the X-sheet's Ctrl+V and the frame menu work across tabs; `pasteFromTab(head)` →
+  `pasteForeign(items, snaps)` (one undo step "Paste from another project", size notice).
+- Carried-over rules, same code paths and messages: movie/comp refusals (`crossPasteBlocked`),
+  `SNAP_MAX` 240 ("could not be copied"), caption font renamed on a clash, centring on another
+  canvas size. New messages (`messages` in `crosstab.ts`): waiting, timed out, closed too soon,
+  stale token (something newer copied), missing record (another browser / private window), and
+  too big to store (IndexedDB write failed, e.g. quota).
+- Checks (2026-11-15, desktop Chrome headless, dev server 127.0.0.1:5262): new fixture
+  `crosstab` 13/13 — the other tab is a same-origin iframe (`tests/_crosstabpeer.html`, its own
+  App, clipboard handler and tab id; removing it stands in for closing the tab): frames with
+  clashing ids + one Undo, centring + notice, X-sheet copy → `app.paste()` then same-tab paste wins
+  again, Motion layer with drawings + Undo, caption font clash, movie refusal, 241 drawings refused,
+  stale token, plain text not hijacked, paste after the copying tab closed, timeout while the other
+  tab never finishes, closed-before-ready, no errors in either realm; the clipboard holds only
+  `text/plain` with the token. `crosspaste` 7/7 still. `npx vitest run --dir src` 842 passed,
+  1 skipped; `npm run build` passed; full `npm run test:browser`: 81 of 82 — only `railperf`'s timing check failed (pinch zoom median
+  39.7 ms, then 54.4 ms alone, limit 30 ms) while other sessions were loading the machine; that
+  fixture does not load the clipboard code and nothing here touches zoom or layout.
+- Not verified / gaps: two real tabs by hand (the iframe shares origin, IndexedDB and locks the
+  way a tab does, but frozen-tab timing is simulated with a never-finishing copy); iPad Safari
+  (Web Locks need Safari 15.4+, otherwise polling); very large copies (every frame/layer Copy now
+  also writes its PNGs to IndexedDB in the background — 24 busy 1080p frames were ~11 MB in the
+  earlier measurement; not re-measured); the frame menu's Paste items stay disabled in a tab that
+  has copied nothing itself (Ctrl+V works); if another tab's X-sheet copy is newer than the token
+  on the clipboard but this tab's own token matches, the own copy pastes on Ctrl+V (canvas).
+
 ### Motion while drawing: Hold still / Show the move (2026-11-14)
 
 User problem: a walk cycle animated in place in Animate, then moved in Motion, slid around (or

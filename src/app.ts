@@ -21,6 +21,7 @@ import { showVectorRestyle } from './ui/vectorrestyle';
 import { makeCanvas, putPixels, RasterEngine } from './brush/raster';
 import { paintDrawing, planeCanvas, Project, type Drawing, type Plane, type Role } from './core/project';
 import { adoptSnaps, snapDrawings, type DrawingSnap } from './core/transfer';
+import { newerElsewhere, receive, share, type ShareHead } from './io/crosstab';
 import { Residency, type AssetSource } from './core/residency';
 import { domPlaneOps } from './view/planeops';
 import { IDENTITY, isIdentity, matrixFor, transformMask, type Interpolation, type Rect, type XParams } from './core/selxform';
@@ -220,6 +221,9 @@ interface NavDrag {
   startRot: number;
   startAng: number;
 }
+
+/** Frames another 2Dope tab copied: the exposures (drawing ids and holds) and their drawings' pictures. */
+export interface FramesBody { items: Exposure[]; snaps: Map<string, DrawingSnap> | null }
 
 export interface InputStats {
   pointerType: string;
@@ -5004,10 +5008,18 @@ export class App {
     }, true);
   }
 
-  copySelection(): number {
+  /**
+   * Copy the selected exposures. The copy is also offered to other 2Dope tabs (`io/crosstab.ts`);
+   * `token` is the text the system clipboard holds for it, when it went through a clipboard event.
+   */
+  copySelection(token: string | null = null): number {
     const ex = this.project.exposures;
     this.clipboard = this.targets.map((i) => ({ drawing: ex[i]!.drawing, length: ex[i]!.length }));
     this.clipFrom = this.clipboard.length ? { project: new WeakRef(this.project), snaps: this.snapDrawings(this.clipboard.map((e) => e.drawing)) } : null;
+    if (this.clipFrom) {
+      const items = this.clipboard.slice();
+      share('frames', token, this.clipFrom.snaps.then((snaps): FramesBody => ({ items, snaps })));
+    }
     return this.clipboard.length;
   }
 
@@ -5016,8 +5028,8 @@ export class App {
     return !!this.clipFrom && this.clipFrom.project.deref() !== this.project;
   }
 
-  cutSelection(): void {
-    if (!this.copySelection()) return;
+  cutSelection(token: string | null = null): void {
+    if (!this.copySelection(token)) return;
     this.selection = [...this.targets];
     this.deleteFrame();
   }
@@ -5028,6 +5040,9 @@ export class App {
    */
   async paste(copies = false): Promise<void> {
     if (this.titlePaintBlocked(false)) return;
+    // frames copied in another 2Dope tab after this tab's own last copy
+    const other = this.live ? null : await newerElsewhere('frames');
+    if (other) return this.pasteFromTab(other);
     if (this.clipboardForeign) return this.pasteForeign();
     const items = this.clipboard.filter((e) => this.project.drawings.has(e.drawing));
     if (this.live || !items.length) return;
@@ -5050,11 +5065,10 @@ export class App {
   }
 
   /** Frames copied in another project: new drawings here from the snapshot, same holds and cycles. One undo step. */
-  private async pasteForeign(): Promise<void> {
-    const from = this.clipFrom, items = this.clipboard.slice();
-    if (!from || this.live || !items.length) return;
+  private async pasteForeign(items = this.clipboard.slice(), pending = this.clipFrom?.snaps): Promise<void> {
+    if (!pending || this.live || !items.length) return;
     const p = this.project, ex = p.exposures;
-    const snaps = await from.snaps;
+    const snaps = await pending;
     if (!snaps) { this.onNotice?.('Those frames could not be copied. Copy them again.'); return; }
     if (this.project !== p || p.exposures !== ex || this.live) return;
     const ids = await adoptSnaps(p, snaps);
@@ -5064,6 +5078,14 @@ export class App {
     this.editTimeline('Paste from another project', (e) => insertAt(e, at, items.map((it) => ({ drawing: ids.get(it.drawing)!, length: it.length }))));
     const w = snaps.values().next().value;
     if (w && (w.w !== p.width || w.h !== p.height)) this.onNotice?.(`Pasted ${items.length} frame${items.length === 1 ? '' : 's'} from a ${w.w}×${w.h} project, centred at the same pixel size.`);
+  }
+
+  /** Frames copied in another 2Dope tab: read its stored copy, then paste as from another project. */
+  async pasteFromTab(head: ShareHead): Promise<void> {
+    if (this.titlePaintBlocked(false) || this.live) return;
+    const got = await receive<FramesBody>(head, (m) => this.onNotice?.(m));
+    if ('message' in got) { this.onNotice?.(got.message); return; }
+    return this.pasteForeign(got.body.items, Promise.resolve(got.body.snaps));
   }
 
 
