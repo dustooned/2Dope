@@ -1,0 +1,2 @@
+*.command text eol=lf
+scripts/offline-kit/*.bat text eol=crlf
