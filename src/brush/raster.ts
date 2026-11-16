@@ -3,6 +3,7 @@ import { symmetryCopies } from '../core/adjust';
 import type { StrokeRecord } from '../core/stroke';
 import type { BrushSettings } from '../core/brush';
 import { hash01 } from '../core/rng';
+import { grainBoilShift } from '../core/grainboil';
 import { jitterColor, mixColor } from '../core/color';
 import { strokeLength } from '../core/stroke';
 import { dabBounds, dabsForStroke, type Dab } from './dabs';
@@ -291,18 +292,29 @@ export function grainScaleOf(b: BrushSettings): number {
   return follow > 0 ? b.grainScale * (1 + follow * (b.size / (b.grainRef ?? b.size) - 1)) : b.grainScale;
 }
 
-/** The pattern's placement: scaled and rotated about the document origin. */
-function paperMatrix(scale: number, rotation = 0): DOMMatrix {
+/** A boiling grain's shift, as fractions of the grain tile (`core/grainboil.ts`); none = fixed. */
+type TileShift = { x: number; y: number };
+
+/**
+ * The pattern's placement: scaled and rotated about the document origin. A boiling grain also
+ * slides the tile by `shift` (fractions of the tile `w` × `h`), in the tile's own space, so the
+ * texture changes but keeps its scale and rotation.
+ */
+function paperMatrix(scale: number, rotation = 0, shift?: TileShift, w = 0, h = 0): DOMMatrix {
   const m = new DOMMatrix();
   if (rotation) m.rotateSelf(rotation);
-  return m.scaleSelf(Math.max(0.05, scale));
+  m.scaleSelf(Math.max(0.05, scale));
+  if (shift && (shift.x || shift.y)) m.translateSelf(-shift.x * w, -shift.y * h);
+  return m;
 }
 
 /** One paper-aligned pattern per stroke, reused by all its stamps. `height` = the depth of a height grain. */
-function paperPattern(g: CanvasRenderingContext2D, scale: number, image?: string, height?: number, rotation = 0): CanvasPattern | null {
-  const pat = g.createPattern(height === undefined ? grainFor(image) : heightFor(image, height), 'repeat');
-  pat?.setTransform(paperMatrix(scale, rotation));
-  return pat;
+function paperPattern(g: CanvasRenderingContext2D, scale: number, image?: string, height?: number, rotation = 0, shift?: TileShift): { pattern: CanvasPattern | null; place: DOMMatrix } {
+  const src = height === undefined ? grainFor(image) : heightFor(image, height);
+  const pattern = g.createPattern(src, 'repeat');
+  const place = paperMatrix(scale, rotation, shift, src.width, src.height);
+  pattern?.setTransform(place);
+  return { pattern, place };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -459,14 +471,17 @@ export class RasterEngine {
     this.pullFrom = pull > 0 ? ctx2d(this.target).getImageData(0, 0, this.width, this.height).data : null;
     const scratch = ctx2d(this.scratch);
     const height = b.grainMode === 'height' ? b.grain : undefined;
-    this.paperPlace = paperMatrix(grainScaleOf(b), b.grainRotation ?? 0);
-    this.paper = b.grain > 0 ? paperPattern(scratch, grainScaleOf(b), b.grainImage, height, b.grainRotation ?? 0) : null;
+    // a boiling grain moves with the frame the stroke is painted on (fixed: no shift)
+    const shift = grainBoilShift(b.grainBoil, record.grainFrame ?? 0);
+    const paper = b.grain > 0 ? paperPattern(scratch, grainScaleOf(b), b.grainImage, height, b.grainRotation ?? 0, shift) : null;
+    this.paperPlace = paper?.place ?? new DOMMatrix();
+    this.paper = paper?.pattern ?? null;
     // a height grain holds the valleys back fully; its depth is already in the mask
     this.paperDepth = Math.min(0.95, height === undefined ? b.grain : 0.95);
     this.paperMin = Math.min(this.paperDepth, b.grainMin ?? 0);
     this.paperRoll = 1 - (b.grainMovement ?? 1);
     this.rollFrom = null;
-    this.shadePaper = b.tiltShade.enabled && b.tiltShade.grain > 0 ? paperPattern(scratch, b.grainScale) : null;
+    this.shadePaper = b.tiltShade.enabled && b.tiltShade.grain > 0 ? paperPattern(scratch, b.grainScale, undefined, undefined, 0, shift).pattern : null;
     this.tip = this.tipIn(color);
     this.shadeTip = tipSprite(record.brush.tiltShade.hardness, color);
     this.hasShade = false;

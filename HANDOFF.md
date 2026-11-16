@@ -2,17 +2,14 @@
 
 ## Current state (2026-11-15) — read this first
 
-### Offline branch merged into main locally (2026-11-16, not pushed)
+### Local main merged with origin/main (2026-11-16, not pushed)
 
-- `main` now has the uncommitted Blender/frames/gesture work as one commit, plus a merge of
-  `claude/perf-audit-842bf3` (offline service worker, manifest and install dialog, lab kit,
-  performance fixes, Open/Custom new-project length). Their notes are below.
-- Only conflict: `UPDATES` in `src/ui/manualtext.ts`. Both sides' 2026-11-15 entries are kept.
-- Checks on the merged tree: `npm test` passed (in a clean copy: 862 passed, 1 skipped; in
-  this checkout it also picks up `.claude/worktrees/`); `npm run build` passed, and
-  `dist/sw.js` and `dist/manifest.webmanifest` are emitted.
-- Not run: the full browser suite, a manual offline check of the merged build, the Mac
-  launcher, iPad. Offline only reaches 2dope.xyz once `main` is pushed.
+- Local `main` = `origin/main` (combined release, already live with offline mode) plus one
+  commit of the Blender camera framing / independent frames / gesture work below. The
+  earlier local merge of `claude/perf-audit-842bf3` is a no-op here: origin/main already had it.
+- Conflicts: `UPDATES` in `src/ui/manualtext.ts` and this file. Both sides kept.
+- Checks on the merged tree: `npx vitest run --dir src` 877 passed, 1 skipped; `npx vitest run scripts` 6 passed;
+  `npm run build` passed with `dist/sw.js`. Not run: full browser suite, iPad.
 
 ### Blender camera framing and manual keyframes (2026-11-15)
 
@@ -43,6 +40,17 @@
 - Checks include the source suite and build, plus Chromium multi-track Add Frame/Undo/Redo,
   mixed lasso paths, touch selection, inside/outside pinch, and transform undo. Physical
   iPad and Apple Pencil gestures remain unverified.
+### Combined release (2026-11-15)
+
+- Integrated the performance/offline, brush grain, cross-tab clipboard and painted frames
+  branches for `main`. New Project includes Open and Custom length and a sticky Create button.
+- The merge carries painted-frame layer snapshots through the same-origin clipboard.
+  The cross-tab fixture verifies that both layers arrive and one Undo removes the paste.
+- Release checkout checks: 879 unit tests passed, 1 skipped, production build and typecheck
+  passed, and 12 targeted desktop Chromium fixtures passed, including rail performance.
+  At a 500 × 620 viewport, New Project showed 42 frames for 3.5 seconds at 12 fps and
+  kept Create visible. The production build reloaded offline and the offline ZIP built
+  on Windows. Physical iPad and offline launchers on student devices remain unverified.
 
 ### Paper finishes and brush import fidelity (2026-11-15)
 
@@ -112,6 +120,202 @@ Checks: `npx vitest run --dir src` 843 passed, 1 skipped; `npm run build` passed
 
 Not done / gaps: Time/xsheet and Motion build one row per frame, so switching to Timing on a 1,000-frame shot is ~280 ms (window the rows); 20-layer and 4K scrubbing are ~100 ms/step (per-layer decode and composite; not profiled); peak canvases still exceed the budget transiently (pins/working set); autosave of a long unsaved shot is still one big encode; iPad Safari memory and real touch were not measured. The fixture's thresholds are generous, and its heap number is only valid with `--enable-precise-memory-info`.
 
+
+### Grain that boils or holds (2026-11-15, branch `claude/boil-grain-8cea35`)
+
+Part of "Painterly animation" (next-phase.md, "Texture that boils or holds"). Brush only.
+
+- **Setting:** `BrushSettings.grainBoil?: 1 | 2 | 3` (missing = Fixed, today's behaviour). Optional,
+  validated in `sanitizeBrushExtras` (so `readBrush`, My brushes and file brushes drop bad values).
+  No `SCHEMA` change; existing brushes and projects stay Fixed.
+- **Shift:** `core/grainboil.ts` `grainBoilShift(boil, frame)`: step = floor(frame / boil); the grain
+  tile slides by the R2 low-discrepancy sequence (fractions of the tile, in the tile's own space, so
+  scale and rotation are kept). Step 0 = no shift (a boil's first step equals Fixed). Pure and
+  deterministic; neighbouring steps are always ≥ 0.2 tile apart (unit-tested).
+- **Which frame:** `StrokeRecord.grainFrame?` (optional), set at pen-down from `App.grainFrame` =
+  the first frame of the current drawing's exposure in layer time. Raster paint is baked when you
+  paint, so the grain belongs to the drawing: anywhere in a hold gives the same grain, moving the
+  layer in time/Motion does not change it, and export reads the baked pixels (equals preview).
+  QuickShape re-renders reuse the record, so they keep it. Changing the setting affects new strokes only.
+- **Engine:** `brush/raster.ts` `paperMatrix`/`paperPattern` take the shift (also the tilt-shade grain).
+- **Vector strokes:** not affected; they have no paper grain today (the option is hidden for the Pen).
+  A per-frame re-render of vector grain would need vector grain first.
+- **UI:** Brush Studio → Paint → "Grain on each frame": Fixed / Boil / On 2s / On 3s, four 44 px
+  buttons (`.grain-boil-seg`, appended block in `style.css`), hint when Paper grain is 0. The Studio
+  has no Simple/Advanced split of its own, so the control is in the one Paint section (not a new
+  fieldset: `main.ts` remembers fieldset folding by index). The Studio preview uses the current frame.
+- **Manual:** brush section paragraph and a 2026-11-15 `UPDATES` entry.
+- **Checks (own dev server 127.0.0.1:5264):** `npx vitest run --dir src` 850 passed, 1 skipped
+  (8 new in `core/grainboil.test.ts`); `npm run build` passed; new fixture `grainboil` 12/12
+  (engine: Boil frames 0/1/2 differ, coverage unchanged, Fixed identical incl. a stroke with no
+  frame, boil step 0 = Fixed, repeatable on two engines, On 2s/On 3s hold; app: real pen strokes on
+  frames 0/1/2 differ with Boil and match with Fixed, hold uses its first frame, repainting the shot
+  gives identical pixels, `drawComp` export = preview on every frame and boils; Studio buttons 44 px,
+  saved with the brush, hidden for the Pen; no errors). Full browser suite `npm run test:browser` against 127.0.0.1:5264: 82 of 82.
+- **Not verified / gaps:** iPad and Pencil; picture grains imported from Procreate (same code path,
+  not separately tested); Smudge/wet mix do not use grain so are unaffected; Paint over the last
+  frame copies the previous frame's grain and only new strokes get the new one (by design); no per-stroke override after painting.
+
+### Copy and paste between browser tabs (2026-11-15)
+
+Follow-up to "Copy and paste between projects" below: frames and layers now cross between two
+2Dope tabs of the same origin. Same-tab behaviour is unchanged (the clipboard token that matches
+this tab's own copy still pastes synchronously from memory).
+
+- **`io/crosstab.ts`** (new): every Copy writes a small header to the IndexedDB database
+  `2dope-clipboard` (store `copy`, keys `head` and `body`; only the newest copy is kept, a copy
+  older than a day is swept when 2Dope opens). Frames and layers also write their body (the
+  `DrawingSnap` map, exposures or layer JSON, caption fonts) once the PNGs are encoded. The copying
+  tab holds a Web Lock `2dope-clipboard:<copy id>` until the body is written.
+- **Why IndexedDB + Web Locks, not a BroadcastChannel handshake**: a handshake needs the copying
+  tab awake to answer. Browsers freeze background tabs (iPad Safari almost at once, desktop Chrome
+  after a while) and a closed tab never answers, while a stored record can still be read; it also
+  means closing the copying tab after the copy is ready loses nothing. The lock tells the pasting
+  tab "still encoding" (lock held: wait up to 20 s, `crossTab.timeout`) from "closed before it
+  finished" (lock released, header still pending). Without Web Locks it polls the header.
+- **Nothing leaves the origin**: the system clipboard only holds the token
+  (`2Dope clipboard <uuid>`, as before); IndexedDB and locks are per-origin.
+- **Routing**: `ui/clipboard.ts` paste event: own token → unchanged; another `2Dope clipboard`
+  token → `pasteFromTab` (`headFor`: the newest record when its token matches; an X-sheet copy
+  from another tab, which writes no token, counts when newer than this tab's own last copy);
+  ordinary text/images → unchanged. Art from another tab still pastes as the PNG it put on the
+  clipboard; keyframes are refused ("paste only in the tab that copied them"). `pasteMedia` (the
+  Paste menu with `navigator.clipboard.read`) follows the same rules.
+- **App**: `copySelection(token?)` / `cutSelection(token?)` share frames; `paste()` first takes
+  frames another tab copied after this tab's last copy (`newerElsewhere`, 500 ms cap on the
+  read), so the X-sheet's Ctrl+V and the frame menu work across tabs; `pasteFromTab(head)` →
+  `pasteForeign(items, snaps)` (one undo step "Paste from another project", size notice).
+- Carried-over rules, same code paths and messages: movie/comp refusals (`crossPasteBlocked`),
+  `SNAP_MAX` 240 ("could not be copied"), caption font renamed on a clash, centring on another
+  canvas size. New messages (`messages` in `crosstab.ts`): waiting, timed out, closed too soon,
+  stale token (something newer copied), missing record (another browser / private window), and
+  too big to store (IndexedDB write failed, e.g. quota).
+- Checks (2026-11-15, desktop Chrome headless, dev server 127.0.0.1:5262): new fixture
+  `crosstab` 13/13 — the other tab is a same-origin iframe (`tests/_crosstabpeer.html`, its own
+  App, clipboard handler and tab id; removing it stands in for closing the tab): frames with
+  clashing ids + one Undo, centring + notice, X-sheet copy → `app.paste()` then same-tab paste wins
+  again, Motion layer with drawings + Undo, caption font clash, movie refusal, 241 drawings refused,
+  stale token, plain text not hijacked, paste after the copying tab closed, timeout while the other
+  tab never finishes, closed-before-ready, no errors in either realm; the clipboard holds only
+  `text/plain` with the token. `crosspaste` 7/7 still. `npx vitest run --dir src` 842 passed,
+  1 skipped; `npm run build` passed; full `npm run test:browser`: 81 of 82 — only `railperf`'s timing check failed (pinch zoom median
+  39.7 ms, then 54.4 ms alone, limit 30 ms) while other sessions were loading the machine; that
+  fixture does not load the clipboard code and nothing here touches zoom or layout.
+- Not verified / gaps: two real tabs by hand (the iframe shares origin, IndexedDB and locks the
+  way a tab does, but frozen-tab timing is simulated with a never-finishing copy); iPad Safari
+  (Web Locks need Safari 15.4+, otherwise polling); very large copies (every frame/layer Copy now
+  also writes its PNGs to IndexedDB in the background — 24 busy 1080p frames were ~11 MB in the
+  earlier measurement; not re-measured); the frame menu's Paste items stay disabled in a tab that
+  has copied nothing itself (Ctrl+V works); if another tab's X-sheet copy is newer than the token
+  on the clipboard but this tab's own token matches, the own copy pastes on Ctrl+V (canvas).
+
+### Painted frames (2026-11-14, branch `claude/painted-frames-471933`) — design
+
+Written before coding; the results and checks follow under "Painted frames: what was built".
+
+**Choice: linked cel layers, not more planes per drawing.** A Painted track is an existing cel
+group (`layer.cel`, `core/cellink.ts`) whose members all carry a new optional `painted: true`.
+Each member is an ordinary drawings layer with its own drawing in every cel; `syncExposures` /
+`syncCelGroups` already keep their cels and timing identical. "The layers of a frame" are the
+group's members, and member *m*'s drawing in cel *i* is that frame's layer *m*. Draw's Layers
+panel already lists exactly this stack (`app.celLayers`) with add (`addCelLayer`), rename, hide,
+reorder, delete, opacity, blend, clipping and masks, so those need no new code paths. The
+alternative (a `Drawing` with N named planes) would touch `Drawing`, residency, brushes, undo
+capture, autosave, the PNG asset store, onion, transfer, artwork and export: everything.
+
+- **What it means for the user:** a frame's layer names, order, visibility, opacity and blend
+  are the track's (the same in every frame, as in Flash or Dreams layers); every frame has its
+  own paint on each layer. A layer left empty in a frame is a blank drawing.
+- **Lead:** the member whose id is the group id, otherwise the bottom member. It stands for the
+  track on the rail. `paintedLead`, `railTracks`, `stackAt` are pure helpers in `cellink.ts`.
+- **Format:** `painted?: true` on a drawings layer (`LayerFile`, validate, `compFile`,
+  `compsFromFile`). Additive, so by `schema.ts`'s own rule **no SCHEMA bump and no 13**: an older
+  build reads the members as ordinary linked art layers, which render identically, and drops the
+  flag if it re-saves. Nothing to reconcile with `claude/story-timecode`'s 12.
+- **Memory:** k layers × n frames drawings, each resident line plane W×H×4 bytes (8.3 MB at
+  1920×1080). They are ordinary drawings, so residency parks them like any other; the working set
+  adds the members of the current frame (already shown) and of the onion neighbours. Lite caps a
+  painted frame at 3 layers (Full at 8) and warns as the last one is added.
+- **Undo:** Make painted / Make plain is one `editor.edit` step for the whole group. Adding a
+  layer is `addCelLayer` (one step). Frame edits sync members inside the same step
+  (`editTimeline`); **gap found:** `commitExposures` (flipbook lift-and-drag, trims) did not
+  sync linked layers at all, so it gains the same member sync.
+- **Rail:** one row per painted track (the lead). Its cels show the stack composited (visible
+  members, bottom first). The header's eye, Move up/down, drag and Delete act on the whole group
+  (one step). Double-tap a painted cel: go to it and paint it in Draw's canvas view with onion
+  on; a Done chip returns to the workspace and view you came from, on the same frame.
+- **Paint over:** `newFrameDrawing` copies the active member; `editTimeline`'s
+  `partnerDrawing` copies each partner through `copiedFrom` when resident (the current frame's
+  members are, since they are on screen), else blank with a notice.
+- **Onion:** a neighbour on a painted track ghosts every visible member's drawing of that cel.
+- **Copy/paste between projects** (`core/transfer.ts`): frame copy/paste copies the active
+  member's drawings only (as for linked art today); Send to / layer copies already take the whole
+  cel group, and `painted` rides along in the layer objects. **My Assets** (`io/artwork.ts`,
+  `core/assets.ts`) already collects cel members and remaps `cel`; `painted` is written by
+  `compFile`. **Exports** render layers, so members export as they preview.
+
+### Painted frames: what was built (2026-11-15)
+
+- `core/cellink.ts`: `PAINTED_MAX` (Lite 3, Full 8), `isPainted`, `groupOf`, `paintedLead`,
+  `railTracks`, `stackAt`, `setPainted`, `moveGroup`. `core/comp.ts` + `io/schema.ts`: optional
+  `painted` (kept only with a `cel`; no SCHEMA change, `minimumDrawingSchema` unchanged).
+- `app.ts`: `setTrackPainted`, `setTrackVisible`, `trackLayerIds`, `paintFrame` / `doneFrame`
+  (`paintingFrame` remembers workspace, Draw's Flipbook/Canvas view and onion; leaving Draw any
+  other way clears it), `paintedMax`; `addCelLayer` caps painted stacks and warns on the last
+  layer; `moveTrack` moves painted groups whole (and steps plain tracks over them); onion ghosts
+  and the residency working set include every visible layer of the neighbouring painted cels.
+  **Fix (also for plain linked art layers):** `commitExposures` (flipbook lift-and-drag and
+  trims) now syncs cel members, applied at once and in Undo/Redo; before, a drag on one linked
+  layer left the others behind.
+- `ui/flipmode.ts`: painted kind (colour `#ff7a59`, header "Painted · N"), one row per group,
+  composited cels (`stackURL`, cached by thumbnail revs), track eye / Hide / Delete act on the
+  group, track menu Painted toggle and "Paint this frame", Duplicate track disabled for painted
+  tracks. Double-tap a painted cel → `paintFrame`; a single tap on the current painted cel shows
+  its options after 360 ms (so a double-tap is not taken for a tap). Done button
+  (`.paint-frame-done`, 44 px) on the stage while `paintingFrame` is set.
+- Manual: Painted frames paragraph after the onion paragraph, Paint over sentence, `UPDATES`
+  entry dated 2026-11-15. `style.css`: one appended block.
+- Tests: `src/core/painted.test.ts` (10: toggle, groups, guards, lead and rail, stack order and
+  visibility, group moves, Lite/Full caps, file round trip, minimum schema, old files and a
+  stray flag). Fixture `tests/paintedframes.html` + `src/ui/paintedframes.browser.ts` (15).
+
+**Checks (2026-11-15, own dev server `127.0.0.1:5265`):** `npx vitest run --dir src` 852 passed,
+1 skipped (10 new); `npm run build` passed; `paintedframes` 15/15 (make painted + Undo/Redo, add a
+frame layer + Undo, one rail row with composited cels and a 44 px header, rename/reorder/hide with
+Undo, export matches the stack and leaves hidden layers out, track eye hides the group in one step,
+moving the track keeps the group together, Paint over copies every layer + Undo, flipbook drag and
+trim keep every layer in step + Undo, double-tap in Animate → Draw with onion and Done back to the
+same frame, onion neighbours stay resident while off-screen layers park and come back with their
+paint, save/reopen keeps the stack at the old minimum schema, Lite cap at 3 with the last-layer
+warning, plain again unfolds the rail, no errors). Full suite `npm run test:browser` 82 of 82.
+
+**Follow-up the same day (2026-11-15), closing most of those gaps:**
+
+- **+ Track → Painted** (`addFlipTrack(true)`): a new track that is painted from the start.
+- **Rail cels** composite each layer with its opacity and blend (`stackURL`; `add` → `lighter`).
+- **Duplicate track** on a painted track copies every layer and drawing into a new group above
+  it (`duplicatePaintedTrack`, one step); re-enabled in the track menu.
+- **Clips** (`ui/rails.ts`): a painted track is one row (its lead, active while drawing on any of
+  its layers, kind "painted · N"); the eye and Delete act on the group. The strip's blocks are the
+  active layer's, whose timing is the group's.
+- **Copy / Paste frames** (`copySelection`, `paste`, `pasteForeign`): on a painted track Copy
+  records each frame's layers bottom first (`clipStack`) and snaps them all for another project;
+  Paste gives each frame layer its own drawing by stack position (`pasteStack`, consulted by
+  `partnerDrawing(src, partnerOf, memberId)`); Paste copies copies them too. Pasting into a
+  plain track takes only the copied layer's drawings, as before.
+- Checks: `paintedframes` 20/20 (5 new: Clips one row, same-project Paste and Paste copies of
+  every layer + Undo, Duplicate track + Undo, + Track → Painted, cross-project paste onto a
+  painted track keeping each layer's paint).
+- Full checks: `npx vitest run --dir src` 852 passed, 1 skipped; `npm run build` passed; full
+  browser suite 81 of 82. The failure is `motionfinish-responsive` "landscape leaves no usable
+  effect list (812×375)"; it fails the same way when `db61e8b` (which passed 82/82 earlier) is
+  checked out on the same server, so it is not this change. Not investigated further.
+
+**Still not done:** a frame cannot have a layer the others lack (layers belong to the track; it
+is blank there); smudge / wet mixing across a frame's layers (the plan's next item); pasting
+painted frames into a plain track drops the other layers; a copied stack whose layer count differs
+from the target fills by position from the bottom; iPad, Pencil, real double-tap timing and Lite
+memory not checked on a device.
 
 ### Motion while drawing: Hold still / Show the move (2026-11-14)
 

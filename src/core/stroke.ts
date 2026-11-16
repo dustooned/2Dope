@@ -38,6 +38,11 @@ export interface StrokeRecord {
   color: string;
   seed: number;
   points: StrokePoint[];
+  /**
+   * The frame a boiling-grain stroke is painted on (the first frame of the drawing's exposure, in
+   * layer time); its brush's `grainBoil` turns it into a grain shift. Missing = frame 0 (Fixed).
+   */
+  grainFrame?: number;
   /** Drawing Guide symmetry while it was drawn (raster brushes mirror their dabs). */
   sym?: { mode: SymmetryMode; cx: number; cy: number };
 }

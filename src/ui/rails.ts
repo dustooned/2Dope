@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { groupOf, isPainted, paintedLead } from '../core/cellink';
 import { layerEnd, PART_LABEL, type Comp, type Layer } from '../core/comp';
 import type { Drawing } from '../core/project';
 import { decorate } from './icons';
@@ -92,7 +93,9 @@ function rowsOf(app: App, state: RailState): Row[] {
     for (const l of c.layers) {
       // cameras and nulls are Motion's business
       if (l.kind === 'camera' || l.kind === 'null') continue;
-      const isActive = depth === 0 && l.id === active;
+      // a painted track's frame layers fold into one row (its lead), as on the flipbook rail
+      if (isPainted(l) && l.kind === 'drawings' && paintedLead(c.layers, l) !== l) continue;
+      const isActive = depth === 0 && (l.id === active || (isPainted(l) && groupOf(c.layers, l.id).some((m) => m.id === active)));
       rows.push({ kind: 'layer', layer: l, depth, active: isActive, offset, foldable: l.kind === 'comp' || (l.kind === 'drawings' && !l.guide) });
       if (l.kind === 'drawings' && !l.guide && state.open.has(`${l.id}#parts`)) {
         for (const part of ['line', 'fill'] as const) rows.push({ kind: 'part', layer: l, part, offset, active: isActive });
@@ -204,7 +207,7 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
           l.visible ? 'Hide' : 'Show',
         );
         decorate(eye, 'eye');
-        eye.addEventListener('click', () => ed.setFlag(l.id, 'visible', !l.visible));
+        eye.addEventListener('click', () => app.setTrackVisible(l.id, !l.visible));
         tag.append(eye);
         if (l.locked) {
           const lock = el('button', { type: 'button', class: 'rail-btn icon-only', 'aria-pressed': 'true', title: 'Locked: tap to unlock' }, 'Unlock');
@@ -213,7 +216,7 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
           tag.append(lock);
         }
       }
-      const kind = identity ? `placement ${identity.number}` : l.kind === 'comp' ? 'group' : l.kind === 'drawings' && l.guide ? 'board' : l.kind === 'drawings' && l.cel ? 'linked' : '';
+      const kind = identity ? `placement ${identity.number}` : l.kind === 'comp' ? 'group' : l.kind === 'drawings' && l.guide ? 'board' : isPainted(l) ? `painted · ${groupOf(app.project.comp.layers, l.id).length}` : l.kind === 'drawings' && l.cel ? 'linked' : '';
       const name = el('button', { type: 'button', class: 'rail-name', title: identity ? `${identity.description} Select to move or time this placement.` : r.active ? 'You draw on this layer' : r.depth === 0 && l.kind === 'drawings' ? `Draw on ${l.name}` : r.depth === 0 && l.kind === 'comp' ? `Edit drawings inside ${l.name}` : l.name }, l.name);
       if (kind && kind !== l.name.toLowerCase()) name.append(el('span', { class: 'rail-kind' }, kind));
       if (r.depth === 0 && l.kind === 'drawings' && !r.active) name.addEventListener('click', () => app.pickLayer(l.id));
@@ -226,7 +229,7 @@ export function buildRails(app: App, state: RailState, cell: number, top: number
           { title: l.name },
           { label: 'Rename…', run: async () => { const n = await askText('Layer name', l.name, 'Rename'); if (n !== null) ed.rename(l.id, n); } },
           { sep: true },
-          { label: 'Delete layer', danger: true, run: async () => { if (await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true)) ed.deleteLayers([l.id]); } },
+          { label: 'Delete layer', danger: true, run: async () => { if (await confirmBox(`Delete “${l.name}”?`, isPainted(l) ? 'Every paint layer of its frames goes too. You can undo this.' : 'You can undo this.', 'Delete', true)) ed.deleteLayers(app.trackLayerIds(l.id)); } },
         ]);
       }
     } else {

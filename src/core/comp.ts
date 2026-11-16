@@ -80,6 +80,12 @@ interface LayerBase {
   notes?: boolean;
   /** Linked art layers: drawings layers sharing a `cel` group keep the same cels and timing. */
   cel?: string;
+  /**
+   * Painted track: every member of this cel group is one paint layer of each frame. The rail shows
+   * the group as one track; Draw's Layers panel lists the frame's layers. Older builds read it as
+   * plain linked art layers (they render the same).
+   */
+  painted?: boolean;
   /** A still layer (background, object): one drawing held for the whole shot, like a Procreate layer. */
   still?: boolean;
   /** Clipping mask: shows only where the first unclipped layer below has paint (Procreate's clipping mask). */
