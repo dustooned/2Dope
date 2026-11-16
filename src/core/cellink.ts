@@ -73,3 +73,92 @@ export function syncCelGroups(before: Layer[], after: Layer[], blank: (srcDrawin
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Painted tracks: a cel group whose members are the paint layers of every frame. The rail shows
+// the group as one track (its lead); Draw's Layers panel lists the members (one frame's layers).
+
+/** Layers a painted frame may hold (Lite keeps memory low). */
+export const PAINTED_MAX = { lite: 3, full: 8 } as const;
+
+export function isPainted(l: Layer | undefined | null): boolean {
+  return !!l && l.kind === 'drawings' && !!l.painted && !!l.cel;
+}
+
+/** Every member of `layerId`'s cel group, itself included, in stack order (front first). */
+export function groupOf(layers: Layer[], layerId: string): DrawingsLayer[] {
+  const me = layers.find((l) => l.id === layerId);
+  if (!me || me.kind !== 'drawings') return [];
+  if (!me.cel) return [me];
+  return layers.filter((l): l is DrawingsLayer => l.kind === 'drawings' && l.cel === me.cel);
+}
+
+/** The member that stands for a painted track: the one whose id is the group id, else the bottom one. */
+export function paintedLead(layers: Layer[], layer: DrawingsLayer): DrawingsLayer {
+  if (!isPainted(layer)) return layer;
+  const g = groupOf(layers, layer.id).filter((m) => m.painted);
+  return g.find((m) => m.id === layer.cel) ?? g[g.length - 1] ?? layer;
+}
+
+/** Rail tracks: a painted track's other members fold into its lead. */
+export function railTracks(layers: Layer[], tracks: DrawingsLayer[]): DrawingsLayer[] {
+  return tracks.filter((l) => !isPainted(l) || paintedLead(layers, l) === l);
+}
+
+/**
+ * The drawings of a painted frame, bottom first (the order to composite them): the cel of `layer`
+ * at exposure index `i` on every visible member. A plain layer gives just its own drawing.
+ */
+export function stackAt(layers: Layer[], layer: DrawingsLayer, i: number, visibleOnly = true): string[] {
+  const own = layer.exposures[i]?.drawing;
+  if (!isPainted(layer)) return own ? [own] : [];
+  const out: string[] = [];
+  for (const m of groupOf(layers, layer.id)) {
+    if (!m.painted || (visibleOnly && !m.visible)) continue;
+    const d = m.exposures[i]?.drawing;
+    if (d) out.push(d);
+  }
+  return out.reverse();
+}
+
+/**
+ * Make a layer's track painted (or plain again): the layer joins/starts its cel group and every
+ * member takes the flag. Returns the new layers, or null when nothing changes.
+ */
+export function setPainted(layers: Layer[], layerId: string, on: boolean): Layer[] | null {
+  const me = layers.find((l) => l.id === layerId);
+  if (!me || me.kind !== 'drawings' || me.guide || me.adjust || me.title || me.caption || me.video) return null;
+  const group = me.cel ?? me.id;
+  let changed = false;
+  const out = layers.map((l) => {
+    if (l.kind !== 'drawings' || (l.id !== layerId && (!me.cel || l.cel !== me.cel))) return l;
+    if (!!l.painted === on && l.cel === group) return l;
+    changed = true;
+    const x: DrawingsLayer = { ...l, cel: group };
+    if (on) x.painted = true; else delete x.painted;
+    return x;
+  });
+  return changed ? out : null;
+}
+
+/**
+ * Move a whole group by `steps` rail tracks (up negative), keeping its members together in their
+ * order. `tracks` are the rail's tracks (leads), front first. Returns the new layers or null.
+ */
+export function moveGroup(layers: Layer[], tracks: DrawingsLayer[], leadId: string, steps: number): Layer[] | null {
+  const i = tracks.findIndex((t) => t.id === leadId);
+  const j = Math.max(0, Math.min(tracks.length - 1, i + steps));
+  if (i < 0 || i === j) return null;
+  const members = groupOf(layers, leadId);
+  const ids = new Set(members.map((m) => m.id));
+  const rest = layers.filter((l) => !ids.has(l.id));
+  const target = tracks[j]!;
+  const paintedTarget = !!target.painted && !!target.cel;
+  const targetGroup = new Set(groupOf(layers, target.id).filter((m) => paintedTarget || m.id === target.id).map((m) => m.id));
+  const first = rest.findIndex((l) => targetGroup.has(l.id));
+  if (first < 0) return null;
+  let last = first;
+  rest.forEach((l, k) => { if (targetGroup.has(l.id)) last = k; });
+  const at = steps < 0 ? first : last + 1;
+  return [...rest.slice(0, at), ...members, ...rest.slice(at)];
+}

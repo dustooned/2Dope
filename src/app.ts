@@ -5,7 +5,7 @@ import { assistPoint, DEFAULT_GUIDE, guideDirections, guideLines, pickDirection,
 import { adjustHex, applyBlur, applyHSB, isNoHSB, keepOutside, NO_HSB, RADIAL_COPIES, symmetryCopies, type HSB, type SymmetryMode } from './core/adjust';
 import { loadGrain, loadTip } from './brush/raster';
 import { allStraight, anchorsOf, cubicSpan, simplifyPoints, smoothPoints, defaultHandles, joinStrokes, movePoint, nearestStroke, scaleSections, scaleWidthAt, sectionAt, setPointMode, snapTarget, type Handles, type PointMode } from './core/vecedit';
-import { celMembers, syncExposures } from './core/cellink';
+import { celMembers, groupOf, isPainted, moveGroup, PAINTED_MAX, paintedLead, railTracks, setPainted, stackAt, syncExposures } from './core/cellink';
 import { cloneBrush, PRESETS, type BrushSettings } from './core/brush';
 import { readBrush } from './core/brushlib';
 import { History, type Command } from './core/history';
@@ -223,7 +223,7 @@ interface NavDrag {
 }
 
 /** Frames another 2Dope tab copied: the exposures (drawing ids and holds) and their drawings' pictures. */
-export interface FramesBody { items: Exposure[]; snaps: Map<string, DrawingSnap> | null }
+export interface FramesBody { items: Exposure[]; snaps: Map<string, DrawingSnap> | null; stack?: Map<string, string[]> | null }
 
 export interface InputStats {
   pointerType: string;
@@ -313,6 +313,8 @@ export class App {
   setWorkspace(w: Workspace): void {
     if (this.gradEdit) this.applyGradEdit();
     if (w === this.workspace || this.live) return;
+    // leaving Draw another way ends painting a frame (Done is no longer there)
+    if (w !== 'draw') this.paintingFrame = null;
     this.settleTemporaryEdits();
     if (this.editor.anchorEditing) this.editor.setAnchorEditing(false);
     if (this.editor.pathEditing) this.editor.setPathEditing(false);
@@ -3633,11 +3635,19 @@ export class App {
    * The drawing a linked layer gets for a new cel: a copy of its partner when the new cel is a
    * duplicate (and that partner's pixels are at hand), otherwise a blank one.
    */
-  partnerDrawing(src: string, partnerOf: (id: string) => string | undefined): string {
+  partnerDrawing(src: string, partnerOf: (id: string) => string | undefined, memberId?: string): string {
+    // pasting painted frames: each frame layer takes its own copied layer (by stack position)
+    const stack = memberId ? this.pasteStack?.get(src) : undefined;
+    if (stack && memberId) {
+      const pos = this.stackPosition(memberId);
+      const mine = pos >= 0 ? stack[pos] : undefined;
+      if (mine && this.project.drawings.has(mine)) return mine;
+    }
     const from = this.project.copiedFrom.get(src);
     const partner = from ? partnerOf(from) : undefined;
     const d = partner ? this.project.drawings.get(partner) : undefined;
     if (d && !d.parked) return this.project.cloneDrawing(d).id;
+    if (d && this.paintOver) this.onNotice?.('A layer of the frame before is still loading, so it starts blank in the new frame.');
     return this.project.newDrawing().id;
   }
 
@@ -3674,6 +3684,89 @@ export class App {
     this.focusLayer(id);this.onCompChanged();this.requestRender();this.onFrameChange();
   }
 
+  /** Layers a painted frame may hold on this device. */
+  get paintedMax(): number { return this.device.lite ? PAINTED_MAX.lite : PAINTED_MAX.full; }
+
+  /**
+   * Painted track (painterly animation): every frame of this track is a small paint stack. Its
+   * layers are the track's linked paint layers; the rail shows them as one track. One undo step.
+   */
+  setTrackPainted(id: string, on: boolean): void {
+    if (this.live || this.strokeActive) return;
+    const out = setPainted(this.project.comp.layers, id, on);
+    if (!out) return;
+    const members = groupOf(out, id);
+    if (on && members.length > this.paintedMax) { this.onNotice?.(`This track has ${members.length} linked layers; a painted frame holds up to ${this.paintedMax}${this.device.lite ? ' in Lite' : ''}.`); return; }
+    const ids = new Set(members.map((m) => m.id));
+    const group = members[0]?.cel ?? id;
+    this.editor.edit(on ? 'Make track painted' : 'Make track plain', (cc) => {
+      for (const l of cc.layers) if (l.kind === 'drawings' && ids.has(l.id)) { l.cel = group; if (on) l.painted = true; else delete l.painted; }
+    });
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** Show or hide a whole painted track (every frame layer), one undo step; a plain track flips its own eye. */
+  setTrackVisible(id: string, visible: boolean): void {
+    const me = this.project.comp.layers.find((l) => l.id === id);
+    if (!isPainted(me)) { this.editor.setFlag(id, 'visible', visible); return; }
+    const ids = new Set(groupOf(this.project.comp.layers, id).map((m) => m.id));
+    this.editor.edit(visible ? 'Show painted track' : 'Hide painted track', (cc) => { for (const l of cc.layers) if (ids.has(l.id)) l.visible = visible; });
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /** The layers a rail track stands for: a painted track's every frame layer, else itself. */
+  trackLayerIds(id: string): string[] {
+    const me = this.project.comp.layers.find((l) => l.id === id);
+    return isPainted(me) ? groupOf(this.project.comp.layers, id).map((m) => m.id) : [id];
+  }
+
+  /** Where Done goes back to after painting a frame (a double-tap on a painted cel), or null. */
+  paintingFrame: { workspace: Workspace; flipbook: boolean; onion: boolean } | null = null;
+  /** Set by the UI: Draw's bottom view (true = flipbook). */
+  drawFlipbook: { get: () => boolean; set: (on: boolean) => void } | null = null;
+
+  /**
+   * Paint one frame of a painted track in Draw: go to it, show Draw's canvas with the onion skin
+   * of the frames around. Done (doneFrame) goes back to where it was opened, on the same frame.
+   */
+  paintFrame(layerId: string, frame: number): void {
+    if (this.live || this.strokeActive) return;
+    const back = this.paintingFrame ?? { workspace: this.workspace, flipbook: this.drawFlipbook?.get() ?? false, onion: this.onion.enabled };
+    if (this.playing) this.togglePlay();
+    if (this.workspace !== 'draw') this.setWorkspace('draw');
+    if (!groupOf(this.project.comp.layers, layerId).some((m) => m.id === this.project.activeLayer)) this.pickLayer(layerId);
+    this.setFrame(frame);
+    this.drawFlipbook?.set(false);
+    if (!this.onion.enabled) this.toggleOnion();
+    this.paintingFrame = back;
+    this.onToolChange();
+    this.focusCanvas();
+  }
+
+  /** Done painting a frame: back to the workspace and view it was opened from, on the same frame. */
+  doneFrame(): void {
+    const back = this.paintingFrame;
+    if (!back || this.strokeActive) return;
+    this.paintingFrame = null;
+    const frame = this.frame;
+    if (back.onion !== this.onion.enabled) this.toggleOnion();
+    if (back.workspace !== this.workspace) this.setWorkspace(back.workspace);
+    if (back.workspace === 'draw' && back.flipbook) this.drawFlipbook?.set(true);
+    this.setFrame(frame);
+    this.onToolChange();
+  }
+
+  /** A painted cel's drawings for the active layer's drawing `id` (bottom first), for the onion skin. */
+  private onionStack(id: string): string[] {
+    const p = this.project;
+    if (p.isPlaceholder || !isPainted(p.layer)) return [id];
+    const i = p.layer.exposures.findIndex((e) => e.drawing === id);
+    return i < 0 ? [id] : stackAt(p.comp.layers, p.layer, i);
+  }
+
   addCelLayer(): void {
     if (this.strokeActive || this.project.isPlaceholder) return;
     const p = this.project;
@@ -3681,14 +3774,20 @@ export class App {
     if (src.kind !== 'drawings' || src.guide) return;
     if (src.title) { this.editor.addLayer('drawings', src.id); return; }
     const group = src.cel ?? src.id;
-    const id = p.newId('L');
     const count = this.celLayers.length;
+    const painted = isPainted(src);
+    if (painted) {
+      const max = this.paintedMax;
+      if (count >= max) { this.onNotice?.(`A painted frame holds up to ${max} layers${this.device.lite ? ' in Lite' : ''}. Merge or delete one to add another.`); return; }
+      if (count + 1 === max) this.onNotice?.(`That is the last layer this painted frame can hold (${max}${this.device.lite ? ' in Lite, to keep memory low' : ''}).`);
+    }
+    const id = p.newId('L');
     this.editor.edit('Add art layer', (cc) => {
       const s = cc.layers.find((l) => l.id === src.id);
       if (!s || s.kind !== 'drawings') return;
       s.cel = group;
       // in a background or object stack the new one is a paint layer; for animation, an art layer
-      const name = this.workspace==='draw' || s.still || cc.asset ? `Paint ${count + 1}` : `${s.name} \u00b7 ${count + 1}`;
+      const name = painted || this.workspace==='draw' || s.still || cc.asset ? `Paint ${count + 1}` : `${s.name} \u00b7 ${count + 1}`;
       const made = drawingsLayer(id, name, s.exposures.map((e) => ({ drawing: p.newDrawing().id, length: e.length })), p.width, p.height, cc.width, cc.height);
       if (s.still) { made.still = true; made.play = s.play; }
       if(cc.asset) {made.play=s.play;made.speed=s.speed;made.single=s.single;made.timeRemap=structuredClone(s.timeRemap);}
@@ -3699,6 +3798,7 @@ export class App {
       made.parent = s.parent;
       made.label = s.label;
       made.cel = group;
+      if (painted) made.painted = true;
       cc.layers.splice(cc.layers.indexOf(s), 0, made);
     });
     this.focusLayer(id);
@@ -3896,14 +3996,16 @@ export class App {
    * on, starting with one blank frame at frame 1. + Frame adds the next drawing after it, and
    * drawing past its end makes a frame there. You draw on it straight away. One undo step.
    */
-  addFlipTrack(): void {
+  addFlipTrack(painted = false): void {
     if (this.live || this.strokeActive) return;
     const p = this.project;
     const id = p.newId('L');
     const above = p.isPlaceholder ? null : p.activeLayer;
     const n = this.drawLayers().filter((l) => !l.guide).length + 1;
-    this.editor.edit('Add track', (cc) => {
-      const made = drawingsLayer(id, `Track ${n}`, [{ drawing: p.newDrawing().id, length: 1 }], p.width, p.height, cc.width, cc.height);
+    this.editor.edit(painted ? 'Add painted track' : 'Add track', (cc) => {
+      const made = drawingsLayer(id, painted ? `Painted ${n}` : `Track ${n}`, [{ drawing: p.newDrawing().id, length: 1 }], p.width, p.height, cc.width, cc.height);
+      // a painted track: every frame holds its own stack of paint layers (Layers → + adds one)
+      if (painted) { made.cel = id; made.painted = true; }
       made.start = 0;
       made.in = 0;
       made.out = null;
@@ -3919,6 +4021,19 @@ export class App {
 
   /** Move a flipbook track up (-1) or down (+1) past the next track (other layers are stepped over). */
   moveTrack(id: string, steps: number): void {
+    const layers = this.project.comp.layers;
+    const rail = railTracks(layers, this.drawLayers().filter((l) => !l.guide));
+    const me = layers.find((l) => l.id === id);
+    if (me && me.kind === 'drawings' && rail.some((t) => isPainted(t))) {
+      const out = moveGroup(layers, rail, paintedLead(layers, me).id, steps);
+      if (!out) return;
+      const ids = out.map((l) => l.id);
+      this.editor.edit(isPainted(me) ? 'Move painted track' : 'Move track', (cc) => { cc.layers = ids.map((x) => cc.layers.find((l) => l.id === x)).filter((l): l is Layer => !!l); });
+      this.onCompChanged();
+      this.requestRender();
+      this.onFrameChange();
+      return;
+    }
     const tracks = this.drawLayers().filter((l) => !l.guide);
     const i = tracks.findIndex((l) => l.id === id);
     const j = Math.max(0, Math.min(tracks.length - 1, i + steps));
@@ -4138,6 +4253,7 @@ export class App {
     if (this.strokeActive) return;
     const src = this.project.comp.layers.find((l) => l.id === id);
     if (!src) return;
+    if (isPainted(src)) return this.duplicatePaintedTrack(id);
     if (src.kind !== 'drawings') return this.editor.duplicate(id);
     const ids = src.exposures.map((e) => e.drawing);
     const copies = await this.copyDrawings(ids);
@@ -4159,6 +4275,40 @@ export class App {
       cc.layers.splice(at, 0, copy);
     });
     this.focusLayer(newId);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /**
+   * Duplicate a painted track whole: every frame layer with its own copied drawings, in a new
+   * group, right above the original. One undo step.
+   */
+  private async duplicatePaintedTrack(id: string): Promise<void> {
+    const layers = this.project.comp.layers;
+    const members = groupOf(layers, id);
+    const ids = [...new Set(members.flatMap((m) => m.exposures.map((e) => e.drawing)))];
+    const copies = await this.copyDrawings(ids);
+    if (!copies) { this.onNotice?.('Could not copy this track: its drawings are still loading. Try again in a moment.'); return; }
+    const map = new Map(ids.map((d, i) => [d, copies[i]!]));
+    const lead = paintedLead(layers, members.find((m) => m.id === id) ?? members[0]!);
+    const newIds = new Map(members.map((m) => [m.id, this.project.newId('L')]));
+    const group = newIds.get(lead.id)!;
+    this.editor.edit('Duplicate painted track', (cc) => {
+      const at = cc.layers.findIndex((l) => newIds.has(l.id));
+      if (at < 0) return;
+      const made = cc.layers.filter((l): l is DrawingsLayer => l.kind === 'drawings' && newIds.has(l.id)).map((l) => {
+        const copy = structuredClone(l);
+        copy.id = newIds.get(l.id)!;
+        if (l.id === lead.id) copy.name = `${l.name} copy`;
+        copy.cel = group;
+        copy.painted = true;
+        copy.exposures = l.exposures.map((e) => ({ ...e, drawing: map.get(e.drawing) ?? e.drawing }));
+        return copy;
+      });
+      cc.layers.splice(at, 0, ...made);
+    });
+    this.focusLayer(newIds.get(this.project.activeLayer) ?? group);
     this.onCompChanged();
     this.requestRender();
     this.onFrameChange();
@@ -4725,7 +4875,7 @@ export class App {
     const linked = celMembers(this.project.comp, layerId).map((m) => ({
       id: m.id,
       before: m.exposures,
-      after: syncExposures(beforeEx, r.ex, m.exposures, (src, partnerOf) => this.partnerDrawing(src, partnerOf)),
+      after: syncExposures(beforeEx, r.ex, m.exposures, (src, partnerOf) => this.partnerDrawing(src, partnerOf, m.id)),
     }));
     if (rip && linked.length)
       rip.after = rip.after.map((l) => {
@@ -4942,6 +5092,27 @@ export class App {
   /** Exposures copied with Copy / Cut (drawing references and holds). Lives for the session. */
   clipboard: Exposure[] = [];
   /**
+   * Copied from a painted track: each copied drawing's whole frame, its layers' drawings bottom
+   * first, so Paste gives every frame layer its own paint back (here or in another project).
+   */
+  private clipStack: Map<string, string[]> | null = null;
+  /** While a paste is applied: a pasted drawing's frame layers in this project, bottom first. */
+  private pasteStack: Map<string, string[]> | null = null;
+
+  /** Where a painted track's layer sits in its stack, counted from the bottom (-1: not painted). */
+  private stackPosition(layerId: string): number {
+    const layers = this.project.comp.layers;
+    const me = layers.find((l) => l.id === layerId);
+    if (!isPainted(me)) return -1;
+    return groupOf(layers, layerId).filter((m) => m.painted).reverse().findIndex((m) => m.id === layerId);
+  }
+
+  /** Run a paste with its painted frames' layers at hand for the frame layers to take. */
+  private withPasteStack(stack: Map<string, string[]> | null, run: () => void): void {
+    this.pasteStack = stack;
+    try { run(); } finally { this.pasteStack = null; }
+  }
+  /**
    * Where those frames came from, and their pictures as a snapshot made at Copy: pasted into another
    * project they become new drawings there (the ids only mean something in their own project).
    */
@@ -5015,10 +5186,17 @@ export class App {
   copySelection(token: string | null = null): number {
     const ex = this.project.exposures;
     this.clipboard = this.targets.map((i) => ({ drawing: ex[i]!.drawing, length: ex[i]!.length }));
-    this.clipFrom = this.clipboard.length ? { project: new WeakRef(this.project), snaps: this.snapDrawings(this.clipboard.map((e) => e.drawing)) } : null;
+    const layer = this.project.isPlaceholder ? null : this.project.layer;
+    this.clipStack = null;
+    if (layer && isPainted(layer)) {
+      const members = groupOf(this.project.comp.layers, layer.id).filter((m) => m.painted).reverse();
+      this.clipStack = new Map(this.targets.map((i) => [ex[i]!.drawing, members.map((m) => m.exposures[i]?.drawing ?? '')]));
+    }
+    const snapIds = [...this.clipboard.map((e) => e.drawing), ...[...(this.clipStack?.values() ?? [])].flat().filter(Boolean)];
+    this.clipFrom = this.clipboard.length ? { project: new WeakRef(this.project), snaps: this.snapDrawings(snapIds) } : null;
     if (this.clipFrom) {
-      const items = this.clipboard.slice();
-      share('frames', token, this.clipFrom.snaps.then((snaps): FramesBody => ({ items, snaps })));
+      const items = this.clipboard.slice(), stack = this.clipStack;
+      share('frames', token, this.clipFrom.snaps.then((snaps): FramesBody => ({ items, snaps, stack })));
     }
     return this.clipboard.length;
   }
@@ -5050,22 +5228,32 @@ export class App {
     const at = t.length ? t[t.length - 1]! + 1 : this.project.exposures.length;
     const ex = this.project.exposures;
     let ids = items.map((e) => e.drawing);
+    const clip = this.clipStack;
+    let stack: Map<string, string[]> | null = clip && this.stackPosition(this.project.activeLayer) >= 0 ? new Map(items.map((it) => [it.drawing, clip.get(it.drawing) ?? []])) : null;
     if (copies) {
       const made = await this.copyDrawings(ids);
       if (!made || this.project.exposures !== ex) return;
+      // every layer of a painted frame gets its own copy too
+      if (stack) {
+        const partners = [...new Set([...stack.values()].flat().filter((d) => d && this.project.drawings.has(d)))];
+        const pmade = partners.length ? await this.copyDrawings(partners) : [];
+        if (!pmade || this.project.exposures !== ex) return;
+        const pmap = new Map(partners.map((d, k) => [d, pmade[k]!]));
+        stack = new Map(items.map((it, k) => [made[k]!, (stack!.get(it.drawing) ?? []).map((d) => pmap.get(d) ?? '')]));
+      }
       ids = made;
     }
-    this.editTimeline(copies ? 'Paste copies' : 'Paste', (e) =>
+    this.withPasteStack(stack, () => this.editTimeline(copies ? 'Paste copies' : 'Paste', (e) =>
       insertAt(
         e,
         at,
         items.map((it, k) => ({ drawing: ids[k]!, length: it.length })),
       ),
-    );
+    ));
   }
 
   /** Frames copied in another project: new drawings here from the snapshot, same holds and cycles. One undo step. */
-  private async pasteForeign(items = this.clipboard.slice(), pending = this.clipFrom?.snaps): Promise<void> {
+  private async pasteForeign(items = this.clipboard.slice(), pending = this.clipFrom?.snaps, clip = this.clipStack): Promise<void> {
     if (!pending || this.live || !items.length) return;
     const p = this.project, ex = p.exposures;
     const snaps = await pending;
@@ -5075,7 +5263,9 @@ export class App {
     if (this.project !== p || p.exposures !== ex) return;
     const t = this.targets;
     const at = t.length ? t[t.length - 1]! + 1 : ex.length;
-    this.editTimeline('Paste from another project', (e) => insertAt(e, at, items.map((it) => ({ drawing: ids.get(it.drawing)!, length: it.length }))));
+    // a painted frame copied there: its layers land on this painted track's layers, bottom first
+    const stack = clip && this.stackPosition(p.activeLayer) >= 0 ? new Map(items.map((it) => [ids.get(it.drawing)!, (clip.get(it.drawing) ?? []).map((d) => ids.get(d) ?? '')])) : null;
+    this.withPasteStack(stack, () => this.editTimeline('Paste from another project', (e) => insertAt(e, at, items.map((it) => ({ drawing: ids.get(it.drawing)!, length: it.length })))));
     const w = snaps.values().next().value;
     if (w && (w.w !== p.width || w.h !== p.height)) this.onNotice?.(`Pasted ${items.length} frame${items.length === 1 ? '' : 's'} from a ${w.w}×${w.h} project, centred at the same pixel size.`);
   }
@@ -5085,7 +5275,7 @@ export class App {
     if (this.titlePaintBlocked(false) || this.live) return;
     const got = await receive<FramesBody>(head, (m) => this.onNotice?.(m));
     if ('message' in got) { this.onNotice?.(got.message); return; }
-    return this.pasteForeign(got.body.items, Promise.resolve(got.body.snaps));
+    return this.pasteForeign(got.body.items, Promise.resolve(got.body.snaps), got.body.stack ?? null);
   }
 
 
@@ -5258,6 +5448,26 @@ export class App {
     const compId = this.project.comp.id;
     const layerId = this.project.editLayer().id;
     const rip = this.rippleFor(layerId, before, after);
+    // linked art and painted layers follow a drag or trim too (their exposures were not previewed)
+    const linked = celMembers(this.project.comp, layerId).map((m) => ({
+      id: m.id,
+      before: m.exposures,
+      after: syncExposures(before, after, m.exposures, (src, partnerOf) => this.partnerDrawing(src, partnerOf)),
+    }));
+    const setLinked = (which: 'before' | 'after') => {
+      for (const k of linked) {
+        const m = this.project.comps.get(compId)?.layers.find((x) => x.id === k.id);
+        if (m && m.kind === 'drawings') m.exposures = k[which];
+      }
+    };
+    if (rip && linked.length) {
+      const fix = (ls: Layer[], which: 'before' | 'after') => ls.map((l) => {
+        const k = linked.find((x) => x.id === l.id);
+        return k && l.kind === 'drawings' ? ({ ...l, exposures: k[which] } as Layer) : l;
+      });
+      rip.after = fix(rip.after, 'after');
+      rip.before = fix(rip.before, 'before');
+    }
     if (rip) {
       const set = (layers: Layer[], dur: number | null) => {
         this.blankPage = false;
@@ -5283,12 +5493,15 @@ export class App {
       this.project.activeComp = compId;
       this.focusLayer(layerId);
       this.project.exposures = ex;
+      setLinked(ex === after ? 'after' : 'before');
       this.frame = Math.min(this.frame, this.compEnd - 1);
       this.requestRender();
       this.onFrameChange();
       this.onDocChanged();
     };
     this.history.push({ label, do: () => set(after), undo: () => set(before) }, true);
+    // the drag already showed the edited layer; its linked layers take the change now
+    if (linked.length) { setLinked('after'); this.requestRender(); this.onFrameChange(); }
     this.onDocChanged();
   }
 
@@ -7370,7 +7583,7 @@ export class App {
     const o = this.onion;
     if (o.enabled) {
       const n = this.onionNeighbors();
-      for (const nb of [...n.before, ...n.after]) out.add(p.drawing(nb.drawing));
+      for (const nb of [...n.before, ...n.after]) for (const id of this.onionStack(nb.drawing)) out.add(p.drawing(id));
     }
     if (this.playing) {
       const ahead = Math.ceil(p.fps * 1.5);
@@ -7411,11 +7624,14 @@ export class App {
     }
     const draw = (list: typeof n.before, color: string) => {
       for (const nb of list) {
-        const d = this.project.drawing(nb.drawing);
-        const ghost = this.onionCache.ghost(d, o.tint ? color : null);
-        if (!ghost) continue; // still coming back; drawn on the next frame
-        g.globalAlpha = o.opacity * Math.pow(o.falloff, nb.distance - 1);
-        g.drawImage(ghost, 0, 0);
+        // a painted frame ghosts every visible layer of the frame
+        for (const id of this.onionStack(nb.drawing)) {
+          const d = this.project.drawing(id);
+          const ghost = this.onionCache.ghost(d, o.tint ? color : null);
+          if (!ghost) continue; // still coming back; drawn on the next frame
+          g.globalAlpha = o.opacity * Math.pow(o.falloff, nb.distance - 1);
+          g.drawImage(ghost, 0, 0);
+        }
       }
     };
     // Farther ghosts first so the nearest sits on top.

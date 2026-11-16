@@ -6007,3 +6007,8 @@ body.ws-motion .minspector:not([hidden]) { display: flex; }
 .grain-boil-seg button { min-height: 44px; min-width: 44px; padding: 0 4px; border-radius: var(--radius); font-size: 12px; }
 .grain-boil-seg button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .grain-boil .hint { margin: 0; }
+/* Painted frames: a painted track's frames are paint stacks, shown as one cel each */
+.flip-track[data-kind="painted"] { --kind: #ff7a59; }
+.flip-row .flip-cel.painted::after { content: ''; position: absolute; right: 4px; top: 4px; width: 8px; height: 8px; border-radius: 2px; background: var(--kind); box-shadow: 2px 2px 0 rgba(0, 0, 0, .35); pointer-events: none; }
+.paint-frame-done { position: absolute; z-index: 40; top: calc(var(--fit-top, 64px) + 8px); right: 16px; min-width: 88px; min-height: 44px; padding: 0 16px; border-radius: 22px; background: var(--accent); color: #fff; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, .35); }
+.paint-frame-done[hidden] { display: none; }

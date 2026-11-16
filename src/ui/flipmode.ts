@@ -12,6 +12,7 @@ import { PlaybackRangeControl, markPlaybackRange } from './playbackrange';
 import { PlaybackRangeGesture } from './playbackrangegesture';
 import { Splitter } from './splitter';
 import { el } from './dom';
+import { groupOf, isPainted, railTracks } from '../core/cellink';
 
 /** Draw's saved Canvas/Flipbook view. (The old Flip mode's key is not read.) */
 const KEY = '2dope.draw.view';
@@ -24,12 +25,13 @@ const ROW = 58;
 /** The track header: room for a readable name (narrow screens keep the old compact box). */
 const labelWidth = () => (typeof matchMedia === 'function' && matchMedia('(max-width: 700px)').matches ? 56 : 104);
 /** What a track holds, for its colour and the header's second line. */
-type TrackKind = 'anim' | 'still' | 'movie' | 'text' | 'notes';
-const KIND_NAME: Record<TrackKind, string> = { anim: 'Animation', still: 'Still', movie: 'Movie', text: 'Text', notes: 'Notes' };
+type TrackKind = 'anim' | 'still' | 'movie' | 'text' | 'notes' | 'painted';
+const KIND_NAME: Record<TrackKind, string> = { anim: 'Animation', still: 'Still', movie: 'Movie', text: 'Text', notes: 'Notes', painted: 'Painted' };
 export function trackKind(l: DrawingsLayer): TrackKind {
   if (l.video) return 'movie';
   if (l.caption || l.title) return 'text';
   if (l.notes) return 'notes';
+  if (l.painted && l.cel) return 'painted';
   if (l.still) return 'still';
   return 'anim';
 }
@@ -68,6 +70,36 @@ function thumbURL(d: Drawing): string | null {
   return url;
 }
 
+/** A painted frame's strip picture: its visible layers composited, bottom first (cached by their thumbnails). */
+const stackThumbs = new Map<string, string>();
+const COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = { normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', add: 'lighter' } as Record<BlendMode, GlobalCompositeOperation>;
+function stackURL(ds: { d: Drawing; alpha: number; blend: BlendMode }[]): string | null {
+  const key = ds.map(({ d, alpha, blend }) => `${d.id}.${d.thumbRev}.${alpha}.${blend}`).join('|');
+  const hit = stackThumbs.get(key);
+  if (hit) return hit;
+  thumbCanvas.width = 80; thumbCanvas.height = 60;
+  const g = thumbCanvas.getContext('2d');
+  if (!g) return null;
+  g.fillStyle = '#fff'; g.fillRect(0, 0, 80, 60);
+  let any = false;
+  for (const { d, alpha, blend } of ds) {
+    const t = d.thumb;
+    if (!t || !t.width || !t.height || alpha <= 0) continue;
+    any = true;
+    const s = Math.min(80 / t.width, 60 / t.height);
+    g.globalAlpha = alpha;
+    g.globalCompositeOperation = COMPOSITE[blend] ?? 'source-over';
+    g.drawImage(t, (80 - t.width * s) / 2, (60 - t.height * s) / 2, t.width * s, t.height * s);
+  }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  if (!any) return null;
+  const url = thumbCanvas.toDataURL();
+  if (stackThumbs.size > 600) stackThumbs.clear();
+  stackThumbs.set(key, url);
+  return url;
+}
+
 export class FlipMode {
   readonly row = el('div', { class: 'flip-row', role: 'region', 'aria-label': 'Flipbook' });
   private views = { draw: false, animate: true };
@@ -85,6 +117,8 @@ export class FlipMode {
   /** A short line where a trim snapped (the playhead, another track's cut). */
   private readonly snapMark = el('div', { class: 'flip-snap', 'aria-hidden': 'true' });
   private playing: boolean | null = null;
+  /** Painting a frame of a painted track (a double-tap on it): Done goes back. */
+  private readonly frameDone = el('button', { type: 'button', class: 'paint-frame-done', hidden: '', title: 'Done painting this frame: back to where you were, on this frame', 'aria-label': 'Done painting frame' }, 'Done');
   private readonly range: PlaybackRangeControl;
   private rangeGesture?: PlaybackRangeGesture;
   /** How wide one frame is on the strip (zoom). */
@@ -125,13 +159,14 @@ export class FlipMode {
     const trackKinds = (): CtxItem[] => [
       { title: 'New track' },
       { label: 'Animation', hint: 'Shift+N', run: () => this.app.addFlipTrack() },
+      { label: 'Painted (paint layers in every frame)', run: () => this.app.addFlipTrack(true) },
       { label: 'Background', run: () => this.app.addStillLayer('background') },
       { label: 'Object', run: () => this.app.addStillLayer('object') },
       { label: 'Notes', run: () => this.app.addNotesLayer() },
       { label: 'Adjustment', run: () => this.app.editor.addLayer('adjustment', this.app.project.isPlaceholder ? undefined : this.app.project.activeLayer) },
       { label: 'Media\u2026', run: () => this.app.pickMedia?.() },
     ];
-    const track = btn('Track', 'Add an animation track above this one, from frame 1. Hold (or right-click) for a background, object, notes or media track. Drag a track\u2019s box up or down to reorder.', 'layers', () => this.app.addFlipTrack(), () => { const r = track.getBoundingClientRect(); showContextMenu(r.left, r.bottom, trackKinds()); }, 'flip-btn flip-adv');
+    const track = btn('Track', 'Add an animation track above this one, from frame 1. Hold (or right-click) for a painted, background, object, notes or media track. Drag a track\u2019s box up or down to reorder.', 'layers', () => this.app.addFlipTrack(), () => { const r = track.getBoundingClientRect(); showContextMenu(r.left, r.bottom, trackKinds()); }, 'flip-btn flip-adv');
     attachContextMenu(track, () => trackKinds());
     const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
     onion.classList.add('flip-onion');
@@ -161,6 +196,10 @@ export class FlipMode {
       app.refit();
     }).observe(this.row);
     this.wireStrip();
+    decorate(this.frameDone, 'check');
+    this.frameDone.addEventListener('click', () => { app.doneFrame(); app.focusCanvas(); });
+    stage.append(this.frameDone);
+    app.drawFlipbook = { get: () => this.views.draw, set: (on) => { if (app.workspace === 'draw' && this.views.draw !== on) this.set(on); } };
     // the flipbook is Draw's view unless you picked the timeline
     try {
       this.views.draw = paintingView('draw', localStorage.getItem(KEY)) === 'flipbook';
@@ -191,13 +230,25 @@ export class FlipMode {
   /** The tracks: the shot's drawing layers (not guides), front first. */
   private tracks(): DrawingsLayer[] {
     // adjustment layers have nothing to draw: they are effects, set in Motion or Layers
-    return this.app.drawLayers().filter((l) => !l.guide && !l.adjust);
+    // a painted track's frame layers fold into one track (its lead)
+    return railTracks(this.app.project.comp.layers, this.app.drawLayers().filter((l) => !l.guide && !l.adjust));
+  }
+
+  /** The track the layer you draw on belongs to (a painted track's lead stands for its every layer). */
+  private owns(l: DrawingsLayer, id = this.app.project.activeLayer): boolean {
+    return l.id === id || (isPainted(l) && groupOf(this.app.project.comp.layers, l.id).some((m) => m.id === id));
+  }
+
+  /** A painted track shows as visible while any of its layers is. */
+  private shows(l: DrawingsLayer): boolean {
+    return isPainted(l) ? groupOf(this.app.project.comp.layers, l.id).some((m) => m.visible) : l.visible;
   }
 
   update(): void {
     const app = this.app;
     this.range.update();
     this.rangeGesture?.update();
+    this.frameDone.hidden = !(app.paintingFrame && app.workspace === 'draw');
     const shown = this.shown;
     if (document.body.classList.contains('flipmode') !== shown) {
       document.body.classList.toggle('flipmode', shown);
@@ -220,7 +271,8 @@ export class FlipMode {
     const p = app.project;
     const tracks = this.tracks();
     const len = Math.max(1, app.compEnd);
-    const sig = `${len}|${p.activeLayer}|${app.editingMask}|` + tracks.map((l) => `${l.id}:${l.visible}:${l.start}:${l.name}:${l.label ?? 0}:${l.clip ? 1 : 0}:${l.mask ?? ''}:${l.blend}:` + l.exposures.map((e) => `${e.drawing}.${e.length}.${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
+    const stackSig = (l: DrawingsLayer) => isPainted(l) ? groupOf(p.comp.layers, l.id).map((m) => `${m.id}${m.visible ? '' : '-'}${m.blend}${app.editor.valueNow(m, 'opacity')}~` + m.exposures.map((e) => `${e.drawing}.${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join(',')).join(';') : '';
+    const sig = `${len}|${p.activeLayer}|${app.editingMask}|` + tracks.map((l) => `${stackSig(l)}${l.id}:${l.visible}:${l.start}:${l.name}:${l.label ?? 0}:${l.clip ? 1 : 0}:${l.mask ?? ''}:${l.blend}:` + l.exposures.map((e) => `${e.drawing}.${e.length}.${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
     // mid-drag the strip is not rebuilt: that would pull the handle out from under the finger
     if (sig !== this.sig && !this.dragging) {
       this.sig = sig;
@@ -243,15 +295,17 @@ export class FlipMode {
     this.shownFrames = [0, -1];
     for (const l of tracks) {
       const kind = trackKind(l);
-      const row = el('div', { class: `flip-track${l.id === p.activeLayer ? ' active' : ''}${l.visible ? '' : ' off'}`, 'data-id': l.id, 'data-kind': kind });
-      const eye = el('button', { type: 'button', class: 'flip-eye', 'aria-pressed': String(l.visible), title: `${l.name}: tap to ${l.visible ? 'hide' : 'show'}, hold for track options`, 'aria-label': `${l.visible ? 'Hide' : 'Show'} ${l.name}` });
+      const vis = this.shows(l);
+      const row = el('div', { class: `flip-track${this.owns(l) ? ' active' : ''}${vis ? '' : ' off'}`, 'data-id': l.id, 'data-kind': kind });
+      const layersNote = isPainted(l) ? ` (${groupOf(p.comp.layers, l.id).length} layers per frame; double-tap a frame to paint it)` : '';
+      const eye = el('button', { type: 'button', class: 'flip-eye', 'aria-pressed': String(vis), title: `${l.name}${layersNote}: tap to ${vis ? 'hide' : 'show'}, hold for track options`, 'aria-label': `${vis ? 'Hide' : 'Show'} ${l.name}` });
       // a colour tag wins over the kind's colour, on the header bar and the track's cels
       if (l.label) row.style.setProperty('--kind', TAGS[l.label % TAGS.length]!);
       if (l.label) eye.style.setProperty('--tag', TAGS[l.label % TAGS.length]!);
       if (l.clip) row.classList.add('clip');
       if (l.mask) row.classList.add('masked');
-      eye.append(el('span', { class: 'flip-check', 'aria-hidden': 'true' }, l.visible ? '✓' : ''), el('span', { class: 'flip-name' }, l.name), el('span', { class: 'flip-kind' }, KIND_NAME[kind]));
-      eye.addEventListener('click', () => { if (this.dragged) { this.dragged = false; return; } app.editor.setFlag(l.id, 'visible', !l.visible); });
+      eye.append(el('span', { class: 'flip-check', 'aria-hidden': 'true' }, vis ? '✓' : ''), el('span', { class: 'flip-name' }, l.name), el('span', { class: 'flip-kind' }, isPainted(l) ? `Painted \u00b7 ${groupOf(p.comp.layers, l.id).length}` : KIND_NAME[kind]));
+      eye.addEventListener('click', () => { if (this.dragged) { this.dragged = false; return; } app.setTrackVisible(l.id, !vis); });
       this.wireTrackDrag(eye, row, l.id);
       attachContextMenu(eye, () => this.trackMenu(l, eye));
       const cells = el('div', { class: 'flip-cells' });
@@ -259,6 +313,7 @@ export class FlipMode {
       let start = l.start;
       l.exposures.forEach((e, i) => { items.push({ i, start, len: e.length, drawing: e.drawing }); start += e.length; });
       this.rows.push({ layer: l, cells, items, shown: new Map() });
+      if (isPainted(l)) cells.dataset.painted = 'true';
       row.append(eye, cells);
       this.grid.append(row);
     }
@@ -268,12 +323,22 @@ export class FlipMode {
   }
 
   /** One cel: the drawing's thumbnail across its hold. */
-  private makeCel(item: { i: number; start: number; len: number; drawing: string }): HTMLElement {
+  private makeCel(item: { i: number; start: number; len: number; drawing: string }, layer?: DrawingsLayer): HTMLElement {
     const c = el('div', { class: 'flip-cel', 'data-i': String(item.i), 'data-start': String(item.start), 'data-len': String(item.len) });
     c.style.setProperty('--s', String(item.start));
     c.style.setProperty('--n', String(item.len));
-    const d = this.app.project.drawing(item.drawing);
-    const url = thumbURL(d);
+    const p = this.app.project;
+    const d = p.drawing(item.drawing);
+    // a painted frame is one cel: its layers composited
+    // each layer with its opacity and blend, bottom first
+    const stack = layer && isPainted(layer)
+      ? groupOf(p.comp.layers, layer.id).filter((m) => m.painted && m.visible).reverse().flatMap((m) => {
+        const dd = p.drawings.get(m.exposures[item.i]?.drawing ?? '');
+        return dd ? [{ d: dd, alpha: Math.max(0, Math.min(1, Number(this.app.editor.valueNow(m, 'opacity')) / 100)), blend: m.blend }] : [];
+      })
+      : null;
+    if (stack) c.classList.add('painted');
+    const url = stack ? stackURL(stack) : thumbURL(d);
     if (url) c.append(el('img', { src: url, alt: '', draggable: 'false' }));
     else c.classList.add('empty');
     if (item.len > 1) c.append(el('span', { class: 'flip-hold' }, `×${item.len}`));
@@ -306,7 +371,7 @@ export class FlipMode {
         if (it.start > to) break;
         keep.add(it.i);
         if (!r.shown.has(it.i)) {
-          const c = this.makeCel(it);
+          const c = this.makeCel(it, r.layer);
           r.shown.set(it.i, c);
           r.cells.append(c);
         }
@@ -502,7 +567,7 @@ export class FlipMode {
   private markCels(): void {
     const app = this.app, f = app.frame, activeId = app.project.activeLayer;
     for (const r of this.rows) {
-      const mine = r.layer.id === activeId;
+      const mine = this.owns(r.layer, activeId);
       for (const c of r.shown.values()) {
         const s = Number(c.dataset.start), n = Number(c.dataset.len);
         const here = f >= s && f < s + n;
@@ -524,7 +589,7 @@ export class FlipMode {
   }
 
   private revealActiveTrack(): void {
-    const row = [...this.grid.querySelectorAll<HTMLElement>('.flip-track')].find(r => r.dataset.id === this.app.project.activeLayer);
+    const row = [...this.grid.querySelectorAll<HTMLElement>('.flip-track')].find(r => this.rows.some((x) => x.layer.id === r.dataset.id && this.owns(x.layer)));
     if (row && (row.offsetTop < this.scroll.scrollTop || row.offsetTop + ROW > this.scroll.scrollTop + this.scroll.clientHeight))
       this.scroll.scrollTop = Math.max(0, row.offsetTop + ROW - this.scroll.clientHeight);
   }
@@ -543,7 +608,7 @@ export class FlipMode {
   private go(layer: DrawingsLayer, frame: number): void {
     const app = this.app;
     if (app.playing) app.togglePlay();
-    if (layer.id !== app.project.activeLayer) app.pickLayer(layer.id);
+    if (!this.owns(layer)) app.pickLayer(layer.id);
     app.setFrame(frame);
   }
 
@@ -793,14 +858,28 @@ export class FlipMode {
     this.rangeGesture = new PlaybackRangeGesture(this.app, s, () => ({ parent: this.grid, cell: this.cell, origin: 0, offset: this.label }), () => {
       clearTimeout(holdTimer); start = null; rulerTap = 0; this.dragging = false; this.dragged = true;
     });
-    // tap: go to that frame; tap the current frame again for its options
+    // tap: go to that frame; tap the current frame again for its options; on a painted track a
+    // double-tap paints that frame in Draw (Done comes back)
+    let celTap = { t: -1e9, id: '', frame: -1 }, menuTimer = 0;
     s.addEventListener('click', (e) => {
       if (this.dragged) { this.dragged = false; return; }
       if ((e.target as HTMLElement).closest('.flip-eye, .flip-trim')) return;
       const h = this.hit(e.clientX, e.clientY);
       if (!h) return;
       const app = this.app;
-      if (h.layer.id === app.project.activeLayer && h.frame === app.frame && !app.playing) {
+      if (isPainted(h.layer)) {
+        const again = e.timeStamp - celTap.t < 360 && celTap.id === h.layer.id && celTap.frame === h.frame;
+        celTap = again ? { t: -1e9, id: '', frame: -1 } : { t: e.timeStamp, id: h.layer.id, frame: h.frame };
+        clearTimeout(menuTimer);
+        if (again) { app.paintFrame(h.layer.id, h.frame); return; }
+        if (this.owns(h.layer) && h.frame === app.frame && !app.playing) {
+          // the frame's options, unless a second tap makes it a double-tap
+          const { clientX: x, clientY: y } = e, layer = h.layer;
+          menuTimer = window.setTimeout(() => { if (celTap.id === layer.id) { celTap.t = -1e9; showContextMenu(x, y, this.frameItems(layer)); } }, 360);
+          return;
+        }
+      }
+      if (this.owns(h.layer) && h.frame === app.frame && !app.playing) {
         showContextMenu(e.clientX, e.clientY, this.frameItems(h.layer));
         return;
       }
@@ -836,7 +915,7 @@ export class FlipMode {
     return [
       { title: l.name },
       { label: 'Draw on this track', run: () => app.pickLayer(l.id), disabled: l.id === app.project.activeLayer },
-      { label: l.visible ? 'Hide' : 'Show', run: () => ed.setFlag(l.id, 'visible', !l.visible) },
+      { label: this.shows(l) ? 'Hide' : 'Show', run: () => app.setTrackVisible(l.id, !this.shows(l)) },
       { title: `Opacity · ${op}%` },
       { chips: [25, 50, 75, 100].map((v) => ({ label: `${v}%`, on: op === v, run: () => ed.setValue(l.id, 'opacity', v, 'Track opacity') })) },
       { title: 'Blend' },
@@ -856,9 +935,11 @@ export class FlipMode {
       { label: 'Effects…', run: () => app.openEffects?.(l.id) },
       { label: '\u2191 Move up', run: () => app.moveTrack(l.id, -1) },
       { label: '\u2193 Move down', run: () => app.moveTrack(l.id, 1) },
+      { label: 'Painted (several paint layers in every frame)', checked: isPainted(l), disabled: !!(l.title || l.caption || l.video), run: () => app.setTrackPainted(l.id, !isPainted(l)) },
+      ...(isPainted(l) ? [{ label: 'Paint this frame (its layers in Draw)', run: () => app.paintFrame(l.id, app.frame) }] : []),
       { label: 'Duplicate track', run: () => void app.duplicateLayer(l.id) },
       { label: 'All layer options…', run: () => { app.pickLayer(l.id); app.openLayers?.(anchor); } },
-      { label: 'Delete track', danger: true, run: async () => { if (await confirmBox(`Delete “${l.name}”?`, 'You can undo this.', 'Delete', true)) ed.deleteLayers([l.id]); } },
+      { label: 'Delete track', danger: true, run: async () => { if (await confirmBox(`Delete “${l.name}”?`, isPainted(l) ? 'Every paint layer of its frames goes too. You can undo this.' : 'You can undo this.', 'Delete', true)) ed.deleteLayers(app.trackLayerIds(l.id)); } },
     ];
   }
 

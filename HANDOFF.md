@@ -159,6 +159,114 @@ this tab's own copy still pastes synchronously from memory).
   has copied nothing itself (Ctrl+V works); if another tab's X-sheet copy is newer than the token
   on the clipboard but this tab's own token matches, the own copy pastes on Ctrl+V (canvas).
 
+### Painted frames (2026-11-14, branch `claude/painted-frames-471933`) — design
+
+Written before coding; the results and checks follow under "Painted frames: what was built".
+
+**Choice: linked cel layers, not more planes per drawing.** A Painted track is an existing cel
+group (`layer.cel`, `core/cellink.ts`) whose members all carry a new optional `painted: true`.
+Each member is an ordinary drawings layer with its own drawing in every cel; `syncExposures` /
+`syncCelGroups` already keep their cels and timing identical. "The layers of a frame" are the
+group's members, and member *m*'s drawing in cel *i* is that frame's layer *m*. Draw's Layers
+panel already lists exactly this stack (`app.celLayers`) with add (`addCelLayer`), rename, hide,
+reorder, delete, opacity, blend, clipping and masks, so those need no new code paths. The
+alternative (a `Drawing` with N named planes) would touch `Drawing`, residency, brushes, undo
+capture, autosave, the PNG asset store, onion, transfer, artwork and export: everything.
+
+- **What it means for the user:** a frame's layer names, order, visibility, opacity and blend
+  are the track's (the same in every frame, as in Flash or Dreams layers); every frame has its
+  own paint on each layer. A layer left empty in a frame is a blank drawing.
+- **Lead:** the member whose id is the group id, otherwise the bottom member. It stands for the
+  track on the rail. `paintedLead`, `railTracks`, `stackAt` are pure helpers in `cellink.ts`.
+- **Format:** `painted?: true` on a drawings layer (`LayerFile`, validate, `compFile`,
+  `compsFromFile`). Additive, so by `schema.ts`'s own rule **no SCHEMA bump and no 13**: an older
+  build reads the members as ordinary linked art layers, which render identically, and drops the
+  flag if it re-saves. Nothing to reconcile with `claude/story-timecode`'s 12.
+- **Memory:** k layers × n frames drawings, each resident line plane W×H×4 bytes (8.3 MB at
+  1920×1080). They are ordinary drawings, so residency parks them like any other; the working set
+  adds the members of the current frame (already shown) and of the onion neighbours. Lite caps a
+  painted frame at 3 layers (Full at 8) and warns as the last one is added.
+- **Undo:** Make painted / Make plain is one `editor.edit` step for the whole group. Adding a
+  layer is `addCelLayer` (one step). Frame edits sync members inside the same step
+  (`editTimeline`); **gap found:** `commitExposures` (flipbook lift-and-drag, trims) did not
+  sync linked layers at all, so it gains the same member sync.
+- **Rail:** one row per painted track (the lead). Its cels show the stack composited (visible
+  members, bottom first). The header's eye, Move up/down, drag and Delete act on the whole group
+  (one step). Double-tap a painted cel: go to it and paint it in Draw's canvas view with onion
+  on; a Done chip returns to the workspace and view you came from, on the same frame.
+- **Paint over:** `newFrameDrawing` copies the active member; `editTimeline`'s
+  `partnerDrawing` copies each partner through `copiedFrom` when resident (the current frame's
+  members are, since they are on screen), else blank with a notice.
+- **Onion:** a neighbour on a painted track ghosts every visible member's drawing of that cel.
+- **Copy/paste between projects** (`core/transfer.ts`): frame copy/paste copies the active
+  member's drawings only (as for linked art today); Send to / layer copies already take the whole
+  cel group, and `painted` rides along in the layer objects. **My Assets** (`io/artwork.ts`,
+  `core/assets.ts`) already collects cel members and remaps `cel`; `painted` is written by
+  `compFile`. **Exports** render layers, so members export as they preview.
+
+### Painted frames: what was built (2026-11-15)
+
+- `core/cellink.ts`: `PAINTED_MAX` (Lite 3, Full 8), `isPainted`, `groupOf`, `paintedLead`,
+  `railTracks`, `stackAt`, `setPainted`, `moveGroup`. `core/comp.ts` + `io/schema.ts`: optional
+  `painted` (kept only with a `cel`; no SCHEMA change, `minimumDrawingSchema` unchanged).
+- `app.ts`: `setTrackPainted`, `setTrackVisible`, `trackLayerIds`, `paintFrame` / `doneFrame`
+  (`paintingFrame` remembers workspace, Draw's Flipbook/Canvas view and onion; leaving Draw any
+  other way clears it), `paintedMax`; `addCelLayer` caps painted stacks and warns on the last
+  layer; `moveTrack` moves painted groups whole (and steps plain tracks over them); onion ghosts
+  and the residency working set include every visible layer of the neighbouring painted cels.
+  **Fix (also for plain linked art layers):** `commitExposures` (flipbook lift-and-drag and
+  trims) now syncs cel members, applied at once and in Undo/Redo; before, a drag on one linked
+  layer left the others behind.
+- `ui/flipmode.ts`: painted kind (colour `#ff7a59`, header "Painted · N"), one row per group,
+  composited cels (`stackURL`, cached by thumbnail revs), track eye / Hide / Delete act on the
+  group, track menu Painted toggle and "Paint this frame", Duplicate track disabled for painted
+  tracks. Double-tap a painted cel → `paintFrame`; a single tap on the current painted cel shows
+  its options after 360 ms (so a double-tap is not taken for a tap). Done button
+  (`.paint-frame-done`, 44 px) on the stage while `paintingFrame` is set.
+- Manual: Painted frames paragraph after the onion paragraph, Paint over sentence, `UPDATES`
+  entry dated 2026-11-15. `style.css`: one appended block.
+- Tests: `src/core/painted.test.ts` (10: toggle, groups, guards, lead and rail, stack order and
+  visibility, group moves, Lite/Full caps, file round trip, minimum schema, old files and a
+  stray flag). Fixture `tests/paintedframes.html` + `src/ui/paintedframes.browser.ts` (15).
+
+**Checks (2026-11-15, own dev server `127.0.0.1:5265`):** `npx vitest run --dir src` 852 passed,
+1 skipped (10 new); `npm run build` passed; `paintedframes` 15/15 (make painted + Undo/Redo, add a
+frame layer + Undo, one rail row with composited cels and a 44 px header, rename/reorder/hide with
+Undo, export matches the stack and leaves hidden layers out, track eye hides the group in one step,
+moving the track keeps the group together, Paint over copies every layer + Undo, flipbook drag and
+trim keep every layer in step + Undo, double-tap in Animate → Draw with onion and Done back to the
+same frame, onion neighbours stay resident while off-screen layers park and come back with their
+paint, save/reopen keeps the stack at the old minimum schema, Lite cap at 3 with the last-layer
+warning, plain again unfolds the rail, no errors). Full suite `npm run test:browser` 82 of 82.
+
+**Follow-up the same day (2026-11-15), closing most of those gaps:**
+
+- **+ Track → Painted** (`addFlipTrack(true)`): a new track that is painted from the start.
+- **Rail cels** composite each layer with its opacity and blend (`stackURL`; `add` → `lighter`).
+- **Duplicate track** on a painted track copies every layer and drawing into a new group above
+  it (`duplicatePaintedTrack`, one step); re-enabled in the track menu.
+- **Clips** (`ui/rails.ts`): a painted track is one row (its lead, active while drawing on any of
+  its layers, kind "painted · N"); the eye and Delete act on the group. The strip's blocks are the
+  active layer's, whose timing is the group's.
+- **Copy / Paste frames** (`copySelection`, `paste`, `pasteForeign`): on a painted track Copy
+  records each frame's layers bottom first (`clipStack`) and snaps them all for another project;
+  Paste gives each frame layer its own drawing by stack position (`pasteStack`, consulted by
+  `partnerDrawing(src, partnerOf, memberId)`); Paste copies copies them too. Pasting into a
+  plain track takes only the copied layer's drawings, as before.
+- Checks: `paintedframes` 20/20 (5 new: Clips one row, same-project Paste and Paste copies of
+  every layer + Undo, Duplicate track + Undo, + Track → Painted, cross-project paste onto a
+  painted track keeping each layer's paint).
+- Full checks: `npx vitest run --dir src` 852 passed, 1 skipped; `npm run build` passed; full
+  browser suite 81 of 82. The failure is `motionfinish-responsive` "landscape leaves no usable
+  effect list (812×375)"; it fails the same way when `db61e8b` (which passed 82/82 earlier) is
+  checked out on the same server, so it is not this change. Not investigated further.
+
+**Still not done:** a frame cannot have a layer the others lack (layers belong to the track; it
+is blank there); smudge / wet mixing across a frame's layers (the plan's next item); pasting
+painted frames into a plain track drops the other layers; a copied stack whose layer count differs
+from the target fills by position from the bottom; iPad, Pencil, real double-tap timing and Lite
+memory not checked on a device.
+
 ### Motion while drawing: Hold still / Show the move (2026-11-14)
 
 User problem: a walk cycle animated in place in Animate, then moved in Motion, slid around (or
