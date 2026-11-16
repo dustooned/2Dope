@@ -2,6 +2,13 @@
 
 ## Current state (2026-11-14) — read this first
 
+### New project: Open length and Custom length (2026-11-15, same branch)
+
+- `core/newproject.ts`: the `frame` length is now labelled **Open** ("as you go", still one blank frame, same id so saved choices keep working); new **Custom** length (`customSeconds`, 0.5 s steps, up to 600 s; `clampSeconds`, `framesFor(choice, fps, customSeconds)`). `NewSettings` gains `customSeconds` (read with a default, so older saved settings load).
+- `ui/newdialog.ts`: Open shows a one-line explanation and the summary says "open length"; Custom shows a seconds field (44 px chips); `style.css` keeps Create/Cancel stuck to the bottom of the dialog on short screens.
+- Checks: `npx vitest run --dir src` 843 passed, 1 skipped (newproject tests extended); `npm run build` passed; dialog checked in the browser pane on `127.0.0.1:5261` (Open hint and summary, Custom field, chips 44 px). Not run: full browser suite, iPad.
+
+
 ### Performance audit (2026-11-15, branch `claude/perf-audit-842bf3`)
 
 Measured in headless desktop Chrome on `127.0.0.1:5261` with generated projects (parked PNG drawings, as opened from the library) using the new fixture `tests/perfaudit.html` (`node scripts/fixtures.mjs --base http://127.0.0.1:5261 perfaudit`; `?frames=500&layers=20&big=0&export=0` to vary). 900 MB residency budget.

@@ -595,6 +595,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-11-15', title: 'New project: open length or your own', items: ['New project → Length: Open starts as one blank frame so you set the timing as you go (the Flipbook adds a page after the last one, Timing sets the holds). Custom takes any length in seconds, up to ten minutes. The Create button stays in view on small screens.'] },
   { date: '2026-11-14', title: 'Animate on the spot while Motion moves it', items: ['View → Motion while drawing: Hold still keeps a layer that Motion moves, and the shot around it, still while you draw, so walk cycles stay in place. Show the move lets you watch it travel as you draw, and strokes still land on the drawing.', 'Fixed: editing inside a placed artwork that Motion moves could show the shot around it shifted twice.'] },
   { date: '2026-11-14', title: 'About 2Dope', items: ['The manual opens with About 2Dope: who designed, programmed and developed it, and why it is kept free and up to date for students. The credit at the bottom of Projects opens it.'] },
   { date: '2026-11-14', title: 'Copy in one project, paste in another', items: ['Copied frames and layers now paste into another project as new drawings with their own pictures (centred when the canvas size differs). A caption brings its custom font.', 'My Assets → Add copy works in a project of another canvas size: the artwork is centred at its own pixel size.', 'Fixed: pasting frames in a different project could show that project’s own drawings instead of the ones you copied.'] },
