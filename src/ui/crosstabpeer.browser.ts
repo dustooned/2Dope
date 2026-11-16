@@ -36,6 +36,15 @@ const peer = {
   },
   /** Ctrl+C on the frame strip with both frames selected. */
   copyFrames() { app.setSelection([0, 1]); return clip(document.querySelector('#strip')!); },
+  async paintedFrame() {
+    app.loadProject(new Project(320, 180)); app.setWorkspace('draw');
+    app.addFlipTrack(true);
+    await paint(app.drawing, '#ff0000', 40, 40);
+    app.addPaintLayer();
+    await paint(app.drawing, '#0000ff', 70, 70);
+    app.setSelection([0]);
+    return clip(document.querySelector('#strip')!);
+  },
   /** Ctrl+C on the selected layer in Motion. */
   copyLayer() { app.editor.select(app.project.layer.id); return clip(document.querySelector('#canvas')!); },
   caption() {

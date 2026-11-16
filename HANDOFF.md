@@ -2,6 +2,18 @@
 
 ## Current state (2026-11-15) — read this first
 
+### Combined release (2026-11-15)
+
+- Integrated the performance/offline, brush grain, cross-tab clipboard and painted frames
+  branches for `main`. New Project includes Open and Custom length and a sticky Create button.
+- The merge carries painted-frame layer snapshots through the same-origin clipboard.
+  The cross-tab fixture verifies that both layers arrive and one Undo removes the paste.
+- Release checkout checks: 879 unit tests passed, 1 skipped, production build and typecheck
+  passed, and 12 targeted desktop Chromium fixtures passed, including rail performance.
+  At a 500 × 620 viewport, New Project showed 42 frames for 3.5 seconds at 12 fps and
+  kept Create visible. The production build reloaded offline and the offline ZIP built
+  on Windows. Physical iPad and offline launchers on student devices remain unverified.
+
 ### Paper finishes and brush import fidelity (2026-11-15)
 
 - Effects → Texture → Look and Effects → Presets offer Comic Newsprint, Cold Press Paper,

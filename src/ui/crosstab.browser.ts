@@ -4,6 +4,7 @@
  * Web Locks the way a second tab does. Removing the iframe stands in for closing that tab.
  */
 import { App } from '../app';
+import { groupOf } from '../core/cellink';
 import { Project, type Drawing } from '../core/project';
 import { crossTab, messages, readHead } from '../io/crosstab';
 import { installClipboard } from './clipboard';
@@ -44,6 +45,7 @@ type Peer = {
   share: (kind: 'frames', token: string | null, body?: Promise<unknown>) => void;
   source(workspace: 'draw' | 'motion', w?: number, h?: number): Promise<Project>;
   copyFrames(): { text: string; types: string[] };
+  paintedFrame(): Promise<{ text: string; types: string[] }>;
   copyLayer(): { text: string; types: string[] };
   caption(): void; movie(): void;
   many(n: number): Promise<{ text: string; types: string[] }>;
@@ -109,6 +111,20 @@ await check('A drawing layer copied in the other tab’s Motion pastes here with
   expect(notices.some(n => n.includes('from another project')), 'no notice');
   app.history.undo(); await wait();
   expect(d.comp.layers.length === before, 'Undo did not remove the layer');
+});
+
+await check('A painted frame pasted across tabs keeps both layers in one Undo step', async () => {
+  const { text } = await peer.paintedFrame();
+  await ready(text);
+  const p = await open(320, 180, 'draw');
+  app.addFlipTrack(true); app.addPaintLayer();
+  const track = p.activeLayer;
+  const layers = () => groupOf(p.comp.layers, track);
+  paste(text); await until(() => layers().every(l => l.exposures.length === 2));
+  const [top, bottom] = layers().map(l => p.drawing(l.exposures[1]!.drawing));
+  expect(blue(await colourAt(top!, 80, 80)) && red(await colourAt(bottom!, 50, 50)), 'a pasted layer lost its paint');
+  app.history.undo();
+  expect(layers().every(l => l.exposures.length === 1), 'one Undo did not remove the pasted frame');
 });
 
 await check('A caption from the other tab brings its custom font, renamed on a clash', async () => {
