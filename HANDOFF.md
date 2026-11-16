@@ -9,7 +9,8 @@
 - Checks: headless Chrome on `vite preview` (127.0.0.1:5262): worker cached 84 files; with the server stopped the app booted, the dialog said Ready, the manual opened. vitest and build run at commit.
 - Lab kit: `npm run package:offline` (after `npm run build`) writes `dist-offline/2dope-offline.zip`: the build plus `Start 2Dope (Windows).bat` (+ `serve.ps1`, no install), `Start 2Dope (Mac).command` (**untested**) and `READ ME FIRST.txt` (sources in `scripts/offline-kit/`), serving on fixed port 5192 so saved projects stay with the same address. Verified on Windows: unzipped kit served index, sw.js, manifest and the PDF worker with the right types, refused `../` paths, and the worker cached 84 files from `localhost:5192`. The zip is written with the system bsdtar (Git Bash's GNU tar makes a bad .zip).
 - Manual: a **Working offline** section (`manualtext.ts`, id `offline`).
-- Not done: an automated fixture, iPad Safari, an in-app "update ready" prompt. The worker only takes effect on 2dope.xyz after the next deploy (not done here).
+- Update prompt: when a new worker takes over (`controllerchange`, only if one already controlled the page) a toast asks for a reload, because the new worker deletes the old cache and this page's lazy chunks would be gone. `scripts/offline-plugin.test.ts` (3 tests, runs under `npm test`, not `--dir src`: it needs node modules the app typecheck does not have) guards the generated worker: every file listed, no `sw.js`/`404.html`, version changes only with content, `ignoreVary` kept.
+- Not done: a browser-level offline fixture (needs a built app; checked by hand above), iPad Safari. The worker only takes effect on 2dope.xyz after the next deploy (not done here).
 
 
 ### New project: Open length and Custom length (2026-11-15, same branch)
