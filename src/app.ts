@@ -3622,7 +3622,14 @@ export class App {
    * The drawing a linked layer gets for a new cel: a copy of its partner when the new cel is a
    * duplicate (and that partner's pixels are at hand), otherwise a blank one.
    */
-  partnerDrawing(src: string, partnerOf: (id: string) => string | undefined): string {
+  partnerDrawing(src: string, partnerOf: (id: string) => string | undefined, memberId?: string): string {
+    // pasting painted frames: each frame layer takes its own copied layer (by stack position)
+    const stack = memberId ? this.pasteStack?.get(src) : undefined;
+    if (stack && memberId) {
+      const pos = this.stackPosition(memberId);
+      const mine = pos >= 0 ? stack[pos] : undefined;
+      if (mine && this.project.drawings.has(mine)) return mine;
+    }
     const from = this.project.copiedFrom.get(src);
     const partner = from ? partnerOf(from) : undefined;
     const d = partner ? this.project.drawings.get(partner) : undefined;
@@ -3976,14 +3983,16 @@ export class App {
    * on, starting with one blank frame at frame 1. + Frame adds the next drawing after it, and
    * drawing past its end makes a frame there. You draw on it straight away. One undo step.
    */
-  addFlipTrack(): void {
+  addFlipTrack(painted = false): void {
     if (this.live || this.strokeActive) return;
     const p = this.project;
     const id = p.newId('L');
     const above = p.isPlaceholder ? null : p.activeLayer;
     const n = this.drawLayers().filter((l) => !l.guide).length + 1;
-    this.editor.edit('Add track', (cc) => {
-      const made = drawingsLayer(id, `Track ${n}`, [{ drawing: p.newDrawing().id, length: 1 }], p.width, p.height, cc.width, cc.height);
+    this.editor.edit(painted ? 'Add painted track' : 'Add track', (cc) => {
+      const made = drawingsLayer(id, painted ? `Painted ${n}` : `Track ${n}`, [{ drawing: p.newDrawing().id, length: 1 }], p.width, p.height, cc.width, cc.height);
+      // a painted track: every frame holds its own stack of paint layers (Layers → + adds one)
+      if (painted) { made.cel = id; made.painted = true; }
       made.start = 0;
       made.in = 0;
       made.out = null;
@@ -4231,6 +4240,7 @@ export class App {
     if (this.strokeActive) return;
     const src = this.project.comp.layers.find((l) => l.id === id);
     if (!src) return;
+    if (isPainted(src)) return this.duplicatePaintedTrack(id);
     if (src.kind !== 'drawings') return this.editor.duplicate(id);
     const ids = src.exposures.map((e) => e.drawing);
     const copies = await this.copyDrawings(ids);
@@ -4252,6 +4262,40 @@ export class App {
       cc.layers.splice(at, 0, copy);
     });
     this.focusLayer(newId);
+    this.onCompChanged();
+    this.requestRender();
+    this.onFrameChange();
+  }
+
+  /**
+   * Duplicate a painted track whole: every frame layer with its own copied drawings, in a new
+   * group, right above the original. One undo step.
+   */
+  private async duplicatePaintedTrack(id: string): Promise<void> {
+    const layers = this.project.comp.layers;
+    const members = groupOf(layers, id);
+    const ids = [...new Set(members.flatMap((m) => m.exposures.map((e) => e.drawing)))];
+    const copies = await this.copyDrawings(ids);
+    if (!copies) { this.onNotice?.('Could not copy this track: its drawings are still loading. Try again in a moment.'); return; }
+    const map = new Map(ids.map((d, i) => [d, copies[i]!]));
+    const lead = paintedLead(layers, members.find((m) => m.id === id) ?? members[0]!);
+    const newIds = new Map(members.map((m) => [m.id, this.project.newId('L')]));
+    const group = newIds.get(lead.id)!;
+    this.editor.edit('Duplicate painted track', (cc) => {
+      const at = cc.layers.findIndex((l) => newIds.has(l.id));
+      if (at < 0) return;
+      const made = cc.layers.filter((l): l is DrawingsLayer => l.kind === 'drawings' && newIds.has(l.id)).map((l) => {
+        const copy = structuredClone(l);
+        copy.id = newIds.get(l.id)!;
+        if (l.id === lead.id) copy.name = `${l.name} copy`;
+        copy.cel = group;
+        copy.painted = true;
+        copy.exposures = l.exposures.map((e) => ({ ...e, drawing: map.get(e.drawing) ?? e.drawing }));
+        return copy;
+      });
+      cc.layers.splice(at, 0, ...made);
+    });
+    this.focusLayer(newIds.get(this.project.activeLayer) ?? group);
     this.onCompChanged();
     this.requestRender();
     this.onFrameChange();
@@ -4818,7 +4862,7 @@ export class App {
     const linked = celMembers(this.project.comp, layerId).map((m) => ({
       id: m.id,
       before: m.exposures,
-      after: syncExposures(beforeEx, r.ex, m.exposures, (src, partnerOf) => this.partnerDrawing(src, partnerOf)),
+      after: syncExposures(beforeEx, r.ex, m.exposures, (src, partnerOf) => this.partnerDrawing(src, partnerOf, m.id)),
     }));
     if (rip && linked.length)
       rip.after = rip.after.map((l) => {
@@ -5035,6 +5079,27 @@ export class App {
   /** Exposures copied with Copy / Cut (drawing references and holds). Lives for the session. */
   clipboard: Exposure[] = [];
   /**
+   * Copied from a painted track: each copied drawing's whole frame, its layers' drawings bottom
+   * first, so Paste gives every frame layer its own paint back (here or in another project).
+   */
+  private clipStack: Map<string, string[]> | null = null;
+  /** While a paste is applied: a pasted drawing's frame layers in this project, bottom first. */
+  private pasteStack: Map<string, string[]> | null = null;
+
+  /** Where a painted track's layer sits in its stack, counted from the bottom (-1: not painted). */
+  private stackPosition(layerId: string): number {
+    const layers = this.project.comp.layers;
+    const me = layers.find((l) => l.id === layerId);
+    if (!isPainted(me)) return -1;
+    return groupOf(layers, layerId).filter((m) => m.painted).reverse().findIndex((m) => m.id === layerId);
+  }
+
+  /** Run a paste with its painted frames' layers at hand for the frame layers to take. */
+  private withPasteStack(stack: Map<string, string[]> | null, run: () => void): void {
+    this.pasteStack = stack;
+    try { run(); } finally { this.pasteStack = null; }
+  }
+  /**
    * Where those frames came from, and their pictures as a snapshot made at Copy: pasted into another
    * project they become new drawings there (the ids only mean something in their own project).
    */
@@ -5104,7 +5169,14 @@ export class App {
   copySelection(): number {
     const ex = this.project.exposures;
     this.clipboard = this.targets.map((i) => ({ drawing: ex[i]!.drawing, length: ex[i]!.length }));
-    this.clipFrom = this.clipboard.length ? { project: new WeakRef(this.project), snaps: this.snapDrawings(this.clipboard.map((e) => e.drawing)) } : null;
+    const layer = this.project.isPlaceholder ? null : this.project.layer;
+    this.clipStack = null;
+    if (layer && isPainted(layer)) {
+      const members = groupOf(this.project.comp.layers, layer.id).filter((m) => m.painted).reverse();
+      this.clipStack = new Map(this.targets.map((i) => [ex[i]!.drawing, members.map((m) => m.exposures[i]?.drawing ?? '')]));
+    }
+    const snapIds = [...this.clipboard.map((e) => e.drawing), ...[...(this.clipStack?.values() ?? [])].flat().filter(Boolean)];
+    this.clipFrom = this.clipboard.length ? { project: new WeakRef(this.project), snaps: this.snapDrawings(snapIds) } : null;
     return this.clipboard.length;
   }
 
@@ -5132,18 +5204,28 @@ export class App {
     const at = t.length ? t[t.length - 1]! + 1 : this.project.exposures.length;
     const ex = this.project.exposures;
     let ids = items.map((e) => e.drawing);
+    const clip = this.clipStack;
+    let stack: Map<string, string[]> | null = clip && this.stackPosition(this.project.activeLayer) >= 0 ? new Map(items.map((it) => [it.drawing, clip.get(it.drawing) ?? []])) : null;
     if (copies) {
       const made = await this.copyDrawings(ids);
       if (!made || this.project.exposures !== ex) return;
+      // every layer of a painted frame gets its own copy too
+      if (stack) {
+        const partners = [...new Set([...stack.values()].flat().filter((d) => d && this.project.drawings.has(d)))];
+        const pmade = partners.length ? await this.copyDrawings(partners) : [];
+        if (!pmade || this.project.exposures !== ex) return;
+        const pmap = new Map(partners.map((d, k) => [d, pmade[k]!]));
+        stack = new Map(items.map((it, k) => [made[k]!, (stack!.get(it.drawing) ?? []).map((d) => pmap.get(d) ?? '')]));
+      }
       ids = made;
     }
-    this.editTimeline(copies ? 'Paste copies' : 'Paste', (e) =>
+    this.withPasteStack(stack, () => this.editTimeline(copies ? 'Paste copies' : 'Paste', (e) =>
       insertAt(
         e,
         at,
         items.map((it, k) => ({ drawing: ids[k]!, length: it.length })),
       ),
-    );
+    ));
   }
 
   /** Frames copied in another project: new drawings here from the snapshot, same holds and cycles. One undo step. */
@@ -5158,7 +5240,10 @@ export class App {
     if (this.project !== p || p.exposures !== ex) return;
     const t = this.targets;
     const at = t.length ? t[t.length - 1]! + 1 : ex.length;
-    this.editTimeline('Paste from another project', (e) => insertAt(e, at, items.map((it) => ({ drawing: ids.get(it.drawing)!, length: it.length }))));
+    // a painted frame copied there: its layers land on this painted track's layers, bottom first
+    const clip = this.clipStack;
+    const stack = clip && this.stackPosition(p.activeLayer) >= 0 ? new Map(items.map((it) => [ids.get(it.drawing)!, (clip.get(it.drawing) ?? []).map((d) => ids.get(d) ?? '')])) : null;
+    this.withPasteStack(stack, () => this.editTimeline('Paste from another project', (e) => insertAt(e, at, items.map((it) => ({ drawing: ids.get(it.drawing)!, length: it.length })))));
     const w = snaps.values().next().value;
     if (w && (w.w !== p.width || w.h !== p.height)) this.onNotice?.(`Pasted ${items.length} frame${items.length === 1 ? '' : 's'} from a ${w.w}×${w.h} project, centred at the same pixel size.`);
   }

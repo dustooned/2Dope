@@ -12,7 +12,7 @@ import { PlaybackRangeControl, markPlaybackRange } from './playbackrange';
 import { PlaybackRangeGesture } from './playbackrangegesture';
 import { Splitter } from './splitter';
 import { el } from './dom';
-import { groupOf, isPainted, railTracks, stackAt } from '../core/cellink';
+import { groupOf, isPainted, railTracks } from '../core/cellink';
 
 /** Draw's saved Canvas/Flipbook view. (The old Flip mode's key is not read.) */
 const KEY = '2dope.draw.view';
@@ -72,8 +72,9 @@ function thumbURL(d: Drawing): string | null {
 
 /** A painted frame's strip picture: its visible layers composited, bottom first (cached by their thumbnails). */
 const stackThumbs = new Map<string, string>();
-function stackURL(ds: Drawing[]): string | null {
-  const key = ds.map((d) => `${d.id}.${d.thumbRev}`).join('|');
+const COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = { normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', add: 'lighter' } as Record<BlendMode, GlobalCompositeOperation>;
+function stackURL(ds: { d: Drawing; alpha: number; blend: BlendMode }[]): string | null {
+  const key = ds.map(({ d, alpha, blend }) => `${d.id}.${d.thumbRev}.${alpha}.${blend}`).join('|');
   const hit = stackThumbs.get(key);
   if (hit) return hit;
   thumbCanvas.width = 80; thumbCanvas.height = 60;
@@ -81,13 +82,17 @@ function stackURL(ds: Drawing[]): string | null {
   if (!g) return null;
   g.fillStyle = '#fff'; g.fillRect(0, 0, 80, 60);
   let any = false;
-  for (const d of ds) {
+  for (const { d, alpha, blend } of ds) {
     const t = d.thumb;
-    if (!t || !t.width || !t.height) continue;
+    if (!t || !t.width || !t.height || alpha <= 0) continue;
     any = true;
     const s = Math.min(80 / t.width, 60 / t.height);
+    g.globalAlpha = alpha;
+    g.globalCompositeOperation = COMPOSITE[blend] ?? 'source-over';
     g.drawImage(t, (80 - t.width * s) / 2, (60 - t.height * s) / 2, t.width * s, t.height * s);
   }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
   if (!any) return null;
   const url = thumbCanvas.toDataURL();
   if (stackThumbs.size > 600) stackThumbs.clear();
@@ -154,13 +159,14 @@ export class FlipMode {
     const trackKinds = (): CtxItem[] => [
       { title: 'New track' },
       { label: 'Animation', hint: 'Shift+N', run: () => this.app.addFlipTrack() },
+      { label: 'Painted (paint layers in every frame)', run: () => this.app.addFlipTrack(true) },
       { label: 'Background', run: () => this.app.addStillLayer('background') },
       { label: 'Object', run: () => this.app.addStillLayer('object') },
       { label: 'Notes', run: () => this.app.addNotesLayer() },
       { label: 'Adjustment', run: () => this.app.editor.addLayer('adjustment', this.app.project.isPlaceholder ? undefined : this.app.project.activeLayer) },
       { label: 'Media\u2026', run: () => this.app.pickMedia?.() },
     ];
-    const track = btn('Track', 'Add an animation track above this one, from frame 1. Hold (or right-click) for a background, object, notes or media track. Drag a track\u2019s box up or down to reorder.', 'layers', () => this.app.addFlipTrack(), () => { const r = track.getBoundingClientRect(); showContextMenu(r.left, r.bottom, trackKinds()); }, 'flip-btn flip-adv');
+    const track = btn('Track', 'Add an animation track above this one, from frame 1. Hold (or right-click) for a painted, background, object, notes or media track. Drag a track\u2019s box up or down to reorder.', 'layers', () => this.app.addFlipTrack(), () => { const r = track.getBoundingClientRect(); showContextMenu(r.left, r.bottom, trackKinds()); }, 'flip-btn flip-adv');
     attachContextMenu(track, () => trackKinds());
     const onion = btn('Onion', 'Onion skin: see the drawings before and after faintly', 'onion', () => this.app.toggleOnion());
     onion.classList.add('flip-onion');
@@ -265,7 +271,7 @@ export class FlipMode {
     const p = app.project;
     const tracks = this.tracks();
     const len = Math.max(1, app.compEnd);
-    const stackSig = (l: DrawingsLayer) => isPainted(l) ? groupOf(p.comp.layers, l.id).map((m) => `${m.id}${m.visible ? '' : '-'}~` + m.exposures.map((e) => `${e.drawing}.${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join(',')).join(';') : '';
+    const stackSig = (l: DrawingsLayer) => isPainted(l) ? groupOf(p.comp.layers, l.id).map((m) => `${m.id}${m.visible ? '' : '-'}${m.blend}${app.editor.valueNow(m, 'opacity')}~` + m.exposures.map((e) => `${e.drawing}.${p.drawings.get(e.drawing)?.thumbRev ?? 0}`).join(',')).join(';') : '';
     const sig = `${len}|${p.activeLayer}|${app.editingMask}|` + tracks.map((l) => `${stackSig(l)}${l.id}:${l.visible}:${l.start}:${l.name}:${l.label ?? 0}:${l.clip ? 1 : 0}:${l.mask ?? ''}:${l.blend}:` + l.exposures.map((e) => `${e.drawing}.${e.length}.${p.drawing(e.drawing).thumbRev}`).join(',')).join('/');
     // mid-drag the strip is not rebuilt: that would pull the handle out from under the finger
     if (sig !== this.sig && !this.dragging) {
@@ -324,7 +330,13 @@ export class FlipMode {
     const p = this.app.project;
     const d = p.drawing(item.drawing);
     // a painted frame is one cel: its layers composited
-    const stack = layer && isPainted(layer) ? stackAt(p.comp.layers, layer, item.i).map((id) => p.drawings.get(id)).filter((x): x is Drawing => !!x) : null;
+    // each layer with its opacity and blend, bottom first
+    const stack = layer && isPainted(layer)
+      ? groupOf(p.comp.layers, layer.id).filter((m) => m.painted && m.visible).reverse().flatMap((m) => {
+        const dd = p.drawings.get(m.exposures[item.i]?.drawing ?? '');
+        return dd ? [{ d: dd, alpha: Math.max(0, Math.min(1, Number(this.app.editor.valueNow(m, 'opacity')) / 100)), blend: m.blend }] : [];
+      })
+      : null;
     if (stack) c.classList.add('painted');
     const url = stack ? stackURL(stack) : thumbURL(d);
     if (url) c.append(el('img', { src: url, alt: '', draggable: 'false' }));
@@ -925,7 +937,7 @@ export class FlipMode {
       { label: '\u2193 Move down', run: () => app.moveTrack(l.id, 1) },
       { label: 'Painted (several paint layers in every frame)', checked: isPainted(l), disabled: !!(l.title || l.caption || l.video), run: () => app.setTrackPainted(l.id, !isPainted(l)) },
       ...(isPainted(l) ? [{ label: 'Paint this frame (its layers in Draw)', run: () => app.paintFrame(l.id, app.frame) }] : []),
-      { label: 'Duplicate track', run: () => void app.duplicateLayer(l.id), disabled: isPainted(l) },
+      { label: 'Duplicate track', run: () => void app.duplicateLayer(l.id) },
       { label: 'All layer options…', run: () => { app.pickLayer(l.id); app.openLayers?.(anchor); } },
       { label: 'Delete track', danger: true, run: async () => { if (await confirmBox(`Delete “${l.name}”?`, isPainted(l) ? 'Every paint layer of its frames goes too. You can undo this.' : 'You can undo this.', 'Delete', true)) ed.deleteLayers(app.trackLayerIds(l.id)); } },
     ];

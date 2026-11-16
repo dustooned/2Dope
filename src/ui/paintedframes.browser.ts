@@ -14,6 +14,7 @@ import { captureProject, loadProjectFile } from '../io/projectio';
 import { minimumDrawingSchema, validateProjectFile } from '../io/schema';
 import { FlipMode } from './flipmode';
 import { LayerCards } from './layercards';
+import { ALL_ROWS, buildRails, RailState } from './rails';
 
 // device settings this fixture changes; put back as they were afterwards
 const savedSettings = Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)!]));
@@ -22,8 +23,8 @@ const app = new App(document.querySelector<HTMLCanvasElement>('#canvas')!, stage
 const errors: string[] = [];
 const notices: string[] = [];
 app.onNotice = (m) => notices.push(m);
-addEventListener('error', (e) => errors.push(e.message));
-addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
+addEventListener('error', (e) => errors.push(`${e.message} ${(e.error as Error | undefined)?.stack ?? ''}`));
+addEventListener('unhandledrejection', (e) => errors.push(`${e.reason} ${(e.reason as Error | undefined)?.stack ?? ''}`));
 app.loadProject(new Project(160, 120));
 app.setWorkspace('draw');
 app.setPaintOver(false);
@@ -248,7 +249,72 @@ await check('Making it plain again keeps every layer as linked art; the rail sho
   expect(rows().length === 2, 'Undo did not fold it again');
 });
 
-await check('No errors', () => expect(!errors.length, errors.join(' | ')));
+
+await check('Clips (the Time rails) fold a painted track into one row too', () => {
+  const state = new RailState(); state.open.add(ALL_ROWS);
+  const out = buildRails(app, state, 20, 0, 0, 400, () => document.createElement('canvas'), () => {});
+  const names = out.nodes.flatMap((n) => [...n.querySelectorAll('.rail-name')].map((b) => b.firstChild?.textContent ?? ''));
+  expect(names.filter((n) => n === layer(A).name).length === 1 && !names.includes(layer(top).name), `rows ${names.join(' | ')}`);
+  expect(out.nodes.some((n) => n.textContent?.includes('painted')), 'no painted kind on the row');
+});
+
+await check('Copy and paste frames on a painted track brings every layer of them; copies are new drawings', async () => {
+  app.pickLayer(top); app.setFrame(0); app.setSelection([]);
+  const before = group().map((m) => m.exposures[0]!.drawing);
+  expect(app.copySelection() === 1, 'nothing copied');
+  app.setFrame(1); app.setSelection([]);
+  await app.paste(false); await wait();
+  expect(group().every((m, k) => m.exposures.length === 3 && m.exposures[2]!.drawing === before[k]), `paste: ${group().map((m) => m.exposures.map((e) => e.drawing).join(',')).join(' / ')}`);
+  app.history.undo(); await wait();
+  await app.paste(true); await wait();
+  const made = group().map((m) => p().drawing(m.exposures[2]!.drawing));
+  expect(made.every((d, k) => d.id !== before[k] && same(d, p().drawing(before[k]!))), 'paste copies did not copy every layer');
+  app.history.undo(); await wait();
+  expect(group().every((m) => m.exposures.length === 2), 'Undo left frames');
+});
+
+await check('Duplicate track copies a painted track whole: its own layers and drawings, one undo step', async () => {
+  const n = p().comp.layers.length;
+  await app.duplicateLayer(A); await wait();
+  const copies = p().comp.layers.filter((l) => l.kind === 'drawings' && l.painted && l.cel !== A) as DrawingsLayer[];
+  expect(p().comp.layers.length === n + 2 && copies.length === 2 && new Set(copies.map((c) => c.cel)).size === 1, `layers ${p().comp.layers.length}, copies ${copies.length}`);
+  const mine = new Set(group().flatMap((m) => m.exposures.map((e) => e.drawing)));
+  expect(copies.every((c) => c.exposures.every((e) => !mine.has(e.drawing))), 'the copy shares drawings');
+  flip.update(); await wait();
+  expect(rows().length === 3, `${rows().length} rail rows`);
+  app.history.undo(); await wait(); flip.update();
+  expect(p().comp.layers.length === n && rows().length === 2, 'Undo left the copy');
+});
+
+await check('+ Track → Painted makes a painted track straight away', async () => {
+  app.addFlipTrack(true); await wait();
+  const made = layer(p().activeLayer);
+  expect(made.painted && made.cel === made.id && made.name.startsWith('Painted'), 'not painted');
+  app.addPaintLayer(); await wait();
+  expect(groupOf(p().comp.layers, made.id).length === 2, 'Layers + did not add a frame layer');
+  app.history.undo(); app.history.undo(); await wait(); app.pickLayer(A);
+});
+
+await check('Frames copied in another project paste onto a painted track with every layer', async () => {
+  app.pickLayer(top); app.setFrame(0); app.setSelection([]);
+  app.copySelection();
+  const blue = rgb(p().drawing(layer(top).exposures[0]!.drawing).line, 50, 50), red = rgb(p().drawing(layer(A).exposures[0]!.drawing).line, 15, 15);
+  const home = p();
+  const other = new Project(160, 120);
+  app.loadProject(other); await wait();
+  app.addFlipTrack(true); app.addPaintLayer(); await wait();
+  const g = groupOf(p().comp.layers, p().activeLayer);
+  await app.paste(false); await wait(250);
+  const after = groupOf(p().comp.layers, p().activeLayer);
+  expect(after.every((m) => m.exposures.length === 2), `frames ${after.map((m) => m.exposures.length).join(',')}`);
+  const pasted = after.map((m) => p().drawing(m.exposures[1]!.drawing));
+  for (const d of pasted) await app.residency.ensure(d);
+  expect(g.length === 2 && rgb(pasted[0]!.line, 50, 50) === blue && rgb(pasted[1]!.line, 15, 15) === red, `top ${rgb(pasted[0]!.line, 50, 50)}, bottom ${rgb(pasted[1]!.line, 15, 15)}`);
+  // (the first project's canvases were freed when the other one opened: this check stays last)
+  void home;
+});
+
+await check('No errors', () => expect(!errors.length, errors.map((e) => (e.match(/at \S+ \([^)]*\)/g) ?? [e]).slice(0, 4).join(' < ').replace(/http:\/\/127\.0\.0\.1:\d+\/src\//g, '')).join(' | ')));
 
 for (const k of Object.keys(localStorage)) if (!(k in savedSettings)) localStorage.removeItem(k);
 for (const [k, v] of Object.entries(savedSettings)) localStorage.setItem(k, v);

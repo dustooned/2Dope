@@ -82,13 +82,33 @@ same frame, onion neighbours stay resident while off-screen layers park and come
 paint, save/reopen keeps the stack at the old minimum schema, Lite cap at 3 with the last-layer
 warning, plain again unfolds the rail, no errors). Full suite `npm run test:browser` 82 of 82.
 
-**Gaps (not done):** layers are per track, so a frame cannot have a layer the others lack (it is
-blank there); Duplicate track for a painted track (disabled); frame Copy/Paste and cross-project
-paste carry only the active layer's drawings (as for linked art); Clips / the Time strip
-(`ui/rails.ts`, `ui/strip.ts`) still show each layer; no "Painted" choice in + Track yet (make a
-track, then Painted); smudge/wet mixing across a frame's layers (the plan's next item); the rail's
-composite ignores layer opacity/blend; iPad, Pencil, real double-tap timing and Lite memory not
-checked on a device.
+**Follow-up the same day (2026-11-15), closing most of those gaps:**
+
+- **+ Track → Painted** (`addFlipTrack(true)`): a new track that is painted from the start.
+- **Rail cels** composite each layer with its opacity and blend (`stackURL`; `add` → `lighter`).
+- **Duplicate track** on a painted track copies every layer and drawing into a new group above
+  it (`duplicatePaintedTrack`, one step); re-enabled in the track menu.
+- **Clips** (`ui/rails.ts`): a painted track is one row (its lead, active while drawing on any of
+  its layers, kind "painted · N"); the eye and Delete act on the group. The strip's blocks are the
+  active layer's, whose timing is the group's.
+- **Copy / Paste frames** (`copySelection`, `paste`, `pasteForeign`): on a painted track Copy
+  records each frame's layers bottom first (`clipStack`) and snaps them all for another project;
+  Paste gives each frame layer its own drawing by stack position (`pasteStack`, consulted by
+  `partnerDrawing(src, partnerOf, memberId)`); Paste copies copies them too. Pasting into a
+  plain track takes only the copied layer's drawings, as before.
+- Checks: `paintedframes` 20/20 (5 new: Clips one row, same-project Paste and Paste copies of
+  every layer + Undo, Duplicate track + Undo, + Track → Painted, cross-project paste onto a
+  painted track keeping each layer's paint).
+- Full checks: `npx vitest run --dir src` 852 passed, 1 skipped; `npm run build` passed; full
+  browser suite 81 of 82. The failure is `motionfinish-responsive` "landscape leaves no usable
+  effect list (812×375)"; it fails the same way when `db61e8b` (which passed 82/82 earlier) is
+  checked out on the same server, so it is not this change. Not investigated further.
+
+**Still not done:** a frame cannot have a layer the others lack (layers belong to the track; it
+is blank there); smudge / wet mixing across a frame's layers (the plan's next item); pasting
+painted frames into a plain track drops the other layers; a copied stack whose layer count differs
+from the target fills by position from the bottom; iPad, Pencil, real double-tap timing and Lite
+memory not checked on a device.
 
 ### Motion while drawing: Hold still / Show the move (2026-11-14)
 
