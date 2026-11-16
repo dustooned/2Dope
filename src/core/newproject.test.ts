@@ -38,13 +38,16 @@ describe('new project presets', () => {
     expect(framesFor(l('frame'), 24)).toBe(1);
     expect(framesFor(l('2s'), 12)).toBe(24);
     expect(framesFor(l('1s'), 25)).toBe(25);
+    expect(framesFor(l('custom'), 12, 3.5)).toBe(42);
+    expect(framesFor(l('custom'), 12, 99999)).toBe(600 * 12);
+    expect(readNewSettings({ length: 'custom', customSeconds: 0.2 }).customSeconds).toBe(0.5);
   });
 
   it('remembered settings survive garbage', () => {
     expect(readNewSettings(null)).toEqual(DEFAULT_NEW);
     expect(readNewSettings({ aspect: 'nope', tier: 5, fps: 'x', length: 'x', custom: 3 })).toEqual(DEFAULT_NEW);
     const ok = readNewSettings({ aspect: '9:16', tier: 720, fps: 24.4, length: '5s', custom: { width: 900, height: 99999 } });
-    expect(ok).toEqual({ aspect: '9:16', tier: 720, fps: 24, length: '5s', custom: { width: 900, height: MAX_SIDE } });
+    expect(ok).toEqual({ aspect: '9:16', tier: 720, fps: 24, length: '5s', custom: { width: 900, height: MAX_SIDE }, customSeconds: 5 });
     expect(clampFps(500)).toBe(120);
   });
 });

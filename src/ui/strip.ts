@@ -524,11 +524,11 @@ export class Strip {
     const sel = new Set(app.selection);
     const sig =
       `${this.cell}#${app.timeFormat}#${this.railSig()}#${this.audio?.active() ? this.audio.sig() : ''}#` +
-      p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).thumbRev}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
+      p.exposures.map((e, i) => `${e.drawing}:${e.length}:${p.drawing(e.drawing).role ?? ''}:${sel.has(i) ? 1 : 0}`).join('|');
     if (sig !== this.signature) {
       this.signature = sig;
       this.rebuild();
-    }
+    } else this.refreshThumbs();
     const cell = this.cell;
     markPlaybackRange(app, this.inner, cell, p.layer.start);
     setLabel(this.layerChip, app.project.isPlaceholder ? 'New layer' : app.project.layer.name);
@@ -685,11 +685,35 @@ export class Strip {
       .join('|')}`;
   }
 
+  /**
+   * A thumbnail changed (a parked drawing came back, or one was redrawn): redraw the previews that
+   * show it in place. Rebuilding the whole strip for each one cost a long shot seconds while its
+   * thumbnails were filled in.
+   */
+  private refreshThumbs(): void {
+    const p = this.app.project;
+    for (const [id, hit] of this.thumbs) {
+      const d = p.drawings.get(id);
+      if (d && hit.rev !== d.thumbRev) this.thumb(d);
+    }
+    for (const c of this.inner.querySelectorAll<HTMLCanvasElement>('canvas.rthumb[data-drawing]')) {
+      const d = p.drawings.get(c.dataset.drawing!);
+      if (!d || c.dataset.rev === String(d.thumbRev)) continue;
+      const fresh = this.smallThumb(d);
+      c.getContext('2d')?.drawImage(fresh, 0, 0);
+      c.dataset.rev = String(d.thumbRev);
+    }
+  }
+
   /** A small preview for a rail block (separate from the editable row's thumbnails). */
   private smallThumb(d: Drawing): HTMLCanvasElement {
     const hit = this.smallThumbs.get(d.id);
-    if (hit && hit.rev === d.thumbRev) return hit.canvas.cloneNode(true) as HTMLCanvasElement;
-    const c = el('canvas', { width: '48', height: '28', class: 'rthumb' });
+    if (hit && hit.rev === d.thumbRev) {
+      const copy = hit.canvas.cloneNode(true) as HTMLCanvasElement;
+      copy.getContext('2d')?.drawImage(hit.canvas, 0, 0);
+      return copy;
+    }
+    const c = el('canvas', { width: '48', height: '28', class: 'rthumb', 'data-drawing': d.id, 'data-rev': String(d.thumbRev) });
     const g = c.getContext('2d');
     if (g) {
       g.fillStyle = '#ffffff';

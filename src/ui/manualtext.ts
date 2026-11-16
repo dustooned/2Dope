@@ -531,6 +531,15 @@ export const MANUAL: ManualSection[] = [
     ],
   },
   {
+    id: 'offline',
+    title: 'Working offline',
+    blocks: [
+      'Menu > Offline saves 2Dope on this device so it opens with no internet. Open 2Dope once while you are online, wait until the dialog says Ready, then use the Install button (Chrome or Edge), Add to Home Screen (iPad Safari) or Install app (Chromebook). Updates arrive by themselves the next time you open 2Dope online.',
+      'Your drawings are saved in this browser on this device, never on a server. Use the same browser each time. On a lab computer that is wiped when you log off, export a .2dope file (Menu > Export .2dope) before you leave and keep it on a USB stick or cloud drive; Menu > Import .2dope brings it back.',
+      'For computers that never go online, your instructor can hand out the offline kit: a zip with a start file for Windows or Mac and a READ ME FIRST.',
+    ],
+  },
+  {
     id: 'device',
     title: 'Phones and older tablets (Lite mode)',
     blocks: [
@@ -604,6 +613,8 @@ export const UPDATES: Update[] = [
   { date: '2026-11-15', title: 'Independent new frames and easier selection', items: ['Adding or inserting a drawing keeps holds on other animation tracks in place. Cel-linked layers still share their frames.', 'Freehand Select combines drawn lines and tapped corners. Tap the first dot to close a tapped path. With the Transform box open, pinch inside to scale the artwork or pinch outside to navigate the canvas.'] },
   { date: '2026-11-15', title: 'Larger and sharper Procreate brush imports', items: ['Brushes → Import can read Procreate sets up to 1 GiB. Tips keep up to 256 px and grain up to 512 px, with grain brightness, contrast and zoom behaviour carried into the raster brush. Textured previews load as you reach them in the library.'] },
   { date: '2026-11-15', title: 'Paper and print finishes', items: ['Motion → Effects → Texture → Look adds Comic Newsprint, Cold Press Paper, Recycled Kraft, Brushed Gesso, Thin Riso Paper, and Dry Riso Ink. Effects → Presets has whole-layer versions with starting Strength and Scale settings.', 'The generated grain stays still across frames and appears in exports. Saved artwork and projects using the new looks require file format 13.'] },
+  { date: '2026-11-15', title: 'Use 2Dope with no internet', items: ['Menu → Offline saves 2Dope on this device so it opens with no internet, and shows how to install it on a computer, iPad or Chromebook. Open 2Dope once online and wait for Ready. Export a .2dope backup before leaving a lab computer. Updates arrive the next time you open it online.'] },
+  { date: '2026-11-15', title: 'New project: open length or your own', items: ['New project → Length: Open starts as one blank frame so you set the timing as you go (the Flipbook adds a page after the last one, Timing sets the holds). Custom takes any length in seconds, up to ten minutes. The Create button stays in view on small screens.'] },
   { date: '2026-11-14', title: 'Animate on the spot while Motion moves it', items: ['View → Motion while drawing: Hold still keeps a layer that Motion moves, and the shot around it, still while you draw, so walk cycles stay in place. Show the move lets you watch it travel as you draw, and strokes still land on the drawing.', 'Fixed: editing inside a placed artwork that Motion moves could show the shot around it shifted twice.'] },
   { date: '2026-11-14', title: 'Story at the bottom, and a timecode burn-in', items: ['On a wide screen the dock button next to Story help moves Story’s panel and timeline under the canvas, and back. Your device remembers it. Under the canvas the Story header is one row, so the picture keeps its room (also on iPad in landscape).', 'Story’s timeline keeps its panels a steady height with the sound lane right under them.', 'New effect: Timecode burns a frame counter or hh:mm:ss:ff timecode into the picture, with a start number, a label, colour, opacity, nine places, move and scale. Motion → New layer → Timecode, or Story tools → Burn in timecode. It shows the same in exports. Projects using it need this version to open.', 'Fixed: after Undo, an open effect card showed the old settings, and the next change there could bring them back.'] },
   { date: '2026-11-14', title: 'About 2Dope', items: ['The manual opens with About 2Dope: who designed, programmed and developed it, and why it is kept free and up to date for students. The credit at the bottom of Projects opens it.'] },
