@@ -7,6 +7,7 @@
 
 import { SAMPLES, type SampleId } from '../io/samples';
 import { el } from './dom';
+import { openModal, type ModalHandle } from './modal';
 
 const DONE_KEY = '2dope.firstrun.done';
 
@@ -36,25 +37,22 @@ function markDone(): void {
  */
 export function showFirstRun(level: FirstRunLevel): Promise<{ start: FirstRunStart; level: FirstRunLevel }> {
   return new Promise((resolve) => {
-    const dialog = el('dialog', { class: 'firstrun', 'aria-label': 'Welcome to 2Dope' });
     let chosen = level, answered = false;
+    // Escape or any outside close answers 'blank'; a Start button answers with its own id.
     const done = (start: FirstRunStart) => {
       if (answered) return;
       answered = true;
       markDone();
       resolve({ start, level: chosen });
-      if (dialog.open) dialog.close();
-      dialog.remove();
+      modal?.close();
     };
-    dialog.addEventListener('cancel', (e) => { e.preventDefault(); done('blank'); });
-    dialog.append(el('h2', {}, 'Welcome to 2Dope'));
+    let modal: ModalHandle | null = null;
     const tips = el('ul', { class: 'fr-tips' });
     for (const t of FIRST_RUN_TIPS) {
       const li = el('li', {});
       li.append(el('span', { class: 'fr-ico', 'aria-hidden': 'true' }, t.icon), el('strong', {}, t.title), el('span', {}, t.text));
       tips.append(li);
     }
-    dialog.append(tips);
     const lv = el('div', { class: 'fr-row' });
     lv.append(el('span', { class: 'name' }, 'Interface'));
     const seg = el('div', { class: 'fx-seg', role: 'group', 'aria-label': 'Interface' });
@@ -66,8 +64,6 @@ export function showFirstRun(level: FirstRunLevel): Promise<{ start: FirstRunSta
       return b;
     });
     lv.append(seg, el('span', { class: 'hint' }, 'Change it any time with the ◐ interface button.'));
-    dialog.append(lv);
-    dialog.append(el('h3', {}, 'Start with'));
     const starts = el('div', { class: 'fr-starts' });
     const start = (id: FirstRunStart, label: string, hint: string, primary = false) => {
       const b = el('button', { type: 'button', class: primary ? 'primary' : '' });
@@ -77,9 +73,7 @@ export function showFirstRun(level: FirstRunLevel): Promise<{ start: FirstRunSta
     };
     start('blank', 'A blank project', 'Choose its size and frame rate next', true);
     for (const s of SAMPLES) start(s.id, `Sample: ${s.name}`, s.hint);
-    dialog.append(starts);
-    document.body.append(dialog);
-    dialog.showModal();
+    modal = openModal({ title: 'Welcome to 2Dope', className: 'firstrun', ariaLabel: 'Welcome to 2Dope', bodyClass: null, content: [tips, lv, el('h3', {}, 'Start with'), starts], cancelId: 'blank', onClose: () => done('blank') });
     (starts.querySelector('button') as HTMLButtonElement | null)?.focus();
   });
 }
