@@ -2,6 +2,14 @@
 
 ## Current state (2026-11-15) — read this first
 
+### Gesture controls, steps 1 to 3 (2026-11-18, branch `ui-refine`, not pushed)
+
+- `core/gestures.ts`: one declarative list of every touch gesture (13 rows; 10 live, 3 planned) with generated help sentences ("Tapping with two fingers will undo."). `core/gestureprefs.ts`: validated device preference `2dope.gestures.v1` (`{ disabled: [...] }`; only the three global taps may be switched off). 16 tests. Not in the project file, no schema change.
+- `ui/gesturecontrols.ts`: Settings → **Gesture controls…** page from the registry, with a switch for the two-finger undo, three-finger redo and four-finger hide-interface taps, Restore defaults, and a Coming later list. Only those three taps are routed through the preference (`app.ts` `finishTapSession`); every other gesture's detection is unchanged.
+- Facts that differ from the task pack: undo, redo and hide-interface taps already existed; the three-finger gesture is a scribble that clears the drawing, not a time scrub; the tap-versus-scrub rule already exists (over 10 px or a direction turn cancels the tap). Thresholds were kept. Action ids are the registry's own (`edit.undo`, `timeline.fit`…): `ui/commands.ts` has no undo or redo commands and adding commands was out of scope.
+- Not done: steps 4 to 6 (routing every surface through the registry, the three-finger timeline gestures, ruler-drag timescale). Motion, strip and board timelines still use the old pinch.
+- Checks: unit suite 900 passed, 1 skipped; scripts 6 passed; build passed. Not run: the Gesture controls page in a browser, any fixture for the tap switches, iPad.
+
 ### Draw timeline zoom (2026-11-18, branch `ui-refine`, not pushed)
 
 - `src/ui/flipzoom.ts` (pure, 8 tests): limits follow the strip and the shot. Zoom-out reaches whole-shot fit (floor 0.5 px per frame; short shots keep the old 4 px minimum). Zoom-in is a quarter of the strip (cap 400 px). The old fixed 4 to 140 px clamp is gone. Pinch gain 0.6. Fit pinch needs under 250 ms, over 800 px/s and fingers together by over 1.6x.

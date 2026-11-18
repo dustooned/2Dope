@@ -6012,3 +6012,11 @@ body.ws-motion .minspector:not([hidden]) { display: flex; }
 .flip-row .flip-cel.painted::after { content: ''; position: absolute; right: 4px; top: 4px; width: 8px; height: 8px; border-radius: 2px; background: var(--kind); box-shadow: 2px 2px 0 rgba(0, 0, 0, .35); pointer-events: none; }
 .paint-frame-done { position: absolute; z-index: 40; top: calc(var(--fit-top, 64px) + 8px); right: 16px; min-width: 88px; min-height: 44px; padding: 0 16px; border-radius: 22px; background: var(--accent); color: #fff; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, .35); }
 .paint-frame-done[hidden] { display: none; }
+
+/* gesture controls page */
+.gesture-dialog { width: min(560px, calc(100vw - 32px)); max-height: 90dvh; overflow: auto; }
+.gesture-group { margin: 12px 0 0; }
+.gesture-group h3 { margin: 0 0 6px; font-size: 13px; }
+.gesture-row { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; }
+.gesture-row input[type=checkbox] { width: 22px; height: 22px; flex: none; }
+.gesture-planned .gesture-row { opacity: .65; min-height: 0; padding: 4px 0; }
