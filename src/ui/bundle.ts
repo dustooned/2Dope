@@ -4,6 +4,7 @@ import { BUNDLE_STEPS, planBundle, prepareBundle, type BundleOptions, type Bundl
 import { planVideo, VIDEO_LITE_MAX_BYTES, VIDEO_MAX_BYTES } from '../io/videoplan';
 import { videoSupport } from '../io/exportvideo';
 import { elText as el } from './dom';
+import { openModal } from './modal';
 
 const labels: Record<BundleStep | 'zip', string> = { video: 'MP4 video with sound', poster: 'Transparent PNG poster', gif: 'Looping GIF excerpt', project: 'Editable .2dope project', zip: 'Package ZIP' };
 export class BundleUI {
@@ -15,7 +16,6 @@ export class BundleUI {
     if (app.strokeActive || app.transforming || app.adjusting) { app.onNotice?.('Finish the current edit first.'); return; }
     if (app.playing) app.togglePlay(); this.close();
     const project = app.project, comp = (scopeId ? project.comps.get(scopeId) : null) ?? exportComp(project) ?? project.comp, poster = app.frame, opener = document.activeElement as HTMLElement;
-    const d = el('dialog'); d.className = 'creation-dialog bundle-dialog'; d.setAttribute('aria-label', 'Hand-in bundle');
     const form = el('div'); form.className = 'creation-fields'; const field = (name: string, n: HTMLElement) => { const l = el('label', name); n.setAttribute('aria-label', name); l.append(n); form.append(l); return l; };
     const start = el('input'), end = el('input'); for (const n of [start, end]) { n.type = 'number'; n.min = '1'; n.max = String(compLength(comp, project.comps)); }
     start.value = String((comp.playbackRange?.start ?? 0) + 1); end.value = String(comp.playbackRange?.end ?? compLength(comp, project.comps)); field('Bundle start frame', start); field('Bundle end frame', end);
@@ -25,8 +25,15 @@ export class BundleUI {
     const steps = el('ol'); steps.className = 'bundle-steps'; steps.setAttribute('aria-label', 'Bundle file progress');
     const progress = el('progress'); progress.max = 1; progress.value = 0; progress.hidden = true; progress.setAttribute('aria-label', 'Making bundle');
     const status = el('p'); status.setAttribute('role', 'status');
-    const foot = el('footer'), close = el('button', 'Close'), make = el('button', 'Make bundle'), partial = el('button', 'Save completed files'), download = el('button', 'Save bundle ZIP'), formats = el('button', 'Other Share formats'); make.className = 'primary'; download.className = 'primary'; partial.hidden = download.hidden = true;
-    foot.append(close, partial, make, download); d.append(el('h2', 'Hand-in bundle'), form, summary, note, steps, progress, status, formats, foot); document.body.append(d);
+    const formats = el('button', 'Other Share formats');
+    // make, partial and download keep their own handlers below; returning false stops them closing the dialog.
+    const keep = () => false;
+    const modal = openModal<'close' | 'partial' | 'make' | 'download' | 'closed'>({
+      title: 'Hand-in bundle', ariaLabel: 'Hand-in bundle', className: 'creation-dialog bundle-dialog', bodyClass: null, content: [form, summary, note, steps, progress, status, formats], footer: 'footer', cancelId: 'close', ownKeys: true,
+      actions: [{ id: 'close', label: 'Close' }, { id: 'partial', label: 'Save completed files', run: keep }, { id: 'make', label: 'Make bundle', primary: true, run: keep }, { id: 'download', label: 'Save bundle ZIP', primary: true, run: keep }],
+      onClose: () => { closed = true; serial++; controller?.abort(); if (!busy) session?.dispose(); ready = null; this.cleanup = null; if (opener?.isConnected) opener.focus(); },
+    });
+    const { make, partial, download } = modal.buttons; partial.hidden = download.hidden = true;
     let session: BundleSession | null = null, controller: AbortController | null = null, busy = false, closed = false, serial = 0, ready: Blob | null = null;
     const options = (): BundleOptions => ({ comp: comp.id, start: Number(start.value) - 1, end: Number(end.value), poster, project: editable.checked, video: { format: 'mp4', size: quality.value === 'small' ? '720p' : '1080p', quality: quality.value === 'small' ? 'standard' : 'high', background: 'white' } });
     const reset = () => { session?.dispose(); session = null; ready = null; partial.hidden = download.hidden = true; make.hidden = false; };
@@ -63,9 +70,9 @@ export class BundleUI {
       catch (e) { if (!closed) status.textContent = signal.aborted ? 'Cancelled. Nothing downloaded.' : (e as Error).message; }
       finally { busy = false; controller = null; if (closed) session?.dispose(); else { partial.disabled = false; make.textContent = 'Retry failed step'; } }
     })();
-    download.onclick = () => { if (ready) save(ready); }; close.onclick = () => this.close(); formats.onclick = () => { if (!busy) { this.close(); this.otherFormats(); } };
+    download.onclick = () => { if (ready) save(ready); }; formats.onclick = () => { if (!busy) { this.close(); this.otherFormats(); } };
     form.oninput = () => { if (!busy) { reset(); void inspect(); } }; form.onchange = () => { if (!busy) { reset(); void inspect(); } };
-    this.cleanup = () => { closed = true; serial++; controller?.abort(); if (!busy) session?.dispose(); ready = null; d.close(); d.remove(); if (opener?.isConnected) opener.focus(); };
-    d.addEventListener('cancel', e => { e.preventDefault(); this.close(); }); d.addEventListener('keydown', e => e.stopPropagation()); d.addEventListener('keyup', e => e.stopPropagation()); d.showModal(); void inspect();
+    this.cleanup = () => modal.close('closed');
+    void inspect();
   }
 }
