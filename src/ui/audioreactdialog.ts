@@ -9,6 +9,7 @@ import { soundStart, type SoundClip } from '../core/audio';
 import { bake, bandEnvelope, MAX_REACT_FRAMES, monoMix, REACTORS, type BakeOptions, type OscShape, type Reactor } from '../core/audioreact';
 import type { SoundBank } from '../io/sound';
 import { el } from './dom';
+import { openModal } from './modal';
 
 const KEY = '2dope.audioreact';
 
@@ -74,9 +75,7 @@ export function reactToAudio(app: App, bank: SoundBank | null): void {
   if (!clips.length || !bank) { app.onNotice?.('This shot has no audio clip yet. Add music or a sound first (Media).'); return; }
   const point = rows.some((r) => { const l = ed.layer(r.layer); return !!l && typeof ed.getProp(l, r.prop).value !== 'number'; });
   let s = load();
-  const dialog = el('dialog', { class: 'small audioreact', 'aria-label': 'React to audio' });
-  dialog.append(el('h2', {}, 'React to audio'));
-  const body = el('div', { class: 'dbody' }), foot = el('div', { class: 'vfoot' });
+  const body = el('div', { class: 'dbody' });
   const row = (label: string, input: HTMLElement, hint = '') => { const r = el('label', { class: 'nfield' }); r.append(el('span', { class: 'name' }, label), input, el('span', { class: 'hint' }, hint)); body.append(r); return input; };
   const select = (label: string, value: string, options: [string, string][], hint = '') => {
     const x = el('select', { 'aria-label': label });
@@ -112,13 +111,11 @@ export function reactToAudio(app: App, bank: SoundBank | null): void {
   show();
   const status = el('p', { class: 'hint', role: 'status' });
   body.append(status);
-  const cancel = el('button', { type: 'button' }, 'Cancel'), go = el('button', { type: 'button', class: 'primary' }, 'Bake');
-  foot.append(cancel, go);
-  dialog.append(body, foot);
-  const close = () => { if (dialog.open) dialog.close(); dialog.remove(); };
-  dialog.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
-  cancel.addEventListener('click', close);
-  go.addEventListener('click', () => void (async () => {
+  // Bake works asynchronously, so its action keeps the dialog open and closes it itself when done.
+  const modal = openModal({ title: 'React to audio', className: 'small audioreact', ariaLabel: 'React to audio', bodyClass: null, content: [body], actions: [{ id: 'cancel', label: 'Cancel' }, { id: 'bake', label: 'Bake', primary: true, run: () => { void bake_(); return false; } }] });
+  const close = () => modal.close();
+  const go = modal.buttons.bake;
+  const bake_ = async () => {
     s = readReactSettings({ startHz: +startHz.value, endHz: +endHz.value, reactor: reactor.value, intensity: +intensity.value, decay: +decay.value, smoothing: +smoothing.value, offset: +offset.value, master: +master.value, seed: +seed.value, elasticity: +elasticity.value, speed: +speed.value, shape: shape.value, axis: axis?.value ?? s.axis, range: range.value });
     save(s);
     const clip = clips.find((c) => c.id === source.value)!, comp = ed.comp;
@@ -145,7 +142,5 @@ export function reactToAudio(app: App, bank: SoundBank | null): void {
       status.textContent = e instanceof Error ? e.message : String(e);
       go.disabled = false;
     }
-  })());
-  document.body.append(dialog);
-  dialog.showModal();
+  };
 }
