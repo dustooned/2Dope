@@ -255,7 +255,7 @@ export const MANUAL: ManualSection[] = [
           ['Swipe the tracks left or right', 'Move through time (left goes forward). A quick swipe goes further; a flick keeps going and slows down (touch the tracks to stop it)', 'scrub'],
           ['Tap or drag the frame numbers', 'Jump the playhead there; drag and it follows your finger', 'scrub'],
           ['Flick the frame numbers to the left', 'Back to frame 1 and play', 'scrub'],
-          ['Pinch the tracks', 'Zoom time in or out and pan at the same time: the frame between your fingers stays under them. A quick pinch in shows the whole shot', 'pinch'],
+          ['Pinch the tracks', 'Zoom time in or out and pan at the same time: the frame between your fingers stays under them. A quick, fast pinch together shows the whole shot (or tap Fit shot, or press Alt+0). Ctrl, ⌘ or Alt with the wheel zooms too', 'pinch'],
           ['Double-tap the frame numbers', 'Zoom in there', 'tap2'],
           ['Tap a frame', 'Go there and draw on that track. Tap the current frame again for its options', 'tap2'],
           ['Press and hold a drawing, then drag', 'It lifts: move it to another time on its track. The other drawings slide aside; let go to drop it (one Undo step)', 'hold'],
@@ -611,6 +611,7 @@ export interface Update {
 }
 
 export const UPDATES: Update[] = [
+  { date: '2026-11-18', title: 'Timeline zoom follows your screen and shot', items: ['The Draw timeline zooms out until the whole shot fits and in until one frame fills a quarter of the strip, so it works on a phone, an iPad and a big monitor.', 'Pinching is gentler. Only a quick, fast pinch together fits the whole shot, so placing a clip no longer jumps the view. There is also a Fit shot button.', 'A long shot opens fitted on screen. Ctrl, ⌘ or Alt with the wheel zooms time under the pointer.'] },
   { date: '2026-11-15', title: 'Camera framing in Blender', items: ['The updated Blender importer follows 2Dope’s camera cuts and uses the opening framing as a clean starting point when Import Camera Animation is off. For zoom in Blender, key Orthographic Scale.'] },
   { date: '2026-11-15', title: 'Independent new frames and easier selection', items: ['Adding or inserting a drawing keeps holds on other animation tracks in place. Cel-linked layers still share their frames.', 'Freehand Select combines drawn lines and tapped corners. Tap the first dot to close a tapped path. With the Transform box open, pinch inside to scale the artwork or pinch outside to navigate the canvas.'] },
   { date: '2026-11-15', title: 'Larger and sharper Procreate brush imports', items: ['Brushes → Import can read Procreate sets up to 1 GiB. Tips keep up to 256 px and grain up to 512 px, with grain brightness, contrast and zoom behaviour carried into the raster brush. Textured previews load as you reach them in the library.'] },

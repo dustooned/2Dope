@@ -2,6 +2,14 @@
 
 ## Current state (2026-11-15) — read this first
 
+### Draw timeline zoom (2026-11-18, branch `ui-refine`, not pushed)
+
+- `src/ui/flipzoom.ts` (pure, 8 tests): limits follow the strip and the shot. Zoom-out reaches whole-shot fit (floor 0.5 px per frame; short shots keep the old 4 px minimum). Zoom-in is a quarter of the strip (cap 400 px). The old fixed 4 to 140 px clamp is gone. Pinch gain 0.6. Fit pinch needs under 250 ms, over 800 px/s and fingers together by over 1.6x.
+- `flipmode.ts`: uses them. Fit eases over 180 ms (instant under reduced motion). New **Fit shot** button; Alt+0 as before; Ctrl / Cmd / Alt + wheel zooms under the pointer. A long shot opens fitted once. Nothing is saved; adding a clip never changes zoom (nothing refits except the fit actions).
+- The `fliptracks` fixture now expects the 0.6 gain (44 x 2^0.6 after doubling the spread).
+- Not done on purpose: plain `F` already fits the page, so it was not rebound; dragging the ruler still scrubs the playhead (changing it to timescale would remove scrubbing). Motion's timeline (8 to 80 px) is untouched.
+- Checks: `npx vitest run --dir src` 892 passed, 1 skipped; scripts 6 passed; build passed; Chromium fliptracks, fliptrim, flipbooksource, railperf and playbackrange passed. Not run: other fixtures, iPad (pinch feel and the fit guard are unverified on a real touch screen).
+
 ### UI refinement: shared dialog shell (2026-11-18, branch `ui-refine`, not merged, not pushed)
 
 - New `src/ui/modal.ts`: `openModal({title, content, actions, ...})` owns showModal, Escape, close, removal and the single answer (`done` resolves with the id of the button that closed it). `modal.test.ts` has 7 tests on a fake DOM.

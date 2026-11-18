@@ -12,14 +12,14 @@ import { PlaybackRangeControl, markPlaybackRange } from './playbackrange';
 import { PlaybackRangeGesture } from './playbackrangegesture';
 import { Splitter } from './splitter';
 import { el } from './dom';
+import { OPEN_CELL, anchoredScroll, clampCell, isFitPinch, pinchCell, zoomLimits, type ZoomLimits } from './flipzoom';
 import { groupOf, isPainted, railTracks } from '../core/cellink';
 
 /** Draw's saved Canvas/Flipbook view. (The old Flip mode's key is not read.) */
 const KEY = '2dope.draw.view';
 /** One frame of time on the strip, and one track row (Procreate Dreams shows three at a time). */
 /** A frame's width on the strip at the start (pinch, Alt+= / Alt+− or a double-tap on the ruler zoom it). */
-const CELL = 44;
-const CELL_MIN = 4, CELL_MAX = 140;
+const CELL = OPEN_CELL;
 /** A track row: a 50 px cel (above the 44 px touch minimum) and a gap. */
 const ROW = 58;
 /** The track header: room for a readable name (narrow screens keep the old compact box). */
@@ -172,7 +172,8 @@ export class FlipMode {
     onion.classList.add('flip-onion');
     onionHold(this.app, onion);
     const fit = btn('Fit', 'Fit the page to the screen', 'fit', () => this.app.fit(), undefined, 'flip-btn flip-icon flip-adv', '');
-    this.actions.append(prev, this.count, next, this.range.button, add, onion, track, fit, done);
+    const fitShot = btn('Fit shot', 'Fit the whole shot on the timeline (Alt+0, or pinch in quickly)', 'fit', () => this.zoomFit(), undefined, 'flip-btn flip-adv', 'Fit shot');
+    this.actions.append(prev, this.count, next, this.range.button, add, onion, track, fit, fitShot, done);
     this.head.append(this.play, this.actions);
     this.grid.append(this.playhead);
     this.scroll.id = 'flipbook-tracks';
@@ -259,6 +260,8 @@ export class FlipMode {
     const active = shown && !app.uiHidden;
     this.row.hidden = !active;
     if (!active) { this.row.parentElement?.style.setProperty('--flip-h', '0px'); return; }
+    // the first time the strip shows, a long shot opens whole (a short one keeps the usual width); not saved
+    if (!this.opened && this.scroll.clientWidth > 0) { this.opened = true; this.cell = Math.min(this.cell, this.limits().fit); }
     if (this.playing !== app.playing) {
       this.playing = app.playing;
       this.play.textContent = app.playing ? 'Pause' : 'Play';
@@ -428,23 +431,46 @@ export class FlipMode {
    * or, with `at` (client x), putting it under that point (a pinch that also pans).
    */
   zoomTo(cell: number, frame = this.app.frame, at?: number): void {
+    cancelAnimationFrame(this.fitAnimation);
     const s = this.scroll;
     const before = at === undefined ? this.label + frame * this.cell - s.scrollLeft : at - s.getBoundingClientRect().left;
-    this.cell = Math.max(CELL_MIN, Math.min(CELL_MAX, cell));
+    this.cell = clampCell(cell, this.limits());
     this.relayout();
     this.remark();
-    s.scrollLeft = Math.max(0, this.label + frame * this.cell - before);
+    s.scrollLeft = anchoredScroll(this.label, frame, this.cell, before);
     this.renderWindow(true);
   }
 
-  /** The whole shot on the strip (a quick pinch, Alt+0). */
+  /** The zoom limits now: they follow the strip's width and the shot's length (nothing is saved). */
+  limits(): ZoomLimits {
+    return zoomLimits(this.scroll.clientWidth, this.label, Math.max(1, this.app.compEnd));
+  }
+
+  private opened = false;
+  private fitAnimation = 0;
+  /**
+   * The whole shot on the strip (a quick pinch, the Fit shot button, Alt+0). Eases over 180 ms,
+   * or jumps when the device asks for reduced motion.
+   */
   zoomFit(): void {
-    const len = Math.max(1, this.app.compEnd);
-    this.cell = Math.max(CELL_MIN, Math.min(CELL_MAX, (this.scroll.clientWidth - this.label - 12) / len));
-    this.relayout();
-    this.remark();
-    this.scroll.scrollLeft = 0;
-    this.renderWindow(true);
+    cancelAnimationFrame(this.fitAnimation);
+    const s = this.scroll, from = this.cell, fromScroll = s.scrollLeft, to = this.limits().fit;
+    const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const apply = (cell: number, scroll: number) => {
+      this.cell = cell;
+      this.relayout();
+      this.remark();
+      s.scrollLeft = scroll;
+      this.renderWindow(true);
+    };
+    if (still || typeof requestAnimationFrame !== 'function') { apply(to, 0); return; }
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / 180), e = 1 - (1 - k) * (1 - k);
+      apply(from + (to - from) * e, fromScroll * (1 - e));
+      if (k < 1) this.fitAnimation = requestAnimationFrame(step);
+    };
+    this.fitAnimation = requestAnimationFrame(step);
   }
 
   /** Put the playhead in the middle of the strip. */
@@ -652,7 +678,7 @@ export class FlipMode {
     const onRuler = (y: number) => y - this.grid.getBoundingClientRect().top < 20;
     // two fingers on the strip: pinch to zoom time and drag to pan, together (a quick pinch fits the whole shot)
     const fingers = new Map<number, number>();
-    let pinch: { d0: number; cell0: number; t0: number; frame: number } | null = null;
+    let pinch: { d0: number; cell0: number; t0: number; frame: number; last: number } | null = null;
     const spread = () => { const xs = [...fingers.values()]; return Math.abs(xs[0]! - xs[1]!); };
     const middle = () => { const xs = [...fingers.values()]; return (xs[0]! + xs[1]!) / 2; };
     /** Put a lifted drawing back where it was. */
@@ -661,6 +687,12 @@ export class FlipMode {
       l.cel.style.transform = '';
       l.cells.classList.remove('lifting');
     };
+    // Ctrl / ⌘ / Alt + wheel (and a trackpad pinch) zooms time, keeping the frame under the pointer
+    s.addEventListener('wheel', (e) => {
+      if (!(e.ctrlKey || e.metaKey || e.altKey)) return;
+      e.preventDefault();
+      this.zoomTo(this.cell * Math.exp(-e.deltaY * 0.004), this.framePos(e.clientX), e.clientX);
+    }, { passive: false });
     s.addEventListener('pointerdown', (e) => {
       this.stopGlide();
       if (e.pointerType === 'touch') fingers.set(e.pointerId, e.clientX);
@@ -669,7 +701,7 @@ export class FlipMode {
         if (start?.mode === 'scrub' || start?.mode === 'ruler') this.app.endScrub();
         if (start?.lift) { drop(start.lift); this.stopEdge(); this.dragging = false; this.sig = ''; }
         start = null;
-        pinch = { d0: Math.max(20, spread()), cell0: this.cell, t0: e.timeStamp, frame: this.framePos(middle()) };
+        pinch = { d0: Math.max(20, spread()), cell0: this.cell, t0: e.timeStamp, frame: this.framePos(middle()), last: Math.max(20, spread()) };
         // (the strip may rebuild while pinching: nothing is held under the fingers)
         this.dragged = true;
       }
@@ -678,15 +710,15 @@ export class FlipMode {
       if (!fingers.has(e.pointerId)) return;
       fingers.set(e.pointerId, e.clientX);
       // the frame that was between the fingers stays between them, wherever they go
-      if (pinch && fingers.size === 2) this.zoomTo(pinch.cell0 * (Math.max(20, spread()) / pinch.d0), pinch.frame, middle());
+      if (pinch && fingers.size === 2) { pinch.last = Math.max(20, spread()); this.zoomTo(pinchCell(pinch.cell0, pinch.d0, pinch.last), pinch.frame, middle()); }
     });
     const lift = (e: PointerEvent) => {
       if (!fingers.delete(e.pointerId) || !pinch) return;
       if (fingers.size < 2) {
         const p = pinch;
         pinch = null;
-        // a fast pinch in: the whole shot
-        if (e.timeStamp - p.t0 < 300 && this.cell < p.cell0 * 0.8) this.zoomFit();
+        // a quick, fast, large pinch together: the whole shot (anything else was just a zoom)
+        if (isFitPinch(e.timeStamp - p.t0, p.d0, p.last)) this.zoomFit();
       }
     };
     s.addEventListener('pointerup', lift);

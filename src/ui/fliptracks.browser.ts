@@ -236,12 +236,13 @@ await check('Two fingers pinch to zoom and drag to pan together: the frame betwe
   // spread to twice the distance, and move both 80 px to the right
   pe(scroll, 'pointermove', a0 - 100 + 80, y, { pointerType: 'touch', pointerId: 31 });
   pe(scroll, 'pointermove', b0 + 100 + 80, y, { pointerType: 'touch', pointerId: 32, isPrimary: false });
+  const zoomed = 44 * Math.pow(2, 0.6); // the pinch follows 0.6 of the finger ratio
   const cell = cel(A, 0).getBoundingClientRect().width / 2 + 1.5;
-  const f1 = at((a0 + b0) / 2 + 80, 88);
+  const f1 = at((a0 + b0) / 2 + 80, zoomed);
   pe(scroll, 'pointerup', a0 - 20, y, { pointerType: 'touch', pointerId: 31 });
   pe(scroll, 'pointerup', b0 + 180, y, { pointerType: 'touch', pointerId: 32, isPrimary: false });
   await wait(80);
-  expect(Math.abs(cell - 88) < 2, `zoom ${cell}`);
+  expect(Math.abs(cell - zoomed) < 2, `zoom ${cell}`);
   expect(Math.abs(f1 - f0) < 0.1, `frame under the fingers ${f0.toFixed(2)} → ${f1.toFixed(2)}`);
 });
 
