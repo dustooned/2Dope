@@ -10,6 +10,7 @@ import type { Project } from '../core/project';
 import { gifFrame, gifHeader } from '../io/gif';
 import { drawComp } from '../view/composite';
 import { el } from './dom';
+import { openModal } from './modal';
 
 const OFF_KEY = '2dope.timelapse.off';
 const SIDE = 360, MAX = 600, IDLE_MS = 700;
@@ -64,16 +65,10 @@ export class TimeLapse {
   /** The replay: play, scrub, save as GIF, and the recording switch. */
   show(): void {
     const frames = this.frames;
-    const dialog = el('dialog', { class: 'timelapse', 'aria-label': 'Time-lapse' });
-    dialog.append(el('h2', {}, 'Time-lapse'));
-    const close = () => { stop(); if (dialog.open) dialog.close(); dialog.remove(); };
-    dialog.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
     const view = el('canvas', { class: 'tl-view', 'aria-label': 'Time-lapse picture' });
     const scrub = el('input', { type: 'range', min: '0', max: String(Math.max(0, frames.length - 1)), value: '0', 'aria-label': 'Picture' });
     const count = el('span', { class: 'hint' });
     const play = el('button', { type: 'button', class: 'primary' }, 'Play');
-    const gif = el('button', { type: 'button' }, 'Save as GIF');
-    const done = el('button', { type: 'button' }, 'Close');
     const rec = el('label', { class: 'share-row toggle' });
     const box = el('input', { type: 'checkbox' });
     box.checked = this.on;
@@ -98,18 +93,15 @@ export class TimeLapse {
       play.textContent = 'Pause';
       timer = window.setInterval(() => { void showAt(i); if (++i >= frames.length) stop(); }, 1000 / 12);
     });
-    gif.addEventListener('click', () => void this.saveGif(frames, gif));
-    done.addEventListener('click', close);
     const bar = el('div', { class: 'tl-bar' });
     bar.append(play, scrub, count);
-    const foot = el('div', { class: 'vfoot' });
-    foot.append(gif, done);
-    if (frames.length) dialog.append(view, bar);
-    else dialog.append(el('p', {}, this.on ? 'Nothing recorded yet in this project: draw something, and each change adds a picture.' : 'Recording is off.'));
-    play.disabled = gif.disabled = frames.length < 2;
-    dialog.append(rec, foot);
-    document.body.append(dialog);
-    dialog.showModal();
+    const content: Node[] = frames.length ? [view, bar] : [el('p', {}, this.on ? 'Nothing recorded yet in this project: draw something, and each change adds a picture.' : 'Recording is off.')];
+    content.push(rec);
+    const modal = openModal({
+      title: 'Time-lapse', className: 'timelapse', ariaLabel: 'Time-lapse', bodyClass: null, content, cancelId: 'close', onClose: stop,
+      actions: [{ id: 'gif', label: 'Save as GIF', run: () => { void this.saveGif(frames, modal.buttons.gif); return false; } }, { id: 'close', label: 'Close' }],
+    });
+    play.disabled = modal.buttons.gif.disabled = frames.length < 2;
     if (frames.length) void showAt(frames.length - 1);
   }
 
