@@ -6,12 +6,13 @@ import { readVectorShape } from '../core/vectorshape';
 import { apply, invert } from '../core/comp';
 import type { Vec2 } from '../core/anim';
 import { elText as el } from './dom';
+import { openModal, type ModalHandle } from './modal';
 /** Exact imported paths, edited on a detached drawing until Apply. */
 export class VectorObjectsUI {
-  private dialog: HTMLDialogElement | null = null;
+  private modal: ModalHandle<'cancel' | 'apply' | 'closed'> | null = null;
   private generation = 0;
   constructor(private app: App) {}
-  close(): void { this.generation++; this.dialog?.close(); this.dialog?.remove(); this.dialog = null; }
+  close(): void { this.generation++; this.modal?.close('closed'); }
   async show(initial?: string): Promise<void> {
     const app = this.app, project = app.project, comp = project.comp, layer = project.layer, drawing = app.drawing, frame = app.frame;
     if (app.strokeActive || app.transforming || app.adjusting || app.editor.dragging || layer.locked || app.playing || app.pointEditing) { app.onNotice?.('Finish the current edit and choose an unlocked drawing.'); return; }
@@ -21,10 +22,7 @@ export class VectorObjectsUI {
     await app.residency.pin(drawing);
     if (generation !== this.generation || app.project !== project || project.comp !== comp || app.drawing !== drawing || app.frame !== frame) { app.residency.unpin(drawing); return; }
     const rev = drawing.rev, expected = JSON.stringify(drawing.vectors), draft = structuredClone(drawing.vectors), selected = new Set([initial && draft.some(v => v.id === initial && v.shape) ? initial : draft.find(v => v.shape)!.id]);
-    const d = el('dialog'); d.className = 'creation-dialog vector-dialog'; d.setAttribute('aria-label', 'Vector objects'); this.dialog = d;
-    let released = false; const close = () => { if (!released) { released = true; app.residency.unpin(drawing); } if (this.dialog === d) this.dialog = null; d.close(); d.remove(); if (opener?.isConnected) opener.focus(); else app.focusCanvas(); };
-    // Also release the drawing when another caller closes this editor.
-    d.addEventListener('close', () => { if (!released) { released = true; app.residency.unpin(drawing); } });
+    let released = false; const close = () => modal.close('closed');
     const status = el('p'); status.setAttribute('role', 'status'); const list = el('select'); list.multiple = true; list.size = 5; list.setAttribute('aria-label', 'Vector path list');
     const individual = el('input'); individual.type = 'checkbox'; individual.setAttribute('aria-label', 'Select individual paths'); const individualLabel = el('label', 'Select individual paths'); individualLabel.prepend(individual);
     const canvas = el('canvas'); canvas.width = 640; canvas.height = 360; canvas.className = 'precision-canvas'; canvas.setAttribute('aria-label', 'Vector object preview. Select a path, then drag its square nodes or round curve handles.');
@@ -71,8 +69,7 @@ export class VectorObjectsUI {
     };
     canvas.onpointermove = e => { if (drag === null) return; const m = current().shape!.matrix; if (Math.abs(m[0] * m[3] - m[1] * m[2]) < 1e-10) { status.textContent = 'This object has a zero scale. Use numeric node controls.'; return; } const b = canvas.getBoundingClientRect(); try { movePoint(drag, apply(invert([...m]), [((e.clientX - b.left) / b.width * 640 - ox) / scale, ((e.clientY - b.top) / b.height * 360 - oy) / scale])); } catch (e) { status.textContent = (e as Error).message; } };
     canvas.onpointerup = canvas.onpointercancel = () => { drag = null; refreshNodes(); };
-    const footer = el('footer'), cancel = el('button', 'Cancel'), save = el('button', 'Apply vectors'); cancel.onclick = close;
-    save.onclick = () => {
+    const save = () => {
       const host = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); host.style.cssText = 'position:fixed;left:-10000px;visibility:hidden'; document.body.append(host);
       try {
         if (app.project !== project || project.comp !== comp || project.layer !== layer || app.drawing !== drawing || app.frame !== frame || drawing.rev !== rev || JSON.stringify(drawing.vectors) !== expected || layer.locked) throw new Error('The drawing changed. Close and reopen Vector objects.');
@@ -83,8 +80,14 @@ export class VectorObjectsUI {
         if (!app.commitVectorObjects(drawing, rev, expected, draft)) throw new Error('No vector changes were applied.'); close();
       } catch (e) { status.textContent = (e as Error).message; } finally { host.remove(); }
     };
-    footer.append(cancel, save); const grouping = el('div'); grouping.className = 'precision-controls'; grouping.append(individualLabel, group, ungroup);
-    d.append(el('h2', 'Vector objects'), el('p', 'Edit imported paths inside this drawing. Select several paths to paint or move them together. Groups keep paths together for selection; their drawing order stays fixed.'), list, grouping, canvas, controls, nodesUI, status, footer); document.body.append(d); rebuild();
-    d.addEventListener('cancel', e => { e.preventDefault(); close(); }); d.addEventListener('keydown', e => e.stopPropagation()); d.addEventListener('keyup', e => e.stopPropagation()); d.showModal();
+    const grouping = el('div'); grouping.className = 'precision-controls'; grouping.append(individualLabel, group, ungroup);
+    // Apply keeps its own handler; returning false stops it closing the dialog. Any close also releases the drawing.
+    const modal = openModal<'cancel' | 'apply' | 'closed'>({
+      title: 'Vector objects', ariaLabel: 'Vector objects', className: 'creation-dialog vector-dialog', bodyClass: null, footer: 'footer', ownKeys: true,
+      content: ['Edit imported paths inside this drawing. Select several paths to paint or move them together. Groups keep paths together for selection; their drawing order stays fixed.', list, grouping, canvas, controls, nodesUI, status],
+      actions: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Apply vectors', run: () => { save(); return false; } }],
+      onClose: () => { if (!released) { released = true; app.residency.unpin(drawing); } if (this.modal === modal) this.modal = null; if (opener?.isConnected) opener.focus(); else app.focusCanvas(); },
+    });
+    this.modal = modal; rebuild();
   }
 }
