@@ -2,6 +2,16 @@
 
 ## Current state (2026-11-15) — read this first
 
+### UI refinement: shared dialog shell (2026-11-18, branch `ui-refine`, not merged, not pushed)
+
+- New `src/ui/modal.ts`: `openModal({title, content, actions, ...})` owns showModal, Escape, close, removal and the single answer (`done` resolves with the id of the button that closed it). `modal.test.ts` has 7 tests on a fake DOM.
+- Moved onto it, one commit each: `vectorrestyle`, `layout` (Align and snap), `offlinedialog` (UI only; worker, caching and install logic untouched), `audioreactdialog`, `timelapse`, `dialogs.ts` (askText, confirmBox, pickBox, askNumbers, askLongText, askPathOptions: signatures and return types unchanged), `firstrun`, `cameramove`, `bundle`, `titles`, `vectorobjects`, `symbols` (both dialogs).
+- No saved-data, `localStorage`, IndexedDB, `.2dope` or service-worker change.
+- Checks per commit: `npx vitest run --dir src` 884 passed, 1 skipped (877 before plus the 7 new); `npx vitest run scripts` 6 passed; `npm run build` passed with `dist/sw.js`. Chromium fixtures run after the matching conversions: vectorbrushes, audioreact, creationtools (+responsive), layerdelete, motionfinish, firstrun, colourreturn, precision (+responsive), assets, assetindependent, assetreplace: all passed.
+- Left on their own code (do not fit the shell as it stands): `artworkassets`, `artworklibrary`, `presets`, `settings` (full panels with a header and outside-click close); `artworkpreview`, `manual` (custom header row, no footer); `playbackrange` (a `<form>` wraps body and footer); `exportdialog`, `newdialog`, `videoexport`, `files`, `graph` (long-lived or reopened dialogs).
+- The task pack's "inline style" list for 2Dope is a scanner false positive: `lettering/styles.ts`, `effects.browser.ts`, `captions.browser.ts`, `lettertool.ts` and `captioneditor.ts` hold data fields called `style` (balloon styles, effect params), not DOM styles. The remaining inline styling is off-screen measuring hosts and about 167 runtime geometry assignments; none moved. Several "functions to touch" in the pack (`count`, `CHANNEL_COLORS`, `fileSize`, `labels`, `thinOut`) were not dialogs.
+- Not verified: the full browser suite, iPad Safari and Apple Pencil. Not started: the inkflo half of the pack (repo location unconfirmed), CSS drift collapse.
+
 ### Local main merged with origin/main (2026-11-16, not pushed)
 
 - Local `main` = `origin/main` (combined release, already live with offline mode) plus one
