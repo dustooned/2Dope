@@ -3,6 +3,7 @@ import { cameraMove, type CameraMove } from '../core/cameramove';
 import { activeCamera, compLength, type CameraLayer } from '../core/comp';
 import { CompDraftPreview } from '../view/compdraft';
 import { elText as el } from './dom';
+import { openModal } from './modal';
 
 export class CameraMoveUI {
   private cleanup: (() => void) | null = null;
@@ -13,7 +14,7 @@ export class CameraMoveUI {
     if (app.strokeActive || app.transforming || app.adjusting) { app.onNotice?.('Finish the current edit first.'); return; }
     if (app.playing) app.togglePlay(); this.close();
     const project = app.project, comp = project.comp, signature = JSON.stringify(comp), opener = document.activeElement as HTMLElement;
-    const id = project.newId('camera'), d = el('dialog'); d.className = 'creation-dialog camera-move'; d.setAttribute('aria-label', 'Camera move');
+    const id = project.newId('camera');
     const form = el('div'); form.className = 'creation-fields';
     const field = (name: string, input: HTMLElement) => { const label = el('label', name); input.setAttribute('aria-label', name); label.append(input); form.append(label); return label; };
     const camera = el('select'); camera.append(new Option('New camera', 'new')); for (const l of comp.layers) if (l.kind === 'camera') camera.append(new Option(`${l.name}${l.locked ? ' · Locked' : ''}`, l.id)); camera.value = app.editor.primary?.kind === 'camera' ? app.editor.primary.id : 'new'; field('Camera', camera);
@@ -29,7 +30,13 @@ export class CameraMoveUI {
     const play = el('button', 'Play preview'), readout = el('output'), transport = el('div'); transport.className = 'creation-transport'; transport.append(play, seek, readout);
     const status = el('p'); status.setAttribute('role', 'status'); const preview = el('section'); preview.className = 'creation-preview'; preview.append(canvas, transport, el('p', 'Preview has its own clock. Apply adds ordinary camera keys in one Undo step.'));
     const body = el('div'); body.className = 'creation-body'; body.append(form, preview);
-    const foot = el('footer'), cancel = el('button', 'Cancel'), apply = el('button', 'Apply camera move'); apply.className = 'primary'; foot.append(cancel, apply); d.append(el('h2', 'Camera move'), body, status, foot); document.body.append(d);
+    const modal = openModal<'cancel' | 'apply' | 'closed'>({
+      title: 'Camera move', ariaLabel: 'Camera move', className: 'creation-dialog camera-move', bodyClass: null, content: [body, status], footer: 'footer', ownKeys: true,
+      actions: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Apply camera move', primary: true, run: () => { applyMove(); return false; } }],
+      onClose: () => { closed = true; renderSerial++; stop(); session.close(); this.cleanup = null; if (opener?.isConnected) opener.focus(); },
+    });
+    const apply = modal.buttons.apply;
+    this.cleanup = () => modal.close('closed');
     let closed = false, playing = false, timer = 0, playSerial = 0, started = 0, first = 0, renderSerial = 0;
     const current = () => !closed && app.project === project && project.comp === comp && JSON.stringify(comp) === signature && !app.strokeActive && !app.transforming && !app.adjusting;
     const session = new CompDraftPreview(project, app.residency, current);
@@ -55,11 +62,10 @@ export class CameraMoveUI {
     const update = () => { stop(); const o = options(); seek.min = String(o.start); seek.max = String(o.end); seek.value = String(o.start); void paint(); };
     form.addEventListener('input', update); form.addEventListener('change', update); seek.oninput = () => { stop(); void paint(); };
     play.onclick = () => { if (playing) stop(); else { playing = true; started = performance.now(); first = Number(seek.value); play.textContent = 'Pause preview'; tick(); } };
-    cancel.onclick = () => this.close(); apply.onclick = () => {
+    const applyMove = () => {
       try { const next = candidate(); app.editor.edit('Camera move', c => { if (camera.value === 'new') c.layers.unshift(next); else c.layers = c.layers.map(l => l.id === next.id ? next : l); }); app.editor.select(next.id); app.editor.throughCamera = true; this.close(); app.requestRender(); app.focusCanvas(); }
       catch (e) { status.textContent = (e as Error).message; }
     };
-    this.cleanup = () => { closed = true; renderSerial++; stop(); session.close(); d.close(); d.remove(); if (opener?.isConnected) opener.focus(); };
-    d.addEventListener('cancel', e => { e.preventDefault(); this.close(); }); d.addEventListener('keydown', e => e.stopPropagation()); d.addEventListener('keyup', e => e.stopPropagation()); d.showModal(); update();
+    update();
   }
 }
