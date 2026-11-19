@@ -1,6 +1,18 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-15) — read this first
+## Current state (2026-11-18) — read this first
+
+### View icons and Gesture controls release (2026-11-18)
+
+- Combined the View icons commit `cb9e26d` with the Gesture controls commits
+  `8171125` and `5e081b2` from `ui-refine` for publication on `main`.
+- Checks on the combined tree: `npm test` and production build passed.
+  The desktop Chromium canvasview fixture passed all 33 checks. A separate fresh-browser
+  check opened Gesture controls through App settings, disabled and reopened all three
+  switches, verified that undo/redo/hide-interface taps were suppressed, restored defaults,
+  and verified those taps worked again. All six View rows showed icons.
+- Physical iPad and Apple Pencil checks remain outstanding. Dated branch-status notes below
+  describe the earlier work before this combined release.
 
 ### Icons on the View options (2026-11-18, `main`, uncommitted)
 
@@ -19,6 +31,13 @@
   checks (overscan ×2, safe areas, centre) fail in the hidden browser pane with and without
   this change (baseline checked by stashing only these edits). Not checked: iPad, Simple mode
   (the strip stays hidden there, as before).
+### Gesture controls, steps 1 to 3 (2026-11-18, branch `ui-refine`, not pushed)
+
+- `core/gestures.ts`: one declarative list of every touch gesture (13 rows; 10 live, 3 planned) with generated help sentences ("Tapping with two fingers will undo."). `core/gestureprefs.ts`: validated device preference `2dope.gestures.v1` (`{ disabled: [...] }`; only the three global taps may be switched off). 16 tests. Not in the project file, no schema change.
+- `ui/gesturecontrols.ts`: Settings → **Gesture controls…** page from the registry, with a switch for the two-finger undo, three-finger redo and four-finger hide-interface taps, Restore defaults, and a Coming later list. Only those three taps are routed through the preference (`app.ts` `finishTapSession`); every other gesture's detection is unchanged.
+- Facts that differ from the task pack: undo, redo and hide-interface taps already existed; the three-finger gesture is a scribble that clears the drawing, not a time scrub; the tap-versus-scrub rule already exists (over 10 px or a direction turn cancels the tap). Thresholds were kept. Action ids are the registry's own (`edit.undo`, `timeline.fit`…): `ui/commands.ts` has no undo or redo commands and adding commands was out of scope.
+- Not done: steps 4 to 6 (routing every surface through the registry, the three-finger timeline gestures, ruler-drag timescale). Motion, strip and board timelines still use the old pinch.
+- Checks: unit suite 900 passed, 1 skipped; scripts 6 passed; build passed. Not run: the Gesture controls page in a browser, any fixture for the tap switches, iPad.
 
 ### Draw timeline zoom (2026-11-18, branch `ui-refine`, not pushed)
 

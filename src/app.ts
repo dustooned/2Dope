@@ -236,6 +236,7 @@ export interface InputStats {
 /** Draw: the canvas and flipbook strip. Time: the X-sheet. Motion: layers, keys and the comp's result. */
 export type { Workspace } from './core/workspace';
 import { isPaintingWorkspace, type Workspace } from './core/workspace';
+import { gestureOn } from './ui/gesturestore';
 
 export class App {
   project = new Project(1920, 1080);
@@ -6834,9 +6835,10 @@ export class App {
     if (!s || cancelled || s.moved || performance.now() - s.start > 300) { this.lastFingerTap = null; return; }
     if (s.maxTouches === 1) { this.fingerTap(s.x ?? 0, s.y ?? 0); return; }
     this.lastFingerTap = null;
-    if (s.maxTouches === 2) this.undo();
-    else if (s.maxTouches === 3) this.redo();
-    else if (s.maxTouches === 4) this.toggleUI();
+    // each of these taps can be turned off on this device (Settings → Gesture controls)
+    if (s.maxTouches === 2) { if (gestureOn('tap2')) this.undo(); }
+    else if (s.maxTouches === 3) { if (gestureOn('tap3')) this.redo(); }
+    else if (s.maxTouches === 4) { if (gestureOn('tap4')) this.toggleUI(); }
   }
   /**
    * A one-finger tap; the second of two close together opens the canvas menu there. Not while

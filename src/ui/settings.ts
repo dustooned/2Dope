@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { defaultQuickMenu, QUICK_ACTIONS, type QuickMenuPrefs } from '../core/quickmenu';
 import { decorate } from './icons';
 import { penSettingsSection } from './pensettings';
+import { openGestureControls } from './gesturecontrols';
 import { workspaceSettings } from './workspacesettings';
 import { commandPrefs, controlInfo, setHidden } from './commands';
 import { PROFILE_LIMIT, STUDENT_CONTROLS, STUDENT_PROFILES_KEY, STUDENT_TOOLS, profileName, readStudentProfiles, readStudentSetup, readStudentUI, type StudentSetup } from '../core/studentprefs';
@@ -107,6 +108,7 @@ export class AppSettingsUI {
     body.append(gestures);
     // device-only, like Hidden controls: not part of student profiles
     const pen = penSettingsSection(this.app); pen.section.open = focus === 'pen'; body.append(pen.section);
+    const gestureBtn = el('button', '', 'Gesture controls…'); gestureBtn.type = 'button'; gestureBtn.addEventListener('click', () => openGestureControls()); body.append(gestureBtn);
     const readDraft = (): StudentSetup => readStudentSetup({
       ui:{tools:Object.fromEntries([...toolChecks].map(([id,c])=>[id,c.checked])),controls:Object.fromEntries([...controlChecks].map(([id,c])=>[id,c.checked]))},
       level:level.value,quickMenu:{showButton:show.checked,edge:edge.value,actions:selects.map(s=>s.value)},
