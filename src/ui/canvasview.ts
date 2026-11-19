@@ -1,7 +1,7 @@
 import type { App } from '../app';
 import { overviewEntries, overviewPage, type CanvasView } from '../core/canvasview';
 import { isPaintingWorkspace } from '../core/workspace';
-import { decorate } from './icons';
+import { decorate, iconSvg } from './icons';
 import { el } from './dom';
 
 
@@ -12,6 +12,9 @@ const OPTIONS: [keyof CanvasView, string, string][] = [
   ['centre', 'Centre cross', 'Mark the middle of the page. Never exported.'],
   ['overview', 'Frame overview', 'Small thumbnails of the drawings around this one; tap one to go there.'],
 ];
+
+/** One icon per view option, so the list scans by shape as well as by name. */
+const ICONS: Record<keyof CanvasView, string> = { transparency: 'checker', overscan: 'overscan', safeAreas: 'safearea', centre: 'centrecross', overview: 'gallery' };
 
 const THUMB_W = 64, THUMB_H = 36;
 /** Drawings shown at once in the frame overview; the arrows page by this many. */
@@ -66,13 +69,17 @@ export class CanvasViewUI {
     this.pop.replaceChildren(el('strong', {}, 'Canvas view'));
     for (const [k, label, title] of OPTIONS) {
       const b = el('button', { type: 'button', role: 'switch', 'aria-checked': String(v[k]), title, 'data-view': k });
-      b.append(el('span', { class: 'canvas-view-name' }, label), el('span', { class: 'canvas-view-state' }, v[k] ? 'On' : 'Off'));
+      const name = el('span', { class: 'canvas-view-name' }, label);
+      name.insertAdjacentHTML('afterbegin', iconSvg(ICONS[k]));
+      b.append(name, el('span', { class: 'canvas-view-state' }, v[k] ? 'On' : 'Off'));
       b.addEventListener('click', () => { this.app.setCanvasView({ [k]: !this.app.canvasView[k] }); this.render(); this.pop.querySelector<HTMLButtonElement>(`[data-view="${k}"]`)?.focus(); });
       this.pop.append(b);
     }
     // Motion while drawing: hold a layer Motion moves still, or preview the move (strokes still land)
     const motion = el('div', { class: 'canvas-view-motion', role: 'group', 'aria-label': 'Motion while drawing' });
-    motion.append(el('span', { class: 'canvas-view-name' }, 'Motion while drawing'));
+    const motionName = el('span', { class: 'canvas-view-name' }, 'Motion while drawing');
+    motionName.insertAdjacentHTML('afterbegin', iconSvg('motion'));
+    motion.append(motionName);
     const modes = el('div', { class: 'canvas-view-modes' });
     for (const [mode, label, title] of [['hold', 'Hold still', 'Draw a layer that Motion moves on the spot: it and the shot stay still (walk cycles in place)'], ['show', 'Show the move', 'See the layer move as it plays over a still page; strokes still land on its drawing']] as const) {
       const b = el('button', { type: 'button', 'aria-pressed': String(this.app.motionWhileDrawing === mode), title, 'data-motion': mode }, label);

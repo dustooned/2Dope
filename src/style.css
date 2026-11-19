@@ -5014,6 +5014,8 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .canvas-view-pop button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 12px; text-align: left; }
 .canvas-view-pop button[aria-checked=true] { background: var(--accent); color: var(--on-accent); }
 .canvas-view-state { font-size: 12px; opacity: 0.85; }
+.canvas-view-name { display: inline-flex; align-items: center; gap: 10px; }
+.canvas-view-name .ico { flex: 0 0 auto; width: 20px; height: 20px; }
 .canvas-view-motion { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
 .canvas-view-modes { display: flex; gap: 4px; }
 .canvas-view-pop .canvas-view-modes button { flex: 1; justify-content: center; text-align: center; }

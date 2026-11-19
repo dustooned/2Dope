@@ -140,6 +140,7 @@ const P: Record<string, string> = {
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0014.5 4h-9A1.5 1.5 0 004 5.5v9A1.5 1.5 0 005.5 16H8"/>',
   trash: '<path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v5.5M14 11v5.5"/>',
   safearea: '<rect x="2.5" y="4" width="19" height="16" rx="1.5"/><rect x="6" y="7.5" width="12" height="9" stroke-dasharray="2 1.6"/>',
+  checker: '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M3.5 12h17M12 3.5v17"/><path d="M3.5 3.5H12V12H3.5zM12 12h8.5v8.5H12z" fill="currentColor" stroke="none" opacity=".55"/>',
   centrecross: '<path d="M12 5v14M5 12h14"/><circle cx="12" cy="12" r="3"/>',
   overscan: '<rect x="6" y="6.5" width="12" height="11"/><path d="M3 4.5h3M3 4.5v3M21 4.5h-3M21 4.5v3M3 19.5h3M3 19.5v-3M21 19.5h-3M21 19.5v-3"/>',
   newframe: '<rect x="4" y="3" width="13" height="17" rx="1.5"/><path d="M19 14v7M15.5 17.5h7"/>',

@@ -2,6 +2,11 @@
 
 ## Current state (2026-11-15) — read this first
 
+### Icons on the View options (2026-11-18, `main`, uncommitted)
+
+- Each row in the View popover (`src/ui/canvasview.ts`, map `ICONS`) now has an icon: Transparency grid (new `checker` in `ui/icons.ts`), Overscan, Title and action safe, Centre cross, Frame overview (gallery) and Motion while drawing. Layout only: no behaviour, storage or export change (`.canvas-view-name` in `style.css`).
+- Checks: `npx vitest run --dir src` 893 passed, 1 skipped; `npm run build` passed; in the browser pane all six rows show an icon and the popover fits (screenshot). `tests/canvasview.html`: 29 pass; the same 4 screen-pixel checks fail in the hidden pane as before. Not checked: iPad, light theme.
+
 ### Frame overview: + / − and page arrows (2026-11-18, `main`, uncommitted)
 
 - View → Frame overview strip (`src/ui/canvasview.ts`) is now ‹ [up to 5 thumbnails] › + −.
