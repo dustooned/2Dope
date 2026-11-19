@@ -69,12 +69,28 @@ try{
   // frame overview: micro thumbnails of neighbouring drawings
   app.addFrame();app.addFrame();app.addFrame();await settle();
   view.button.click();await settle();sw('overview').click();await settle();
-  const strip=()=>document.querySelector<HTMLElement>('.canvas-overview')!,thumbs=()=>[...strip().querySelectorAll<HTMLButtonElement>('button')];
+  const strip=()=>document.querySelector<HTMLElement>('.canvas-overview')!,thumbs=()=>[...strip().querySelectorAll<HTMLButtonElement>('.canvas-overview-thumb')];
   check('Frame overview shows the neighbouring drawings',!strip().hidden && thumbs().length>=3 && thumbs().filter(b=>b.getAttribute('aria-current')==='true').length===1,thumbs().length);
   const r=strip().getBoundingClientRect(),s=stage.getBoundingClientRect();
   check('Overview thumbnails are 44px touch targets inside the stage',thumbs().every(b=>b.offsetHeight>=44 && b.offsetWidth>=44) && r.left>=s.left && r.right<=s.right && r.bottom<=s.bottom);
   const first=thumbs()[0]!,frame=Number(first.getAttribute('aria-label')!.replace(/\D+/g,''))-1;
   first.click();await settle();check('Tapping a thumbnail goes to that drawing',frame>=0 && frame<app.lf+1 && app.lf===frame && strip().querySelector('[aria-current=true]')?.getAttribute('aria-label')===`Go to frame ${frame+1}`,[frame,app.lf]);
+  // + / − and paging arrows: at most five drawings show; the arrows look further without changing frame
+  const tool=(c:string)=>strip().querySelector<HTMLButtonElement>(`.canvas-overview-${c}`)!;
+  let n=app.project.exposures.length;tool('add').click();await settle();
+  check('+ adds a drawing after this one',app.project.exposures.length===n+1);
+  n=app.project.exposures.length;tool('delete').click();await settle();
+  check('− deletes this drawing',app.project.exposures.length===n-1);
+  for(let i=0;i<8;i++)app.addFrame();await settle();
+  check('The overview shows at most five drawings',thumbs().length===5,thumbs().length);
+  const lf0=app.lf;app.setLayerFrame(0);await settle();
+  check('At the first drawing Back is off and Forward is on',tool('back').disabled && !tool('forward').disabled);
+  const before=thumbs()[0]!.getAttribute('aria-label');tool('forward').click();await settle();
+  check('Forward shows later drawings and keeps the frame',thumbs()[0]!.getAttribute('aria-label')!==before && app.lf===0 && !strip().querySelector('[aria-current=true]'));
+  tool('back').click();await settle();check('Back returns to the earlier drawings',thumbs()[0]!.getAttribute('aria-label')===before);
+  tool('forward').click();await settle();app.setLayerFrame(lf0);await settle();
+  check('Changing frame brings the current drawing back into view',!!strip().querySelector('[aria-current=true]'));
+  const tr=strip().getBoundingClientRect();check('The strip with its buttons stays inside the stage',tr.left>=s.left && tr.right<=s.right,[tr.left,tr.right,s.left,s.right]);
   app.setWorkspace('motion');await settle();check('Overview and View stay out of Motion',strip().hidden && pop().hidden);
   app.setWorkspace('animate');await settle();check('Animate shares the same canvas view options',!strip().hidden && app.canvasView.overscan);
   const fresh=readCanvasView(JSON.parse(localStorage.getItem(CANVAS_VIEW_KEY)??'null'));check('A fresh read restores every option',JSON.stringify(fresh)===JSON.stringify(app.canvasView));

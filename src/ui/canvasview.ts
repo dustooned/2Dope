@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { overviewEntries, type CanvasView } from '../core/canvasview';
+import { overviewEntries, overviewPage, type CanvasView } from '../core/canvasview';
 import { isPaintingWorkspace } from '../core/workspace';
 import { decorate } from './icons';
 import { el } from './dom';
@@ -14,6 +14,8 @@ const OPTIONS: [keyof CanvasView, string, string][] = [
 ];
 
 const THUMB_W = 64, THUMB_H = 36;
+/** Drawings shown at once in the frame overview; the arrows page by this many. */
+const OVERVIEW_SIZE = 5;
 
 /**
  * Draw and Animate's View button (canvas view options) and its frame overview strip. View-only:
@@ -24,6 +26,9 @@ export class CanvasViewUI {
   private readonly pop = el('section', { id: 'canvas-view-options', class: 'canvas-view-pop', role: 'group', 'aria-label': 'Canvas view', hidden: '' });
   private readonly strip = el('nav', { class: 'canvas-overview', 'aria-label': 'Frame overview', hidden: '' });
   private sig = '';
+  /** Overview page offset from centred, in drawings; reset when the current drawing changes. */
+  private shift = 0;
+  private at = '';
 
   constructor(private readonly app: App, stage: HTMLElement) {
     decorate(this.button, 'eye');
@@ -93,16 +98,34 @@ export class CanvasViewUI {
     this.button.classList.toggle('on', v.transparency || v.overscan || v.safeAreas || v.centre || v.overview);
     if (!this.pop.hidden) this.render();
     if (!on) { this.strip.hidden = true; this.sig = ''; return; }
-    const entries = overviewEntries(a.project.exposures, a.layerFrame);
-    const sig = [a.project.activeComp, a.project.activeLayer, ...entries.map((e) => {
+    // A frame change brings the page back around the current drawing; the arrows only look.
+    const at = `${a.project.activeComp}|${a.project.activeLayer}|${overviewEntries(a.project.exposures, a.layerFrame, 0)[0]?.start ?? -1}`;
+    if (at !== this.at) { this.at = at; this.shift = 0; }
+    const page = overviewPage(a.project.exposures, a.layerFrame, OVERVIEW_SIZE, this.shift);
+    this.shift = page.first - overviewPage(a.project.exposures, a.layerFrame, OVERVIEW_SIZE).first;
+    const sig = [at, page.first, page.total, ...page.entries.map((e) => {
       const d = a.project.drawings.get(e.drawing);
       return `${e.drawing}:${e.start}:${e.current}:${d?.thumbRev ?? -1}`;
     })].join('|');
     this.strip.hidden = false;
     if (sig === this.sig) return;
     this.sig = sig;
-    this.strip.replaceChildren(...entries.map((e) => {
-      const b = el('button', { type: 'button', title: `Frame ${e.start + 1}${e.length > 1 ? `–${e.start + e.length}` : ''}`, 'aria-label': `Go to frame ${e.start + 1}` });
+    const tool = (label: string, title: string, icon: string, cls: string, run: () => void, enabled = true) => {
+      const b = el('button', { type: 'button', class: `canvas-overview-tool ${cls}`, title, 'aria-label': title }, label);
+      if (icon) { decorate(b, icon); b.classList.add('icon-only'); }
+      b.disabled = !enabled;
+      b.addEventListener('click', () => { if (!a.strokeActive) run(); });
+      return b;
+    };
+    const move = (by: number) => { this.shift += by; this.update(); };
+    const back = tool('Back', `Earlier drawings (${page.first} before)`, 'prev', 'canvas-overview-back', () => move(-OVERVIEW_SIZE), page.canBack);
+    const after = page.total - page.first - page.entries.length;
+    const forward = tool('Forward', `Later drawings (${after} after)`, 'next', 'canvas-overview-forward', () => move(OVERVIEW_SIZE), page.canForward);
+    const add = tool('+', 'New drawing after this one (N)', '', 'canvas-overview-add', () => a.addFrame());
+    const remove = tool('−', 'Delete this drawing (Delete)', '', 'canvas-overview-delete', () => a.deleteFrame());
+    const thumbs = el('div', { class: 'canvas-overview-thumbs' });
+    thumbs.append(...page.entries.map((e) => {
+      const b = el('button', { type: 'button', class: 'canvas-overview-thumb', title: `Frame ${e.start + 1}${e.length > 1 ? `–${e.start + e.length}` : ''}`, 'aria-label': `Go to frame ${e.start + 1}` });
       if (e.current) b.setAttribute('aria-current', 'true');
       const c = el('canvas', { width: String(THUMB_W), height: String(THUMB_H), 'aria-hidden': 'true' });
       const g = c.getContext('2d');
@@ -119,5 +142,11 @@ export class CanvasViewUI {
       b.addEventListener('click', () => { if (!a.strokeActive) a.setLayerFrame(e.start); });
       return b;
     }));
+    const keepFocus = this.strip.contains(document.activeElement) ? (document.activeElement as HTMLElement).className : '';
+    this.strip.replaceChildren(back, thumbs, forward, add, remove);
+    if (keepFocus.includes('canvas-overview-tool')) {
+      const again = this.strip.querySelector<HTMLButtonElement>(`.${keepFocus.split(' ')[1]}`);
+      (again && !again.disabled ? again : thumbs.querySelector<HTMLButtonElement>('[aria-current=true]') ?? thumbs.querySelector('button'))?.focus();
+    }
   }
 }

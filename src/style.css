@@ -5023,6 +5023,11 @@ body.arranging-assets .sidebar, body.arranging-assets .painting-brush-handle { d
 .canvas-overview button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 44px; min-height: 44px; padding: 3px; border-radius: 8px; font-size: 11px; line-height: 1; }
 .canvas-overview canvas { display: block; width: 64px; height: 36px; border-radius: 4px; }
 .canvas-overview button[aria-current=true] { box-shadow: inset 0 0 0 2px var(--accent); }
+.canvas-overview { align-items: stretch; }
+.canvas-overview-thumbs { display: flex; gap: 4px; }
+.canvas-overview .canvas-overview-tool { justify-content: center; font-size: 22px; font-weight: 600; }
+.canvas-overview .canvas-overview-tool:disabled { opacity: .35; }
+.canvas-overview-add { margin-left: 4px; border-left: 1px solid var(--border, #8884); }
 .canvas-view-pop[hidden], .canvas-overview[hidden], body.ui-hidden .canvas-overview, body.quick .canvas-overview, body.ui-hidden .canvas-view-pop, body.quick .canvas-view-pop { display: none !important; }
 
 /* Draw/Animate toolbar standard: tools, a divider, then panel openers; the options row names its tool */

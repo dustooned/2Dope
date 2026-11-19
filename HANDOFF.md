@@ -2,6 +2,19 @@
 
 ## Current state (2026-11-15) — read this first
 
+### Frame overview: + / − and page arrows (2026-11-18, `main`, uncommitted)
+
+- View → Frame overview strip (`src/ui/canvasview.ts`) is now ‹ [up to 5 thumbnails] › + −.
+  + calls `app.addFrame()`, − calls `app.deleteFrame()` (same Undo steps as the Flipbook).
+  The arrows page by 5 without changing the frame; a frame/layer change re-centres the page.
+- `core/canvasview.ts`: new `overviewPage(exposures, lf, size, shift)` (full window at either
+  end, clamped shift); `overviewEntries` unchanged. Unit test added. Manual text + UPDATES entry.
+- Checks: `npx vitest run --dir src` 893 passed, 1 skipped; `npx vitest run scripts` 6 passed;
+  `npm run build` passed. `tests/canvasview.html`: all 8 new overview checks pass; 4 screen-pixel
+  checks (overscan ×2, safe areas, centre) fail in the hidden browser pane with and without
+  this change (baseline checked by stashing only these edits). Not checked: iPad, Simple mode
+  (the strip stays hidden there, as before).
+
 ### Draw timeline zoom (2026-11-18, branch `ui-refine`, not pushed)
 
 - `src/ui/flipzoom.ts` (pure, 8 tests): limits follow the strip and the shot. Zoom-out reaches whole-shot fit (floor 0.5 px per frame; short shots keep the old 4 px minimum). Zoom-in is a quarter of the strip (cap 400 px). The old fixed 4 to 140 px clamp is gone. Pinch gain 0.6. Fit pinch needs under 250 ms, over 800 px/s and fingers together by over 1.6x.

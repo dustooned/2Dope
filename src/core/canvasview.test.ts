@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTION_SAFE, DEFAULT_CANVAS_VIEW, overviewEntries, readCanvasView, safeRect, TITLE_SAFE } from './canvasview';
+import { ACTION_SAFE, DEFAULT_CANVAS_VIEW, overviewEntries, overviewPage, readCanvasView, safeRect, TITLE_SAFE } from './canvasview';
 
 describe('canvas view options', () => {
   it('reads stored preferences, falling back to defaults', () => {
@@ -26,5 +26,24 @@ describe('canvas view options', () => {
     expect(overviewEntries(ex, 99, 1).filter((e) => e.current).map((e) => e.drawing)).toEqual(['f']);
     expect(overviewEntries(ex, -3, 0).map((e) => e.drawing)).toEqual(['a']);
     expect(overviewEntries([], 0)).toEqual([]);
+  });
+
+  it('pages the overview: a full window centred on the current drawing, moved by the arrows', () => {
+    const ex = 'abcdefghijkl'.split('').map((drawing) => ({ drawing, length: 2 }));
+    const names = (p: ReturnType<typeof overviewPage>) => p.entries.map((e) => e.drawing).join('');
+    expect(names(overviewPage(ex, 12))).toBe('efghi'); // current g, centred
+    expect(overviewPage(ex, 12)).toMatchObject({ first: 4, total: 12, canBack: true, canForward: true });
+    // full at either end
+    expect(names(overviewPage(ex, 0))).toBe('abcde');
+    expect(overviewPage(ex, 0).canBack).toBe(false);
+    expect(names(overviewPage(ex, 23))).toBe('hijkl');
+    expect(overviewPage(ex, 23).canForward).toBe(false);
+    // arrows move by a page, clamped; the current drawing may scroll out of view
+    expect(names(overviewPage(ex, 12, 5, 5))).toBe('hijkl');
+    expect(names(overviewPage(ex, 12, 5, -5))).toBe('abcde');
+    expect(names(overviewPage(ex, 12, 5, -99))).toBe('abcde');
+    expect(names(overviewPage(ex.slice(0, 3), 2))).toBe('abc');
+    expect(overviewPage(ex.slice(0, 3), 2)).toMatchObject({ canBack: false, canForward: false });
+    expect(overviewPage([], 0)).toMatchObject({ entries: [], total: 0, canBack: false, canForward: false });
   });
 });

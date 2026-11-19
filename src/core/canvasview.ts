@@ -69,3 +69,25 @@ export function overviewEntries(exposures: readonly Exposure[], lf: number, radi
   all[at]!.current = true;
   return all.slice(Math.max(0, at - radius), at + radius + 1);
 }
+
+export interface OverviewPage {
+  entries: OverviewEntry[];
+  /** Index of the first shown drawing among all of the layer's drawings. */
+  first: number;
+  total: number;
+  canBack: boolean;
+  canForward: boolean;
+}
+
+/**
+ * A window of at most `size` drawings for the overview strip. With `shift` 0 it is centred on the
+ * current drawing (kept full at either end); the arrows move it by `shift` drawings, clamped.
+ */
+export function overviewPage(exposures: readonly Exposure[], lf: number, size = 5, shift = 0): OverviewPage {
+  const all = overviewEntries(exposures, lf, Number.MAX_SAFE_INTEGER);
+  const total = all.length, n = Math.max(1, Math.floor(size));
+  const at = Math.max(0, all.findIndex((e) => e.current));
+  const last = Math.max(0, total - n);
+  const first = Math.max(0, Math.min(last, at - Math.floor(n / 2) + Math.trunc(shift)));
+  return { entries: all.slice(first, first + n), first, total, canBack: first > 0, canForward: first < last };
+}
