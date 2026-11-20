@@ -9,7 +9,7 @@
     "dev:lan": "vite --host --mode lan",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude \".claude/worktrees/**\"",
     "test:browser": "node scripts/fixtures.mjs",
     "package:offline": "node scripts/make-offline-kit.mjs"
   },

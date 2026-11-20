@@ -1,6 +1,15 @@
 # 2Dope maintenance handoff
 
-## Current state (2026-11-18) — read this first
+## Current state (2026-11-20) — read this first
+
+### Local test discovery (2026-11-20)
+
+- `package.json` excludes `.claude/worktrees/**` from `npm test` so nested checkouts
+  do not run alongside this checkout's tests. App and script tests still run.
+- Verified `npm test` with nested worktrees present: 107 files passed, 904 tests passed,
+  and 1 was skipped. The production build passed.
+- This change affects test discovery. The browser fixtures could not connect locally in
+  this environment, and physical iPad and Apple Pencil verification remains outstanding.
 
 ### View icons and Gesture controls release (2026-11-18)
 
