@@ -2,6 +2,12 @@
 
 ## Current state (2026-11-20) — read this first
 
+### Offline mode: real-browser check (2026-11-21, uncommitted)
+
+- Compared with inkflo: 2Dope's offline mode already matched it (precache worker, install dialog, manifest, kit zip, manual) and is live on 2dope.xyz (`sw.js` and manifest return 200). The one gap in the 2026-11-15 notes was a browser-level check; added `scripts/offline-check.mjs`, run with `npm run test:offline` after `npm run build`.
+- It serves `dist/` on 127.0.0.1:5193 (with `Vary: Origin`), loads it in headless Chrome, waits for the worker to cache all 87 files, stops the server, reloads, and fetches every precached file plus the manifest. 7 of 7 checks passed on this build. Nothing in the app, worker or storage changed.
+- Not done: iPad Safari Add to Home Screen, the Mac launcher, a real lab PC, and a check that an update (new worker) shows the reload toast.
+
 ### Shape handles for snapped brush shapes (2026-11-21, `main`)
 
 - After QuickShape snaps a **Brush** stroke (not Vector, which already has point editing), its points stay on the canvas until something else is drawn or edited. Drag them to reshape: line and arc ends, polygon and polyline vertices, an arc's middle (bends it through the pen with its ends fixed), a box or oval's corners and edge middles (opposite side fixed) and a round handle above it that turns it. Shift gives 15° steps and keeps corners in proportion.

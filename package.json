@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude \".claude/worktrees/**\"",
     "test:browser": "node scripts/fixtures.mjs",
+    "test:offline": "node scripts/offline-check.mjs",
     "package:offline": "node scripts/make-offline-kit.mjs"
   },
   "devDependencies": {
