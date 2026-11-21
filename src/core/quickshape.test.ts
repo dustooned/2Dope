@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { constrainShape, editShape, fitAs, recognizeShape, shapeOutline, type V } from './quickshape';
+import { constrainShape, editShape, fitAs, moveHandle, recognizeShape, shapeHandles, shapeOutline, type Shape, type V } from './quickshape';
 
 /** A wobbly hand-drawn version of a path (deterministic). */
 function wobble(p: V[], amount: number): V[] {
@@ -255,5 +255,86 @@ describe('Edit shape: fit the stroke as a chosen shape', () => {
     expect(fitAs('arc', stroke)?.kind).toBe('arc');
     expect(fitAs('polyline', stroke)?.kind).toBe('polyline');
     expect(fitAs('line', [{ x: 0, y: 0 }])).toBeNull();
+  });
+});
+
+describe('QuickShape handles', () => {
+  const near = (a: V, b: V) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
+
+  it('gives a line its two ends and moves one while the other stays', () => {
+    const s: Shape = { kind: 'line', a: { x: 0, y: 0 }, b: { x: 100, y: 0 } };
+    expect(shapeHandles(s).map((h) => h.id)).toEqual(['a', 'b']);
+    const m = moveHandle(s, 'b', { x: 50, y: 50 });
+    expect(m.kind === 'line' && near(m.a, { x: 0, y: 0 }) && near(m.b, { x: 50, y: 50 })).toBe(true);
+  });
+
+  it('turns a line end to a 15 degree step when perfect', () => {
+    const s: Shape = { kind: 'line', a: { x: 0, y: 0 }, b: { x: 100, y: 0 } };
+    const m = moveHandle(s, 'b', { x: 100, y: 3 }, true);
+    expect(m.kind === 'line' && Math.abs(m.b.y) < 1e-9).toBe(true);
+  });
+
+  it('resizes a rectangle from an edge with the opposite edge fixed', () => {
+    const s: Shape = { kind: 'rect', cx: 50, cy: 50, w: 30, h: 20, rot: 0 };
+    expect(shapeHandles(s)).toHaveLength(9);
+    const m = moveHandle(s, '1,0', { x: 120, y: 50 });
+    // the left edge was at 20 and stays; the right edge is now at 120
+    expect(m.kind === 'rect' && Math.abs(m.cx - 70) < 1e-9 && Math.abs(m.w - 50) < 1e-9 && m.h === 20).toBe(true);
+  });
+
+  it('keeps the opposite corner of a turned ellipse fixed', () => {
+    const s: Shape = { kind: 'ellipse', cx: 0, cy: 0, rx: 40, ry: 20, rot: 0.5 };
+    const at = (sh: Shape, id: string) => shapeHandles(sh).find((h) => h.id === id)!;
+    const fixed = at(s, '-1,-1');
+    const m = moveHandle(s, '1,1', { x: 90, y: 70 });
+    expect(m.kind).toBe('ellipse');
+    expect(near(fixed, at(m, '-1,-1'))).toBe(true);
+    expect(near(at(m, '1,1'), { x: 90, y: 70 })).toBe(true);
+  });
+
+  it('keeps a corner drag in proportion when perfect', () => {
+    const s: Shape = { kind: 'rect', cx: 0, cy: 0, w: 40, h: 20, rot: 0 };
+    const m = moveHandle(s, '1,1', { x: 200, y: 30 }, true);
+    expect(m.kind === 'rect' && Math.abs(m.w / m.h - 2) < 1e-9).toBe(true);
+  });
+
+  it('turns by the rotate handle', () => {
+    const s: Shape = { kind: 'rect', cx: 0, cy: 0, w: 40, h: 20, rot: 0 };
+    const rot = shapeHandles(s).find((h) => h.id === 'rot')!;
+    expect(near(rot, { x: 0, y: -48 })).toBe(true);
+    // dragging the handle to the right of the centre turns the top edge to face right (a quarter turn)
+    const m = moveHandle(s, 'rot', { x: 100, y: 0 });
+    expect(m.kind === 'rect' && Math.abs(m.rot - Math.PI / 2) < 1e-9).toBe(true);
+  });
+
+  it('moves one polygon vertex and nothing else', () => {
+    const s: Shape = { kind: 'polygon', pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] };
+    const m = moveHandle(s, 'p1', { x: 20, y: -5 });
+    expect(m.kind === 'polygon' && near(m.pts[0]!, { x: 0, y: 0 }) && near(m.pts[1]!, { x: 20, y: -5 }) && near(m.pts[2]!, { x: 10, y: 10 })).toBe(true);
+  });
+
+  it('bends an arc through the dragged middle with its ends fixed', () => {
+    const s: Shape = { kind: 'arc', cx: 0, cy: 0, r: 50, start: Math.PI, sweep: Math.PI };
+    const ends = shapeHandles(s);
+    const m = moveHandle(s, 'mid', { x: 0, y: -80 });
+    expect(m.kind).toBe('arc');
+    const h = shapeHandles(m);
+    expect(near(h[0]!, ends[0]!)).toBe(true);
+    expect(near(h[1]!, ends[1]!)).toBe(true);
+    expect(near(h[2]!, { x: 0, y: -80 })).toBe(true);
+  });
+
+  it('ignores unknown ids and degenerate bends', () => {
+    const arc: Shape = { kind: 'arc', cx: 0, cy: 0, r: 50, start: Math.PI, sweep: Math.PI };
+    expect(moveHandle(arc, 'mid', { x: 0, y: 0 })).toBe(arc);
+    expect(moveHandle(arc, 'zzz', { x: 1, y: 1 })).toBe(arc);
+  });
+
+  it('drags an arc end around its centre', () => {
+    const s: Shape = { kind: 'arc', cx: 0, cy: 0, r: 50, start: 0, sweep: Math.PI / 2 };
+    const m = moveHandle(s, 'end', { x: -50, y: 0 });
+    expect(m.kind === 'arc' && Math.abs(m.sweep - Math.PI) < 1e-9 && m.start === 0).toBe(true);
+    const n = moveHandle(s, 'start', { x: 0, y: 50 });
+    expect(n.kind === 'arc' && Math.abs(n.start - Math.PI / 2) < 1e-9 && Math.abs(n.sweep) < 1e-9).toBe(true);
   });
 });

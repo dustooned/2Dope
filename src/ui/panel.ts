@@ -283,6 +283,12 @@ export function buildPanel(app: App, root: HTMLElement): void {
     refreshers.push(() => (input.checked = app.quickShape));
     row.append(input, el('span', {}, 'QuickShape: hold at the end of a stroke to snap it to a shape'));
     fs.append(row);
+    const hRow = el('label', { class: 'row toggle', title: 'After a Brush shape snaps, its points show: drag them to resize, bend or turn it. Hold Shift while dragging for 15° steps and in-proportion corners.' });
+    const hInput = el('input', { type: 'checkbox' });
+    hInput.addEventListener('change', () => app.setShapeHandles(hInput.checked));
+    refreshers.push(() => (hInput.checked = app.shapeHandlesOn));
+    hRow.append(hInput, el('span', {}, 'Shape handles: drag a snapped brush shape\u2019s points to adjust it'));
+    fs.append(hRow);
     body.append(fs);
   }
 

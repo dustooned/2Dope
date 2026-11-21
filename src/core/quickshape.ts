@@ -675,3 +675,185 @@ export function fitAs(choice: ShapeChoice, raw: readonly V[]): Shape | null {
     }
   }
 }
+
+/** A draggable point on a snapped shape (Edit shape): where it sits, and how it behaves. */
+export interface ShapeHandle {
+  id: string;
+  x: number;
+  y: number;
+  role: 'point' | 'corner' | 'edge' | 'rotate' | 'bend';
+}
+
+/** Half sizes of an ellipse or rectangle (a rectangle's `w` and `h` are half extents). */
+function halves(s: Extract<Shape, { kind: 'ellipse' | 'rect' }>): { hx: number; hy: number } {
+  return s.kind === 'ellipse' ? { hx: s.rx, hy: s.ry } : { hx: s.w, hy: s.h };
+}
+
+function toWorld(s: { cx: number; cy: number; rot: number }, u: number, v: number): V {
+  const c = Math.cos(s.rot);
+  const n = Math.sin(s.rot);
+  return { x: s.cx + u * c - v * n, y: s.cy + u * n + v * c };
+}
+
+function toLocal(s: { cx: number; cy: number; rot: number }, p: V): V {
+  const dx = p.x - s.cx;
+  const dy = p.y - s.cy;
+  const c = Math.cos(s.rot);
+  const n = Math.sin(s.rot);
+  return { x: dx * c + dy * n, y: -dx * n + dy * c };
+}
+
+const wrapPi = (a: number) => {
+  let d = a % (2 * Math.PI);
+  if (d > Math.PI) d -= 2 * Math.PI;
+  if (d <= -Math.PI) d += 2 * Math.PI;
+  return d;
+};
+const wrap2Pi = (a: number) => ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+/** The two ends and the middle of an arc. */
+function arcEnds(s: Extract<Shape, { kind: 'arc' }>): { p0: V; p1: V; pm: V } {
+  const at = (a: number) => ({ x: s.cx + Math.cos(a) * s.r, y: s.cy + Math.sin(a) * s.r });
+  return { p0: at(s.start), p1: at(s.start + s.sweep), pm: at(s.start + s.sweep / 2) };
+}
+
+/**
+ * The points that can be dragged to reshape a snapped shape. Lines, polylines and polygons give
+ * their vertices; an arc its two ends and its middle (which bends it); an ellipse or rectangle
+ * its four corners, four edge middles and a turn handle `rotReach` above the top edge.
+ */
+export function shapeHandles(s: Shape, rotReach = 28): ShapeHandle[] {
+  switch (s.kind) {
+    case 'line':
+      return [
+        { id: 'a', x: s.a.x, y: s.a.y, role: 'point' },
+        { id: 'b', x: s.b.x, y: s.b.y, role: 'point' },
+      ];
+    case 'polyline':
+    case 'polygon':
+      return s.pts.map((q, i) => ({ id: `p${i}`, x: q.x, y: q.y, role: 'point' as const }));
+    case 'arc': {
+      const { p0, p1, pm } = arcEnds(s);
+      return [
+        { id: 'start', x: p0.x, y: p0.y, role: 'point' },
+        { id: 'end', x: p1.x, y: p1.y, role: 'point' },
+        { id: 'mid', x: pm.x, y: pm.y, role: 'bend' },
+      ];
+    }
+    case 'ellipse':
+    case 'rect': {
+      const { hx, hy } = halves(s);
+      const out: ShapeHandle[] = [];
+      for (const sy of [-1, 0, 1])
+        for (const sx of [-1, 0, 1]) {
+          if (!sx && !sy) continue;
+          const p = toWorld(s, sx * hx, sy * hy);
+          out.push({ id: `${sx},${sy}`, x: p.x, y: p.y, role: sx && sy ? 'corner' : 'edge' });
+        }
+      const r = toWorld(s, 0, -(hy + rotReach));
+      out.push({ id: 'rot', x: r.x, y: r.y, role: 'rotate' });
+      return out;
+    }
+  }
+}
+
+const SNAP15 = Math.PI / 12;
+
+function snapFrom(from: V, to: V): V {
+  const l = dist(from, to);
+  const a = Math.round(Math.atan2(to.y - from.y, to.x - from.x) / SNAP15) * SNAP15;
+  return { x: from.x + Math.cos(a) * l, y: from.y + Math.sin(a) * l };
+}
+
+/**
+ * The shape after handle `id` is dragged to `to`. `perfect` (Shift, or a second finger) turns line
+ * ends to 15 degree steps, keeps a corner drag in proportion and turns a rotation in 15 degree
+ * steps. Unknown ids, or a drag that cannot be honoured (an arc with its three points in a line),
+ * return `s` itself.
+ */
+export function moveHandle(s: Shape, id: string, to: V, perfect = false): Shape {
+  const MIN = 1;
+  switch (s.kind) {
+    case 'line':
+      if (id === 'a') return { ...s, a: perfect ? snapFrom(s.b, to) : { x: to.x, y: to.y } };
+      if (id === 'b') return { ...s, b: perfect ? snapFrom(s.a, to) : { x: to.x, y: to.y } };
+      return s;
+    case 'polyline':
+    case 'polygon': {
+      const i = /^p(\d+)$/.test(id) ? Number(id.slice(1)) : -1;
+      if (i < 0 || i >= s.pts.length) return s;
+      const pts = s.pts.slice();
+      const prev = s.kind === 'polyline' ? (s.pts[i - 1] ?? s.pts[i + 1]) : undefined;
+      pts[i] = perfect && prev ? snapFrom(prev, to) : { x: to.x, y: to.y };
+      return { ...s, pts };
+    }
+    case 'arc': {
+      const { p0, p1 } = arcEnds(s);
+      const clamp = (w: number) => Math.max(-2 * Math.PI, Math.min(2 * Math.PI, w));
+      if (id === 'start') {
+        const d = wrapPi(Math.atan2(to.y - s.cy, to.x - s.cx) - s.start);
+        return { ...s, start: s.start + d, sweep: clamp(s.sweep - d) };
+      }
+      if (id === 'end') {
+        const d = wrapPi(Math.atan2(to.y - s.cy, to.x - s.cx) - (s.start + s.sweep));
+        return { ...s, sweep: clamp(s.sweep + d) };
+      }
+      if (id === 'mid') {
+        // bend: the circle through both fixed ends and the dragged middle
+        const det = 2 * (p0.x * (to.y - p1.y) + to.x * (p1.y - p0.y) + p1.x * (p0.y - to.y));
+        if (Math.abs(det) < 1e-6) return s;
+        const a2 = p0.x * p0.x + p0.y * p0.y;
+        const b2 = to.x * to.x + to.y * to.y;
+        const c2 = p1.x * p1.x + p1.y * p1.y;
+        const cx = (a2 * (to.y - p1.y) + b2 * (p1.y - p0.y) + c2 * (p0.y - to.y)) / det;
+        const cy = (a2 * (p1.x - to.x) + b2 * (p0.x - p1.x) + c2 * (to.x - p0.x)) / det;
+        const r = Math.hypot(p0.x - cx, p0.y - cy);
+        if (!Number.isFinite(r) || r > 1e5) return s;
+        const a0 = Math.atan2(p0.y - cy, p0.x - cx);
+        const dm = wrap2Pi(Math.atan2(to.y - cy, to.x - cx) - a0);
+        const de = wrap2Pi(Math.atan2(p1.y - cy, p1.x - cx) - a0);
+        return { kind: 'arc', cx, cy, r, start: a0, sweep: dm <= de ? de : de - 2 * Math.PI };
+      }
+      return s;
+    }
+    case 'ellipse':
+    case 'rect': {
+      if (id === 'rot') {
+        let rot = Math.atan2(to.y - s.cy, to.x - s.cx) + Math.PI / 2;
+        if (perfect) rot = Math.round(rot / SNAP15) * SNAP15;
+        return { ...s, rot };
+      }
+      const m = /^(-?1|0),(-?1|0)$/.exec(id);
+      if (!m) return s;
+      const sx = Number(m[1]);
+      const sy = Number(m[2]);
+      if (!sx && !sy) return s;
+      const { hx, hy } = halves(s);
+      const t = toLocal(s, to);
+      // the opposite edge (or corner) stays put; the dragged one follows the pen
+      let nx = hx;
+      let ny = hy;
+      let ux = 0;
+      let uy = 0;
+      if (sx) {
+        const fixed = -sx * hx;
+        nx = Math.max(MIN, Math.abs(t.x - fixed) / 2);
+        ux = fixed + sx * nx;
+      }
+      if (sy) {
+        const fixed = -sy * hy;
+        ny = Math.max(MIN, Math.abs(t.y - fixed) / 2);
+        uy = fixed + sy * ny;
+      }
+      if (perfect && sx && sy) {
+        const k = Math.max(nx / hx, ny / hy);
+        nx = hx * k;
+        ny = hy * k;
+        ux = -sx * hx + sx * nx;
+        uy = -sy * hy + sy * ny;
+      }
+      const c = toWorld(s, ux, uy);
+      return s.kind === 'ellipse' ? { ...s, cx: c.x, cy: c.y, rx: nx, ry: ny } : { ...s, cx: c.x, cy: c.y, w: nx, h: ny };
+    }
+  }
+}

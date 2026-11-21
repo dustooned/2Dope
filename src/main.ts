@@ -162,7 +162,7 @@ const openShapeMenu = (anchor: HTMLElement) => {
     ...SHAPE_CHOICES.map((c) => ({ label: c.label, checked: cur === c.id, run: () => app.swapShape(c.id) })),
     { sep: true },
     { label: '✎ Keep my stroke', checked: cur === 'stroke', run: () => app.swapShape('stroke') },
-    ...(app.lastShape?.rec.tool === 'pen' ? [{ sep: true } as const, { label: '◇ Edit points', run: () => { const id = app.lastShape?.rec.id; app.enterPointEdit(id); } }, { label: 'Points after hold', checked: app.pointsAfterHold, run: () => app.setPointsAfterHold(!app.pointsAfterHold) }, { label: 'New points straight', checked: app.straightDefault, run: () => app.setStraightDefault(!app.straightDefault) }] : []),
+    ...(app.lastShape?.rec.tool === 'pen' ? [{ sep: true } as const, { label: '◇ Edit points', run: () => { const id = app.lastShape?.rec.id; app.enterPointEdit(id); } }, { label: 'Points after hold', checked: app.pointsAfterHold, run: () => app.setPointsAfterHold(!app.pointsAfterHold) }, { label: 'New points straight', checked: app.straightDefault, run: () => app.setStraightDefault(!app.straightDefault) }] : [{ sep: true } as const, { label: '◇ Shape handles', checked: app.shapeHandlesOn, run: () => app.setShapeHandles(!app.shapeHandlesOn) }]),
   ]);
 };
 shapeBtn.addEventListener('click', () => openShapeMenu(shapeBtn));

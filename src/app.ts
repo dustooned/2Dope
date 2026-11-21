@@ -90,7 +90,7 @@ import { Smoother, smoothStroke } from './brush/smoothing';
 import { eraseVectors, VECTOR_ERASE_NAMES, vectorWidths, type VectorErase } from './core/vectorcut';
 import { vectorsToSvg } from './io/svg';
 import { drawingBox } from './view/contentbox';
-import { constrainShape, editShape, fitAs, pressureProfile, recognizeShape, sampleProfile, SHAPE_CHOICES, SHAPE_NAMES, shapeOutline, type Shape, type ShapeChoice } from './core/quickshape';
+import { constrainShape, editShape, fitAs, moveHandle, pressureProfile, recognizeShape, sampleProfile, SHAPE_CHOICES, SHAPE_NAMES, shapeHandles, shapeOutline, type Shape, type ShapeChoice, type ShapeHandle } from './core/quickshape';
 import { drawVectorStroke, clearVectorRenderCache, hasVisibleVectorStroke } from './brush/vector';
 import { DEFAULT_ONION, OnionCache, type OnionSettings } from './view/onion';
 import type { ScriptPanel } from './core/script';
@@ -182,7 +182,7 @@ interface LiveStroke {
   /** Assisted drawing: where the stroke began and the guide direction it settled on. */
   assist?: { x: number; y: number; dir: number | null };
   /** Set once QuickShape snapped the stroke: the recognised shape and the pen point at the snap. */
-  shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; profile: number[]; raw: StrokePoint[] };
+  shape?: { base: Shape; grab: StrokePoint; now: StrokePoint; constrain: boolean; profile: number[]; raw: StrokePoint[]; final?: Shape };
   /** The selection a raster stroke paints inside, fixed at pen-down (never while editing a mask). */
   clip: Uint8Array | null;
 }
@@ -528,7 +528,7 @@ export class App {
 
   /** True while a stroke is being drawn (autosave waits for it to end). */
   get strokeActive(): boolean {
-    return this.live !== null || this.waits.length > 0 || this.fillG !== null || this.wandG !== null || this.fillBusy || this.xf !== null || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null || this.editor.dragging;
+    return this.live !== null || this.waits.length > 0 || this.fillG !== null || this.wandG !== null || this.fillBusy || this.xf !== null || !!this.shapeDrag || !!this.ve?.drag || !!this.ve?.hdrag || this.smudge !== null || this.editor.dragging;
   }
 
   get viewW(): number {
@@ -793,9 +793,119 @@ export class App {
    * The last snapped shape while it can still be changed (Edit shape): the hand-drawn points, the
    * stroke it became and its undo step. Cleared by any other stroke or edit.
    */
-  lastShape: { raw: StrokePoint[]; choice: ShapeChoice | 'stroke'; rec: StrokeRecord; drawing: Drawing; plane: Plane; canvas: HTMLCanvasElement; cmd: ReturnType<History['peekUndo']>; autoPaint?: AutoPaintStroke; clip: Uint8Array | null } | null = null;
+  lastShape: { raw: StrokePoint[]; choice: ShapeChoice | 'stroke'; rec: StrokeRecord; drawing: Drawing; plane: Plane; canvas: HTMLCanvasElement; cmd: ReturnType<History['peekUndo']>; autoPaint?: AutoPaintStroke; clip: Uint8Array | null; shape: Shape | null; profile: number[] } | null = null;
   /** Main shows or hides the Edit shape button. */
   onShapeChange: () => void = () => {};
+
+  /** Shape handles: drag the points of a snapped brush shape to reshape it (vector lines use their own points). */
+  shapeHandlesOn = loadJSON<boolean>('2dope.shape.handles') ?? true;
+  private shapeDrag: { id: number; handle: string; base: Shape; off: { x: number; y: number }; start: { x: number; y: number }; moved: boolean; pending: Shape | null; raf: number } | null = null;
+
+  setShapeHandles(on: boolean): void {
+    this.shapeHandlesOn = on;
+    saveJSON('2dope.shape.handles', on);
+    this.onToolChange();
+    this.requestRender();
+  }
+
+  /** The handles to show right now, or null. */
+  private activeHandles(): { shape: Shape; handles: ShapeHandle[] } | null {
+    const s = this.lastShape;
+    if (!this.shapeHandlesOn || !s?.shape || s.rec.tool === 'pen' || s.choice === 'stroke' || this.tool !== 'brush') return null;
+    if (!this.shapeEditable || this.ve || this.xf || this.playing || this.live || this.adjusting) return null;
+    return { shape: s.shape, handles: shapeHandles(s.shape, 28 / this.view.zoom) };
+  }
+
+  /** A pointer-down on a handle starts reshaping; false when it missed them all. */
+  private shapeHandleDown(e: PointerEvent): boolean {
+    if (this.shapeDrag || (e.pointerType === 'touch' && this.touches.size > 1)) return false;
+    const a = this.activeHandles();
+    if (!a) return false;
+    const p = this.toPoint(e, e.timeStamp);
+    let best: ShapeHandle | null = null;
+    let bd = (e.pointerType === 'touch' ? 36 : 24) / this.view.zoom;
+    for (const h of a.handles) {
+      const d = Math.hypot(h.x - p.x, h.y - p.y);
+      if (d <= bd) { bd = d; best = h; }
+    }
+    if (!best) return false;
+    this.shapeDrag = { id: e.pointerId, handle: best.id, base: a.shape, off: { x: best.x - p.x, y: best.y - p.y }, start: { x: p.x, y: p.y }, moved: false, pending: null, raf: 0 };
+    this.requestRender();
+    return true;
+  }
+
+  private shapeDragMove(e: PointerEvent): void {
+    const d = this.shapeDrag;
+    if (!d) return;
+    const p = this.toPoint(e, e.timeStamp);
+    if (!d.moved && Math.hypot(p.x - d.start.x, p.y - d.start.y) < 3 / this.view.zoom) return;
+    d.moved = true;
+    d.pending = moveHandle(d.base, d.handle, { x: p.x + d.off.x, y: p.y + d.off.y }, e.shiftKey);
+    if (!d.raf) d.raf = requestAnimationFrame(() => { d.raf = 0; this.applyShapeDrag(); });
+  }
+
+  /** Redraw the shape for the latest handle position (one undo step stays in place of the last). */
+  private applyShapeDrag(): void {
+    const d = this.shapeDrag;
+    if (!d?.pending) return;
+    const shape = d.pending;
+    d.pending = null;
+    const s = this.lastShape;
+    if (!s || !this.shapeEditable || !this.residency.isReady(s.drawing)) return;
+    if (s.autoPaint?.mask && !this.residency.isReady(s.autoPaint.mask)) return;
+    this.replaceShape(s, this.shapeStrokePoints(shape, s.profile, s.raw[s.raw.length - 1]!), SHAPE_NAMES[shape.kind], shape.kind, shape, s.profile);
+  }
+
+  private shapeDragEnd(cancelled: boolean): void {
+    const d = this.shapeDrag;
+    if (!d) return;
+    if (d.raf) { cancelAnimationFrame(d.raf); d.raf = 0; }
+    if (cancelled) d.pending = d.moved ? d.base : null;
+    this.applyShapeDrag();
+    this.shapeDrag = null;
+    this.requestRender();
+  }
+
+  private drawShapeHandles(g: CanvasRenderingContext2D): void {
+    const a = this.activeHandles() ?? (this.shapeDrag && this.lastShape?.shape ? { shape: this.lastShape.shape, handles: shapeHandles(this.lastShape.shape, 28 / this.view.zoom) } : null);
+    if (!a) return;
+    const z = this.view.zoom;
+    const by = new Map(a.handles.map((h) => [h.id, h]));
+    g.save();
+    g.lineWidth = 1.5 / z;
+    g.strokeStyle = '#4aa3ff';
+    if (a.shape.kind === 'rect' || a.shape.kind === 'ellipse') {
+      // the box the handles sit on, and the stem to the turn handle
+      const ring = ['-1,-1', '0,-1', '1,-1', '1,0', '1,1', '0,1', '-1,1', '-1,0'].map((k) => by.get(k)!);
+      g.beginPath();
+      ring.forEach((h, i) => (i ? g.lineTo(h.x, h.y) : g.moveTo(h.x, h.y)));
+      g.closePath();
+      g.stroke();
+      const top = by.get('0,-1')!, rot = by.get('rot')!;
+      g.beginPath();
+      g.moveTo(top.x, top.y);
+      g.lineTo(rot.x, rot.y);
+      g.stroke();
+    } else if (a.shape.kind === 'arc') {
+      // the chord shows what stays put while the middle bends it
+      g.beginPath();
+      g.moveTo(by.get('start')!.x, by.get('start')!.y);
+      g.lineTo(by.get('end')!.x, by.get('end')!.y);
+      g.stroke();
+    }
+    for (const h of a.handles) {
+      const live = this.shapeDrag?.handle === h.id;
+      const r = (h.role === 'edge' ? 7 : 9) / z;
+      g.beginPath();
+      if (h.role === 'edge') g.rect(h.x - r, h.y - r, r * 2, r * 2);
+      else if (h.role === 'bend') { g.moveTo(h.x, h.y - r * 1.2); g.lineTo(h.x + r * 1.2, h.y); g.lineTo(h.x, h.y + r * 1.2); g.lineTo(h.x - r * 1.2, h.y); g.closePath(); }
+      else g.arc(h.x, h.y, r, 0, Math.PI * 2);
+      g.fillStyle = live || h.role === 'rotate' ? '#4aa3ff' : '#fff';
+      g.fill();
+      g.stroke();
+    }
+    g.restore();
+  }
 
   /** Is the Edit shape menu still valid (nothing done since the snap)? */
   get shapeEditable(): boolean {
@@ -820,31 +930,46 @@ export class App {
       void this.residency.ensure(s.autoPaint.mask); this.onNotice?.('Loading the layer mask. Try Edit shape again in a moment.'); return;
     }
     let pts: StrokePoint[];
-    const last = s.raw[s.raw.length - 1]!;
+    let shape: Shape | null = null;
+    let profile = s.profile;
     if (choice === 'stroke') pts = s.raw.map((q) => ({ ...q }));
     else {
-      const shape = fitAs(choice, s.raw);
-      if (!shape) {
+      const fitted = fitAs(choice, s.raw);
+      if (!fitted) {
         this.onNotice?.(`This stroke cannot make a ${(SHAPE_CHOICES.find((c) => c.id === choice)?.label ?? choice).replace(/^\S+\s/, '').toLowerCase()}.`);
         return;
       }
-      const profile = pressureProfile(shape, s.raw);
-      const outline = shapeOutline(shape, Math.max(1, 2 / this.view.zoom));
-      const n = Math.max(1, outline.length - 1);
-      pts = outline.map((q, i) => ({ x: q.x, y: q.y, pressure: sampleProfile(profile, i / n), tiltX: last.tiltX, tiltY: last.tiltY, t: i }));
+      shape = fitted;
+      profile = pressureProfile(fitted, s.raw);
+      pts = this.shapeStrokePoints(fitted, profile, s.raw[s.raw.length - 1]!);
     }
+    const label = choice === 'stroke' ? 'Keep my stroke' : (SHAPE_CHOICES.find((c) => c.id === choice)?.label ?? choice).replace(/^\S+\s/, '');
+    this.replaceShape(s, pts, label, choice, shape, profile);
+  }
+
+  /** The stroke points of a shape: its outline carrying the pressure profile and the last tilt. */
+  private shapeStrokePoints(shape: Shape, profile: number[], last: StrokePoint): StrokePoint[] {
+    const outline = shapeOutline(shape, Math.max(1, 2 / this.view.zoom));
+    const n = Math.max(1, outline.length - 1);
+    return outline.map((q, i) => ({ x: q.x, y: q.y, pressure: sampleProfile(profile, i / n), tiltX: last.tiltX, tiltY: last.tiltY, t: i }));
+  }
+
+  /**
+   * Swap the snapped shape's stroke for `pts` as one undo step in place of the old one (used by
+   * Edit shape and by dragging a shape handle). False when nothing changed.
+   */
+  private replaceShape(s: NonNullable<App['lastShape']>, pts: StrokePoint[], label: string, choice: ShapeChoice | 'stroke', shape: Shape | null, profile: number[]): boolean {
     const rec: StrokeRecord = { ...s.rec, id: newStrokeId(), points: pts };
     // a vector replacement stays inside the selection the shape was drawn in (its copies too)
     const strokes = rec.tool === 'pen' ? this.clipToSelection([rec, ...this.symmetryVectors(rec)], s.clip) : [];
     if (rec.tool === 'pen' && !strokes.length) {
       this.onNotice?.('That shape would be outside the selection.');
-      return;
+      return false;
     }
     // take the old shape away, then commit the new one
     this.history.undo();
     const d = s.drawing;
     const oldVectors = d.vectors;
-    const label = choice === 'stroke' ? 'Keep my stroke' : (SHAPE_CHOICES.find((c) => c.id === choice)?.label ?? choice).replace(/^\S+\s/, '');
     if (rec.tool === 'pen') {
       const ids = new Set(strokes.map((v) => v.id));
       d.vectors = [...d.vectors, ...strokes];
@@ -888,6 +1013,8 @@ export class App {
     }
     s.rec = rec;
     s.choice = choice;
+    s.shape = shape;
+    s.profile = profile;
     s.cmd = this.history.peekUndo();
     this.residency.updateThumb(d);
     this.requestRender();
@@ -897,6 +1024,7 @@ export class App {
       this.ve = null;
       this.enterPointEdit(strokes.find((v) => v.id === rec.id || v.id.startsWith(`${rec.id}~`))?.id ?? strokes[0]!.id);
     }
+    return true;
   }
 
   /** Re-render the snapped stroke for the current pen position (resize/turn) and constrain state. */
@@ -908,6 +1036,7 @@ export class App {
     const perfect = sh.constrain || shift;
     let s = editShape(perfect ? constrainShape(sh.base) : sh.base, sh.grab, sh.now, perfect);
     if (perfect && (s.kind === 'line' || s.kind === 'polyline')) s = constrainShape(s);
+    sh.final = s;
     const last = live.lastRaw;
     const outline = shapeOutline(s, Math.max(1, 2 / this.view.zoom));
     const rec = live.record;
@@ -5972,7 +6101,7 @@ export class App {
       }
     }
     // a snapped shape can be changed from the Edit shape button until something else happens
-    this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo(), autoPaint: live.autoPaint, clip: live.clip } : null;
+    this.lastShape = live.shape ? { raw: live.shape.raw, choice: live.shape.base.kind, rec, drawing: d, plane: live.plane, canvas: live.canvas, cmd: this.history.peekUndo(), autoPaint: live.autoPaint, clip: live.clip, shape: live.shape.final ?? live.shape.base, profile: live.shape.profile } : null;
     this.onShapeChange();
     // a vector line snapped by holding: show its points straight away (can be turned off)
     if (live.shape && rec.tool === 'pen' && this.pointsAfterHold) this.enterPointEdit(pointsOf);
@@ -6041,14 +6170,14 @@ export class App {
     // (An open stroke blocks frame changes and timeline edits.)
     const lifted = (e: PointerEvent, cancelled: boolean) => {
       if (this.motionPointer === e.pointerId || this.letters.pointer === e.pointerId) { this.onUp(e, cancelled); return; }
-      if ((this.live && e.pointerId === this.live.pointerId) || (this.waiting && e.pointerId === this.waiting.id) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.wandG && e.pointerId === this.wandG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
+      if ((this.live && e.pointerId === this.live.pointerId) || (this.waiting && e.pointerId === this.waiting.id) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.wandG && e.pointerId === this.wandG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.shapeDrag && e.pointerId === this.shapeDrag.id) || (this.smudge && e.pointerId === this.smudge.id)) this.onUp(e, cancelled);
     };
     window.addEventListener('pointerup', (e) => lifted(e, false));
     window.addEventListener('pointercancel', (e) => lifted(e, true));
     c.addEventListener('lostpointercapture', (e) => {
       if (e.buttons === 0 && this.motionPointer === e.pointerId) { this.onUp(e, false); return; }
       // a pen that is no longer pressed has lifted
-      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.wandG && e.pointerId === this.wandG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.smudge && e.pointerId === this.smudge.id))) this.onUp(e, false);
+      if (e.buttons === 0 && ((this.live && e.pointerId === this.live.pointerId) || (this.fillG && e.pointerId === this.fillG.pointerId) || (this.wandG && e.pointerId === this.wandG.pointerId) || (this.xf?.drag && e.pointerId === this.xf.drag.id) || (this.ve?.drag && e.pointerId === this.ve.drag.id) || (this.ve?.hdrag && e.pointerId === this.ve.hdrag.id) || (this.shapeDrag && e.pointerId === this.shapeDrag.id) || (this.smudge && e.pointerId === this.smudge.id))) this.onUp(e, false);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -6105,6 +6234,7 @@ export class App {
       this.letters.down(e.pointerId, { x: p.x, y: p.y }, e.pointerType);
       return;
     }
+    if (this.shapeHandleDown(e)) return;
     this.veValid();
     if (this.ve && !this.ve.drag) {
       // point editing: grab an anchor; a tap on another vector line switches to it
@@ -6591,6 +6721,7 @@ export class App {
     if (this.tscrub && e.pointerId === this.tscrub.id) return this.moveTimeScrub(e);
     if (this.guideDrag && e.pointerId === this.guideDrag.id) return this.moveGuideDrag(e);
     if (this.smudge && e.pointerId === this.smudge.id) return this.moveSmudge(e);
+    if (this.shapeDrag && e.pointerId === this.shapeDrag.id) { this.shapeDragMove(e); return; }
     const hd = this.ve?.hdrag;
     if (hd && e.pointerId === hd.id) {
       const p = this.toPoint(e, e.timeStamp);
@@ -6724,6 +6855,7 @@ export class App {
     if (this.tscrub && e.pointerId === this.tscrub.id) this.endTimeScrub(cancelled);
     if (this.guideDrag && e.pointerId === this.guideDrag.id) { this.guideDrag = null; return; }
     if (this.smudge && e.pointerId === this.smudge.id) return this.endSmudge(cancelled);
+    if (this.shapeDrag && e.pointerId === this.shapeDrag.id) { this.shapeDragEnd(cancelled); return; }
     const hd = this.ve?.hdrag;
     if (hd && e.pointerId === hd.id && this.ve) {
       const ve = this.ve;
@@ -7424,6 +7556,7 @@ export class App {
     this.drawSymmetryGuide(g);
     this.drawGuide(g);
     this.drawPointEdit(g);
+    this.drawShapeHandles(g);
     if (this.view.zoom >= 8) this.drawPixelGrid(g);
   }
 

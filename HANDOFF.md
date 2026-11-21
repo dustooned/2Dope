@@ -2,6 +2,13 @@
 
 ## Current state (2026-11-20) — read this first
 
+### Shape handles for snapped brush shapes (2026-11-21, `main`)
+
+- After QuickShape snaps a **Brush** stroke (not Vector, which already has point editing), its points stay on the canvas until something else is drawn or edited. Drag them to reshape: line and arc ends, polygon and polyline vertices, an arc's middle (bends it through the pen with its ends fixed), a box or oval's corners and edge middles (opposite side fixed) and a round handle above it that turns it. Shift gives 15° steps and keeps corners in proportion.
+- `core/quickshape.ts`: new pure `shapeHandles(shape, rotReach)` and `moveHandle(shape, id, to, perfect)`. `app.ts`: `swapShape` is split so `replaceShape(...)` (undo the old snap, commit the new stroke inside the selection clip) is shared with handle drags; `lastShape` now also keeps `shape` and the pressure `profile`. A drag is applied once per animation frame, each replacing the previous, so the whole edit stays one Undo step. Setting `2dope.shape.handles` (default on): Edit shape menu → Shape handles, and the Assist settings checkbox. Manual text and an `UPDATES` entry added.
+- Checks: `npm test` 914 passed, 1 skipped (10 new handle geometry tests); `npm run build` passed. New fixture `tests/shapehandles.html` (12 checks: edge drag, one-step Undo, line end, ellipse turn, switch off) passed in the in-app browser, as did `selectionpaint`, `inkpaint` (27), `paintingworkflow` (21) and `pointedit` (9).
+- Not checked: how the handle overlay looks (drawn in `drawShapeHandles`, not screenshotted), iPad or Apple Pencil feel, handle reach on touch (36 px), the second-finger "perfect" gesture (only Shift is wired for handle drags), light theme. Handles can be grabbed even when the Edit shape button has timed out (they stay until the next stroke or edit, like Procreate). Drawing a new stroke that begins within reach of a handle grabs the handle instead; turn the switch off if that gets in the way.
+
 ### Handoff label cleanup (2026-11-21)
 
 - Section headings dated 2026-11-18 that said "uncommitted", "not pushed" or "not merged" now say where the work landed. All of it is on `origin/main`; `ui-refine` is fully merged and could be deleted. Local `main` was rebased onto `origin/main` to drop a duplicate of the nested-worktree test commit (identical trees).
