@@ -2,6 +2,11 @@
 
 ## Current state (2026-11-20) — read this first
 
+### Handoff label cleanup (2026-11-21)
+
+- Section headings dated 2026-11-18 that said "uncommitted", "not pushed" or "not merged" now say where the work landed. All of it is on `origin/main`; `ui-refine` is fully merged and could be deleted. Local `main` was rebased onto `origin/main` to drop a duplicate of the nested-worktree test commit (identical trees).
+- Re-checked on `b2ec550`: `npm test` 107 files, 904 passed, 1 skipped; `npm run build` passed. Browser fixtures, iPad and Apple Pencil not run.
+
 ### Local test discovery (2026-11-20)
 
 - `package.json` excludes `.claude/worktrees/**` from `npm test` so nested checkouts
@@ -23,12 +28,12 @@
 - Physical iPad and Apple Pencil checks remain outstanding. Dated branch-status notes below
   describe the earlier work before this combined release.
 
-### Icons on the View options (2026-11-18, `main`, uncommitted)
+### Icons on the View options (2026-11-18, `cb9e26d`, merged and pushed on `main`)
 
 - Each row in the View popover (`src/ui/canvasview.ts`, map `ICONS`) now has an icon: Transparency grid (new `checker` in `ui/icons.ts`), Overscan, Title and action safe, Centre cross, Frame overview (gallery) and Motion while drawing. Layout only: no behaviour, storage or export change (`.canvas-view-name` in `style.css`).
 - Checks: `npx vitest run --dir src` 893 passed, 1 skipped; `npm run build` passed; in the browser pane all six rows show an icon and the popover fits (screenshot). `tests/canvasview.html`: 29 pass; the same 4 screen-pixel checks fail in the hidden pane as before. Not checked: iPad, light theme.
 
-### Frame overview: + / − and page arrows (2026-11-18, `main`, uncommitted)
+### Frame overview: + / − and page arrows (2026-11-18, `981d001`, merged and pushed on `main`)
 
 - View → Frame overview strip (`src/ui/canvasview.ts`) is now ‹ [up to 5 thumbnails] › + −.
   + calls `app.addFrame()`, − calls `app.deleteFrame()` (same Undo steps as the Flipbook).
@@ -40,7 +45,7 @@
   checks (overscan ×2, safe areas, centre) fail in the hidden browser pane with and without
   this change (baseline checked by stashing only these edits). Not checked: iPad, Simple mode
   (the strip stays hidden there, as before).
-### Gesture controls, steps 1 to 3 (2026-11-18, branch `ui-refine`, not pushed)
+### Gesture controls, steps 1 to 3 (2026-11-18, `8171125` and `5e081b2`, merged into `main` and pushed)
 
 - `core/gestures.ts`: one declarative list of every touch gesture (13 rows; 10 live, 3 planned) with generated help sentences ("Tapping with two fingers will undo."). `core/gestureprefs.ts`: validated device preference `2dope.gestures.v1` (`{ disabled: [...] }`; only the three global taps may be switched off). 16 tests. Not in the project file, no schema change.
 - `ui/gesturecontrols.ts`: Settings → **Gesture controls…** page from the registry, with a switch for the two-finger undo, three-finger redo and four-finger hide-interface taps, Restore defaults, and a Coming later list. Only those three taps are routed through the preference (`app.ts` `finishTapSession`); every other gesture's detection is unchanged.
@@ -48,7 +53,7 @@
 - Not done: steps 4 to 6 (routing every surface through the registry, the three-finger timeline gestures, ruler-drag timescale). Motion, strip and board timelines still use the old pinch.
 - Checks: unit suite 900 passed, 1 skipped; scripts 6 passed; build passed. Not run: the Gesture controls page in a browser, any fixture for the tap switches, iPad.
 
-### Draw timeline zoom (2026-11-18, branch `ui-refine`, not pushed)
+### Draw timeline zoom (2026-11-18, `b1f60ec` and `142605b`, merged into `main` and pushed)
 
 - `src/ui/flipzoom.ts` (pure, 8 tests): limits follow the strip and the shot. Zoom-out reaches whole-shot fit (floor 0.5 px per frame; short shots keep the old 4 px minimum). Zoom-in is a quarter of the strip (cap 400 px). The old fixed 4 to 140 px clamp is gone. Pinch gain 0.6. Fit pinch needs under 250 ms, over 800 px/s and fingers together by over 1.6x.
 - `flipmode.ts`: uses them. Fit eases over 180 ms (instant under reduced motion). New **Fit shot** button; Alt+0 as before; Ctrl / Cmd / Alt + wheel zooms under the pointer. A long shot opens fitted once. Nothing is saved; adding a clip never changes zoom (nothing refits except the fit actions).
@@ -56,7 +61,7 @@
 - Not done on purpose: plain `F` already fits the page, so it was not rebound; dragging the ruler still scrubs the playhead (changing it to timescale would remove scrubbing). Motion's timeline (8 to 80 px) is untouched.
 - Checks: `npx vitest run --dir src` 892 passed, 1 skipped; scripts 6 passed; build passed; Chromium fliptracks, fliptrim, flipbooksource, railperf and playbackrange passed. Not run: other fixtures, iPad (pinch feel and the fit guard are unverified on a real touch screen).
 
-### UI refinement: shared dialog shell (2026-11-18, branch `ui-refine`, not merged, not pushed)
+### UI refinement: shared dialog shell (2026-11-18, merged into `main` and pushed with `88751ab`)
 
 - New `src/ui/modal.ts`: `openModal({title, content, actions, ...})` owns showModal, Escape, close, removal and the single answer (`done` resolves with the id of the button that closed it). `modal.test.ts` has 7 tests on a fake DOM.
 - Moved onto it, one commit each: `vectorrestyle`, `layout` (Align and snap), `offlinedialog` (UI only; worker, caching and install logic untouched), `audioreactdialog`, `timelapse`, `dialogs.ts` (askText, confirmBox, pickBox, askNumbers, askLongText, askPathOptions: signatures and return types unchanged), `firstrun`, `cameramove`, `bundle`, `titles`, `vectorobjects`, `symbols` (both dialogs).
@@ -66,7 +71,7 @@
 - The task pack's "inline style" list for 2Dope is a scanner false positive: `lettering/styles.ts`, `effects.browser.ts`, `captions.browser.ts`, `lettertool.ts` and `captioneditor.ts` hold data fields called `style` (balloon styles, effect params), not DOM styles. The remaining inline styling is off-screen measuring hosts and about 167 runtime geometry assignments; none moved. Several "functions to touch" in the pack (`count`, `CHANNEL_COLORS`, `fileSize`, `labels`, `thinOut`) were not dialogs.
 - Not verified: the full browser suite, iPad Safari and Apple Pencil. Not started: the inkflo half of the pack (repo location unconfirmed), CSS drift collapse.
 
-### Local main merged with origin/main (2026-11-16, not pushed)
+### Local main merged with origin/main (2026-11-16, since pushed)
 
 - Local `main` = `origin/main` (combined release, already live with offline mode) plus one
   commit of the Blender camera framing / independent frames / gesture work below. The
