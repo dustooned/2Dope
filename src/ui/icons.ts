@@ -196,6 +196,10 @@ const P: Record<string, string> = {
   fxLongshadow: '<rect x="4" y="4" width="9" height="9" rx="1"/><path d="M13 13l7 7M13 4l7 7M4 13l7 7" stroke-dasharray="1.5 2.5"/>',
   fxDuotone: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16" stroke-dasharray="2 2"/>',
   fxWipe: '<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M12 5v14M8 8v8" stroke-dasharray="2 2"/>',
+  fxHalftone: '<circle cx="6" cy="6" r="1.2"/><circle cx="12" cy="6" r="2"/><circle cx="18" cy="6" r="2.8"/><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="2.6"/><circle cx="18" cy="12" r="3"/><circle cx="6" cy="18" r="2.6"/><circle cx="12" cy="18" r="3"/>',
+  fxStarglow: '<path d="M12 3v18M3 12h18"/><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="2"/>',
+  fxSpotblur: '<circle cx="8" cy="9" r="4"/><circle cx="16" cy="14" r="5" stroke-dasharray="2 2"/><circle cx="8" cy="18" r="2"/>',
+  fxGradient: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-dasharray="1 3"/><path d="M4 14h16" stroke-dasharray="2 2"/><path d="M4 18h16"/>',
   fxDrawon: '<path d="M3 18c3-9 7 3 11-6"/><path d="M17 9l4-3" stroke-dasharray="1.5 2.5"/>',
   lasso: '<path d="M7 17c-3-1.5-4-4-3-6.5C5.5 6 10 4 14.5 4.5S21 8 20 11.5 14 17 10 16.5"/><path d="M7 17c.5 1.5-.5 3-2 3.5"/>',
 };

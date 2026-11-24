@@ -6,6 +6,7 @@ import { assetClipTimingChange, assetTimingChange, type AssetTimingField, type A
 import { CURVES, curveOf, EASED, easingOf, easingSides, isAnimated, moveKey, removeKey, reverseKeys, scaleKeyTimes, setAllEasings, setKey, setSegmentCurve, setSegmentEasing, setSegmentSide, shiftKeys, staticProp, valueAt, type Curve, type Easing, type Key, type Prop, type Side, type Vec2 } from './core/anim';
 import { loopKeys, smoothKeys, staggerOffsets, wiggle, type LoopMode, type StaggerOrder, type WiggleOptions } from './core/keytools';
 import { effectDef, keyableSettings, newEffect, plainName, stillSetting, temporalEffect } from './core/effects';
+import { presetKeys, presetOf, withPresetKeys, type MotionPresetId } from './core/motionpresets';
 import { newSeed } from './core/rng';
 import { CAPTION_KEYS, captionValue, type CaptionKey, type CaptionTrack } from './lettering/spec';
 import {
@@ -228,6 +229,30 @@ export class CompEditor {
 
   layer(id: string): Layer | undefined {
     return this.comp.layers.find((l) => l.id === id);
+  }
+
+  /**
+   * Write a Motion preset (Pop in, Bounce, Spin...) as ordinary keyframes on these layers from the
+   * playhead, relative to where each layer is now. Keys already inside the preset's frames are
+   * replaced; locked layers and cameras are skipped. One undo step; false when nothing changed.
+   */
+  applyMotionPreset(ids: string[], id: MotionPresetId): boolean {
+    const c = this.comp, size = { width: c.width, height: c.height };
+    const targets = ids.map((i) => this.layer(i)).filter((l): l is Layer => !!l && !l.locked && l.kind !== 'camera');
+    if (!targets.length) return false;
+    return this.edit(`Motion preset: ${presetOf(id).label}`, (comp) => {
+      for (const t of targets) {
+        const l = comp.layers.find((x) => x.id === t.id);
+        if (!l) continue;
+        const f0 = Math.max(0, layerFrame(l, this.app.frame)), tr = l.transform;
+        const base = { position: valueAt(tr.position, f0), scale: valueAt(tr.scale, f0), rotation: valueAt(tr.rotation, f0), opacity: valueAt(tr.opacity, f0) };
+        for (const pk of presetKeys(id, base, f0, comp.fps, size)) {
+          const prop = tr[pk.prop] as Prop;
+          // a preset sets its own timing: a position path that moved at an even speed no longer does
+          (tr as unknown as Record<string, Prop>)[pk.prop] = withPresetKeys(prop.keys, prop.value, pk.keys) as Prop;
+        }
+      }
+    });
   }
 
   get primary(): Layer | undefined {

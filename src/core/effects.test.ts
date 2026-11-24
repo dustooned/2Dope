@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, PAPER_FINISHES, param, readEffects, resetEffect, setPictureStamp, temporalSamples } from './effects';
+import { SCHEMA } from '../io/schema';
+import { FORMAT15_EFFECTS, FORMAT16_EFFECTS, activeEffects, effectAt, effectPreview, effectsKey, effectsPad, effectTick, newEffect, PAPER_FINISHES, param, readEffects, resetEffect, setPictureStamp, temporalSamples } from './effects';
 import { drawingsLayer, newComp } from './comp';
 import { compFile, minimumDrawingSchema } from '../io/schema';
 
@@ -189,5 +190,46 @@ describe('expanded effect settings', () => {
     expect(param(newEffect('boil', 'b', 1), 'direction')).toBe('both');
     expect(param(newEffect('edges', 'x', 1), 'width')).toBe(1);
     expect(param(newEffect('vignette', 'v', 1), 'color')).toBe('#000000');
+  });
+});
+
+describe('Halftone, Starglow and Spot blur', () => {
+  it('start from sensible, safe defaults', () => {
+    expect(param(newEffect('halftone', 'h', 1), 'look')).toBe('ink');
+    expect(param(newEffect('halftone', 'h', 1), 'mix')).toBe(0);
+    expect(newEffect('halftone', 'h', 1).amount).toBe(8);
+    expect(param(newEffect('starglow', 's', 1), 'rays')).toBe('4');
+    expect(param(newEffect('starglow', 's', 1), 'composite')).toBe('top');
+    expect(param(newEffect('spotblur', 'b', 1), 'shape')).toBe('disc');
+    expect(newEffect('spotblur', 'b', 1).amount).toBe(12);
+  });
+  it('pad the layer for the streaks and discs that spread past the art', () => {
+    const l = (type: 'starglow' | 'spotblur', amount: number) => ({ id: 'L', effects: [{ ...newEffect(type, 'e', 1), amount }] });
+    expect(effectsPad(l('starglow', 100))).toBeGreaterThanOrEqual(100);
+    expect(effectsPad(l('spotblur', 30))).toBeGreaterThanOrEqual(30);
+  });
+  it('are in the newest file format, so an older build refuses a project that uses them', () => {
+    expect([...FORMAT15_EFFECTS]).toEqual(['halftone', 'starglow', 'spotblur']);
+    expect(SCHEMA).toBeGreaterThanOrEqual(15);
+  });
+});
+
+describe('Gradient background and the small option additions', () => {
+  it('Gradient starts as a soft two-colour blend behind the art', () => {
+    const g = newEffect('gradient', 'g', 1);
+    expect(g.amount).toBe(100);
+    expect(param(g, 'kind')).toBe('linear');
+    expect(param(g, 'where')).toBe('behind');
+    expect(param(g, 'soft')).toBe(true);
+    expect([...FORMAT16_EFFECTS]).toEqual(['gradient']);
+    expect(SCHEMA).toBeGreaterThanOrEqual(16);
+  });
+  it('the new settings on older effects default to the old look', () => {
+    expect(param(newEffect('blur', 'b', 1), 'direction')).toBe('both');
+    expect(param(newEffect('blur', 'b', 1), 'mix')).toBe(100);
+    expect(param(newEffect('posterize', 'p', 1), 'mix')).toBe(100);
+    expect(param(newEffect('rgbsplit', 'r', 1), 'mode')).toBe('line');
+    expect(param(newEffect('wipe', 'w', 1), 'style')).toBe('line');
+    expect(param(newEffect('wipe', 'w', 1), 'shape')).toBe('star');
   });
 });

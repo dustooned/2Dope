@@ -47,6 +47,10 @@ export const SYNONYM_GROUPS: readonly (readonly string[])[] = [
   ['speed', 'fast', 'rush', 'whoosh', 'smear'],
   ['sketch', 'pencil', 'trace', 'tracing', 'drawn'],
   ['loop', 'cycle', 'forever', 'repeating'],
+  ['gradient', 'ramp', 'backdrop', 'background', 'sunset', 'sky'],
+  ['comic', 'halftone', 'dots', 'dot', 'newsprint', 'newspaper', 'popart'],
+  ['sparkle', 'star', 'starglow', 'twinkle', 'streak', 'rays'],
+  ['bokeh', 'defocus', 'lens', 'focus', 'photo'],
 ];
 
 /** Extra student words for an effect, by effect id (its name and description are already searched). */
@@ -83,6 +87,10 @@ export const EFFECT_WORDS: Record<string, string> = {
   longshadow: 'flat shadow icon poster',
   duotone: 'two colour poster gradient map',
   wipe: 'reveal transition uncover clock iris',
+  gradient: 'background colour fade sky sunset ramp wash backdrop blend',
+  halftone: 'comic dots print newspaper pop art pattern',
+  starglow: 'star sparkle shine rays light streaks lens twinkle',
+  spotblur: 'bokeh out of focus depth lens soft blur background discs',
   drawon: 'write reveal draw itself line animate trim path',
   blinds: 'transition slats reveal',
   kaleido: 'mirror pattern symmetry spin',

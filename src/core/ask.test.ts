@@ -101,6 +101,8 @@ describe('the real catalogue answers real student words', () => {
     expect(first('oops')).toBe('tap2');
     expect(first('redo')).toBe('tap3');
     expect(first('hide the interface')).toBe('tap4');
+    expect(first('make it bounce')).toBe('preset.bounce');
+    expect(first('fade in')).toBe('preset.fadein');
   });
   it('says how to do a gesture, in the words the Gesture controls page uses', () => {
     const hit = searchAsk(cat, 'undo').find((h) => h.entry.id === 'tap2')!;

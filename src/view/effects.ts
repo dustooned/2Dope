@@ -5,6 +5,7 @@ import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
 import { blindsEffect, fillEffect, kaleidoEffect, outlineEffect, soundwaveEffect } from './fxextra';
 import { duotoneEffect, glitchEffect, longShadowEffect, rgbSplitEffect, shakeEffect, wipeEffect } from './fxmotion';
+import { gradientEffect, halftoneEffect, spotBlurEffect, starglowEffect } from './fxlight';
 import { timecodeEffect } from './fxtimecode';
 export { setOutlinePictureSource, setSoundPreload, setSoundSource, soundReady } from './fxextra';
 
@@ -187,6 +188,10 @@ function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number, pad = 
   else if (e.type === 'longshadow') longShadowEffect(c, e);
   else if (e.type === 'duotone') duotoneEffect(c, e);
   else if (e.type === 'wipe') wipeEffect(c, e, pad);
+  else if (e.type === 'halftone') halftoneEffect(c, e);
+  else if (e.type === 'gradient') gradientEffect(c, e, pad);
+  else if (e.type === 'starglow') starglowEffect(c, e);
+  else if (e.type === 'spotblur') spotBlurEffect(c, e);
   else if (e.type === 'kaleido') kaleidoEffect(c, e, frame, fps, pad, (cv, from) => warp(cv, from));
   else if (e.type === 'soundwave') soundwaveEffect(c, e, frame, fps, pad, layerId, blurCanvas);
   else if (e.type === 'timecode') timecodeEffect(c, e, param<string>(e, 'from') === 'layer' ? frame : frame + start, fps, pad);
@@ -203,7 +208,8 @@ function perPixel(c: HTMLCanvasElement, f: (px: Uint8ClampedArray, i: number) =>
 /** Posterize: each channel snapped to Levels evenly spaced values. */
 function posterizer(e: LayerEffect): (d: Uint8ClampedArray, i: number) => void {
   const n = Math.max(2, Math.round(e.amount)) - 1;
-  return (d, i) => { for (let k = 0; k < 3; k++) d[i + k] = Math.round((Math.round((d[i + k]! / 255) * n) / n) * 255); };
+  const mix = Math.max(0, Math.min(1, Number(param<number>(e, 'mix')) / 100));
+  return (d, i) => { for (let k = 0; k < 3; k++) { const flat = Math.round((Math.round((d[i + k]! / 255) * n) / n) * 255); d[i + k] = Math.round(d[i + k]! + (flat - d[i + k]!) * mix); } };
 }
 
 /** Threshold: brightness at or over Level is white, under it black. */
@@ -805,10 +811,34 @@ function boxMean(v: Float32Array, w: number, h: number, r: number): Float32Array
 function blurLayer(c: HTMLCanvasElement, e: LayerEffect): void {
   const radius = e.amount;
   if (radius < 1) return;
+  const mix = Math.max(0, Math.min(1, Number(param<number>(e, 'mix')) / 100));
+  if (mix <= 0) return;
+  const way = param<string>(e, 'direction');
   const g = c.getContext('2d', { willReadFrequently: true })!;
-  const img = g.getImageData(0, 0, c.width, c.height);
-  blurPainted(img.data, c.width, c.height, radius);
-  g.putImageData(img, 0, 0);
+  // with part of the blur, the picture before it is kept to blend back in
+  const before = mix < 1 ? canvasFor('blurkeep', c.width, c.height) : null;
+  before?.getContext('2d')!.drawImage(c, 0, 0);
+  if (way === 'horizontal' || way === 'vertical') {
+    // one way only: a straight smear, about as soft as a round blur of the same radius
+    const len = radius * 2, n = Math.min(48, Math.max(2, Math.ceil(len)));
+    const off = new Float64Array(n);
+    for (let k = 0; k < n; k++) off[k] = (k / (n - 1) - 0.5) * len;
+    smear(c, (x, y, k, to) => { to[0] = way === 'horizontal' ? x + off[k]! : x; to[1] = way === 'vertical' ? y + off[k]! : y; }, n, len / 2);
+  } else {
+    const img = g.getImageData(0, 0, c.width, c.height);
+    blurPainted(img.data, c.width, c.height, radius);
+    g.putImageData(img, 0, 0);
+  }
+  if (before) {
+    // premultiplied blend: the old picture at 1 - mix plus the blurred one at mix
+    const blurred = canvasFor('blurnew', c.width, c.height);
+    blurred.getContext('2d')!.drawImage(c, 0, 0);
+    const og = c.getContext('2d')!;
+    og.save(); og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, c.width, c.height);
+    og.globalAlpha = 1 - mix; og.drawImage(before, 0, 0);
+    og.globalCompositeOperation = 'lighter'; og.globalAlpha = mix; og.drawImage(blurred, 0, 0);
+    og.restore();
+  }
 }
 
 /** Scale the alpha of every painted pixel by keep(x, y), 0..1. */

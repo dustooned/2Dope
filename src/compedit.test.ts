@@ -252,6 +252,28 @@ describe('layers', () => {
     expect(ed.comp.layers.find((l) => l.id === 'L1')!.parent).toBeNull();
   });
 
+  it('applies a Motion preset as ordinary keys from the playhead, one undo step', () => {
+    const { app, ed, comp } = rig();
+    app.frame = 6;
+    expect(ed.applyMotionPreset(['L1'], 'bounce')).toBe(true);
+    const l = comp.layers.find((x) => x.id === 'L1')!, keys = l.transform.position.keys;
+    expect(keys.length).toBe(5); expect(keys[0]!.f).toBe(6); expect(keys[0]!.v).toEqual(l.transform.position.keys[4]!.v);
+    expect(app.history.canUndo).toBe(true);
+    app.history.undo();
+    expect(comp.layers.find((x) => x.id === 'L1')!.transform.position.keys.length).toBe(0);
+  });
+  it('a Motion preset skips locked layers, needs a layer, and replaces keys inside its frames', () => {
+    const { app, ed, comp } = rig();
+    expect(ed.applyMotionPreset([], 'spin')).toBe(false);
+    comp.layers[0]!.locked = true;
+    expect(ed.applyMotionPreset(['L1'], 'spin')).toBe(false);
+    comp.layers[0]!.locked = false;
+    app.frame = 0; ed.applyMotionPreset(['L1'], 'spin');
+    const first = comp.layers[0]!.transform.rotation.keys.length;
+    ed.applyMotionPreset(['L1'], 'spin'); // the same frames again: replaced, not doubled
+    expect(comp.layers[0]!.transform.rotation.keys.length).toBe(first);
+    expect(comp.layers[0]!.transform.rotation.keys.at(-1)!.v).toBe(360);
+  });
   it('reorders among the layers a list shows, never swallowed by hidden layers between them', () => {
     const { ed, comp } = rig();
     // A (shown), a hidden null, B (shown), another hidden null, C (shown): the list shows A, B, C

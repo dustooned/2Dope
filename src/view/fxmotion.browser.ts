@@ -154,4 +154,96 @@ check('A tinted echo paints its trail in the tint colour, behind the art', () =>
   ok(trail[3]! > 0 && trail[2]! > trail[0]! + 60 && art[0]! > 240 && art[1]! > 240, [trail, art]);
 });
 
+// ---- Halftone, Starglow, Spot blur --------------------------------------------------------------
+const alpha = (c: HTMLCanvasElement, x: number, y = 20) => px(c, x, y)[3]!;
+const expectTrue = ok;
+const solid = (c: HTMLCanvasElement, x: number, y: number) => alpha(c, x, y) > 200;
+check('Halftone makes solid ink in dark areas and no dots in white ones', () => {
+  const dark = render(rigC('halftone', 8, {}, '#000000'));
+  expectTrue(solid(dark, 45, 15) && solid(dark, 50, 20) && solid(dark, 55, 25) && alpha(dark, 30, 20) === 0, [alpha(dark, 45, 15), alpha(dark, 50, 20), alpha(dark, 30, 20)]);
+  expectTrue(alpha(render(rigC('halftone', 8, {}, '#ffffff')), 50, 20) === 0);
+});
+check('Halftone can grow its dots where it is light instead', () => {
+  expectTrue(solid(render(rigC('halftone', 8, { invert: true }, '#ffffff')), 50, 20));
+});
+check('Halftone grey gives about half-covered dots', () => {
+  const c = render(rigC('halftone', 8, {}, '#808080')), d = c.getContext('2d')!.getImageData(42, 12, 16, 16).data;
+  let on = 0; for (let i = 3; i < d.length; i += 4) if (d[i]! > 128) on++;
+  const share = on / (16 * 16);
+  expectTrue(share > 0.25 && share < 0.75, share);
+});
+check('Halftone colour dots take the colour of the picture; ink dots take the ink colour', () => {
+  const d = render(rigC('halftone', 8, { look: 'colour' }, '#ff0000')).getContext('2d')!.getImageData(42, 12, 16, 16).data;
+  let reds = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 200 && d[i]! > d[i + 1]! + 100) reds++;
+  expectTrue(reds > 10, reds);
+  const ink = render(rigC('halftone', 8, { color: '#0000ff' }, '#000000')), p = px(ink, 50, 20);
+  expectTrue(p[2]! > 200 && p[0]! < 40, p);
+});
+check('Halftone can keep the picture underneath', () => {
+  const p = px(render(rigC('halftone', 8, { mix: 100 }, '#ffffff')), 50, 20);
+  expectTrue(p[3]! > 200 && p[0]! > 240, p);
+});
+check('Starglow sends streaks along its lines, not between them', () => {
+  const c = render(rigC('starglow', 30, { rays: '4', angle: 0, threshold: 60 }, '#ffffff'));
+  expectTrue(alpha(c, 70, 20) > 0 && alpha(c, 50, 3) > 0 && alpha(c, 68, 38) === 0, [alpha(c, 70, 20), alpha(c, 50, 3), alpha(c, 68, 38)]);
+});
+check('Starglow ignores what is not bright, and Length 0 does nothing', () => {
+  expectTrue(alpha(render(rigC('starglow', 30, { threshold: 60 }, '#303030')), 70, 20) === 0);
+  expectTrue(alpha(render(rigC('starglow', 0, {}, '#ffffff')), 70, 20) === 0);
+});
+check('Starglow with eight points also reaches the diagonals', () => {
+  const four = render(rigC('starglow', 30, { rays: '4', angle: 0 }, '#ffffff')), eight = render(rigC('starglow', 30, { rays: '8', angle: 0 }, '#ffffff'));
+  expectTrue(alpha(eight, 66, 36) > alpha(four, 66, 36), [alpha(four, 66, 36), alpha(eight, 66, 36)]);
+});
+check('Spot blur spreads a shape into a soft disc, and Radius 0 changes nothing', () => {
+  const c = render(rigC('spotblur', 8, {}, '#ffffff'));
+  expectTrue(alpha(c, 62, 20) > 0 && alpha(c, 62, 20) < 255 && alpha(c, 75, 20) === 0 && alpha(c, 50, 20) > 240, [alpha(c, 62, 20), alpha(c, 75, 20), alpha(c, 50, 20)]);
+  expectTrue(alpha(render(rigC('spotblur', 0, {}, '#ffffff')), 62, 20) === 0);
+});
+check('Spot blur has a six-sided shape too', () => {
+  const c = render(rigC('spotblur', 8, { shape: 'hex' }, '#ffffff'));
+  expectTrue(alpha(c, 62, 20) > 0 && alpha(c, 75, 20) === 0, alpha(c, 62, 20));
+});
+
+// ---- the small additions ---------------------------------------------------------------------------
+check('RGB split can fringe out from the middle instead: none at the middle, more towards the edge', () => {
+  const c = render(rigC('rgbsplit', 30, { mode: 'radial' }, '#ffffff')), mid = px(c, 50, 20), edge = px(c, 58, 20);
+  expectTrue(mid[0]! > 200 && mid[1]! > 200 && mid[2]! > 200 && edge[3]! > 200 && edge[2]! < 100 && edge[0]! > 200, [mid, edge]);
+});
+check('Wipe can close in as a diamond, square, star or heart', () => {
+  for (const shape of ['diamond', 'square', 'star', 'heart']) {
+    const open = render(rigC('wipe', 0, { style: 'shape', shape }, '#ffffff')), most = render(rigC('wipe', 95, { style: 'shape', shape }, '#ffffff')), gone = render(rigC('wipe', 100, { style: 'shape', shape }, '#ffffff'));
+    expectTrue(alpha(open, 41, 11) > 200 && alpha(most, 50, 20) > 200 && alpha(most, 41, 11) === 0 && alpha(gone, 50, 20) === 0, [shape, alpha(open, 41, 11), alpha(most, 50, 20), alpha(most, 41, 11), alpha(gone, 50, 20)]);
+  }
+});
+check('Gradient fills the page behind the art, top colour to bottom colour', () => {
+  const c = render(rigC('gradient', 100, { color: '#ff0000', color2: '#0000ff', soft: false }, '#ffffff'));
+  const top = px(c, 10, 1), bottom = px(c, 10, 38), art = px(c, 50, 20);
+  expectTrue(top[3] === 255 && top[0]! > 200 && top[2]! < 60 && bottom[2]! > 200 && bottom[0]! < 60 && art[0]! > 240 && art[1]! > 240, [top, bottom, art]);
+});
+check('Gradient works on a layer with nothing on it, and alone it hides the art', () => {
+  const r = rigC('gradient', 100, { color: '#00ff00', color2: '#00ff00' }, '#ffffff');
+  r.p.drawing(r.p.layer.exposures[0]!.drawing).line.getContext('2d')!.clearRect(0, 0, W, H); r.p.drawing(r.p.layer.exposures[0]!.drawing).rev += 7;
+  expectTrue(px(render(r), 10, 10)[1]! > 200);
+  const only = px(render(rigC('gradient', 100, { color: '#00ff00', color2: '#00ff00', where: 'only' }, '#ffffff')), 50, 20);
+  expectTrue(only[1]! > 200 && only[0]! < 60, only);
+});
+check('A circle gradient runs from the first colour at its centre to the second', () => {
+  const c = render(rigC('gradient', 100, { kind: 'radial', color: '#ff0000', color2: '#0000ff', soft: false, where: 'only' }, '#ffffff'));
+  const mid = px(c, 50, 20), corner = px(c, 1, 1);
+  expectTrue(mid[0]! > 200 && corner[2]! > 200, [mid, corner]);
+});
+check('Gaussian blur can blur one way only', () => {
+  const side = render(rigC('blur', 6, { direction: 'horizontal' }, '#ffffff')), up = render(rigC('blur', 6, { direction: 'vertical' }, '#ffffff'));
+  expectTrue(alpha(side, 62, 20) > 0 && alpha(side, 50, 8) === 0 && alpha(up, 50, 8) > 0 && alpha(up, 62, 20) === 0, [alpha(side, 62, 20), alpha(side, 50, 8), alpha(up, 50, 8), alpha(up, 62, 20)]);
+});
+check('Gaussian blur can be mixed in part', () => {
+  const none = alpha(render(rigC('blur', 8, { mix: 0 }, '#ffffff')), 38), half = alpha(render(rigC('blur', 8, { mix: 50 }, '#ffffff')), 38), all = alpha(render(rigC('blur', 8, {}, '#ffffff')), 38);
+  expectTrue(none === 0 && half > 0 && all > half, [none, half, all]);
+});
+check('Posterize can be mixed in part', () => {
+  const r0 = px(render(rigC('posterize', 2, { mix: 0 }, '#999999')), 50, 20)[0]!, r50 = px(render(rigC('posterize', 2, { mix: 50 }, '#999999')), 50, 20)[0]!, r100 = px(render(rigC('posterize', 2, {}, '#999999')), 50, 20)[0]!;
+  expectTrue(Math.abs(r0 - 153) < 3 && r100 > 250 && r50 > r0 + 30 && r50 < r100 - 30, [r0, r50, r100]);
+});
+
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

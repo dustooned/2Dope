@@ -30,9 +30,21 @@ export function rgbSplitEffect(c: HTMLCanvasElement, e: LayerEffect): void {
   if (dist <= 0) return;
   const w = c.width, h = c.height, a = (Number(param<number>(e, 'angle')) * Math.PI) / 180;
   const dx = Math.round(Math.cos(a) * dist), dy = Math.round(Math.sin(a) * dist);
-  if (!dx && !dy) return;
+  const radial = param<string>(e, 'mode') === 'radial';
+  if (!radial && !dx && !dy) return;
   const g = c.getContext('2d', { willReadFrequently: true })!, img = g.getImageData(0, 0, w, h), s = img.data;
   const out = g.createImageData(w, h), d = out.data;
+  if (radial) {
+    // a lens: no split in the middle, growing to Distance at the edge of the picture (red out, blue in)
+    const cx = w / 2, cy = h / 2, R = Math.max(w, h) / 2;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const vx = ((x - cx) / R) * dist, vy = ((y - cy) / R) * dist;
+      const at = (px: number, py: number) => { const xi = Math.round(px), yi = Math.round(py); return xi >= 0 && xi < w && yi >= 0 && yi < h ? yi * w + xi : -1; };
+      takeChannels(s, d, (y * w + x) * 4, at(x - vx, y - vy), y * w + x, at(x + vx, y + vy));
+    }
+    g.putImageData(out, 0, 0);
+    return;
+  }
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const o = (y * w + x) * 4;
     const rx = x - dx, ry = y - dy, bx = x + dx, by = y + dy;
@@ -152,6 +164,33 @@ export function duotoneEffect(c: HTMLCanvasElement, e: LayerEffect): void {
   g.putImageData(img, 0, 0);
 }
 
+/** A shape the Wipe can grow or close in: how far (in shape-sized steps) a point is from the middle. */
+export type WipeShape = 'diamond' | 'square' | 'star' | 'heart';
+
+/**
+ * The size of the `shape` that just reaches point (x, y), measured from the middle: 0 at the middle, 1
+ * on the edge of the unit shape. It is the same at twice the distance twice over, so it can be used
+ * as a distance. Shapes point up (y grows downward on screen).
+ */
+export function shapeMetric(shape: WipeShape, x: number, y: number): number {
+  const ax = Math.abs(x), ay = Math.abs(y);
+  if (shape === 'square') return Math.max(ax, ay);
+  if (shape === 'diamond') return ax + ay;
+  if (shape === 'star') {
+    // five points: the edge swings between a deep notch and a long point
+    const r = Math.hypot(x, y);
+    if (r === 0) return 0;
+    const theta = Math.atan2(x, -y);
+    return r / (0.42 + 0.58 * Math.abs(Math.cos((5 * theta) / 2)) ** 1.6);
+  }
+  // heart: the classic (x² + y² − 1)³ − x²y³ ≤ 0, found by shrinking until the point is inside
+  const px = x, py = -y;
+  const inside = (u: number, v: number) => (u * u + v * v - 1) ** 3 - u * u * v ** 3 <= 0;
+  let lo = 0.001, hi = 6;
+  for (let i = 0; i < 18; i++) { const mid = (lo + hi) / 2; if (inside(px / mid, py / mid)) hi = mid; else lo = mid; }
+  return hi;
+}
+
 /**
  * Wipe: hides or reveals the layer with a straight edge (Line), a turning hand (Clock) or a
  * closing circle (Iris). Completion 0% shows everything, 100% hides everything.
@@ -164,6 +203,9 @@ export function wipeEffect(c: HTMLCanvasElement, e: LayerEffect, pad: number): v
   const a = (Number(param<number>(e, 'angle')) * Math.PI) / 180, ux = Math.sin(a), uy = -Math.cos(a);
   // how far the page reaches along the wipe direction, so 100% really clears every corner
   const reach = (Math.abs(ux) * pw + Math.abs(uy) * ph) / 2 || 1, R = Math.hypot(pw, ph) / 2 || 1;
+  const shapeKind = param<string>(e, 'shape') as WipeShape;
+  // the shape's size at the page corners, so it closes in from just past them
+  const shapeMax = style === 'shape' ? Math.max(0.01, ...[[-pw, -ph], [pw, -ph], [-pw, ph], [pw, ph]].map(([cx2, cy2]) => shapeMetric(shapeKind, cx2! / 2 / R, cy2! / 2 / R))) : 1;
   const g = c.getContext('2d', { willReadFrequently: true })!, img = g.getImageData(0, 0, w, h), p = img.data;
   // the wipe line sits a little past each end so feathered edges still start and finish clean
   const t = C * (1 + 2 * feather) - feather;
@@ -177,6 +219,7 @@ export function wipeEffect(c: HTMLCanvasElement, e: LayerEffect, pad: number): v
       ang = ((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
       u = ang / (Math.PI * 2);
     } else if (style === 'iris') u = 1 - Math.hypot(px, py) / R; // the edge closes in to the middle
+    else if (style === 'shape') u = 1 - shapeMetric(shapeKind, px / R, py / R) / shapeMax;
     else u = 0.5 + (px * ux + py * uy) / (2 * reach);
     let keep = feather > 0 ? smooth((u - t) / (2 * feather) + 0.5) : u >= C ? 1 : 0;
     if (C >= 1) keep = 0;

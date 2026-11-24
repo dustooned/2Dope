@@ -7,6 +7,7 @@ import { CURVES, curveOf, easingOf, EASINGS, isAnimated, spacingTicks, type Curv
 import { BLEND_MODES, compLength, layerEnd, PART_LABEL, PART_NAMES, partOf, playsOn, type BlendMode, type DrawingsLayer, type Layer, type PartName, type PlayMode } from '../core/comp';
 import { FPS_PRESETS } from '../core/project';
 import { newEffect } from '../core/effects';
+import { MOTION_PRESETS, presetOf, type MotionPresetId } from '../core/motionpresets';
 import { newSeed } from '../core/rng';
 import { WIGGLE_DEFAULTS, type LoopMode, type StaggerOrder, type WiggleDims, type WiggleOptions } from '../core/keytools';
 import { isCap, isFx, isPartProp, isPin, keyId, PROP_LABEL, type KeyRef, type PropKey, type PropName } from '../compedit';
@@ -192,6 +193,11 @@ export class MotionPanel {
     ]);
     const layer = menu('Layer', 'Layer actions', 'layers', () => ed.primary ? this.layerItems(ed.primary) : this.layerListItems());
     const tools = menu('Animation', 'Motion tools', 'motion', () => this.animationItems());
+    // one-tap simple motion for the selected layers, from the playhead (ordinary keys you can edit)
+    const presets = menu('Presets', 'One-tap motion for the selected layers, from the playhead: Pop in, Bounce, Pulse, Spin and more', 'key', () => [
+      { title: ed.selected.length ? 'Motion from the playhead' : 'Select a layer first' },
+      ...MOTION_PRESETS.map((p) => ({ label: p.label, disabled: !ed.selected.length || app.playing, run: () => this.runPreset(p.id) })),
+    ]);
     const view = menu('View', 'Motion view options', 'viewfinder', () => this.viewItems());
     const assets = btn('Assets', 'Project assets and reusable files', () => {
       if (this.openAssets) this.openAssets(assets); else app.onNotice?.('The asset browser is unavailable.');
@@ -221,7 +227,7 @@ export class MotionPanel {
     this.inspector.onToggle = () => this.inspectorBtn.setAttribute('aria-pressed', String(this.inspector.isOpen));
     const menus = row(
       group(addLayer, importMedia, assets),
-      group(graph, layer, this.anchors.button, this.effectsBtn),
+      group(graph, layer, this.anchors.button, this.effectsBtn, presets),
       group(tools, view, this.inspectorBtn),
     );
     menus.classList.add('motion-menus'); menus.setAttribute('role', 'group'); menus.setAttribute('aria-label', 'Motion commands');
@@ -1157,6 +1163,14 @@ export class MotionPanel {
     if (!dims) return;
     this.wiggleLast = { frequency: Math.min(10, Math.max(0.5, r[0]!)), magnitude: Math.abs(r[1]!), smooth: Math.min(1, Math.max(0, r[2]! / 100)), seed: Math.round(r[3]!) >>> 0, dims };
     ed.wiggleKeys(this.wiggleLast);
+  }
+
+  /** Add a Motion preset's keys to the selected layers (the keys are ordinary: edit, ease or delete them). */
+  private runPreset(id: MotionPresetId): void {
+    const ed = this.app.editor, p = presetOf(id);
+    const ok = ed.applyMotionPreset([...ed.selected], id);
+    this.app.onNotice?.(ok ? `${p.label} added from frame ${this.app.frame + 1}: ${p.hint.toLowerCase()}. Its keys are ordinary ones you can edit.` : 'Nothing changed: select an unlocked layer first.');
+    this.app.requestRender();
   }
 
   private wiggleLast: WiggleOptions = { ...WIGGLE_DEFAULTS, seed: 1 };

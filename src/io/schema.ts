@@ -1,5 +1,5 @@
 import { readVideo, VIDEO_MAX_SECONDS, VIDEO_PATH, type VideoSpec } from '../core/video';
-import { FORMAT10_EFFECTS, FORMAT12_EFFECTS, FORMAT14_EFFECTS, isPaperFinish, readEffectStyleOrigin, temporalEffect, type EffectStyleOrigin } from '../core/effects';
+import { FORMAT10_EFFECTS, FORMAT12_EFFECTS, FORMAT14_EFFECTS, FORMAT15_EFFECTS, FORMAT16_EFFECTS, isPaperFinish, readEffectStyleOrigin, temporalEffect, type EffectStyleOrigin } from '../core/effects';
 import { readTitle, type TitleSpec } from '../core/title';
 import { readCaption, type CaptionSpec } from '../lettering/spec';
 import { MAX_PROJECT_FONTS } from '../lettering/fonts';
@@ -41,7 +41,7 @@ import { readVectorStyle, readVectorClips, readVectorControls, MAX_STAMPS, MAX_S
  * - Anything else bumps SCHEMA and adds a step to `migrate`, which upgrades older files on open.
  * - Files from a NEWER schema are refused with a clear message, never half-read.
  */
-export const SCHEMA = 14;
+export const SCHEMA = 16;
 export const FORMAT = '2dope';
 
 export interface ExposureFile {
@@ -193,6 +193,8 @@ export interface DrawingFile {
 /** Keep ordinary archives readable by older builds; imported path paint requires format 5. */
 export function minimumDrawingSchema(drawings: Record<string, DrawingFile>, comps?: Record<string, CompFile>): number {
   const uses = (test: (effect: LayerEffect) => boolean) => !!comps && Object.values(comps).some(c => c.layers.some(l => l.effects?.some(test) || l.styleOrigin?.effects.some(test)));
+  if (uses((e) => FORMAT16_EFFECTS.includes(e.type))) return 16;
+  if (uses((e) => FORMAT15_EFFECTS.includes(e.type))) return 15;
   if (uses((e) => FORMAT14_EFFECTS.includes(e.type))) return 14;
   if (uses((e) => e.type === 'texture' && isPaperFinish(e.style))) return 13;
   if (uses((e) => FORMAT12_EFFECTS.includes(e.type))) return 12;
@@ -605,6 +607,10 @@ export function migrate(input: unknown): Record<string, unknown> {
   if ((raw.schema as number) < 13) raw = { ...raw, schema: 13 };
   // Draw on and the simple motion effects are additive; only files using them need 14.
   if ((raw.schema as number) < 14) raw = { ...raw, schema: 14 };
+  // Halftone, Starglow and Spot blur are additive; only files using them need 15.
+  if ((raw.schema as number) < 15) raw = { ...raw, schema: 15 };
+  // Gradient background is additive; only files using it need 16.
+  if ((raw.schema as number) < 16) raw = { ...raw, schema: 16 };
   return raw;
 }
 

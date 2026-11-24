@@ -11,7 +11,7 @@
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
-export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave' | 'timecode' | 'drawon' | 'glitch' | 'rgbsplit' | 'shake' | 'longshadow' | 'duotone' | 'wipe';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave' | 'timecode' | 'drawon' | 'glitch' | 'rgbsplit' | 'shake' | 'longshadow' | 'duotone' | 'wipe' | 'halftone' | 'starglow' | 'spotblur' | 'gradient';
 
 /** Effects added in format 10: older readers drop unknown effect types, so saving one needs reader 10. */
 export const FORMAT10_EFFECTS: readonly EffectType[] = ['fill', 'outline', 'blinds', 'kaleido', 'soundwave'];
@@ -19,6 +19,10 @@ export const FORMAT10_EFFECTS: readonly EffectType[] = ['fill', 'outline', 'blin
 export const FORMAT12_EFFECTS: readonly EffectType[] = ['timecode'];
 /** Effects added in format 14 (Draw on and the simple motion set): older readers would drop them, so saving one needs reader 14. */
 export const FORMAT14_EFFECTS: readonly EffectType[] = ['drawon', 'glitch', 'rgbsplit', 'shake', 'longshadow', 'duotone', 'wipe'];
+/** Effects added in format 15 (Halftone, Starglow, Spot blur): older readers would drop them, so saving one needs reader 15. */
+export const FORMAT15_EFFECTS: readonly EffectType[] = ['halftone', 'starglow', 'spotblur'];
+/** Effects added in format 16 (Gradient background): older readers would drop it, so saving one needs reader 16. */
+export const FORMAT16_EFFECTS: readonly EffectType[] = ['gradient'];
 /** Longest label a text setting keeps (the Timecode prefix). */
 export const EFFECT_TEXT_MAX = 40;
 /** What an effect works on: Ink, Colour, the whole layer, or (captions only) the letters. */
@@ -133,7 +137,11 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'look', label: 'Look', kind: 'choice', options: [{ id: 'erase', label: 'Rubbed-out specks' }, { id: 'speckle', label: 'Light and dark specks' }], def: 'erase' },
       { key: 'mono', label: 'Grey specks (off: coloured)', kind: 'toggle', def: true },
     ] },
-  { id: 'blur', label: 'Gaussian blur', hint: 'Softens the layer like a camera out of focus, or a dreamy glow (Gaussian blur)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [0, 40], sizeRange: [0, 0], amountLabel: 'Blur', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false },
+  { id: 'blur', label: 'Gaussian blur', hint: 'Softens the layer like a camera out of focus, or a dreamy glow (Gaussian blur)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [0, 40], sizeRange: [0, 0], amountLabel: 'Blur', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false,
+    extras: [
+      { key: 'direction', label: 'Blur', kind: 'choice', options: [{ id: 'both', label: 'All round' }, { id: 'horizontal', label: 'Sideways only' }, { id: 'vertical', label: 'Up and down only' }], def: 'both' },
+      { key: 'mix', label: 'Amount of blur', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 100 },
+    ] },
   { id: 'echo', label: 'Echo', hint: 'Leave fading copies of earlier artwork frames behind the current layer.', target: 'layer', amount: 45, size: 3, hold: 1, amountRange: [0, 100], sizeRange: [1, 6], amountLabel: 'Fade per copy', sizeLabel: 'Copies', amountUnit: '%', sizeUnit: '', animated: false,
     extras: [
       { key: 'spacing', label: 'Frame spacing', kind: 'range', min: 1, max: 12, step: 1, unit: ' frames', def: 1 },
@@ -141,7 +149,7 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'tint', label: 'Tint the copies', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
       { key: 'tintColor', label: 'Tint colour', kind: 'color', def: '#4aa3ff' },
     ] },
-  { id: 'motionblur', label: 'Motion blur', hint: 'Smear the current drawing along the layer’s animated movement, rotation and scale.', target: 'layer', amount: 50, size: 5, hold: 1, amountRange: [0, 100], sizeRange: [2, 6], amountLabel: 'Shutter', sizeLabel: 'Samples', amountUnit: '% of frame', sizeUnit: '', animated: false },
+  { id: 'motionblur', label: 'Motion blur', hint: 'Smear the current drawing along the layer’s animated movement, rotation and scale. Shutter 50% is a film camera’s usual 180° shutter; 100% is 360°.', target: 'layer', amount: 50, size: 5, hold: 1, amountRange: [0, 100], sizeRange: [2, 6], amountLabel: 'Shutter', sizeLabel: 'Samples', amountUnit: '% of frame', sizeUnit: '', animated: false },
   { id: 'shadow', label: 'Drop shadow', hint: 'A shadow behind the art, offset and softened, like a sticker or a cut-out (drop shadow)', target: 'layer', amount: 5, size: 0, hold: 1, amountRange: [0, 120], sizeRange: [0, 100], amountLabel: 'Distance', sizeLabel: 'Softness', amountUnit: ' px', sizeUnit: ' px', animated: false,
     extras: [
       { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 135 },
@@ -168,7 +176,8 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
       { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
     ] },
-  { id: 'posterize', label: 'Posterize', hint: 'Fewer shades of each colour: flat, poster-like bands (posterize)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [2, 32], sizeRange: [0, 0], amountLabel: 'Levels', sizeLabel: 'Size', amountUnit: '', sizeUnit: '', animated: false },
+  { id: 'posterize', label: 'Posterize', hint: 'Fewer shades of each colour: flat, poster-like bands (posterize)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [2, 32], sizeRange: [0, 0], amountLabel: 'Levels', sizeLabel: 'Size', amountUnit: '', sizeUnit: '', animated: false,
+    extras: [{ key: 'mix', label: 'Amount of effect', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 100 }] },
   { id: 'mosaic', label: 'Mosaic', hint: 'Big square blocks of colour, like a censored or low-res picture (mosaic)', target: 'layer', amount: 10, size: 10, hold: 1, amountRange: [1, 200], sizeRange: [1, 200], amountLabel: 'Blocks across', sizeLabel: 'Blocks down', amountUnit: '', sizeUnit: '', animated: false,
     extras: [{ key: 'sharp', label: 'Sharp colours', kind: 'toggle', def: false }, { key: 'hard', label: 'Hard edges', kind: 'toggle', def: false }] },
   { id: 'edges', label: 'Find edges', hint: 'Only the outlines stay, like a pencil tracing of the picture (find edges)', target: 'layer', amount: 0, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Mix with original', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
@@ -283,7 +292,10 @@ export const EFFECT_TYPES: EffectDef[] = [
     ],
     pad: (e) => Math.ceil(e.amount + 1.5 * Number(param<number>(e, 'split')) + 2) },
   { id: 'rgbsplit', label: 'RGB split', hint: 'Red slides one way and blue the other, leaving colour fringes along an angle. Key Distance to make it pulse', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [0, 60], sizeRange: [0, 0], amountLabel: 'Distance', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: '', animated: false,
-    extras: [{ key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 0 }],
+    extras: [
+      { key: 'mode', label: 'Split', kind: 'choice', options: [{ id: 'line', label: 'Along a direction' }, { id: 'radial', label: 'Out from the middle (lens)' }], def: 'line' },
+      { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 0 },
+    ],
     pad: (e) => e.amount + 2 },
   { id: 'shake', label: 'Camera shake', hint: 'The whole layer jitters like a shaken camera. Key Strength up and down for an impact or an explosion', target: 'layer', amount: 8, size: 0, hold: 1, amountRange: [0, 80], sizeRange: [0, 0], amountLabel: 'Strength', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: '', animated: true, seeded: true,
     extras: [
@@ -306,10 +318,49 @@ export const EFFECT_TYPES: EffectDef[] = [
     ] },
   { id: 'wipe', label: 'Wipe', hint: 'Hide or reveal the layer with a moving edge, a turning clock hand or a closing circle. Key Completion from 0 to 100%', target: 'layer', amount: 0, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Completion', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
     extras: [
-      { key: 'style', label: 'Style', kind: 'choice', options: [{ id: 'line', label: 'Line' }, { id: 'clock', label: 'Clock' }, { id: 'iris', label: 'Iris' }], def: 'line' },
+      { key: 'style', label: 'Style', kind: 'choice', options: [{ id: 'line', label: 'Line' }, { id: 'clock', label: 'Clock' }, { id: 'iris', label: 'Iris' }, { id: 'shape', label: 'Shape' }], def: 'line' },
+      { key: 'shape', label: 'Shape', kind: 'choice', options: [{ id: 'diamond', label: 'Diamond' }, { id: 'square', label: 'Square' }, { id: 'star', label: 'Star' }, { id: 'heart', label: 'Heart' }], def: 'star' },
       { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 90 },
       { key: 'feather', label: 'Feather', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
       { key: 'invert', label: 'Invert', kind: 'toggle', def: false },
+    ] },
+  { id: 'halftone', label: 'Halftone', hint: 'The picture turns into a grid of comic-book dots: bigger where it is darker. Choose ink or colour dots', target: 'layer', amount: 8, size: 0, hold: 1, amountRange: [3, 40], sizeRange: [0, 0], amountLabel: 'Dot size', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'angle', label: 'Grid angle', kind: 'range', min: 0, max: 90, step: 5, unit: '\u00b0', def: 45 },
+      { key: 'look', label: 'Dots', kind: 'choice', options: [{ id: 'ink', label: 'Ink' }, { id: 'colour', label: 'Colour' }], def: 'ink' },
+      { key: 'color', label: 'Ink colour', kind: 'color', def: '#000000' },
+      { key: 'invert', label: 'Bigger where it is light', kind: 'toggle', def: false },
+      { key: 'mix', label: 'Keep the picture', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
+    ] },
+  { id: 'starglow', label: 'Starglow', hint: 'Streaks of light run out from the bright parts, like a sparkle or a star filter on a lens', target: 'layer', amount: 40, size: 0, hold: 1, amountRange: [0, 200], sizeRange: [0, 0], amountLabel: 'Length', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'threshold', label: 'Brightness needed', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 70 },
+      { key: 'intensity', label: 'Intensity', kind: 'range', min: 0.2, max: 4, step: 0.1, unit: '\u00d7', def: 1 },
+      { key: 'rays', label: 'Points', kind: 'choice', options: [{ id: '4', label: '4' }, { id: '6', label: '6' }, { id: '8', label: '8' }, { id: '12', label: '12' }], def: '4' },
+      { key: 'angle', label: 'Turn', kind: 'range', min: 0, max: 90, step: 5, unit: '\u00b0', def: 0 },
+      { key: 'tint', label: 'Tint the streaks', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
+      { key: 'tintColor', label: 'Streak colour', kind: 'color', def: '#fff6c8' },
+      { key: 'composite', label: 'Original', kind: 'choice', options: [{ id: 'top', label: 'Keep it' }, { id: 'none', label: 'Streaks only' }], def: 'top' },
+    ],
+    pad: (e) => e.amount + 2 },
+  { id: 'spotblur', label: 'Spot blur', hint: 'A lens blur: bright spots spread into soft discs, like an out-of-focus photo', target: 'layer', amount: 12, size: 0, hold: 1, amountRange: [0, 60], sizeRange: [0, 0], amountLabel: 'Radius', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'highlights', label: 'Bright discs', kind: 'range', min: 0, max: 300, step: 10, unit: '%', def: 80 },
+      { key: 'threshold', label: 'Brightness needed', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 70 },
+      { key: 'shape', label: 'Disc shape', kind: 'choice', options: [{ id: 'disc', label: 'Round' }, { id: 'hex', label: 'Six-sided' }], def: 'disc' },
+    ],
+    pad: (e) => e.amount + 2 },
+  { id: 'gradient', label: 'Gradient background', hint: 'A smooth blend of two colours across the page, behind your art: a sky, a sunset or a colour wash. Works on an empty layer too', target: 'layer', amount: 100, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Opacity', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'color', label: 'Colour', kind: 'color', def: '#ffb36b' },
+      { key: 'color2', label: 'Second colour', kind: 'color', def: '#4b2e83' },
+      { key: 'kind', label: 'Shape', kind: 'choice', options: [{ id: 'linear', label: 'Straight' }, { id: 'radial', label: 'Circle' }], def: 'linear' },
+      { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 0 },
+      { key: 'cx', label: 'Circle centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'cy', label: 'Circle centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'radius', label: 'Circle size', kind: 'range', min: 5, max: 200, step: 1, unit: '%', def: 100 },
+      { key: 'soft', label: 'Soft blend (ease in and out)', kind: 'toggle', def: true },
+      { key: 'where', label: 'Gradient', kind: 'choice', options: [{ id: 'behind', label: 'Behind the art' }, { id: 'only', label: 'Alone (hides the art)' }], def: 'behind' },
     ] },
   { id: 'drawon', label: 'Draw on', hint: 'Vector lines draw themselves along their path, or a short piece of each line travels along it, with tapered ends. Set Start and End for a piece; key End from 0 to 100% to draw a line on; Travel moves it with no keys', target: 'line', amount: 35, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 100], amountLabel: 'End', sizeLabel: 'Start', amountUnit: '%', sizeUnit: '%', animated: false,
     frameDependent: (e) => Number(param<number>(e, 'travel')) !== 0,

@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import { searchAsk, type AskEntry, type AskKind } from '../core/ask';
-import { commandEntries, effectEntries, gestureEntries, manualEntries, toolEntries } from '../core/askcatalog';
+import { commandEntries, effectEntries, gestureEntries, manualEntries, presetEntries, toolEntries } from '../core/askcatalog';
 import { effectIcon, iconSvg } from './icons';
 import { el } from './dom';
 import { openModal } from './modal';
@@ -33,7 +33,7 @@ let catalog: AskEntry[] | null = null;
 async function load(): Promise<AskEntry[]> {
   if (catalog) return catalog;
   const [{ MANUAL }, { COMMANDS, CONTEXT_NAMES }] = await Promise.all([import('./manualtext'), import('./commands')]);
-  catalog = [...toolEntries(), ...effectEntries(), ...gestureEntries(), ...commandEntries(COMMANDS, CONTEXT_NAMES), ...manualEntries(MANUAL)];
+  catalog = [...toolEntries(), ...effectEntries(), ...gestureEntries(), ...presetEntries(), ...commandEntries(COMMANDS, CONTEXT_NAMES), ...manualEntries(MANUAL)];
   return catalog;
 }
 

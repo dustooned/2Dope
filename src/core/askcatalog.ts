@@ -6,6 +6,7 @@ import type { AskEntry } from './ask';
 import { EFFECT_WORDS, TOOL_ENTRIES } from './askdata';
 import { EFFECT_TYPES, plainName } from './effects';
 import { GESTURE_ACTIONS, GESTURES, gestureSentence } from './gestures';
+import { MOTION_PRESETS } from './motionpresets';
 
 export function effectEntries(): AskEntry[] {
   return EFFECT_TYPES.map((d) => ({ id: d.id, kind: 'effect', name: plainName(d), text: d.hint, words: EFFECT_WORDS[d.id] ?? '' }));
@@ -59,7 +60,12 @@ export function gestureEntries(): AskEntry[] {
   });
 }
 
+/** The Motion presets (Pop in, Bounce...): found like a command, with where to look. */
+export function presetEntries(): AskEntry[] {
+  return MOTION_PRESETS.map((p) => ({ id: `preset.${p.id}`, kind: 'command' as const, name: `${p.label} (motion preset)`, text: p.hint, words: `motion animate preset ${p.words}`, where: 'Motion, Presets menu' }));
+}
+
 /** Effects and tools: the part of the catalogue that needs nothing from the UI. */
 export function effectAndToolEntries(): AskEntry[] {
-  return [...toolEntries(), ...effectEntries(), ...gestureEntries()];
+  return [...toolEntries(), ...effectEntries(), ...gestureEntries(), ...presetEntries()];
 }
