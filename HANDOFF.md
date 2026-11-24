@@ -2,6 +2,12 @@
 
 ## Current state (2026-11-20) — read this first
 
+### Layer cards: easier move, flip and Ink/Colour convert (2026-11-23, uncommitted)
+
+- `ui/layercards.ts`: each card has a drag grip (⠇) that drags at once, with no 280 ms hold and `touch-action: none`, so a pen or finger no longer loses the drag to list scrolling. Up / Down on the focused grip moves a layer one step. Hold-to-drag on the card body still works.
+- Flip ↔, Flip ↕ and new **To Colour**, **To Ink**, **Swap** are in the always-visible action grid of the active layer (Flip was behind More actions). `app.convertPlane(mode)` moves the current drawing's raster paint between Ink and Colour, or swaps them, as one Undo step. Vector lines are not converted.
+- Checks: tsc clean, `npm test` (src) 911 passed, 1 skipped; `npm run build` passed. Not checked: any browser fixture, the new grip on iPad / Apple Pencil, how the grip and tiles look, `convertPlane` has no unit or fixture test, and `layerspop.ts` (the other layers list) was not changed.
+
 ### Offline mode: real-browser check (2026-11-21, uncommitted)
 
 - Compared with inkflo: 2Dope's offline mode already matched it (precache worker, install dialog, manifest, kit zip, manual) and is live on 2dope.xyz (`sw.js` and manifest return 200). The one gap in the 2026-11-15 notes was a browser-level check; added `scripts/offline-check.mjs`, run with `npm run test:offline` after `npm run build`.

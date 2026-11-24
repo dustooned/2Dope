@@ -343,8 +343,8 @@ export class LayerCards {
         const more = el('button', { type: 'button', class: 'lc-more', title: 'Group options', 'aria-label': `${l.name} options` }, '\u22ef');
         more.addEventListener('pointerdown', (e) => e.stopPropagation());
         more.addEventListener('click', (e) => { e.stopPropagation(); this.menuFor = this.menuFor === l.id ? null : l.id; this.sig = ''; this.update(); });
-        card.append(fold, this.thumb(l), info, more, eye);
-      } else card.append(this.thumb(l), info, eye);
+        card.append(this.grip(l), fold, this.thumb(l), info, more, eye);
+      } else card.append(this.grip(l), this.thumb(l), info, eye);
       this.bindCard(card, l, on);
       list.append(card);
       if (this.swiped === l.id) list.append(this.quick(l));
@@ -434,6 +434,18 @@ export class LayerCards {
     ];
   }
 
+  /** The drag grip on a card: press and drag straight away; Up / Down arrows move it a step. */
+  private grip(l: Layer): HTMLElement {
+    const g = el('span', { class: 'lc-grip', role: 'button', tabindex: '0', title: 'Drag to move this layer up or down (or press Up / Down)', 'aria-label': `Move ${l.name}` }, '⠇');
+    g.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault(); e.stopPropagation();
+      this.app.editor.reorder(l.id, e.key === 'ArrowUp' ? -1 : 1);
+      this.sig = ''; this.update();
+    });
+    return g;
+  }
+
   /** Tap: draw on it (or open its options if it is already the one). Hold, then drag: reorder. */
   private bindCard(card: HTMLElement, l: Layer, on: boolean): void {
     card.addEventListener('pointerdown', (e) => {
@@ -453,6 +465,14 @@ export class LayerCards {
         }
       }, HOLD_MS);
       this.drag = { id: l.id, y0: e.clientY, x0: e.clientX, card, ready: false, timer, pointer, moved: false };
+      if ((e.target as HTMLElement).closest('.lc-grip')) {
+        // the grip drags at once (no hold), so a pen or finger never waits or fights the list scroll
+        clearTimeout(timer);
+        this.drag.ready = true;
+        card.classList.add('lifting');
+        try { card.setPointerCapture(pointer); } catch { /* synthetic */ }
+        e.preventDefault();
+      }
     });
     card.addEventListener('pointermove', (e) => {
       const d = this.drag;
@@ -757,12 +777,17 @@ export class LayerCards {
       this.menuFor = null;
     }, true);
     if (drawn) {
+      tile(grid, 'Flip ↔', 'fliph', 'Mirror this drawing left to right', () => app.flipDrawing('h'));
+      tile(grid, 'Flip ↕', 'flipv', 'Mirror this drawing top to bottom', () => app.flipDrawing('v'));
+      tile(grid, 'To Colour', 'fill', 'Drew lines by mistake? Move this drawing’s Ink paint onto Colour (under the ink). Undo brings it back', () => app.convertPlane('toColour'));
+      tile(grid, 'To Ink', 'draw', 'Filled by mistake? Move this drawing’s Colour paint onto Ink (on top). Undo brings it back', () => app.convertPlane('toInk'));
+      tile(grid, 'Swap', 'invert', 'Swap Ink and Colour', () => app.convertPlane('swap'));
+    }
+    if (drawn) {
       const drawing = section('This drawing');
       tile(drawing, 'Select', 'lasso', 'Select what this drawing has, ready to move, scale or fill inside', () => { this.close(); app.selectContents(); });
       tile(drawing, 'Fill', 'fill', 'Fill this drawing with the current colour (on Colour, under the ink)', () => app.fillDrawing());
       tile(drawing, 'Clear', 'eraser', 'Clear this drawing: Ink, Colour and vector lines (you can undo)', () => app.clearFrame());
-      tile(drawing, 'Flip ↔', 'fliph', 'Mirror this drawing left to right', () => app.flipDrawing('h'));
-      tile(drawing, 'Flip ↕', 'flipv', 'Mirror this drawing top to bottom', () => app.flipDrawing('v'));
       const layer = section('Layer');
       tile(layer, 'Effects', 'fx', 'Line boil and other effects (they show in Motion, Share and exports)', () => { this.close(); app.openEffects?.(l.id); });
       if (l.mask) tile(layer, 'Delete mask', 'deselect', 'Remove the mask: everything shows again (you can undo)', () => app.deleteMask());

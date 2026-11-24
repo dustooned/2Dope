@@ -3557,6 +3557,34 @@ export class App {
     );
   }
 
+  /**
+   * Convert paint between Ink and Colour on the current drawing (for a stroke drawn on the wrong one):
+   * 'toColour' moves Ink's paint under, 'toInk' moves Colour's paint on top, 'swap' trades them.
+   * Raster paint only (vector lines stay). One undo step.
+   */
+  convertPlane(mode: 'toColour' | 'toInk' | 'swap'): void {
+    if (this.titlePaintBlocked()) return;
+    if (this.live || this.blankPage) return;
+    const d = this.drawing;
+    if (!this.residency.isReady(d)) return;
+    const w = this.docW, h = this.docH, full = { x: 0, y: 0, w, h };
+    const line = planeCanvas(d, 'line'), fill = planeCanvas(d, 'fill');
+    const lg = line.getContext('2d')!, fg = fill.getContext('2d')!;
+    const beforeLine = lg.getImageData(0, 0, w, h), beforeFill = fg.getImageData(0, 0, w, h);
+    const label = mode === 'toColour' ? 'Ink to Colour' : mode === 'toInk' ? 'Colour to Ink' : 'Swap Ink and Colour';
+    const run = () => {
+      const a = makeCanvas(w, h), b = makeCanvas(w, h);
+      a.getContext('2d')!.putImageData(beforeLine, 0, 0);
+      b.getContext('2d')!.putImageData(beforeFill, 0, 0);
+      lg.clearRect(0, 0, w, h); fg.clearRect(0, 0, w, h);
+      if (mode === 'toColour') { fg.drawImage(b, 0, 0); fg.drawImage(a, 0, 0); }
+      else if (mode === 'toInk') { lg.drawImage(a, 0, 0); lg.drawImage(b, 0, 0); }
+      else { lg.drawImage(b, 0, 0); fg.drawImage(a, 0, 0); }
+      this.touch(d);
+    };
+    this.history.push({ label, drawings: [d], do: run, undo: () => { putPixels(line, full, beforeLine); putPixels(fill, full, beforeFill); this.touch(d); } }, false);
+  }
+
   /** Mirror the current drawing (Line, Fill and vector lines). Mirroring twice puts it back. */
   flipDrawing(axis: 'h' | 'v'): void {
     if (this.titlePaintBlocked()) return;
