@@ -252,6 +252,29 @@ describe('layers', () => {
     expect(ed.comp.layers.find((l) => l.id === 'L1')!.parent).toBeNull();
   });
 
+  it('reorders among the layers a list shows, never swallowed by hidden layers between them', () => {
+    const { ed, comp } = rig();
+    // A (shown), a hidden null, B (shown), another hidden null, C (shown): the list shows A, B, C
+    comp.layers.splice(0, comp.layers.length, drawingsLayer('A', 'A', [{ drawing: 'a', length: 1 }], 400, 300), nullLayer('N1', 'N1', comp), drawingsLayer('B', 'B', [{ drawing: 'b', length: 1 }], 400, 300), nullLayer('N2', 'N2', comp), drawingsLayer('C', 'C', [{ drawing: 'c', length: 1 }], 400, 300));
+    const shown = ['A', 'B', 'C'], ids = () => comp.layers.map((l) => l.id).join();
+    ed.reorderAmong('B', shown, -1); // B passes A, not the null
+    expect(ids()).toBe('B,A,N1,N2,C');
+  });
+  it('reorderAmong keeps the order of the others and clamps at the ends', () => {
+    const { ed, comp } = rig();
+    comp.layers.splice(0, comp.layers.length, drawingsLayer('A', 'A', [{ drawing: 'a', length: 1 }], 400, 300), nullLayer('N1', 'N1', comp), drawingsLayer('B', 'B', [{ drawing: 'b', length: 1 }], 400, 300), nullLayer('N2', 'N2', comp), drawingsLayer('C', 'C', [{ drawing: 'c', length: 1 }], 400, 300));
+    const shown = ['A', 'B', 'C'], shownOrder = () => comp.layers.filter((l) => shown.includes(l.id)).map((l) => l.id).join();
+    ed.reorderAmong('A', shown, 5); // to the bottom of the shown ones
+    expect(shownOrder()).toBe('B,C,A');
+    expect(comp.layers.map((l) => l.id)).toContain('N1'); expect(comp.layers.length).toBe(5);
+    ed.reorderAmong('A', shown, 5); // already last: nothing moves
+    expect(shownOrder()).toBe('B,C,A');
+    ed.reorderAmong('C', shown, -1);
+    expect(shownOrder()).toBe('C,B,A');
+    ed.reorderAmong('B', shown, 0);
+    expect(shownOrder()).toBe('C,B,A');
+  });
+
   it('reorders, renames, hides and trims', () => {
     const { ed } = rig();
     ed.addLayer('null');

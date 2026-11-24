@@ -2,7 +2,15 @@
 
 ## Current state (2026-11-20) — read this first
 
-### More options on older effects (2026-11-23, uncommitted)
+### Layer reorder fix, round two (2026-11-23, uncommitted)
+
+- Cause found (after a screenshot showed cards with no grip, i.e. an older build, but also a real bug): `CompEditor.reorder` moves a layer within the comp's **whole** layer list, while the Layers card list shows only some of them (a drawing's art layers in Draw, only drawings and groups elsewhere). A one-card move could swap with a hidden layer and look like nothing happened.
+- Fix: new `CompEditor.reorderAmong(id, shown, delta)` moves a layer to the place of the shown layer it passes. `ui/layercards.ts` uses it for the drop, the grip's Up / Down keys, and new **Move up** / **Move down** tiles (in the layer's actions) and **Up** / **Down** (swipe-left quick actions), always working from the cards actually on screen (`shownCards`).
+- Drag feel: neighbours slide out of the way while you drag, and a card takes a place once its leading edge passes the neighbour's middle (about half a card, was a full card). The grip is a larger boxed handle (36 px wide, 44 px tall) and the hint reads "Drag the grip to reorder (or use Move up / Move down)".
+- Checks: tsc clean; `npm test` (src) 927 passed, 1 skipped (2 new `reorderAmong` tests with hidden layers between); build passed. In the in-app browser (mouse-style pointer events on the grip, five cards): a 0.6-card drag swapped, siblings shifted during the drag, a tiny drag did nothing, a 1.4-card upward drag moved one place. `paintingworkflow` 21 of 21 and `layerdelete` 9 of 9 still pass. Screenshot of the new grip looked right.
+- Not checked: real touch or Apple Pencil (simulated pointers only), auto-scroll of the list while dragging past its edge (not built; a long list needs the Up / Down buttons), the Move buttons by hand, dragging inside a folded stack or group children (those cards have no grip). If a screenshot still shows cards with no grip, it is an older cached build: the site's offline worker keeps the old files until the update toast is accepted or the page is closed and reopened.
+
+### More options on older effects (2026-11-23, `688ec43`)
 
 - New settings (every default keeps the old look, so no existing project changes and no schema bump: extras are optional, older readers ignore them):
   - **Glow**: Tint the glow %, Glow colour.

@@ -34,7 +34,7 @@ export class LayerCards {
   private swiped: string | null = null;
   /** The + menu: animation, background or object layer. */
   private addOpen = false;
-  private drag: { id: string; y0: number; x0: number; card: HTMLElement; ready: boolean; timer: number; pointer: number; moved: boolean } | null = null;
+  private drag: { id: string; y0: number; x0: number; card: HTMLElement; ready: boolean; timer: number; pointer: number; moved: boolean; place?: { cards: HTMLElement[]; centres: number[]; from: number; to: number; gap: number } } | null = null;
   /** Groups folded open in the list (view state only). */
   private openGroups = new Set<string>();
   /** A two-finger tap on this card (Procreate: the layer's opacity and options). */
@@ -304,7 +304,7 @@ export class LayerCards {
 
     const sel = this.selection();
     if (sel.length > 1) this.root.append(this.batchBar(sel));
-    else if (layers.length > 1) this.root.append(el('p', { class: 'hint lc-swipe-hint' }, 'Swipe right to select more, left for quick actions; hold to drag.'));
+    else if (layers.length > 1) this.root.append(el('p', { class: 'hint lc-swipe-hint' }, 'Drag the grip \u2807 to reorder (or use Move up / Move down). Swipe right to select more, left for quick actions.'));
     const list = el('div', { class: 'lc-list', role: 'listbox', 'aria-label': paint && app.project.comp.asset ? `Layers of ${app.project.comp.name}` : 'Layers', 'aria-multiselectable': 'true' });
     for (const l of layers) {
       const on = l.id === active;
@@ -434,14 +434,25 @@ export class LayerCards {
     ];
   }
 
+  /** The layer cards on screen now, top first (a folded stack or a group's inside is not listed). */
+  private shownCards(): HTMLElement[] {
+    return [...this.root.querySelectorAll<HTMLElement>('.lc-list .lc-card[data-id]:not(.child)')];
+  }
+
+  /** Move a layer up (−1) or down (+1) among the layers the list shows. */
+  private moveLayer(id: string, delta: number): void {
+    this.app.editor.reorderAmong(id, this.shownCards().map((c) => c.dataset.id!), delta);
+    this.sig = '';
+    this.update();
+  }
+
   /** The drag grip on a card: press and drag straight away; Up / Down arrows move it a step. */
   private grip(l: Layer): HTMLElement {
     const g = el('span', { class: 'lc-grip', role: 'button', tabindex: '0', title: 'Drag to move this layer up or down (or press Up / Down)', 'aria-label': `Move ${l.name}` }, '⠇');
     g.addEventListener('keydown', (e) => {
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
       e.preventDefault(); e.stopPropagation();
-      this.app.editor.reorder(l.id, e.key === 'ArrowUp' ? -1 : 1);
-      this.sig = ''; this.update();
+      this.moveLayer(l.id, e.key === 'ArrowUp' ? -1 : 1);
     });
     return g;
   }
@@ -502,6 +513,28 @@ export class LayerCards {
       }
       e.preventDefault();
       d.card.style.transform = `translateY(${dy}px)`;
+      // the others slide out of the way, so the drop place shows before you let go
+      if (!d.place) {
+        const cards = this.shownCards(), from = cards.indexOf(d.card);
+        if (from >= 0) {
+          const rects = cards.map((c) => c.getBoundingClientRect());
+          d.place = { cards, centres: rects.map((r) => r.top + r.height / 2), from, to: from, gap: rects[from]!.height + 6 };
+        }
+      }
+      const p = d.place;
+      if (p) {
+        // the card's leading edge passing a neighbour's middle is enough to take its place
+        const mid = p.centres[p.from]! + dy, half = (p.gap - 6) / 2;
+        let to = p.from;
+        p.centres.forEach((c, k) => { if (k < p.from && mid - half < c) to = Math.min(to, k); if (k > p.from && mid + half > c) to = Math.max(to, k); });
+        p.to = to;
+        p.cards.forEach((c, k) => {
+          if (k === p.from) return;
+          const shift = to < p.from && k >= to && k < p.from ? p.gap : to > p.from && k > p.from && k <= to ? -p.gap : 0;
+          c.style.transition = 'transform 0.12s';
+          c.style.transform = shift ? `translateY(${shift}px)` : '';
+        });
+      }
     });
     const end = (e: PointerEvent, cancelled: boolean) => {
       const d = this.drag;
@@ -510,12 +543,12 @@ export class LayerCards {
       this.drag = null;
       d.card.classList.remove('lifting');
       d.card.style.transform = '';
+      for (const c of d.place?.cards ?? []) { c.style.transform = ''; c.style.transition = ''; }
       if (cancelled) return this.update();
       if (d.ready) {
-        // drop: move by however many cards the finger travelled
-        const h = d.card.getBoundingClientRect().height + 6;
-        const steps = Math.round((e.clientY - d.y0) / h);
-        if (steps) this.app.editor.reorder(l.id, steps);
+        // drop: the card takes the place of the card it was dragged to
+        const steps = d.place ? d.place.to - d.place.from : 0;
+        if (steps) this.app.editor.reorderAmong(l.id, d.place!.cards.map((c) => c.dataset.id!), steps);
         this.sig = '';
         this.update();
         return;
@@ -670,6 +703,8 @@ export class LayerCards {
       b.addEventListener('click', () => void (async () => { await fn(); this.swiped = null; this.sig = ''; this.update(); })());
       box.append(b);
     };
+    act('Up', 'up', () => this.moveLayer(l.id, -1));
+    act('Down', 'down', () => this.moveLayer(l.id, 1));
     act(l.locked ? 'Unlock' : 'Lock', 'lock', () => app.editor.setFlag(l.id, 'locked', !l.locked));
     act('Duplicate', 'copy', () => app.duplicateLayer(l.id));
     if (l.kind === 'drawings' && !l.guide && !l.locked) act('Clear', 'eraser', () => { app.pickLayer(l.id); app.clearFrame(); });
@@ -765,6 +800,8 @@ export class LayerCards {
       tile(grid, 'Convert to paint', 'draw', 'Keep pixels and allow painting', () => app.convertTitle?.(l.id));
     }
     if (l.kind === 'comp' && app.project.comps.get(l.comp)?.asset) tile(grid, 'Symbol options', 'layers', 'Shared source, exposed pins, swapping and independent copies', () => app.openSymbol?.(l.id));
+    tile(grid, 'Move up', 'up', 'Bring this layer forward (above the layer over it)', () => this.moveLayer(l.id, -1));
+    tile(grid, 'Move down', 'down', 'Send this layer back (below the layer under it)', () => this.moveLayer(l.id, 1));
     tile(grid, 'Rename', 'draw', 'Rename this layer', async () => {
       const n = await askText('Layer name', l.name, 'Rename');
       if (n !== null) app.editor.rename(l.id, n);

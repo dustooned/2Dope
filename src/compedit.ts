@@ -978,6 +978,25 @@ export class CompEditor {
     return true;
   }
 
+  /**
+   * Move a layer up (−1) or down (+1) among the layers a list shows, which may be only some of the
+   * comp's layers (a drawing's art layers, say): it takes the place of the shown layer it passes, so
+   * hidden layers in between can never swallow the move.
+   */
+  reorderAmong(id: string, shown: string[], delta: number): void {
+    this.edit('Reorder layer', (c) => {
+      const order = c.layers.filter((l) => shown.includes(l.id)).map((l) => l.id);
+      const i = order.indexOf(id);
+      if (i < 0) return;
+      const j = Math.max(0, Math.min(order.length - 1, i + delta));
+      if (i === j) return;
+      const target = order[j]!;
+      const [l] = c.layers.splice(c.layers.findIndex((x) => x.id === id), 1);
+      const at = c.layers.findIndex((x) => x.id === target);
+      c.layers.splice(j > i ? at + 1 : at, 0, l!);
+    });
+  }
+
   /** Move a layer up (−1) or down (+1) the stack. */
   reorder(id: string, delta: number): void {
     this.edit('Reorder layer', (c) => {
