@@ -670,6 +670,11 @@ function showManual(at = 'overview'): void {
   manual().then((m) => m.openManual(at, syncNews), () => app.onNotice?.('The manual could not load. Reload 2Dope to open it.'));
 }
 app.onOpenManual = (section) => showManual(section);
+// Ask: find a tool, effect or manual page from a word (the panel and its word lists load on first use)
+function showAsk(): void {
+  setMenu(false);
+  import('./ui/ask').then((m) => m.openAsk(app, { showManual }), () => app.onNotice?.('Ask could not load. Reload 2Dope to open it.'));
+}
 setTimeout(syncNews, 1000);
 try {
   // first time on this device: point at the manual once
@@ -687,6 +692,7 @@ const menuActions: Record<string, () => void> = {
   'copy-visible': () => app.copyVisible?.(),
   settings: () => openSettings(),
   manual: () => showManual(),
+  ask: () => showAsk(),
   updates: () => showManual('updates'),
   offline: () => void import('./ui/offlinedialog').then((m) => m.openOfflineDialog((t) => files?.toast(t)), loadFailed),
   quick: () => quick.toggle(),

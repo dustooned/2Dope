@@ -15,6 +15,11 @@ export interface ManualSection {
 }
 
 export const MANUAL: ManualSection[] = [
+  { id: 'ask', title: 'Ask: find a tool, effect or help page', blocks: [
+    'Forgot what something is called? Open Menu → Ask and type a word you remember, or say it your own way: wiggle, glow, erase, old tv, broken screen. Spelling does not have to be perfect, and a half-typed word works.',
+    'Results show the tool, effect, command, gesture or manual page it could be, with a short description. Show me opens the effect on the layer you are drawing on, Use it switches to the tool, and Read opens the manual page. Commands and gestures say where to find them or how to do them, and never do anything on their own. Press Enter to use the top result. The buttons under the box show only one kind.',
+    { tip: 'Nothing found? Try the thing you want to change (line, colour, layer) or how it should look (glow, broken, old). Everything stays on this device: nothing you type is sent anywhere.' },
+  ] },
   { id: 'clipboard-clips', title: 'Copy, paste and reuse clips', blocks: [
     'Copy a canvas selection, or select timeline frames and use Ctrl/Cmd+C. Paste canvas artwork into Draw or Animate. Pasting copied timeline frames makes independent drawings in the same project. The frame menu also offers Paste (same drawings) for reusing existing cels. To loop a cycle such as a walk, select its drawings and choose ×2, ×3, ×4 or To end under Repeat as a cycle in the frame menu. The repeats reuse the same drawings, and each choice is one Undo step. In Motion, Copy and Paste duplicate the selected layers with their settings and timing. Frames and layers also paste into another project: copy, open the other project, paste. They arrive as new drawings with their own pictures (and a caption brings its font); a project of another size gets them centred at the same pixel size. One copy carries up to 240 drawings this way. Movie layers and placed artwork move with My Assets or a .2dope file instead, and Paste says so. This works between two 2Dope tabs as well: copy in one tab, paste in the other (same browser). Big copies take a moment to get ready; if the other tab is still preparing, Paste says so. Closing the copying tab once the copy is ready does not lose it. Keyframes paste only in the tab that copied them. Copy Visible in the main menu sends a PNG of the current frame to other apps.',
     'Paste or drop a supported image, SVG/EPS, animated GIF, layered PSD/OpenRaster file, movie, sound or compatible .2dope asset. It appears in Assets → This Project and gets one selected placement at the playhead. An original GIF keeps its frames and converts delays to holds at the shot frame rate. If the clipboard only provides a still image, choose Assets → Import to load the original file. A movie becomes a movie track that plays the file itself (up to ten minutes and 500 MB), with its sound.',
@@ -404,6 +409,7 @@ export const MANUAL: ManualSection[] = [
     id: 'layers',
     title: 'Layers, backgrounds and notes',
     blocks: [
+      'To change the order of layers, drag the grip on the left of a card (it moves at once, with a finger, pen or mouse) and the other cards slide aside to show where it will land. Or open the layer’s actions and use Move up and Move down, or swipe a card left for Up and Down. Hidden layers never get in the way: a layer swaps with the next layer you can see.',
       'The Layers bubble (or the label on the canvas) opens the layer cards: front layer on top, each with a picture of the frame on screen, its name and an eye.',
       {
         list: [
