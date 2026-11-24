@@ -196,9 +196,24 @@ try {
   tapWith(20, 20, { altKey: true }); tapWith(40, 20, {}); tapWith(40, 40, {}); tapWith(20, 40, {}); tapWith(20, 20, {}); await settle();
   check('Alt subtracts a polygon from the selection', sel(30, 30) === 0 && sel(50, 50) === 1 && sel(100, 100) === 1);
   tap(5, 100); tap(30, 100); tap(30, 120);
+  pointer('pointermove', 70, 110); await settle();
+  check('An open polygon follows the pointer with a rubber-band tip', !!app.polyTip && Math.abs(app.polyTip[0] - 70) < 2);
   app.cancelSelectDraft();
   check('Cancel drops a polygon in progress and keeps the selection', app.selectDraftPoints === 0 && sel(100, 100) === 1);
   app.setSelectShape('free');
+
+  // Ink / Colour convert
+  await fresh();
+  app.clearSpatialSelection();
+  paint([['rgb(0,0,0)', 10, 10, 20, 20]]);
+  app.convertPlane('toColour'); await settle();
+  check('To Colour moves Ink paint under, onto Colour', alphaOf(app.drawing.line, 15, 15) === 0 && alphaOf(app.drawing.fill!, 15, 15) === 255);
+  app.convertPlane('toInk'); await settle();
+  check('To Ink moves Colour paint back on top', alphaOf(app.drawing.line, 15, 15) === 255 && alphaOf(app.drawing.fill!, 15, 15) === 0);
+  app.convertPlane('swap'); await settle();
+  check('Swap trades Ink and Colour', alphaOf(app.drawing.line, 15, 15) === 0 && alphaOf(app.drawing.fill!, 15, 15) === 255);
+  app.undo(); await settle();
+  check('One Undo puts the paint back', alphaOf(app.drawing.line, 15, 15) === 255 && alphaOf(app.drawing.fill!, 15, 15) === 0);
 } catch (e) {
   check(String(e), false);
 } finally {

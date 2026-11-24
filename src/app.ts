@@ -3291,7 +3291,8 @@ export class App {
     const selected = this.spatialSelection ? this.spatial : null;
     if (selected?.exact && !this.fillG && !this.xf) this.drawSelectionTint(g, selected.area);
     const free = this.fillG?.mode === 'lasso' && (this.selectShape === 'free' || this.selectShape === 'poly') ? this.fillG.points : [];
-    const draft = this.lassoDraft.length || free.length === 1 ? [...this.lassoDraft, ...free] : [];
+    const tip = this.selectShape === 'poly' && this.lassoDraft.length && !free.length && this.polyTip ? [this.polyTip] : [];
+    const draft = this.lassoDraft.length || free.length === 1 ? [...this.lassoDraft, ...free, ...tip] : [];
     if (draft.length) {
       const z = this.view.zoom;
       g.save();
@@ -6809,8 +6810,16 @@ export class App {
     return this.live !== null && this.touches.has(this.live.pointerId);
   }
 
+  /** Where the pointer hovers while a polygon is open: the rubber-band line runs to it. */
+  polyTip: [number, number] | null = null;
+
   private onMove(e: PointerEvent): void {
     if (e.pointerType === 'pen') this.notePen(e);
+    if (this.selectShape === 'poly' && this.lassoDraft.length && !this.fillG && !this.xf) {
+      const q = this.toPoint(e, e.timeStamp);
+      this.polyTip = [q.x, q.y];
+      this.requestRender();
+    }
     if (this.letters.pointer === e.pointerId) { const p = this.toPoint(e, e.timeStamp); this.letters.move(e.pointerId, { x: p.x, y: p.y }); return; }
     if (this.gradEdit?.drag && e.pointerId === this.gradEdit.drag.id) return this.moveGradDrag(e);
     if (this.tscrub && e.pointerId === this.tscrub.id) return this.moveTimeScrub(e);
