@@ -1,4 +1,5 @@
-import { activeEffects, artReach, effectsPad, temporalEffect, temporalSamples } from '../core/effects';
+import { activeEffects, artReach, effectAt, effectsPad, param, temporalEffect, temporalSamples } from '../core/effects';
+import { drawOnStrokes } from '../core/drawon';
 import { drawEffected, fxPreview, fxPreviewScale, releaseEffectScratch } from './effects';
 import { paintCaption } from './caption';
 import { captionAtFrame, captionSignature, videoAt } from '../core/comp';
@@ -199,6 +200,19 @@ interface PartsCtx {
   project?: Project;
 }
 
+/** The layer's Draw on effect applied to its vector lines at this frame (the same array when it has none). */
+function drawOnVectors(parts: PartsCtx, vectors: readonly StrokeRecord[], opt?: CompositeOptions): readonly StrokeRecord[] {
+  if (!opt?.export && fxPreview === 'off') return vectors; // effects are off while you work
+  const fx = activeEffects(parts.layer).find((e) => e.type === 'drawon');
+  if (!fx || !vectors.length) return vectors;
+  const e = effectAt(fx, parts.lf);
+  return drawOnStrokes(vectors, {
+    start: e.size, end: e.amount, offset: Number(param<number>(e, 'offset')) || 0, travel: Number(param<number>(e, 'travel')) || 0,
+    seconds: parts.lf / (parts.comp?.fps ?? 24), taper: Number(param<number>(e, 'taper')) || 0,
+    mode: param<string>(e, 'mode') === 'order' ? 'order' : 'each', loop: !!param<boolean>(e, 'loop'),
+  });
+}
+
 function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions, parts?: PartsCtx): void {
   // a movie layer shows its movie on the Colour plane, fitted to the page, under anything painted on it
   if (parts?.layer.kind === 'drawings' && parts.layer.video && parts.comp && parts.frame !== undefined && parts.project) {
@@ -233,7 +247,11 @@ function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, op
       return;
     }
     t.drawImage(src.line, 0, 0);
-    for (const v of src.vectors ?? d.vectors) drawVectorStroke(t, v, src.vectorLength?.(v) ?? strokeLength(v.points));
+    const all = src.vectors ?? d.vectors;
+    // Draw on: only part of each vector line shows (pieces are new records, measured on their own)
+    const shown = parts ? drawOnVectors(parts, all, opt) : all;
+    const whole = shown === all ? null : new Set(all);
+    for (const v of shown) drawVectorStroke(t, v, !whole || whole.has(v) ? src.vectorLength?.(v) ?? strokeLength(v.points) : strokeLength(v.points));
     src.overlay?.(t, name);
   };
   if (!parts || !partsActive(parts.layer)) {

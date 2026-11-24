@@ -11,7 +11,7 @@
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
-export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave' | 'timecode';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave' | 'timecode' | 'drawon';
 
 /** Effects added in format 10: older readers drop unknown effect types, so saving one needs reader 10. */
 export const FORMAT10_EFFECTS: readonly EffectType[] = ['fill', 'outline', 'blinds', 'kaleido', 'soundwave'];
@@ -249,6 +249,15 @@ export const EFFECT_TYPES: EffectDef[] = [
     ],
     pad: (e) => outlineReach(e) + e.size + 2,
     frameDependent: (e) => Number(param<number>(e, 'cycle')) !== 0 && (Math.round(Number(param<number>(e, 'count'))) > 1 || param<string>(e, 'palette') !== 'one' || param<string>(e, 'mode') === 'trail') },
+  { id: 'drawon', label: 'Draw on', hint: 'Vector lines draw themselves along their path, or a short piece of each line travels along it, with tapered ends. Set Start and End for a piece; key End from 0 to 100% to draw a line on; Travel moves it with no keys', target: 'line', amount: 35, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 100], amountLabel: 'End', sizeLabel: 'Start', amountUnit: '%', sizeUnit: '%', animated: false,
+    frameDependent: (e) => Number(param<number>(e, 'travel')) !== 0,
+    extras: [
+      { key: 'offset', label: 'Offset', kind: 'range', min: -200, max: 200, step: 1, unit: '%', def: 0 },
+      { key: 'travel', label: 'Travel per second', kind: 'range', min: -400, max: 400, step: 5, unit: '%', def: 60 },
+      { key: 'taper', label: 'Tapered ends', kind: 'range', min: 0, max: 200, step: 1, unit: ' px', def: 24 },
+      { key: 'mode', label: 'Lines', kind: 'choice', options: [{ id: 'each', label: 'All at once' }, { id: 'order', label: 'One after another' }], def: 'each' },
+      { key: 'loop', label: 'Loop round the path', kind: 'toggle', def: true },
+    ] },
   { id: 'blinds', label: 'Venetian blinds', hint: 'Slats close across the layer to hide it or open to reveal it (Venetian blinds)', target: 'layer', amount: 0, size: 30, hold: 1, amountRange: [0, 100], sizeRange: [2, 400], amountLabel: 'Completion', sizeLabel: 'Slat width', amountUnit: '%', sizeUnit: ' px', animated: false, seeded: true,
     extras: [
       { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 1, unit: '°', def: 0 },
