@@ -123,13 +123,24 @@ export interface EffectDef {
 }
 
 export const EFFECT_TYPES: EffectDef[] = [
-  { id: 'boil', label: 'Line boil', hint: 'Lines wiggle a little every few frames, like hand-drawn animation', target: 'line', amount: 1.6, size: 22, hold: 2, amountRange: [0, 16], sizeRange: [4, 160], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
+  { id: 'boil', label: 'Line boil', hint: 'Lines wiggle a little every few frames, like hand-drawn animation', target: 'line', amount: 1.6, size: 22, hold: 2, amountRange: [0, 16], sizeRange: [4, 160], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true,
+    extras: [{ key: 'direction', label: 'Wobble', kind: 'choice', options: [{ id: 'both', label: 'Both ways' }, { id: 'horizontal', label: 'Sideways' }, { id: 'vertical', label: 'Up and down' }], def: 'both' }] },
   { id: 'roughen', label: 'Roughen edges', hint: 'Edges crumble and break up a little, like dry ink or a photocopy (roughen edges)', target: 'line', amount: 3, size: 34, hold: 2, amountRange: [0, 20], sizeRange: [8, 160], amountLabel: 'Roughness', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
-  { id: 'turbulence', label: 'Ripple', hint: 'Swirling, rippling warp: heat haze, water, wobbly shapes (turbulent displace)', target: 'layer', amount: 6, size: 90, hold: 2, amountRange: [0, 40], sizeRange: [8, 300], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true },
-  { id: 'grain', label: 'Film grain', hint: 'Tiny specks in the paint that change every frame, like old film (noise)', target: 'layer', amount: 35, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Strength', sizeLabel: 'Speck', amountUnit: '%', sizeUnit: ' px', animated: true },
+  { id: 'turbulence', label: 'Ripple', hint: 'Swirling, rippling warp: heat haze, water, wobbly shapes (turbulent displace)', target: 'layer', amount: 6, size: 90, hold: 2, amountRange: [0, 40], sizeRange: [8, 300], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: true,
+    extras: [{ key: 'direction', label: 'Ripple', kind: 'choice', options: [{ id: 'both', label: 'Both ways' }, { id: 'horizontal', label: 'Sideways' }, { id: 'vertical', label: 'Up and down' }], def: 'both' }] },
+  { id: 'grain', label: 'Film grain', hint: 'Tiny specks in the paint that change every frame, like old film (noise)', target: 'layer', amount: 35, size: 2, hold: 1, amountRange: [0, 100], sizeRange: [1, 16], amountLabel: 'Strength', sizeLabel: 'Speck', amountUnit: '%', sizeUnit: ' px', animated: true,
+    extras: [
+      { key: 'look', label: 'Look', kind: 'choice', options: [{ id: 'erase', label: 'Rubbed-out specks' }, { id: 'speckle', label: 'Light and dark specks' }], def: 'erase' },
+      { key: 'mono', label: 'Grey specks (off: coloured)', kind: 'toggle', def: true },
+    ] },
   { id: 'blur', label: 'Gaussian blur', hint: 'Softens the layer like a camera out of focus, or a dreamy glow (Gaussian blur)', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [0, 40], sizeRange: [0, 0], amountLabel: 'Blur', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false },
   { id: 'echo', label: 'Echo', hint: 'Leave fading copies of earlier artwork frames behind the current layer.', target: 'layer', amount: 45, size: 3, hold: 1, amountRange: [0, 100], sizeRange: [1, 6], amountLabel: 'Fade per copy', sizeLabel: 'Copies', amountUnit: '%', sizeUnit: '', animated: false,
-    extras: [{ key: 'spacing', label: 'Frame spacing', kind: 'range', min: 1, max: 12, step: 1, unit: ' frames', def: 1 }] },
+    extras: [
+      { key: 'spacing', label: 'Frame spacing', kind: 'range', min: 1, max: 12, step: 1, unit: ' frames', def: 1 },
+      { key: 'decay', label: 'Fade', kind: 'choice', options: [{ id: 'fast', label: 'Fast (each copy fades more)' }, { id: 'even', label: 'Even (steady steps)' }], def: 'fast' },
+      { key: 'tint', label: 'Tint the copies', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
+      { key: 'tintColor', label: 'Tint colour', kind: 'color', def: '#4aa3ff' },
+    ] },
   { id: 'motionblur', label: 'Motion blur', hint: 'Smear the current drawing along the layer’s animated movement, rotation and scale.', target: 'layer', amount: 50, size: 5, hold: 1, amountRange: [0, 100], sizeRange: [2, 6], amountLabel: 'Shutter', sizeLabel: 'Samples', amountUnit: '% of frame', sizeUnit: '', animated: false },
   { id: 'shadow', label: 'Drop shadow', hint: 'A shadow behind the art, offset and softened, like a sticker or a cut-out (drop shadow)', target: 'layer', amount: 5, size: 0, hold: 1, amountRange: [0, 120], sizeRange: [0, 100], amountLabel: 'Distance', sizeLabel: 'Softness', amountUnit: ' px', sizeUnit: ' px', animated: false,
     extras: [
@@ -144,6 +155,8 @@ export const EFFECT_TYPES: EffectDef[] = [
       { key: 'threshold', label: 'Threshold', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 60 },
       { key: 'intensity', label: 'Intensity', kind: 'range', min: 0, max: 4, step: 0.1, unit: '\u00d7', def: 1 },
       { key: 'composite', label: 'Original', kind: 'choice', options: [{ id: 'top', label: 'On top' }, { id: 'behind', label: 'Behind' }, { id: 'none', label: 'Glow only' }], def: 'top' },
+      { key: 'tint', label: 'Tint the glow', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
+      { key: 'tintColor', label: 'Glow colour', kind: 'color', def: '#ffd36e' },
     ],
     pad: (e) => 1.5 * e.amount + 2 },
   { id: 'dirblur', label: 'Directional blur', hint: 'Streaks along one direction, like something moving fast (directional blur)', target: 'layer', amount: 10, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Length', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: ' px', animated: false,
@@ -159,8 +172,19 @@ export const EFFECT_TYPES: EffectDef[] = [
   { id: 'mosaic', label: 'Mosaic', hint: 'Big square blocks of colour, like a censored or low-res picture (mosaic)', target: 'layer', amount: 10, size: 10, hold: 1, amountRange: [1, 200], sizeRange: [1, 200], amountLabel: 'Blocks across', sizeLabel: 'Blocks down', amountUnit: '', sizeUnit: '', animated: false,
     extras: [{ key: 'sharp', label: 'Sharp colours', kind: 'toggle', def: false }, { key: 'hard', label: 'Hard edges', kind: 'toggle', def: false }] },
   { id: 'edges', label: 'Find edges', hint: 'Only the outlines stay, like a pencil tracing of the picture (find edges)', target: 'layer', amount: 0, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Mix with original', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
-    extras: [{ key: 'invert', label: 'Invert', kind: 'toggle', def: false }] },
-  { id: 'threshold', label: 'Threshold', hint: 'Every colour becomes black or white, like a photocopy (threshold)', target: 'layer', amount: 128, size: 0, hold: 1, amountRange: [0, 255], sizeRange: [0, 0], amountLabel: 'Level', sizeLabel: 'Size', amountUnit: '', sizeUnit: '', animated: false },
+    extras: [
+      { key: 'width', label: 'Line width', kind: 'range', min: 1, max: 6, step: 1, unit: ' px', def: 1 },
+      { key: 'color', label: 'Line colour', kind: 'color', def: '#000000' },
+      { key: 'bg', label: 'Paper colour', kind: 'color', def: '#ffffff' },
+      { key: 'clear', label: 'Lines only (no paper)', kind: 'toggle', def: false },
+      { key: 'invert', label: 'Swap line and paper', kind: 'toggle', def: false },
+    ] },
+  { id: 'threshold', label: 'Threshold', hint: 'Every colour becomes black or white, like a photocopy (threshold)', target: 'layer', amount: 128, size: 0, hold: 1, amountRange: [0, 255], sizeRange: [0, 0], amountLabel: 'Level', sizeLabel: 'Size', amountUnit: '', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'dark', label: 'Dark colour', kind: 'color', def: '#000000' },
+      { key: 'light', label: 'Light colour', kind: 'color', def: '#ffffff' },
+      { key: 'softness', label: 'Soft edge', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
+    ] },
   { id: 'twirl', label: 'Twirl', hint: 'Swirls the middle around like water going down a drain (twirl)', target: 'layer', amount: 90, size: 30, hold: 1, amountRange: [-720, 720], sizeRange: [1, 100], amountLabel: 'Angle', sizeLabel: 'Radius', amountUnit: '\u00b0', sizeUnit: '%', animated: false,
     extras: [
       { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
@@ -204,6 +228,7 @@ export const EFFECT_TYPES: EffectDef[] = [
   { id: 'vignette', label: 'Vignette', hint: 'Darker (or lighter) towards the edges of the frame, like an old lens (vignette)', target: 'layer', amount: 50, size: 60, hold: 1, amountRange: [-100, 100], sizeRange: [1, 100], amountLabel: 'Amount', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '%', animated: false,
     extras: [
       { key: 'softness', label: 'Softness', kind: 'range', min: 1, max: 100, step: 1, unit: '%', def: 50 },
+      { key: 'color', label: 'Colour (when darker)', kind: 'color', def: '#000000' },
       { key: 'round', label: 'Roundness', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
       { key: 'cx', label: 'Centre across', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
       { key: 'cy', label: 'Centre down', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 50 },
@@ -587,7 +612,7 @@ export function temporalSamples(l: { id: string; in: number; start: number; effe
   const effects = activeEffects(l);
   const echo = effects.find(e => e.type === 'echo');
   const blur = effects.find(e => e.type === 'motionblur');
-  const echoes: { frame: number; alpha: number }[] = [];
+  const echoes: { frame: number; alpha: number; tint?: { amount: number; color: string } }[] = [];
   const poses: number[] = [];
   // Outline Trail: earlier frames, oldest first, each drawn as its outline in the next colour
   const trails: { frame: number; index: number; alpha: number; effect: LayerEffect }[] = [];
@@ -608,7 +633,11 @@ export function temporalSamples(l: { id: string; in: number; start: number; effe
     const spacing = Math.round(param<number>(e, 'spacing'));
     if (e.amount > 0) for (let i = Math.round(e.size); i > 0; i--) {
       const at = frame - spacing * i;
-      if (at >= Math.max(0, l.in)) echoes.push({ frame: at, alpha: (e.amount / 100) ** i });
+      const n = Math.round(e.size), even = param<string>(e, 'decay') === 'even';
+      // Fast: each copy keeps Fade% of the one before. Even: copies step down in equal amounts.
+      const alpha = even ? (e.amount / 100) * (1 - (i - 1) / n) : (e.amount / 100) ** i;
+      const tint = Math.max(0, Math.min(1, Number(param<number>(e, 'tint')) / 100));
+      if (at >= Math.max(0, l.in)) echoes.push({ frame: at, alpha, ...(tint > 0 ? { tint: { amount: tint, color: param<string>(e, 'tintColor') } } : {}) });
     }
   }
   if (blur) {

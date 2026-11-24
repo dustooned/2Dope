@@ -1,4 +1,5 @@
 /** Real-pixel checks for Glitch, RGB split, Camera shake, Long shadow, Duotone and Wipe. */
+import { LINEAR } from '../core/anim';
 import { newEffect, type EffectType } from '../core/effects';
 import { Project } from '../core/project';
 import { drawComp, releaseScratch } from './composite';
@@ -84,6 +85,73 @@ check('Clock wipe and Iris wipe clear the page at 100%', () => {
 check('Iris wipe closes towards the middle', () => {
   const c = render(rig('wipe', 90, { style: 'iris' }));
   ok(px(c, 50)[3]! > 200 && px(c, 41, 11)[3] === 0, [px(c, 50), px(c, 41, 11)]);
+});
+
+// ---- expanded settings of the earlier effects -------------------------------------------------
+/** A square of one colour (x 40..59, y 10..29) with an effect. */
+let rev = 0;
+const rigC = (type: EffectType, amount: number, params: Record<string, number | string | boolean> = {}, fill = '#ffffff', size = 0) => {
+  const r = rig(type, amount, params, size);
+  const d = r.p.drawing(r.p.layer.exposures[0]!.drawing), g = d.line.getContext('2d')!;
+  g.clearRect(0, 0, W, H); g.fillStyle = fill; g.fillRect(40, 10, 20, 20);
+  d.rev += 1000 + (rev += 1); // the drawing changed: effect results cached for the earlier paint no longer apply
+  return r;
+};
+check('Threshold keeps black and white by default and takes new colours', () => {
+  const bw = px(render(rigC('threshold', 128, {}, '#ffffff')), 50), dk = px(render(rigC('threshold', 128, {}, '#202020')), 50);
+  ok(bw.slice(0, 3).every((v) => v === 255) && dk.slice(0, 3).every((v) => v === 0), [bw, dk]);
+  const c = px(render(rigC('threshold', 128, { dark: '#ff0000', light: '#00ff00' }, '#202020')), 50);
+  ok(c[0] === 255 && c[1] === 0, c);
+});
+check('Threshold soft edge blends between the two colours near the level', () => {
+  const mid = px(render(rigC('threshold', 128, { softness: 100 }, '#808080')), 50);
+  ok(mid[0]! > 40 && mid[0]! < 215, mid);
+});
+check('Find edges can draw lines only, in a colour', () => {
+  const r = rigC('edges', 0, { clear: true, color: '#ff0000' }, '#000000');
+  const c = render(r), edge = px(c, 40, 20), inner = px(c, 50, 20);
+  ok(edge[3]! > 150 && edge[0] === 255 && inner[3] === 0, [edge, inner]);
+});
+check('Find edges line width reaches further from the edge', () => {
+  const thin = px(render(rigC('edges', 0, { clear: true, width: 1 }, '#000000')), 43)[3]!, wide = px(render(rigC('edges', 0, { clear: true, width: 4 }, '#000000')), 43)[3]!;
+  ok(wide > thin, [thin, wide]);
+});
+check('Vignette darkens towards a chosen colour', () => {
+  const r = rigC('vignette', 100, { color: '#ff0000', softness: 100 }, '#ffffff', 10);
+  const c = render(r), edge = px(c, 41, 11);
+  ok(edge[0]! > edge[1]! + 40, edge);
+});
+check('Glow can be tinted a colour', () => {
+  const plain = px(render(rigC('glow', 6, { composite: 'none', threshold: 0 }, '#ffffff')), 38), tinted = px(render(rigC('glow', 6, { composite: 'none', threshold: 0, tint: 100, tintColor: '#ff0000' }, '#ffffff')), 38);
+  ok(plain[3]! > 0 && plain[1]! > 200 && tinted[3]! > 0 && tinted[0]! > 200 && tinted[1]! < 40, [plain, tinted]);
+});
+check('Film grain can add light and dark specks instead of rubbing the paint out', () => {
+  const c = render(rigC('grain', 100, { look: 'speckle', mono: true }, '#808080', 1));
+  const d = c.getContext('2d')!.getImageData(40, 10, 20, 20).data; const seen = new Set<number>();
+  for (let i = 0; i < d.length; i += 4) { ok(d[i + 3] === 255); seen.add(d[i]!); }
+  ok(seen.size > 6, seen.size);
+  ok(px(render(rigC('grain', 100, {}, '#808080', 1)), 50)[3]! <= 255);
+});
+/** The painted box [x0, y0, x1, y1] of a render. */
+const box = (c: HTMLCanvasElement) => {
+  const d = c.getContext('2d')!.getImageData(0, 0, W, H).data; let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return [x0, y0, x1, y1];
+};
+check('Boil and Ripple can wobble one way only', () => {
+  const sideways = box(render(rigC('turbulence', 12, { direction: 'horizontal' }, '#ffffff', 30)));
+  ok(sideways[1] === 10 && sideways[3] === 29 && (sideways[0]! < 40 || sideways[2]! > 59), sideways);
+  const vertical = box(render(rigC('turbulence', 12, { direction: 'vertical' }, '#ffffff', 30)));
+  ok(vertical[0] === 40 && vertical[2] === 59 && (vertical[1]! < 10 || vertical[3]! > 29), vertical);
+  const both = box(render(rigC('turbulence', 12, { direction: 'both' }, '#ffffff', 30)));
+  ok(both[0]! < 40 && both[1]! < 10 || both[2]! > 59 || both[3]! > 29, both);
+});
+check('A tinted echo paints its trail in the tint colour, behind the art', () => {
+  const r = rig('echo', 80, { spacing: 2, tint: 100, tintColor: '#4aa3ff' }, 3);
+  const pos = r.p.layer.transform.position, [bx, by] = pos.value as [number, number];
+  pos.keys = [{ f: 0, v: [bx, by], in: LINEAR, out: LINEAR }, { f: 10, v: [bx + 30, by], in: LINEAR, out: LINEAR }];
+  const c = render(r, 10), trail = px(c, 60), art = px(c, 80);
+  ok(trail[3]! > 0 && trail[2]! > trail[0]! + 60 && art[0]! > 240 && art[1]! > 240, [trail, art]);
 });
 
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

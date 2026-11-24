@@ -164,3 +164,30 @@ describe('keyframed effect settings', () => {
     setPictureStamp(() => '');
   });
 });
+
+describe('expanded effect settings', () => {
+  const layer = (e: ReturnType<typeof newEffect>) => ({ id: 'L', in: 0, start: 0, effects: [e] });
+  it('Echo keeps the fast fade by default and can step down evenly', () => {
+    const e = { ...newEffect('echo', 'e', 1), amount: 80, size: 4 };
+    const fast = temporalSamples(layer(e), 20).echoes.map((x) => x.alpha);
+    expect(fast[3]).toBeCloseTo(0.8); expect(fast[0]).toBeCloseTo(0.8 ** 4);
+    const even = temporalSamples(layer({ ...e, params: { decay: 'even' } }), 20).echoes.map((x) => x.alpha);
+    expect(even[3]).toBeCloseTo(0.8); expect(even[2]).toBeCloseTo(0.8 * 0.75); expect(even[0]).toBeCloseTo(0.8 * 0.25);
+  });
+  it('Echo tint only appears when asked for', () => {
+    const e = { ...newEffect('echo', 'e', 1), size: 2 };
+    expect(temporalSamples(layer(e), 10).echoes.every((x) => x.tint === undefined)).toBe(true);
+    const t = temporalSamples(layer({ ...e, params: { tint: 50, tintColor: '#ff0000' } }), 10).echoes;
+    expect(t.every((x) => x.tint?.amount === 0.5 && x.tint.color === '#ff0000')).toBe(true);
+  });
+  it('new settings default to the old look', () => {
+    expect(param(newEffect('glow', 'g', 1), 'tint')).toBe(0);
+    expect(param(newEffect('threshold', 't', 1), 'dark')).toBe('#000000');
+    expect(param(newEffect('threshold', 't', 1), 'light')).toBe('#ffffff');
+    expect(param(newEffect('threshold', 't', 1), 'softness')).toBe(0);
+    expect(param(newEffect('grain', 'g', 1), 'look')).toBe('erase');
+    expect(param(newEffect('boil', 'b', 1), 'direction')).toBe('both');
+    expect(param(newEffect('edges', 'x', 1), 'width')).toBe(1);
+    expect(param(newEffect('vignette', 'v', 1), 'color')).toBe('#000000');
+  });
+});

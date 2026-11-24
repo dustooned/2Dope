@@ -2,7 +2,22 @@
 
 ## Current state (2026-11-20) — read this first
 
-### Simple motion effects: Glitch, RGB split, Camera shake, Long shadow, Duotone, Wipe (2026-11-23, uncommitted)
+### More options on older effects (2026-11-23, uncommitted)
+
+- New settings (every default keeps the old look, so no existing project changes and no schema bump: extras are optional, older readers ignore them):
+  - **Glow**: Tint the glow %, Glow colour.
+  - **Threshold**: Dark colour, Light colour, Soft edge %.
+  - **Find edges**: Line width px, Line colour, Paper colour, Lines only (no paper), and Invert is now "Swap line and paper".
+  - **Vignette**: Colour (used when darkening).
+  - **Film grain**: Look (Rubbed-out specks / Light and dark specks) and Grey or coloured specks.
+  - **Echo**: Fade (Fast / Even), Tint the copies %, Tint colour. The tint reuses the Fill effect on each echo copy (`view/composite.ts`); `temporalSamples` now returns an optional `tint` per echo and an `even` fade.
+  - **Line boil** and **Ripple**: Wobble / Ripple direction (Both ways, Sideways, Up and down) in `displace`.
+- Dropped from my own suggestions because it was already there: a boil / ripple Speed. The Changes (hold) control already sets how often the pattern changes.
+- Checks: tsc clean; `npm test` (src) 925 passed, 1 skipped (3 new in `effects.test.ts`: echo fade and tint sampling, defaults keep the old look); build passed. `tests/fxmotion.html` now 21 of 21 (9 new real-pixel checks for the above); `tests/rendering.html` 31 of 31. Looked at all of them on a coloured picture. Manual text and `UPDATES` line added.
+- Note for fixtures: effect results are cached by drawing id and revision, so a test that repaints a drawing must bump `d.rev` (the real app does on every edit).
+- Not checked: the Effects panel showing the new controls (Advanced), keyframing the new range settings, iPad, and speed of Find edges at width 6 on a full-size page (the Sobel sample step is wider, not heavier, but it was not timed). Not done from the list: Motion blur shutter angle in degrees, Gaussian blur horizontal / vertical and Mix, Posterize Mix, Roughen / Texture options.
+
+### Simple motion effects: Glitch, RGB split, Camera shake, Long shadow, Duotone, Wipe (2026-11-23, `d36f542`)
 
 - Six streamlined layer effects from the Maxon shortlist below, pure pixel passes in new `view/fxmotion.ts` (dispatched from `applyEffect`), defs in `core/effects.ts`. All target the whole layer.
   - **Glitch** (Slide px, Band height px, Bands glitching %, Colour split px; changes every `hold` frames, seeded, New pattern works).

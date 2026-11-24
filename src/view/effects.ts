@@ -208,7 +208,20 @@ function posterizer(e: LayerEffect): (d: Uint8ClampedArray, i: number) => void {
 
 /** Threshold: brightness at or over Level is white, under it black. */
 function thresholder(e: LayerEffect): (d: Uint8ClampedArray, i: number) => void {
-  return (d, i) => { const v = 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]! >= e.amount ? 255 : 0; d[i] = d[i + 1] = d[i + 2] = v; };
+  const [dr, dg, db] = rgbOf(param<string>(e, 'dark')), [lr, lg, lb] = rgbOf(param<string>(e, 'light'));
+  const band = (Number(param<number>(e, 'softness')) / 100) * 128;
+  return (d, i) => {
+    const l = 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!;
+    // a soft edge blends across the Level instead of cutting at it
+    const v = band > 0 ? Math.min(1, Math.max(0, (l - e.amount) / (2 * band) + 0.5)) : l >= e.amount ? 1 : 0;
+    d[i] = dr + (lr - dr) * v; d[i + 1] = dg + (lg - dg) * v; d[i + 2] = db + (lb - db) * v;
+  };
+}
+
+/** #rrggbb as [r, g, b] (black when it is not a colour). */
+function rgbOf(h: string): [number, number, number] {
+  const v = /^#([0-9a-f]{6})$/i.exec(h)?.[1] ?? '000000';
+  return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
 }
 
 /** Mosaic: the page in Blocks across × Blocks down, each block one colour (its average, or its middle pixel when sharp). */
@@ -254,17 +267,26 @@ function findEdges(c: HTMLCanvasElement, e: LayerEffect): void {
     const a = d[i + 3]! / 255;
     lum[p] = (0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!) * a + 255 * (1 - a);
   }
-  const inv = param<boolean>(e, 'invert'), mix = e.amount / 100;
+  const inv = param<boolean>(e, 'invert'), mix = e.amount / 100, clear = param<boolean>(e, 'clear');
+  const k = Math.max(1, Math.round(Number(param<number>(e, 'width')) || 1));
+  const line = rgbOf(param<string>(e, 'color')), paper = rgbOf(param<string>(e, 'bg'));
+  // Swap exchanges the two, so the defaults keep the old look (dark lines on white; white on black)
+  const A = inv ? line : paper, B = inv ? paper : line;
   const at = (x: number, y: number) => lum[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))]!;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
       if (!d[i + 3]) continue;
-      const gx = at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1);
-      const gy = at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1);
-      const m = Math.min(255, Math.hypot(gx, gy) / 4);
-      const v = inv ? m : 255 - m;
-      for (let k = 0; k < 3; k++) d[i + k] = v * (1 - mix) + d[i + k]! * mix;
+      const gx = at(x + k, y - k) + 2 * at(x + k, y) + at(x + k, y + k) - at(x - k, y - k) - 2 * at(x - k, y) - at(x - k, y + k);
+      const gy = at(x - k, y + k) + 2 * at(x, y + k) + at(x + k, y + k) - at(x - k, y - k) - 2 * at(x, y - k) - at(x + k, y - k);
+      const m = Math.min(255, Math.hypot(gx, gy) / 4) / 255;
+      if (clear) {
+        // lines only: the line colour, as strong as the edge; nothing where there is no edge
+        for (let j = 0; j < 3; j++) d[i + j] = line[j]! * (1 - mix) + d[i + j]! * mix;
+        d[i + 3] = Math.round(d[i + 3]! * (m * (1 - mix) + mix));
+        continue;
+      }
+      for (let j = 0; j < 3; j++) d[i + j] = (A[j]! + (B[j]! - A[j]!) * m) * (1 - mix) + d[i + j]! * mix;
     }
   }
   g.putImageData(img, 0, 0);
@@ -453,6 +475,7 @@ function glow(c: HTMLCanvasElement, e: LayerEffect): void {
   const bright = canvasFor('glow', w, h), bg = bright.getContext('2d', { willReadFrequently: true })!;
   const img = bg.createImageData(w, h), s = src.data, d = img.data;
   const t = param<number>(e, 'threshold') / 100, knee = 0.1, gain = param<number>(e, 'intensity');
+  const tint = Math.max(0, Math.min(1, Number(param<number>(e, 'tint')) / 100)), [tr, tg, tb] = rgbOf(param<string>(e, 'tintColor'));
   for (let i = 0; i < s.length; i += 4) {
     const a = s[i + 3]! / 255;
     if (!a) continue;
@@ -461,7 +484,7 @@ function glow(c: HTMLCanvasElement, e: LayerEffect): void {
     // a soft knee so the edge of the glowing area does not band
     const k = Math.min(1, Math.max(0, (lum - t + knee) / (2 * knee)));
     if (!k) continue;
-    d[i] = s[i]!; d[i + 1] = s[i + 1]!; d[i + 2] = s[i + 2]!; d[i + 3] = Math.round(s[i + 3]! * k);
+    d[i] = s[i]! + (tr - s[i]!) * tint; d[i + 1] = s[i + 1]! + (tg - s[i + 1]!) * tint; d[i + 2] = s[i + 2]! + (tb - s[i + 2]!) * tint; d[i + 3] = Math.round(s[i + 3]! * k);
   }
   blurPainted(d, w, h, e.amount);
   if (gain !== 1) for (let i = 3; i < d.length; i += 4) d[i] = Math.min(255, d[i]! * gain);
@@ -627,6 +650,7 @@ function displace(c: HTMLCanvasElement, e: LayerEffect, tick: number, octaves: n
   if (!box) return;
   const { x0, y0, x1, y1 } = box;
   const seed = (e.seed ^ Math.imul(tick + 1, 0x9e3779b1)) >>> 0;
+  const way = param<string>(e, 'direction'), kx = way === 'vertical' ? 0 : 1, ky = way === 'horizontal' ? 0 : 1;
   // the octaves' amplitudes add up to 1, so a pixel never moves further than `amount`
   let norm = 0;
   for (let o = 0; o < octaves; o++) norm += 0.5 ** o;
@@ -660,7 +684,7 @@ function displace(c: HTMLCanvasElement, e: LayerEffect, tick: number, octaves: n
         dx += q.amp * ((q.gx[a]! * (1 - sx) + q.gx[a + 1]! * sx) * (1 - sy) + (q.gx[b]! * (1 - sx) + q.gx[b + 1]! * sx) * sy);
         dy += q.amp * ((q.gy[a]! * (1 - sx) + q.gy[a + 1]! * sx) * (1 - sy) + (q.gy[b]! * (1 - sx) + q.gy[b + 1]! * sx) * sy);
       }
-      const sxp = Math.round(x + dx * amount), syp = Math.round(y + dy * amount);
+      const sxp = Math.round(x + dx * amount * kx), syp = Math.round(y + dy * amount * ky);
       if (sxp < 0 || syp < 0 || sxp >= w || syp >= h) continue;
       out[(y - y0) * ow + (x - x0)] = src[syp * w + sxp]!;
     }
@@ -812,6 +836,22 @@ function grain(c: HTMLCanvasElement, e: LayerEffect, tick: number): void {
   const size = Math.max(1, Math.round(e.size));
   const cols = Math.ceil(c.width / size) + 1;
   const seed = (e.seed ^ Math.imul(tick + 1, 0x9e3779b1)) >>> 0;
+  if (param<string>(e, 'look') === 'speckle') {
+    // light and dark specks: the paint's own colours pushed up or down (grey, or one push per colour)
+    const mono = param<boolean>(e, 'mono'), w = c.width, h = c.height;
+    const g = c.getContext('2d', { willReadFrequently: true })!, img = g.getImageData(0, 0, w, h), d = img.data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (!d[i + 3]) continue;
+      const cell = Math.floor(y / size) * cols + Math.floor(x / size);
+      for (let j = 0; j < 3; j++) {
+        const v = (hash01(seed, cell, mono ? 7 : 7 + j * 13) * 2 - 1) * amt * 128;
+        d[i + j] = Math.min(255, Math.max(0, d[i + j]! + v));
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return;
+  }
   eatAlpha(c, (x, y) => 1 - amt * hash01(seed, Math.floor(y / size) * cols + Math.floor(x / size), 7));
 }
 
@@ -1014,7 +1054,7 @@ function vignette(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
   // half-axes: the frame's own proportions, pulled towards a circle by Roundness
   const r = Math.min(pw, ph) / 2, ax = (pw / 2) * (1 - round) + r * round, ay = (ph / 2) * (1 - round) + r * round;
   const g = c.getContext('2d', { willReadFrequently: true })!;
-  const img = g.getImageData(0, 0, w, h), d = img.data;
+  const img = g.getImageData(0, 0, w, h), d = img.data, edge = rgbOf(param<string>(e, 'color'));
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
@@ -1022,7 +1062,7 @@ function vignette(c: HTMLCanvasElement, e: LayerEffect, pad: number): void {
       const dist = Math.hypot((x - cx) / ax, (y - cy) / ay); // 1 at the frame's edge
       const t = Math.min(1, Math.max(0, (dist - inner) / soft));
       const k = t * t * (3 - 2 * t) * Math.abs(amt);
-      for (let j = 0; j < 3; j++) d[i + j] = amt > 0 ? d[i + j]! * (1 - k) : d[i + j]! + (255 - d[i + j]!) * k;
+      for (let j = 0; j < 3; j++) d[i + j] = amt > 0 ? d[i + j]! + (edge[j]! - d[i + j]!) * k : d[i + j]! + (255 - d[i + j]!) * k;
     }
   }
   g.putImageData(img, 0, 0);

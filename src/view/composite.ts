@@ -447,7 +447,9 @@ function drawTimedLayer(g: CanvasRenderingContext2D, project: Project, c: Comp, 
       }
       for (const sample of echoes) {
         const pose = plateBase.multiply(toDom(worldMatrix(c, l, sample.frame)));
-        drawLayer(plate, project, c, layer, sample.frame, pose, sample.alpha, planes, previous, depth);
+        // a tinted echo copy gets a Fill on top of the layer's own effects, in the echo's colour
+        const copy = sample.tint ? ({ ...layer, effects: [...(layer.effects ?? []), { id: 'echo-tint', type: 'fill', on: true, target: 'layer', amount: sample.tint.amount * 100, size: 0, hold: 1, seed: 0, params: { color: sample.tint.color, mode: 'replace' } }] } as Layer) : layer;
+        drawLayer(plate, project, c, copy, sample.frame, pose, sample.alpha, planes, previous, depth);
       }
       if (blur) {
         const target = echoes.length ? fresh(`shutter${depth}`, w, h) : plate;
