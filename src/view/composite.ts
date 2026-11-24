@@ -1,5 +1,5 @@
 import { activeEffects, artReach, effectAt, effectsPad, param, temporalEffect, temporalSamples } from '../core/effects';
-import { drawOnStrokes } from '../core/drawon';
+import { drawOnStrokes, MAX_COPIES, repeatCopy, repeatIndices, type RepeatSettings } from '../core/drawon';
 import { drawEffected, fxPreview, fxPreviewScale, releaseEffectScratch } from './effects';
 import { paintCaption } from './caption';
 import { captionAtFrame, captionSignature, videoAt } from '../core/comp';
@@ -201,16 +201,27 @@ interface PartsCtx {
 }
 
 /** The layer's Draw on effect applied to its vector lines at this frame (the same array when it has none). */
-function drawOnVectors(parts: PartsCtx, vectors: readonly StrokeRecord[], opt?: CompositeOptions): readonly StrokeRecord[] {
+function drawOnVectors(parts: PartsCtx, vectors: readonly StrokeRecord[], opt?: CompositeOptions, framesBehind = 0): readonly StrokeRecord[] {
   if (!opt?.export && fxPreview === 'off') return vectors; // effects are off while you work
   const fx = activeEffects(parts.layer).find((e) => e.type === 'drawon');
   if (!fx || !vectors.length) return vectors;
   const e = effectAt(fx, parts.lf);
   return drawOnStrokes(vectors, {
     start: e.size, end: e.amount, offset: Number(param<number>(e, 'offset')) || 0, travel: Number(param<number>(e, 'travel')) || 0,
-    seconds: parts.lf / (parts.comp?.fps ?? 24), taper: Number(param<number>(e, 'taper')) || 0,
+    seconds: (parts.lf - framesBehind) / (parts.comp?.fps ?? 24), taper: Number(param<number>(e, 'taper')) || 0,
     mode: param<string>(e, 'mode') === 'order' ? 'order' : 'each', loop: !!param<boolean>(e, 'loop'),
   });
+}
+
+/** The layer's Draw on Repeater at this frame: how the extra copies sit, or null when it makes none. */
+function repeaterOf(parts: PartsCtx, opt?: CompositeOptions): { r: RepeatSettings; px: number; py: number } | null {
+  if (!opt?.export && fxPreview === 'off') return null;
+  const fx = activeEffects(parts.layer).find((e) => e.type === 'drawon');
+  if (!fx) return null;
+  const e = effectAt(fx, parts.lf), n = (k: string) => Number(param<number>(e, k)) || 0;
+  const copies = Math.max(1, Math.min(MAX_COPIES, Math.round(n('copies')) || 1));
+  if (copies < 2) return null;
+  return { r: { copies, x: n('copyX'), y: n('copyY'), scale: n('copyScale') || 100, turn: n('copyTurn'), fade: n('copyFade'), delay: n('copyDelay'), depth: n('depth') }, px: (Number(param<number>(e, 'pivotX')) || 50) / 100, py: (Number(param<number>(e, 'pivotY')) || 50) / 100 };
 }
 
 function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, opt?: CompositeOptions, parts?: PartsCtx): void {
@@ -251,6 +262,22 @@ function paintPlanes(g: CanvasRenderingContext2D, d: Drawing, planes: Planes, op
     // Draw on: only part of each vector line shows (pieces are new records, measured on their own)
     const shown = parts ? drawOnVectors(parts, all, opt) : all;
     const whole = shown === all ? null : new Set(all);
+    // the Repeater: copies behind the line, farthest first, each offset, turned, sized and faded (and a few frames behind)
+    const rep = parts && all.length ? repeaterOf(parts, opt) : null;
+    if (rep) {
+      const cx = src.line.width * rep.px, cy = src.line.height * rep.py;
+      for (const k of repeatIndices(rep.r)) {
+        const c = repeatCopy(rep.r, k);
+        // a vector brush sets its own opacity, so the copy is drawn on its own canvas and that is faded
+        const cg = fresh(`rep${parts!.depth}`, src.line.width, src.line.height);
+        cg.translate(cx + c.dx, cy + c.dy); cg.rotate(c.turn); cg.scale(c.scale, c.scale); cg.translate(-cx, -cy);
+        for (const v of drawOnVectors(parts!, all, opt, c.frames)) drawVectorStroke(cg, v, strokeLength(v.points));
+        t.save();
+        t.globalAlpha *= c.alpha;
+        t.drawImage(cg.canvas, 0, 0);
+        t.restore();
+      }
+    }
     for (const v of shown) drawVectorStroke(t, v, !whole || whole.has(v) ? src.vectorLength?.(v) ?? strokeLength(v.points) : strokeLength(v.points));
     src.overlay?.(t, name);
   };

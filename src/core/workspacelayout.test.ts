@@ -30,11 +30,12 @@ describe('workspace layout preferences', () => {
     // saved before Motion had the view switches (no `seen`): they join the end
     const old = readWorkspaceLayouts({ motion: { tools: ['camera', 'addlayer'] }, draw: { tools: ['brush', 'eraser'] } });
     expect(old.motion.tools).toEqual(['camera', 'addlayer', 'safeareas', 'centrecross', 'overscan']);
-    expect(old.draw.tools).toEqual(['brush', 'eraser', 'eyedrop', 'letter']);
+    // a customised older bar is not changed by defaults that are no longer on the bar
+    expect(old.draw.tools).toEqual(['brush', 'eraser']);
     // taken off after that: it stays off
     const later = readWorkspaceLayouts(JSON.parse(JSON.stringify({ ...old, motion: { ...old.motion, tools: ['camera'] } })));
     expect(later.motion.tools).toEqual(['camera']);
-    expect(later.draw.tools).toEqual(['brush', 'eraser', 'eyedrop', 'letter']);
+    expect(later.draw.tools).toEqual(['brush', 'eraser']);
   });
 
   it('moves only the untouched Story bar to sketch tools and keeps custom actions', () => {
@@ -55,13 +56,31 @@ describe('workspace layout preferences', () => {
     expect(readWorkspaceLayouts({ motion: { tools: modern, seen: modern, labels: true } }).motion.tools).toEqual(modern);
     expect(readWorkspaceLayouts({ motion: { tools: ['look'], seen: modern } }).motion.tools).toEqual(['look']);
   });
+  it('puts what students use most on the default Draw and Animate bars', () => {
+    const draw = defaultWorkspaceLayout('draw').tools, animate = defaultWorkspaceLayout('animate').tools;
+    // paint, rub out, colour in, pick the colour, choose, move, layers, then onion skin and play
+    expect(draw).toEqual(['brush', 'eraser', 'fill', 'color', 'select', 'transform', 'layers', 'onion', 'play']);
+    expect(animate).toEqual(['brush', 'eraser', 'fill', 'color', 'select', 'transform', 'assets', 'layers', 'onion', 'play']);
+    // the less common ones are still one tap away under More tools
+    for (const t of ['letter', 'eyedrop', 'pen', 'smudge']) { expect(draw).not.toContain(t); expect(WORKSPACE_TOOLS.draw).toContain(t); }
+  });
+  it('moves an untouched earlier default bar to today\'s, and leaves a customised bar alone', () => {
+    const yesterday = ['brush', 'eraser', 'color', 'select', 'transform', 'eyedrop', 'letter', 'layers'];
+    const saved = { tools: yesterday, seen: [...WORKSPACE_TOOLS.draw] };
+    expect(readWorkspaceLayouts({ draw: saved }).draw.tools).toEqual(defaultWorkspaceLayout('draw').tools);
+    expect(readWorkspaceLayouts({ draw: { ...saved, labels: true } }).draw.tools).toEqual(yesterday);
+    expect(readWorkspaceLayouts({ draw: { ...saved, toolDock: 'left' } }).draw.tools).toEqual(yesterday);
+    expect(readWorkspaceLayouts({ draw: { ...saved, tools: [...yesterday].reverse() } }).draw.tools).toEqual([...yesterday].reverse());
+    const animateYesterday = ['brush', 'eraser', 'color', 'select', 'transform', 'assets', 'letter', 'layers'];
+    expect(readWorkspaceLayouts({ animate: { tools: animateYesterday, seen: [...WORKSPACE_TOOLS.animate] } }).animate.tools).toEqual(defaultWorkspaceLayout('animate').tools);
+  });
   it('shares the first sketch tools across Draw, Animate and Story without replacing customized bars', () => {
     const old = ['brush', 'smudge', 'eraser', 'eyedrop', 'select', 'transform', 'layers', 'color'];
-    expect(readWorkspaceLayouts({ draw: { tools: old, seen: [...WORKSPACE_TOOLS.draw] } }).draw.tools.slice(0, 3)).toEqual(defaultWorkspaceLayout('board').tools);
-    expect(defaultWorkspaceLayout('animate').tools.slice(0, 3)).toEqual(defaultWorkspaceLayout('board').tools);
+    expect(readWorkspaceLayouts({ draw: { tools: old, seen: [...WORKSPACE_TOOLS.draw] } }).draw.tools.slice(0, 2)).toEqual(defaultWorkspaceLayout('board').tools.slice(0, 2));
+    expect(defaultWorkspaceLayout('animate').tools.slice(0, 2)).toEqual(defaultWorkspaceLayout('board').tools.slice(0, 2));
     const former = ['brush', 'eraser', 'color', 'select', 'transform', 'smudge', 'eyedrop', 'layers'];
     expect(readWorkspaceLayouts({ draw: { tools: former } }).draw.tools).toEqual(defaultWorkspaceLayout('draw').tools);
-    expect(readWorkspaceLayouts({ draw: { tools: former, brushEdge: 'right' } }).draw.tools).toEqual([...former, 'letter']);
+    expect(readWorkspaceLayouts({ draw: { tools: former, brushEdge: 'right' } }).draw.tools).toEqual(former);
     expect(readWorkspaceLayouts({ draw: { tools: old, seen: [...WORKSPACE_TOOLS.draw], labels: true } }).draw.tools).toEqual(old);
     expect(readWorkspaceLayouts({ draw: { tools: ['brush', 'color'], seen: [...WORKSPACE_TOOLS.draw] } }).draw.tools).toEqual(['brush', 'color']);
   });

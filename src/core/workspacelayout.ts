@@ -42,8 +42,11 @@ const SEEN_BEFORE: Record<Workspace, readonly string[]> = {
 };
 export type WorkspaceLayouts = Record<Workspace, WorkspaceLayout>;
 export function defaultWorkspaceLayout(ws: Workspace): WorkspaceLayout {
-  return { tools: ws === 'draw' ? ['brush', 'eraser', 'color', 'select', 'transform', 'eyedrop', 'letter', 'layers']
-    : ws === 'animate' ? ['brush', 'eraser', 'color', 'select', 'transform', 'assets', 'letter', 'layers']
+  // What students reach for most, in the order they use it: paint, rub out, colour in, pick the colour,
+  // choose and move, layers, then the two animation helpers. Letter, Eyedropper (also on the side rail),
+  // Vector and Smudge live under More tools.
+  return { tools: ws === 'draw' ? ['brush', 'eraser', 'fill', 'color', 'select', 'transform', 'layers', 'onion', 'play']
+    : ws === 'animate' ? ['brush', 'eraser', 'fill', 'color', 'select', 'transform', 'assets', 'layers', 'onion', 'play']
     // Timing: Play, onion and frame actions already have homes (transport, X-sheet); they can be pinned
     : ws === 'time' ? ['layers'] : ws === 'board' ? ['brush', 'eraser', 'color'] : ['look', 'safeareas', 'centrecross', 'overscan'],
   toolDock: 'top', brushEdge: 'left', labels: false, advancedTargets: false, seen: [...WORKSPACE_TOOLS[ws]] };
@@ -63,10 +66,11 @@ export function readWorkspaceLayouts(value: unknown): WorkspaceLayouts {
       : ws === 'animate' ? ['brush', 'eraser', 'eyedrop', 'select', 'assets', 'layers', 'color'] : [];
     if (oldPaint.length && v.labels !== true && !v.advancedTargets && (v.toolDock === undefined || v.toolDock === 'top') &&
       tools.length === oldPaint.length && tools.every((t, i) => t === oldPaint[i])) tools = [...d.tools];
-    const formerDefaults = ws === 'draw' ? ['brush', 'eraser', 'color', 'select', 'transform', 'smudge', 'eyedrop', 'layers']
-      : ws === 'animate' ? ['brush', 'eraser', 'color', 'select', 'assets', 'eyedrop', 'layers'] : [];
+    // every default an earlier version shipped: an untouched bar of one of these moves to today's default
+    const formerDefaults: string[][] = ws === 'draw' ? [['brush', 'eraser', 'color', 'select', 'transform', 'smudge', 'eyedrop', 'layers'], ['brush', 'eraser', 'color', 'select', 'transform', 'eyedrop', 'letter', 'layers']]
+      : ws === 'animate' ? [['brush', 'eraser', 'color', 'select', 'assets', 'eyedrop', 'layers'], ['brush', 'eraser', 'color', 'select', 'transform', 'assets', 'letter', 'layers']] : [];
     if (formerDefaults.length && !v.labels && !v.advancedTargets && v.brushEdge !== 'right' && (!v.toolDock || v.toolDock === 'top') &&
-      tools.length === formerDefaults.length && tools.every((t, i) => t === formerDefaults[i])) tools = [...d.tools];
+      formerDefaults.some((old) => tools.length === old.length && tools.every((t, i) => t === old[i]))) tools = [...d.tools];
     // Motion commands now live in its shared header; only an untouched old bar becomes view tools.
     if (ws === 'motion' && v.labels !== true && !v.advancedTargets && (v.toolDock === undefined || v.toolDock === 'top') &&
       [SEEN_BEFORE.motion, WORKSPACE_TOOLS.motion].some(old => tools.length === old.length && tools.every((t, i) => t === old[i]))) tools = [...d.tools];

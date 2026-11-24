@@ -49,15 +49,15 @@ try {
   const start = tools();
   bubbles.editTools(); await settle();
   check('Edit tool bar: the bar wiggles and a tray opens', document.querySelector('.bub-tools')!.classList.contains('bar-editing') && !!document.querySelector('.bar-tray:not([hidden])'));
-  check('The tray offers the animation actions', ['play', 'onion', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'].every((k) => !!tray(k)), [...document.querySelectorAll<HTMLElement>('.bar-tray [data-add]')].map((b) => b.dataset.add));
+  check('The default bar has what students use most, and the tray offers the rest', ['brush', 'eraser', 'fill', 'color', 'select', 'transform', 'layers', 'onion', 'play'].every((k) => !!tool(k)) && ['eyedrop', 'letter', 'pen', 'smudge', 'prevdraw', 'nextdraw', 'insert', 'dup', 'del', 'fx'].every((k) => !!tray(k)), [...document.querySelectorAll<HTMLElement>('.bar-tray [data-add]')].map((b) => b.dataset.add));
   const brushAt = mid(tool('brush'));
   await drag(tool('transform'), [brushAt[0] - 14, brushAt[1]], 'mouse');
   check('Mouse: drag Transform in front of Brush', tools()[0] === 'transform' && tools()[1] === 'brush', tools());
   await drag(tool('layers'), [innerWidth / 2, innerHeight - 40], 'touch');
   check('Finger: drag Layers off the bar removes it', !tools().includes('layers') && !!tray('layers'), tools());
-  await drag(tray('onion')!, mid(tool('select')), 'pen');
+  await drag(tray('eyedrop')!, mid(tool('select')), 'pen');
   const t = tools();
-  check('Pen: drag Onion skin from the tray onto the bar, where it was dropped', t.includes('onion') && Math.abs(t.indexOf('onion') - t.indexOf('select')) === 1, t);
+  check('Pen: drag Eyedropper from the tray onto the bar, where it was dropped', t.includes('eyedrop') && Math.abs(t.indexOf('eyedrop') - t.indexOf('select')) === 1, t);
   const stored = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY) ?? '{}').draw?.tools;
   check('The bar is saved on this device', JSON.stringify(stored) === JSON.stringify(tools()), stored);
   // a tap picks, it does not use the tool
@@ -80,7 +80,7 @@ try {
   // ---- Animate: an animation action pinned to the bar works
   app.setWorkspace('animate'); await settle();
   const ws = app.workspaceLayouts.animate;
-  app.setWorkspaceLayouts({ ...app.workspaceLayouts, animate: { ...ws, tools: [...ws.tools, 'onion', 'insert'] } }); await settle();
+  app.setWorkspaceLayouts({ ...app.workspaceLayouts, animate: { ...ws, tools: [...ws.tools, 'insert'] } }); await settle();
   const onion = app.onion.enabled, drawings = app.project.drawings.size;
   tool('onion').click(); tool('insert').click(); await settle();
   check('Animate: Onion skin and New drawing work from the bar', app.onion.enabled !== onion && app.project.drawings.size === drawings + 1);
@@ -149,7 +149,10 @@ try {
 
   // the Eyedropper tool: on the bar, lit while armed, a tap on the canvas picks and it goes out
   await settle(400);
-  check('Eyedropper is on the Draw tool bar', tools().includes('eyedrop'), tools());
+  // it is not on the default bar any more (the side rail has it too); pinning it puts it there
+  const draw = app.workspaceLayouts.draw;
+  app.setWorkspaceLayouts({ ...app.workspaceLayouts, draw: { ...draw, tools: [...draw.tools.filter((x) => x !== 'eyedrop'), 'eyedrop'] } }); await settle();
+  check('Eyedropper can be pinned to the Draw tool bar', tools().includes('eyedrop'), tools());
   tool('eyedrop').click(); await settle();
   check('Tapping it arms it (lit)', app.eyedropArmed && tool('eyedrop').getAttribute('aria-pressed') === 'true');
   app.setColor('#000000');

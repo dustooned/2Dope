@@ -24,6 +24,51 @@ export interface DrawOnSettings {
   loop: boolean;
 }
 
+/**
+ * The Repeater: extra copies of the drawn-on lines, each one further along an offset, turned, scaled,
+ * faded and (optionally) a few frames behind, so a line leaves echoing trails or recedes into depth.
+ * Copy 0 is the line itself; copies 1.. are drawn behind it, farthest first.
+ */
+export interface RepeatSettings {
+  /** Copies in all, the line itself included (1 = no repeat). */
+  copies: number;
+  /** Each copy moves this far (px) from the one before. */
+  x: number;
+  y: number;
+  /** Each copy is this % of the size of the one before. */
+  scale: number;
+  /** Each copy turns this many degrees more than the one before. */
+  turn: number;
+  /** Each copy loses this % of its opacity compared with the one before. */
+  fade: number;
+  /** Each copy shows the animation this many frames earlier than the one before. */
+  delay: number;
+  /** 0..100: copies also shrink and fade as if they were further away. */
+  depth: number;
+}
+
+export const MAX_COPIES = 12;
+
+/** How copy `k` (1 or more) sits: offset from the line, turn (radians), size, opacity and how many frames behind. */
+export function repeatCopy(r: RepeatSettings, k: number): { dx: number; dy: number; turn: number; scale: number; alpha: number; frames: number } {
+  const d = Math.max(0, Math.min(100, r.depth)) / 100;
+  const scale = (Math.max(1, r.scale) / 100) * (1 - d * 0.08);
+  const keep = (1 - Math.max(0, Math.min(100, r.fade)) / 100) * (1 - d * 0.12);
+  return {
+    dx: r.x * k, dy: r.y * k,
+    turn: (r.turn * k * Math.PI) / 180,
+    scale: Math.max(0.01, scale ** k),
+    alpha: Math.max(0, keep ** k),
+    frames: r.delay * k,
+  };
+}
+
+/** The copies to draw, farthest first (the line itself is drawn on top, last). */
+export function repeatIndices(r: RepeatSettings): number[] {
+  const n = Math.max(1, Math.min(MAX_COPIES, Math.round(r.copies)));
+  return Array.from({ length: n - 1 }, (_, i) => n - 1 - i);
+}
+
 /** Lines this applies to: pen and vector brush lines (imported closed shapes are left whole). */
 export const drawOnable = (s: StrokeRecord): boolean => !s.shape && s.points.length > 1;
 

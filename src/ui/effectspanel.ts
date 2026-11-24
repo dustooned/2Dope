@@ -6,6 +6,15 @@ import { newSeed } from '../core/rng';
 import { setKey } from '../core/anim';
 import { showContextMenu, type CtxItem } from './contextmenu';
 import { decorate, effectIcon, iconSvg } from './icons';
+import { FAVS_KEY, MAX_FAVS, MAX_RECENT, pushRecent, readEffectIds, RECENT_KEY, toggleFavourite } from '../core/effectfavs';
+
+/** A device-only list from localStorage (empty when storage is unavailable or damaged). */
+function readStore(key: string): unknown {
+  try { return JSON.parse(localStorage.getItem(key) ?? 'null'); } catch { return null; }
+}
+function writeStore(key: string, value: string[]): void {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode: the list lasts until the page closes */ }
+}
 import { el } from './dom';
 
 const MODE_KEY = '2dope.fx.mode';
@@ -291,19 +300,30 @@ export class EffectsPanel {
       const search = el('input', { type: 'search', class: 'fx-search', placeholder: 'Find an effect…', 'aria-label': 'Find an effect' });
       search.value = this.search;
       const sections = new Map<string, HTMLElement>();
-      for (const t of EFFECT_TYPES) {
-        if (l.adjust && temporalEffect(t.id)) continue;
-        const category = temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow', 'longshadow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'kaleido', 'offset', 'wave', 'drawon', 'shake'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv', 'glitch', 'rgbsplit'].includes(t.id) ? 'Texture and retro' : ['outline', 'fill'].includes(t.id) ? 'Outline and fill' : ['blinds', 'wipe'].includes(t.id) ? 'Transitions' : ['soundwave', 'timecode'].includes(t.id) ? 'Generate' : 'Colour and style';
-        let section = sections.get(category);
-        if (!section) { section = el('section', { class: 'fx-category' }); section.append(el('strong', {}, category)); sections.set(category, section); add.append(section); }
+      // the effects this device starred, and the ones it used last (newest first), come first
+      const usable = EFFECT_TYPES.filter((t) => !(l.adjust && temporalEffect(t.id)));
+      const allowed = usable.map((t) => t.id);
+      const favs = readEffectIds(readStore(FAVS_KEY), allowed, MAX_FAVS);
+      const recent = readEffectIds(readStore(RECENT_KEY), allowed, MAX_RECENT).filter((id) => !favs.includes(id));
+      const categoryOf = (t: (typeof EFFECT_TYPES)[number]) => temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow', 'longshadow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'kaleido', 'offset', 'wave', 'drawon', 'shake'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv', 'glitch', 'rgbsplit'].includes(t.id) ? 'Texture and retro' : ['outline', 'fill'].includes(t.id) ? 'Outline and fill' : ['blinds', 'wipe'].includes(t.id) ? 'Transitions' : ['soundwave', 'timecode'].includes(t.id) ? 'Generate' : 'Colour and style';
+      const section = (title: string, shelf = false) => {
+        let sec = sections.get(title);
+        if (!sec) { sec = el('section', { class: `fx-category${shelf ? ' fx-shelf' : ''}` }); sec.append(el('strong', {}, title)); sections.set(title, sec); add.append(sec); }
+        return sec;
+      };
+      /** One effect: its Add button and a star to keep it near the top. */
+      const makeTile = (t: (typeof EFFECT_TYPES)[number]) => {
+        const category = categoryOf(t);
+        const tile = el('div', { class: 'fx-tile' });
         const b = el('button', { type: 'button', title: t.hint, 'aria-label': `Add ${plainName(t)}`, 'data-effect': t.id });
         b.disabled = list.length >= MAX_LAYER_EFFECTS || temporalEffect(t.id) && list.some(e => e.type === t.id);
         const top = el('span', { class: 'fx-add-top' });
         top.insertAdjacentHTML('afterbegin', iconSvg(effectIcon(t.id)));
         top.append(el('strong', {}, plainName(t)));
         b.append(top, el('span', { class: 'fx-add-hint' }, t.hint));
-        b.dataset.search = `${plainName(t)} ${t.hint} ${category}`.toLowerCase();
+        tile.dataset.search = `${plainName(t)} ${t.hint} ${category}`.toLowerCase();
         b.addEventListener('click', () => {
+          writeStore(RECENT_KEY, pushRecent(readEffectIds(readStore(RECENT_KEY), allowed, MAX_RECENT), t.id));
           const id = this.newId();
           this.opened.add(id);
           // Keep Add open for a stack of effects. Each addition is its own undoable edit.
@@ -311,15 +331,32 @@ export class EffectsPanel {
           this.commit(`Add ${plainName(t).toLowerCase()}`, [...list, { ...newEffect(t.id, id, newSeed()), ...((l.kind === 'comp' || l.adjust || temporalEffect(t.id)) ? { target: 'layer' as const } : l.title ? { target: 'fill' as const } : {}) }]);
           this.root.querySelector<HTMLButtonElement>(`[data-effect="${t.id}"]`)?.focus({ preventScroll: true });
         });
-        section.append(b);
+        const starred = favs.includes(t.id);
+        const star = el('button', { type: 'button', class: 'fx-star', 'aria-pressed': String(starred), 'aria-label': starred ? `Remove ${plainName(t)} from favourites` : `Add ${plainName(t)} to favourites`, title: starred ? 'Take off your favourites' : 'Keep near the top of this list' }, starred ? '\u2605' : '\u2606');
+        star.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          writeStore(FAVS_KEY, toggleFavourite(favs, t.id));
+          this.render();
+        });
+        tile.append(b, star);
+        return tile;
+      };
+      const byId = new Map<string, (typeof EFFECT_TYPES)[number]>(usable.map((t) => [t.id, t]));
+      for (const [title, ids] of [['Favourites', favs], ['Recent', recent]] as const) {
+        if (!ids.length) continue;
+        const sec = section(title, true);
+        for (const id of ids) { const t = byId.get(id); if (t) sec.append(makeTile(t)); }
       }
+      for (const t of usable) section(categoryOf(t)).append(makeTile(t));
       const empty = el('p', { class: 'hint', hidden: '' }, 'No matching effects. Try blur, glow, colour or warp.');
       const filter = () => {
         const query = this.search.trim().toLowerCase(); let count = 0;
-        for (const section of sections.values()) {
+        for (const sec of sections.values()) {
           let visible = 0;
-          for (const b of section.querySelectorAll<HTMLButtonElement>('button')) { b.hidden = !b.dataset.search!.includes(query); if (!b.hidden) visible++; }
-          section.hidden = !visible; count += visible;
+          for (const t of sec.querySelectorAll<HTMLElement>('.fx-tile')) { t.hidden = !t.dataset.search!.includes(query); if (!t.hidden) visible++; }
+          sec.hidden = !visible;
+          // a shelf repeats effects listed below it, so it does not count as a match of its own
+          if (!sec.classList.contains('fx-shelf')) count += visible;
         }
         empty.hidden = count > 0;
       };

@@ -54,4 +54,23 @@ check('Tapered ends narrow the cut end to a point', () => {
 });
 check('The drawing itself is not changed', () => { const r = rig({}, 20); render(r); expectTrue(r.p.drawing(r.l.exposures[0]!.drawing).vectors.length === 1 && r.p.drawing(r.l.exposures[0]!.drawing).vectors[0]!.points.length === 91); });
 
+check('The Repeater draws faded copies behind the line, one step down each', () => {
+  const c = render(rig({ copies: 3, copyY: 8, copyFade: 50 }, 100));
+  const a1 = alpha(c, 50, 28), a2 = alpha(c, 50, 36);
+  expectTrue(alpha(c, 50, 20) > 240 && Math.abs(a1 - 128) < 20 && Math.abs(a2 - 64) < 20, [alpha(c, 50, 20), a1, a2]);
+});
+check('One copy (the default) makes no repeat', () => { const c = render(rig({ copies: 1, copyY: 8 }, 100)); expectTrue(alpha(c, 50, 30) === 0 && alpha(c, 50, 20) > 240, alpha(c, 50, 30)); });
+check('Copies can trail a few frames behind a travelling piece', () => {
+  const r = rig({ copies: 2, travel: 100, copyDelay: 6, copyFade: 0, loop: true }, 20);
+  const half = Math.round(r.p.comp.fps / 2), c = render(r, half); // the piece is at 50..70%; its copy, 6 frames earlier, is further back
+  const xs = (x: number) => alpha(c, x);
+  const lead = [55, 60, 65].some((x) => xs(x) > 200), back = [10, 20, 30, 40].some((x) => xs(x) > 200);
+  expectTrue(lead && back, [lead, back]);
+});
+check('Copy size shrinks each copy about its centre', () => {
+  const c = render(rig({ copies: 2, copyScale: 50, copyFade: 0, pivotY: 100 }, 100));
+  // half size about the bottom edge: the line at y 20 moves to y 30 and is half as thick
+  expectTrue(alpha(c, 50, 30) > 200 && alpha(c, 50, 26) === 0, [alpha(c, 50, 30), alpha(c, 50, 26)]);
+});
+
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;
