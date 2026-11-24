@@ -44,6 +44,7 @@ const P: Record<string, string> = {
   selrect: '<rect x="4" y="5" width="16" height="14" rx="1" stroke-dasharray="3 2"/>',
   selellipse: '<ellipse cx="12" cy="12" rx="8.5" ry="6.5" stroke-dasharray="3 2"/>',
   selauto: '<path d="M5 19l7-7"/><path d="M15 3.5l1.4 2.9 2.9 1.4-2.9 1.4L15 12.1l-1.4-2.9-2.9-1.4 2.9-1.4z"/>',
+  selpoly: '<path d="M12 3l8 6-3 11H7L4 9z" stroke-dasharray="3 2"/>',
   selnew: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
   seladd: '<rect x="3" y="3" width="12" height="12" rx="2"/><path d="M17 13v8M13 17h8"/>',
   selsub: '<rect x="3" y="3" width="12" height="12" rx="2"/><path d="M13 17h8"/>',

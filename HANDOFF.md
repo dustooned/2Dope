@@ -2,7 +2,15 @@
 
 ## Current state (2026-11-20) — read this first
 
-### Layer cards: easier move, flip and Ink/Colour convert (2026-11-23, uncommitted)
+### Polygon select, Shift/Alt multi-select, shape handle polish (2026-11-23, uncommitted)
+
+- Compared with inkflo (`E:/2026/Dev/Apps/inkflo/beta`, `ui/marquee.ts`): it has an explicit Polygon marquee (tap corners, rubber band, Close / Cancel buttons). 2Dope already had tapped corners inside Freehand and New / Add / Subtract chips; this adds what was missing. Inkflo's Magnetic marquee was not ported.
+- `app.ts`: new `SelectShape` **`poly`** (Select row chip "Polygon"): press where a corner goes (drag to place it exactly), lift to set it; the first dot (18 px) or Enter closes; Backspace takes back a corner; Esc cancels. New `selectDraftPoints`, `closeSelectDraft`, `undoSelectPoint`, `cancelSelectDraft`, and Close / Undo corner / Cancel chips (`ui/bubbles.ts`) while a shape is in progress. **Shift** held at the start of any selection adds, **Alt** subtracts, for that selection only (`opOverride`, read in `takeSelection`); the chips still set the sticky mode. New `selpoly` icon.
+- Shape handles: dark halo under the blue outline and handles (reads on light and dark paint), 35% larger on coarse pointers, the dragged handle grows. A finger touching down while a Pencil drags a handle keeps the shape perfect (like Shift).
+- Checks: tsc clean; `npm test` (src) 911 passed, 1 skipped; build passed. `tests/selectionedit.html` 42 of 42 at 1100×800 (8 new polygon / Shift / Alt / Undo corner / Cancel checks; at the hidden pane's 0×0 size geometry checks fail, as before). `tests/shapehandles.html` 12 of 12.
+- Not checked: how the polygon draft and handles look on screen (no screenshot), real Pencil + finger perfect gesture, iPad, light theme. A rubber-band line to the hovering cursor between taps is not drawn (inkflo has it).
+
+### Layer cards: easier move, flip and Ink/Colour convert (2026-11-23, `9af96f3`)
 
 - `ui/layercards.ts`: each card has a drag grip (⠇) that drags at once, with no 280 ms hold and `touch-action: none`, so a pen or finger no longer loses the drag to list scrolling. Up / Down on the focused grip moves a layer one step. Hold-to-drag on the card body still works.
 - Flip ↔, Flip ↕ and new **To Colour**, **To Ink**, **Swap** are in the always-visible action grid of the active layer (Flip was behind More actions). `app.convertPlane(mode)` moves the current drawing's raster paint between Ink and Colour, or swaps them, as one Undo step. Vector lines are not converted.

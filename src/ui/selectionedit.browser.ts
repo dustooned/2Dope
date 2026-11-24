@@ -177,6 +177,28 @@ try {
   const fingerTap = (x: number, y: number) => { touch('pointerdown', 20, x, y); touch('pointerup', 20, x, y); };
   fingerTap(16, 16); fingerTap(64, 16); fingerTap(64, 64); fingerTap(16, 64); fingerTap(16, 16);
   check('A finger can tap a lasso even with finger painting switched off', sel(35, 35) === 1 && sel(70, 70) === 0 && !app.history.canUndo);
+  // Polygon select: tap corners, close on the first dot; Shift adds, Alt subtracts, Backspace takes a corner back
+  await fresh();
+  app.setSelectShape('poly');
+  tap(10, 10); tap(60, 10); tap(60, 60);
+  check('Polygon keeps tapped corners until closed', app.selectDraftPoints === 3 && !app.spatialSelection);
+  tap(30, 90); await settle();
+  app.undoSelectPoint();
+  check('Undo corner takes back the last corner', app.selectDraftPoints === 3);
+  tap(10, 60); tap(10, 10); await settle();
+  check('Tapping the first dot closes the polygon into a selection', app.selectDraftPoints === 0 && sel(30, 30) === 1 && sel(100, 100) === 0);
+  const tapWith = (x: number, y: number, mod: { shiftKey?: boolean; altKey?: boolean }) => {
+    const r = canvas.getBoundingClientRect(), p = app.view.docToScreen(x, y);
+    for (const type of ['pointerdown', 'pointerup']) canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: 'pen', pointerId: 1, button: 0, buttons: type === 'pointerup' ? 0 : 1, pressure: 1, clientX: r.left + p.x, clientY: r.top + p.y, ...mod }));
+  };
+  tapWith(80, 80, { shiftKey: true }); tapWith(120, 80, {}); tapWith(120, 120, {}); tapWith(80, 120, {}); tapWith(80, 80, {}); await settle();
+  check('Shift adds a second polygon to the selection', sel(30, 30) === 1 && sel(100, 100) === 1 && app.selectOp === 'new');
+  tapWith(20, 20, { altKey: true }); tapWith(40, 20, {}); tapWith(40, 40, {}); tapWith(20, 40, {}); tapWith(20, 20, {}); await settle();
+  check('Alt subtracts a polygon from the selection', sel(30, 30) === 0 && sel(50, 50) === 1 && sel(100, 100) === 1);
+  tap(5, 100); tap(30, 100); tap(30, 120);
+  app.cancelSelectDraft();
+  check('Cancel drops a polygon in progress and keeps the selection', app.selectDraftPoints === 0 && sel(100, 100) === 1);
+  app.setSelectShape('free');
 } catch (e) {
   check(String(e), false);
 } finally {

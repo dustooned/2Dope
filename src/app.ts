@@ -137,7 +137,7 @@ const ASSIST_KEY = '2dope.guide.assist';
 /** Fill tool: region fill, temporary lasso selection, or leftover cleanup. */
 export type FillMode = 'tap' | 'lasso' | 'leftover';
 /** Procreate's selection modes. */
-export type SelectShape = 'free' | 'rect' | 'ellipse' | 'auto' | 'color';
+export type SelectShape = 'free' | 'poly' | 'rect' | 'ellipse' | 'auto' | 'color';
 
 /** An inclusive pixel box (x1 < 0 = empty). */
 interface Box4 {
@@ -799,7 +799,7 @@ export class App {
 
   /** Shape handles: drag the points of a snapped brush shape to reshape it (vector lines use their own points). */
   shapeHandlesOn = loadJSON<boolean>('2dope.shape.handles') ?? true;
-  private shapeDrag: { id: number; handle: string; base: Shape; off: { x: number; y: number }; start: { x: number; y: number }; moved: boolean; pending: Shape | null; raf: number } | null = null;
+  private shapeDrag: { id: number; handle: string; base: Shape; off: { x: number; y: number }; start: { x: number; y: number }; moved: boolean; pending: Shape | null; raf: number; perfect: boolean; at: { x: number; y: number } } | null = null;
 
   setShapeHandles(on: boolean): void {
     this.shapeHandlesOn = on;
@@ -829,7 +829,7 @@ export class App {
       if (d <= bd) { bd = d; best = h; }
     }
     if (!best) return false;
-    this.shapeDrag = { id: e.pointerId, handle: best.id, base: a.shape, off: { x: best.x - p.x, y: best.y - p.y }, start: { x: p.x, y: p.y }, moved: false, pending: null, raf: 0 };
+    this.shapeDrag = { id: e.pointerId, handle: best.id, base: a.shape, off: { x: best.x - p.x, y: best.y - p.y }, start: { x: p.x, y: p.y }, moved: false, pending: null, raf: 0, perfect: false, at: { x: p.x, y: p.y } };
     this.requestRender();
     return true;
   }
@@ -840,7 +840,8 @@ export class App {
     const p = this.toPoint(e, e.timeStamp);
     if (!d.moved && Math.hypot(p.x - d.start.x, p.y - d.start.y) < 3 / this.view.zoom) return;
     d.moved = true;
-    d.pending = moveHandle(d.base, d.handle, { x: p.x + d.off.x, y: p.y + d.off.y }, e.shiftKey);
+    d.at = { x: p.x, y: p.y };
+    d.pending = moveHandle(d.base, d.handle, { x: p.x + d.off.x, y: p.y + d.off.y }, e.shiftKey || d.perfect);
     if (!d.raf) d.raf = requestAnimationFrame(() => { d.raf = 0; this.applyShapeDrag(); });
   }
 
@@ -893,9 +894,22 @@ export class App {
       g.lineTo(by.get('end')!.x, by.get('end')!.y);
       g.stroke();
     }
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const grow = coarse ? 1.35 : 1;
+    // a dark halo under the blue line so the box and handles read on light and dark paint alike
+    g.save();
+    g.lineWidth = 4 / z;
+    g.strokeStyle = 'rgba(0,0,0,0.35)';
+    for (const h of a.handles) {
+      const r = (h.role === 'edge' ? 7 : 9) * grow / z;
+      g.beginPath();
+      if (h.role === 'edge') g.rect(h.x - r, h.y - r, r * 2, r * 2); else g.arc(h.x, h.y, r, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.restore();
     for (const h of a.handles) {
       const live = this.shapeDrag?.handle === h.id;
-      const r = (h.role === 'edge' ? 7 : 9) / z;
+      const r = ((h.role === 'edge' ? 7 : 9) * grow * (live ? 1.25 : 1)) / z;
       g.beginPath();
       if (h.role === 'edge') g.rect(h.x - r, h.y - r, r * 2, r * 2);
       else if (h.role === 'bend') { g.moveTo(h.x, h.y - r * 1.2); g.lineTo(h.x + r * 1.2, h.y); g.lineTo(h.x, h.y + r * 1.2); g.lineTo(h.x - r * 1.2, h.y); g.closePath(); }
@@ -1913,6 +1927,8 @@ export class App {
 
   selectShape: SelectShape = loadJSON<SelectShape>(SELECT_SHAPE_KEY) ?? 'free';
   selectOp: 'new' | 'add' | 'subtract' = 'new';
+  /** Shift (add) or Alt (subtract) held when a selection began: applies to that selection only. */
+  private opOverride: 'add' | 'subtract' | null = null;
   transformMode: TransformMode = 'uniform';
   transformInterpolation: Interpolation = 'bilinear';
   transformSnap = false;
@@ -1972,6 +1988,34 @@ export class App {
     this.onToolChange();
   }
 
+  /** Corners of the polygon or tapped path being drawn (0 when none). */
+  get selectDraftPoints(): number {
+    return this.lassoDraft.length;
+  }
+
+  /** Close the polygon being drawn into a selection (needs 3 corners). */
+  closeSelectDraft(): void {
+    if (this.lassoDraft.length >= 3) this.finishLasso();
+    else this.onNotice?.('A polygon needs at least 3 corners.');
+  }
+
+  /** Take back the last corner of the polygon being drawn. */
+  undoSelectPoint(): void {
+    if (!this.lassoDraft.length) return;
+    this.lassoDraft = this.lassoDraft.slice(0, -1);
+    this.requestRender();
+    this.onToolChange();
+  }
+
+  /** Drop the polygon being drawn. */
+  cancelSelectDraft(): void {
+    if (!this.lassoDraft.length) return;
+    this.lassoDraft = [];
+    this.opOverride = null;
+    this.requestRender();
+    this.onToolChange();
+  }
+
   setSelectOp(o: 'new' | 'add' | 'subtract'): void {
     this.selectOp = o;
     this.onToolChange();
@@ -1992,14 +2036,16 @@ export class App {
   private takeSelection(area: Area | null, points: [number, number][], exact: boolean, prev: Area | null = this.spatialSelection): void {
     const W = this.docW, H = this.docH;
     let out = area, pts = points, ex = exact;
-    if (prev && area && this.selectOp !== 'new') {
+    const op = this.opOverride ?? this.selectOp;
+    this.opOverride = null;
+    if (prev && area && op !== 'new') {
       const mask = new Uint8Array(W * H);
-      const add = this.selectOp === 'add';
+      const add = op === 'add';
       for (let i = 0; i < mask.length; i++) mask[i] = add ? prev.mask[i]! | area.mask[i]! : prev.mask[i]! & (area.mask[i]! ^ 1);
       out = boxOf(mask, W, H);
       pts = out ? boxPoints(out) : [];
       ex = true;
-    } else if (!area && this.selectOp === 'subtract') return;
+    } else if (!area && op === 'subtract') return;
     this.spatial = out ? { project: this.project, comp: this.project.comp.id, layer: this.project.activeLayer, drawing: this.drawing, frame: this.frame, area: out, points: pts, exact: ex } : null;
   }
 
@@ -2985,6 +3031,7 @@ export class App {
     const d = this.drawing;
     if (!this.residency.isReady(d)) return;
     const p = this.toPoint(e, e.timeStamp);
+    if (this.fillMode === 'lasso' && !this.lassoDraft.length) this.opOverride = e.shiftKey ? 'add' : e.altKey ? 'subtract' : null;
     if (this.fillMode === 'lasso' && this.selectShape === 'auto') {
       this.autoSelect(p.x, p.y);
       return;
@@ -3045,6 +3092,7 @@ export class App {
         for (let k = 1; k <= steps; k++) this.fillSeed(last[0] + ((p.x - last[0]) * k) / steps, last[1] + ((p.y - last[1]) * k) / steps, true);
         g.points[g.points.length - 1] = [p.x, p.y];
       } else if (g.mode === 'lasso' && (this.selectShape === 'rect' || this.selectShape === 'ellipse')) g.points[1] = [p.x, p.y];
+      else if (g.mode === 'lasso' && this.selectShape === 'poly') g.points = [[p.x, p.y]];
       else if (Math.hypot(p.x - last[0], p.y - last[1]) >= 1.5 / this.view.zoom) g.points.push([p.x, p.y]);
     }
     this.requestRender();
@@ -3063,7 +3111,16 @@ export class App {
     const d = g.d;
     if (g.mode === 'lasso') {
       if (!cancel) {
-        if (this.selectShape === 'free') {
+        if (this.selectShape === 'poly') {
+          // a corner: press where it goes (drag to place it exactly), lift to set it; the first dot closes
+          const v = g.points.at(-1)!;
+          const first = this.lassoDraft[0];
+          if (first && this.lassoDraft.length >= 3 && Math.hypot(v[0] - first[0], v[1] - first[1]) <= 18 / this.view.zoom) this.finishLasso();
+          else {
+            const last = this.lassoDraft.at(-1);
+            if (!last || Math.hypot(v[0] - last[0], v[1] - last[1]) > 2 / this.view.zoom) this.lassoDraft = [...this.lassoDraft, v];
+          }
+        } else if (this.selectShape === 'free') {
           const [sx, sy] = this.lassoDraft[0] ?? g.points[0]!;
           const [ex, ey] = g.points.at(-1)!;
           const closing = this.lassoDraft.length >= 3 && Math.hypot(ex - sx, ey - sy) <= 14 / this.view.zoom;
@@ -3233,7 +3290,7 @@ export class App {
     if (this.lettering) this.letters.drawOverlay(g);
     const selected = this.spatialSelection ? this.spatial : null;
     if (selected?.exact && !this.fillG && !this.xf) this.drawSelectionTint(g, selected.area);
-    const free = this.fillG?.mode === 'lasso' && this.selectShape === 'free' ? this.fillG.points : [];
+    const free = this.fillG?.mode === 'lasso' && (this.selectShape === 'free' || this.selectShape === 'poly') ? this.fillG.points : [];
     const draft = this.lassoDraft.length || free.length === 1 ? [...this.lassoDraft, ...free] : [];
     if (draft.length) {
       const z = this.view.zoom;
@@ -6394,6 +6451,16 @@ export class App {
       this.endWand(true);
     }
 
+    // Shape handles: a finger touching down while a handle is dragged keeps it perfect (like Shift)
+    if (isTouch && this.shapeDrag && this.shapeDrag.id !== e.pointerId) {
+      const d = this.shapeDrag;
+      d.perfect = true;
+      if (d.moved) {
+        d.pending = moveHandle(d.base, d.handle, { x: d.at.x + d.off.x, y: d.at.y + d.off.y }, true);
+        if (!d.raf) d.raf = requestAnimationFrame(() => { d.raf = 0; this.applyShapeDrag(); });
+      }
+      return;
+    }
     // QuickShape: a finger touching down while a snapped shape is held makes it perfect
     if (isTouch && this.live?.shape && this.live.pointerId !== e.pointerId) {
       this.live.shape.constrain = true;
@@ -7261,6 +7328,11 @@ export class App {
     if (this.xf && (e.code === 'Escape' || e.code === 'Enter')) {
       if (e.code === 'Enter') this.applyTransform();
       else this.cancelTransform();
+      return;
+    }
+    if (!this.fillG && this.lassoDraft.length && (e.code === 'Backspace' || e.code === 'Delete') && this.selectShape === 'poly') {
+      e.preventDefault();
+      this.undoSelectPoint();
       return;
     }
     if (!this.fillG && this.lassoDraft.length && (e.code === 'Escape' || e.code === 'Enter')) {

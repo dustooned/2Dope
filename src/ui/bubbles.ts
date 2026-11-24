@@ -733,7 +733,7 @@ export class Bubbles {
     // frame (a tap on a bubble that is replaced between finger down and up is lost: Pause did nothing)
     const perFrame = a.playing ? 'playing' : [a.currentHold, a.currentRole, a.lf, a.drawing.vectors.length].join(',');
     const transform = xp ? [a.transformMode, a.transformInterpolation, a.transformSnap, a.transformMagnetics, xp.flipH, xp.flipV].join(',') : '';
-    const sig = [!!a.board, shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, transform, a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.eyedropArmed, JSON.stringify(a.canvasView), a.editor.keys.size, a.selectShape, a.selectOp, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
+    const sig = [!!a.board, shape, sharing, a.lastShape?.choice ?? '', a.editor.autoKey, a.editor.throughCamera, a.editor.keyAtStart, this.hooks.story?.view() ?? '', a.playing, perFrame, this.level, ws, flip, cur, editing, a.pointStroke?.id ?? '', a.pointSelMode ?? '', a.straightDefault, a.pointsAfterHold, a.snapPoints, a.mergeOnSnap, this.pointSettings, a.pointWidthScope, a.pointChoiceSig, this.layersOpen, a.project.activeLayer, cels.map((l) => `${l.id}:${l.name}:${l.visible}`).join(','), a.plane, a.fillMode, sel, a.blankPage, a.onion.enabled, a.color, transform, a.uiHidden, a.adjusting?.kind ?? '', a.symmetry, a.eyedropArmed, JSON.stringify(a.canvasView), a.editor.keys.size, a.selectShape, a.selectOp, a.selectDraftPoints, a.canReselect, a.hasArtClip, commandPrefs().hidden.join(','), a.smudgeStrength, a.guide.mode, a.assist, a.guideEdit, a.fillStyle, a.color2, a.gradEditing].join('|');
     setTimeout(() => this.measure(), 0);
     for (const b of this.modes.querySelectorAll<HTMLButtonElement>('[data-ws]')) b.setAttribute('aria-pressed', String(!sharing && b.dataset.ws === ws));
     const shareMode = this.modes.querySelector<HTMLButtonElement>('[data-mode="share"]');
@@ -954,6 +954,7 @@ export class Bubbles {
       // how to select (Procreate's modes) and how a new selection combines with this one
       const shapes: [SelectShape, string, string, string][] = [
         ['free', 'Freehand', 'Draw round what you want', 'lasso'],
+        ['poly', 'Polygon', 'Tap corners (drag to place one exactly); tap the first dot or press Enter to close', 'selpoly'],
         ['rect', 'Rectangle', 'Drag a rectangle', 'selrect'],
         ['ellipse', 'Ellipse', 'Drag an ellipse', 'selellipse'],
         ['auto', 'Automatic', 'Tap an area between lines', 'selauto'],
@@ -966,6 +967,12 @@ export class Bubbles {
       const sep = () => el('span', { class: 'bub-sep', 'aria-hidden': 'true' });
       // Fill in the selection with a gradient style starts a gradient edit here too
       add(...this.gradChips(), ...shapeChips, sep(), ...opChips, sep());
+      // a polygon or tapped path in progress: finish it, take back a corner, or drop it
+      if (a.selectDraftPoints) {
+        add(this.chip('Close', `Close the shape into a selection (${a.selectDraftPoints} corner${a.selectDraftPoints === 1 ? '' : 's'}; needs 3). Enter does the same`, false, () => a.closeSelectDraft(), 'check'));
+        add(this.chip('Undo corner', 'Take back the last corner (Backspace)', false, () => a.undoSelectPoint(), 'undo'));
+        add(this.chip('Cancel', 'Drop the shape (Esc)', false, () => a.cancelSelectDraft(), 'close'), sep());
+      }
       // the actions come from the command registry, minus the ones this device hides
       add(...this.commandChips('select'));
     } else if (row === 'board') {
