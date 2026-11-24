@@ -2,7 +2,14 @@
 
 ## Current state (2026-11-20) — read this first
 
-### Ask: find a tool, effect or help page from a word (2026-11-23, uncommitted)
+### Typed numbers on every effect slider (2026-11-23, uncommitted)
+
+- In `ui/effectspanel.ts` the read-only `<output>` beside each effect slider is now an editable number field (`numberField`), for the main sliders (Amount, Size) and every extra range setting of every effect, including all the newer ones. Tap it (it selects its text), type, Enter or leaving sets it, Escape puts the old value back, arrow keys step by the slider's step, a blank entry restores the old value, and a value outside the range stops at the nearest end (and is rounded to the step's decimals). It previews while you type, keeps the slider in step, sets a key at the playhead when the setting is animated (◆ on), and goes through the same commit as the slider, so it is one Undo step. App shortcuts are blocked while typing.
+- Not changed: choices, switches, colours, text and the existing number-only settings (they already had typed fields); the "Changes" control is a row of fixed choices.
+- Checks: tsc clean; `npm test` (src) 940 passed, 1 skipped; build passed. In the in-app browser on a Glow effect (Advanced): typing 42 moved the slider live and committed, 999 stopped at 100, a blank entry restored the value, 2.5 worked on Intensity, Escape put Threshold back, a typed value on an animated setting kept its key on. Screenshot looked right. No new automated test: the field lives inside the panel's builder, and there is no fixture for the Effects panel yet.
+- Not checked: touch keyboards on iPad (numeric keypad, whether it hides the panel), the narrow phone layout of the row, Undo after a typed value (it shares the slider's commit, not tried by hand), Motion's own timeline values (not part of this).
+
+### Ask: find a tool, effect or help page from a word (2026-11-23, `3422b38`)
 
 - Scope chosen with the user: word matching only. No AI model, no network, no "what can I make" recipes, no logging of searches.
 - `core/ask.ts` (pure): `tokens` / `stem` (plurals, -ing / -ed, colour / color, grey / gray, stop words), `wordMatch` (same word 1, start of a longer word 0.85, one slip 0.7, two in 8+ letters; swapped neighbours count as one), `expand` (everyday-word groups, 0.6), `searchAsk` (name ×5, extra student words ×3.5, description / manual text ×1 with the typed word only, coverage weighting, a small bias for effects and tools over pages over commands, a boost when a short name is typed in full, a small penalty for long names). Slips are only tolerated on words the student typed, not on stand-ins, and never in long text.

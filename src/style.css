@@ -4489,6 +4489,9 @@ body.ws-time #canvas { cursor: ew-resize; }
 .fx-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .fx-row > span:first-child { min-width: 58px; opacity: .8; }
 .fx-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.fx-val { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; }
+.fx-row .fx-val input[type=number] { flex: 0 0 auto; width: 66px; max-width: 66px; min-height: 36px; padding: 0 6px; text-align: right; font-size: 12px; }
+.fx-unit { min-width: 14px; opacity: .65; }
 .fx-row output { min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; opacity: .8; }
 .fx-reseed { align-self: flex-start; min-height: 32px; border-radius: var(--radius); font-size: 12px; }
 .fx-add { display: flex; gap: 6px; flex-wrap: wrap; }

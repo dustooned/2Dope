@@ -415,19 +415,57 @@ export class EffectsPanel {
       return key === 'amount' || key === 'size' ? { ...f, [key]: v } : { ...f, params: { ...f.params, [key]: v } };
     }));
     const commitKeyed = (key: string, v: number, label: string) => { effectPreview.delete(this.layerId); ed.setValue(this.layerId, `fx:${e.id}:${key}`, v, `${name} ${label.toLowerCase()}`); this.app.requestRender(); this.render(); };
+    /**
+     * The number beside a slider, typed as well as read: click it, type a value, press Enter or leave
+     * it to set it (arrow keys step it, Escape puts the old value back). It keeps the slider's range
+     * and step, previews while you type, and is one undo step like the slider. `show` changes the
+     * text only (the slider moving).
+     */
+    const numberField = (label: string, min: number, max: number, step: number, unit: string, value: number, live: (v: number) => void, commit: (v: number) => void) => {
+      const places = (String(step).split('.')[1] ?? '').length;
+      const fmt = (v: number) => String(Number(v.toFixed(places)));
+      const clamp = (v: number) => Math.min(max, Math.max(min, v));
+      const wrap = el('span', { class: 'fx-val' });
+      const input = el('input', { type: 'number', inputmode: places ? 'decimal' : 'numeric', step: String(step), min: String(min), max: String(max), 'aria-label': `${label} value`, title: 'Type a number, or use the slider' });
+      let shown = value;
+      input.value = fmt(value);
+      const read = (): number | null => {
+        const v = Number(input.value);
+        return input.value.trim() === '' || !Number.isFinite(v) ? null : Number(clamp(v).toFixed(places));
+      };
+      input.addEventListener('focus', () => input.select());
+      input.addEventListener('input', () => { const v = read(); if (v !== null) live(v); });
+      input.addEventListener('change', () => {
+        const v = read();
+        if (v === null) { input.value = fmt(shown); effectPreview.delete(this.layerId); this.app.requestRender(); return; }
+        input.value = fmt(v);
+        shown = v;
+        commit(v);
+      });
+      input.addEventListener('keydown', (k) => {
+        // typing must not trigger the app's shortcuts
+        k.stopPropagation();
+        if (k.key === 'Enter') input.blur();
+        else if (k.key === 'Escape') { k.preventDefault(); input.value = fmt(shown); effectPreview.delete(this.layerId); this.app.requestRender(); input.blur(); }
+      });
+      wrap.append(input);
+      if (unit.trim()) wrap.append(el('span', { class: 'fx-unit' }, unit.trim()));
+      return { el: wrap, show: (v: number) => { input.value = fmt(v); } };
+    };
     const slider = (label: string, key: 'amount' | 'size', lim: readonly [number, number], step: number, unit: string) => {
       const row = el('label', { class: 'fx-row' });
       const input = el('input', { type: 'range', min: String(lim[0]), max: String(lim[1]), step: String(step), 'aria-label': label });
       input.value = String(now[key]);
-      const out = el('output', {}, `${Math.round(now[key] * 10) / 10}${unit}`);
+      const done = (v: number) => { if (keyed(key)) commitKeyed(key, v, label); else this.patch(i, { [key]: v }, `${name} ${label.toLowerCase()}`); };
+      const field = numberField(label, lim[0], lim[1], step, unit, now[key], (v) => { input.value = String(v); preview(key, v); this.app.requestRender(); }, done);
       input.addEventListener('input', () => {
         const v = Number(input.value);
-        out.textContent = `${v}${unit}`;
+        field.show(v);
         preview(key, v);
         this.app.requestRender();
       });
-      input.addEventListener('change', () => { if (keyed(key)) commitKeyed(key, Number(input.value), label); else this.patch(i, { [key]: Number(input.value) }, `${name} ${label.toLowerCase()}`); });
-      row.append(el('span', {}, label), input, out, keyButton(key, label));
+      input.addEventListener('change', () => done(Number(input.value)));
+      row.append(el('span', {}, label), input, field.el, keyButton(key, label));
       body.append(row);
     };
     if (e.type === 'texture') {
@@ -478,14 +516,15 @@ export class EffectsPanel {
         const v = Math.round(Number(param<number>(now, x.key)) * 10) / 10;
         const input = el('input', { type: 'range', min: String(x.min), max: String(x.max), step: String(x.step), 'aria-label': x.label });
         input.value = String(v);
-        const out = el('output', {}, `${v}${x.unit}`);
+        const done = (n: number) => { if (keyed(x.key)) commitKeyed(x.key, n, x.label); else setParam(x.key, n, x.label); };
+        const field = numberField(x.label, x.min, x.max, x.step, x.unit, v, (n) => { input.value = String(n); preview(x.key, n); this.app.requestRender(); }, done);
         input.addEventListener('input', () => {
-          out.textContent = `${input.value}${x.unit}`;
+          field.show(Number(input.value));
           preview(x.key, Number(input.value));
           this.app.requestRender();
         });
-        input.addEventListener('change', () => { if (keyed(x.key)) commitKeyed(x.key, Number(input.value), x.label); else setParam(x.key, Number(input.value), x.label); });
-        row.append(input, out, keyButton(x.key, x.label));
+        input.addEventListener('change', () => done(Number(input.value)));
+        row.append(input, field.el, keyButton(x.key, x.label));
       } else if (x.kind === 'choice') {
         // nine places (corners, edges, centre) read as a 3 by 3 grid
         const seg = el('div', { class: `fx-seg small${x.options.length === 9 ? ' fx-grid3' : ''}`, role: 'group', 'aria-label': x.label });
