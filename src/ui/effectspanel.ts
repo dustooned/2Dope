@@ -5,7 +5,7 @@ import { canMerge, cleanEffectText, EFFECT_TEXT_MAX, duplicateEffect, EFFECT_TYP
 import { newSeed } from '../core/rng';
 import { setKey } from '../core/anim';
 import { showContextMenu, type CtxItem } from './contextmenu';
-import { decorate } from './icons';
+import { decorate, effectIcon, iconSvg } from './icons';
 import { el } from './dom';
 
 const MODE_KEY = '2dope.fx.mode';
@@ -293,12 +293,15 @@ export class EffectsPanel {
       const sections = new Map<string, HTMLElement>();
       for (const t of EFFECT_TYPES) {
         if (l.adjust && temporalEffect(t.id)) continue;
-        const category = temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'kaleido', 'offset', 'wave', 'drawon'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv'].includes(t.id) ? 'Texture and retro' : ['outline', 'fill'].includes(t.id) ? 'Outline and fill' : ['blinds'].includes(t.id) ? 'Transitions' : ['soundwave', 'timecode'].includes(t.id) ? 'Generate' : 'Colour and style';
+        const category = temporalEffect(t.id) ? 'Motion over time' : ['blur', 'dirblur', 'radialblur', 'shadow', 'glow', 'longshadow'].includes(t.id) ? 'Blur and light' : ['boil', 'roughen', 'turbulence', 'twirl', 'mirror', 'kaleido', 'offset', 'wave', 'drawon', 'shake'].includes(t.id) ? 'Shape and movement' : ['grain', 'texture', 'dither', 'fringe', 'tv', 'glitch', 'rgbsplit'].includes(t.id) ? 'Texture and retro' : ['outline', 'fill'].includes(t.id) ? 'Outline and fill' : ['blinds', 'wipe'].includes(t.id) ? 'Transitions' : ['soundwave', 'timecode'].includes(t.id) ? 'Generate' : 'Colour and style';
         let section = sections.get(category);
         if (!section) { section = el('section', { class: 'fx-category' }); section.append(el('strong', {}, category)); sections.set(category, section); add.append(section); }
         const b = el('button', { type: 'button', title: t.hint, 'aria-label': `Add ${plainName(t)}`, 'data-effect': t.id });
         b.disabled = list.length >= MAX_LAYER_EFFECTS || temporalEffect(t.id) && list.some(e => e.type === t.id);
-        b.append(el('strong', {}, plainName(t)), el('span', { class: 'fx-add-hint' }, t.hint));
+        const top = el('span', { class: 'fx-add-top' });
+        top.insertAdjacentHTML('afterbegin', iconSvg(effectIcon(t.id)));
+        top.append(el('strong', {}, plainName(t)));
+        b.append(top, el('span', { class: 'fx-add-hint' }, t.hint));
         b.dataset.search = `${plainName(t)} ${t.hint} ${category}`.toLowerCase();
         b.addEventListener('click', () => {
           const id = this.newId();
@@ -347,7 +350,9 @@ export class EffectsPanel {
     const top = el('div', { class: 'fx-top' });
     const grip = el('button', { type: 'button', class: 'fx-grip', title: 'Drag to reorder', 'aria-label': `Reorder ${name}` }, '☰');
     const title = el('button', { type: 'button', class: 'fx-title', 'aria-expanded': String(open), title: open ? 'Fold this effect' : 'Show its settings' });
-    title.append(el('span', { class: 'fx-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), el('span', { class: 'fx-name' }, name), el('span', { class: 'fx-badge' }, (temporalEffect(e.type) ? 'Motion' : this.layer()?.kind === 'comp' || this.layer()?.adjust ? 'Composite' : TARGET_NAMES[e.target])));
+    const fxIco = el('span', { class: 'fx-ico', 'aria-hidden': 'true' });
+    fxIco.innerHTML = iconSvg(effectIcon(e.type));
+    title.append(el('span', { class: 'fx-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), fxIco, el('span', { class: 'fx-name' }, name), el('span', { class: 'fx-badge' }, (temporalEffect(e.type) ? 'Motion' : this.layer()?.kind === 'comp' || this.layer()?.adjust ? 'Composite' : TARGET_NAMES[e.target])));
     title.addEventListener('click', () => { if (this.swiped) { this.swiped = ''; this.render(); return; } if (open) this.opened.delete(e.id); else this.opened.add(e.id); this.render(); });
     const sw = el('button', { type: 'button', class: `fx-switch${e.on ? ' on' : ''}`, role: 'switch', 'aria-checked': String(e.on), title: e.on ? 'Turn this effect off' : 'Turn this effect on', 'aria-label': `${name} on` });
     sw.append(el('span', { class: 'lc-switch-knob', 'aria-hidden': 'true' }));

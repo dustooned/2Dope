@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { iconSvg } from './icons';
+import { EFFECT_TYPES } from '../core/effects';
+import { effectIcon, iconSvg } from './icons';
 
 // read the sources as text, so the check needs no DOM
 const src = import.meta.glob(['./icons.ts', './bubbles.ts', './captioneditor.ts', './motion.ts', './effectspanel.ts', './commands.ts'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
@@ -34,6 +35,9 @@ describe('icons', () => {
     const names = asked('./captioneditor.ts');
     expect(names.length).toBeGreaterThan(40);
     for (const n of ['balloonSpeech', 'balloonThought', 'balloonShout', 'balloonWhisper', 'balloonBox', 'sfx', 'tailJoined', 'tailBubbles', 'tailLightning', 'lookClassic', 'captionStyles']) expect(iconSvg(n), n).not.toBe('');
+  });
+  it('every layer effect has its own icon', () => {
+    for (const t of EFFECT_TYPES) expect(iconSvg(effectIcon(t.id)), t.id).not.toBe('');
   });
   it('no two icons share the same drawing (no placeholders)', () => {
     const bodies = new Map<string, string>();

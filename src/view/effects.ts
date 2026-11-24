@@ -4,6 +4,7 @@ import { applyBlur } from '../core/adjust';
 import { ditherPixels } from '../core/dither';
 import { hash01 } from '../core/rng';
 import { blindsEffect, fillEffect, kaleidoEffect, outlineEffect, soundwaveEffect } from './fxextra';
+import { duotoneEffect, glitchEffect, longShadowEffect, rgbSplitEffect, shakeEffect, wipeEffect } from './fxmotion';
 import { timecodeEffect } from './fxtimecode';
 export { setOutlinePictureSource, setSoundPreload, setSoundSource, soundReady } from './fxextra';
 
@@ -180,6 +181,12 @@ function applyEffect(c: HTMLCanvasElement, e: LayerEffect, frame: number, pad = 
   else if (e.type === 'fill') fillEffect(c, e);
   else if (e.type === 'outline') outlineEffect(c, e, frame, fps, pad);
   else if (e.type === 'blinds') blindsEffect(c, e, pad);
+  else if (e.type === 'glitch') glitchEffect(c, e, tick);
+  else if (e.type === 'rgbsplit') rgbSplitEffect(c, e);
+  else if (e.type === 'shake') shakeEffect(c, e, tick, pad);
+  else if (e.type === 'longshadow') longShadowEffect(c, e);
+  else if (e.type === 'duotone') duotoneEffect(c, e);
+  else if (e.type === 'wipe') wipeEffect(c, e, pad);
   else if (e.type === 'kaleido') kaleidoEffect(c, e, frame, fps, pad, (cv, from) => warp(cv, from));
   else if (e.type === 'soundwave') soundwaveEffect(c, e, frame, fps, pad, layerId, blurCanvas);
   else if (e.type === 'timecode') timecodeEffect(c, e, param<string>(e, 'from') === 'layer' ? frame : frame + start, fps, pad);

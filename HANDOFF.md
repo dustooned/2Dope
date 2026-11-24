@@ -2,7 +2,27 @@
 
 ## Current state (2026-11-20) — read this first
 
-### Draw on: procedural animated lines (2026-11-23, uncommitted)
+### Simple motion effects: Glitch, RGB split, Camera shake, Long shadow, Duotone, Wipe (2026-11-23, uncommitted)
+
+- Six streamlined layer effects from the Maxon shortlist below, pure pixel passes in new `view/fxmotion.ts` (dispatched from `applyEffect`), defs in `core/effects.ts`. All target the whole layer.
+  - **Glitch** (Slide px, Band height px, Bands glitching %, Colour split px; changes every `hold` frames, seeded, New pattern works).
+  - **RGB split** (Distance px, Direction; key Distance to pulse).
+  - **Camera shake** (Strength px, Turn °, Smoothness %: 0 jumps each tick, higher drifts; key Strength for an impact).
+  - **Long shadow** (Length px, Direction, Opacity, Colour; built by doubling, about log2(length) draws).
+  - **Duotone** (Mix, Dark colour, Light colour, Balance).
+  - **Wipe** (Completion; Line, Clock or Iris; Direction, Feather, Invert; Effects → Transitions).
+- Layer padding grows with the px settings so shifted pixels are not cut off at the page edge (rotation from Turn is not padded). Px settings shrink in Fast preview like the other effects.
+- File format: new `FORMAT14_EFFECTS` (these six plus **Draw on**, which was missing from any format list), `SCHEMA` 13 → 14 with a migrate step; `minimumDrawingSchema` returns 14 for a file using them, so older builds refuse it with the usual message instead of silently dropping the effect. No unit test for the 14 rule was added.
+- Checks: tsc clean; `npm test` (src) 922 passed, 1 skipped; build passed. New fixture `tests/fxmotion.html` (`view/fxmotion.browser.ts`): 12 of 12 real-pixel checks (channel placement, band slide and repeatability, shake range, shadow direction and layering, duotone colour, wipe line / clock / iris). Looked at all six on a coloured picture: they read right. `tests/rendering.html` re-run: see below. Manual text and `UPDATES` line added.
+- Not checked: the Effects panel with the new sliders (adding them in the app, keyframing Strength / Completion), iPad, export through the video path, speed on a full-size page (Glitch, RGB split and Duotone are per-pixel passes; Fast preview halves them; not profiled), the shake's Turn on a layer near the page edge.
+
+### Effect icons and Maxon / Red Giant shortlist (2026-11-23, uncommitted)
+
+- Every layer effect now has its own line icon (`fxBoil` … `fxDrawon` in `ui/icons.ts`; `effectIcon(type)` maps a type to its name). Shown on each button in the Add an effect list (`fx-add-top`) and in each effect card's title (`fx-ico`). `icons.test.ts` gained "every layer effect has its own icon" (a new effect type without an icon fails it); the existing no-duplicate-drawings test covers the rest. Looked at all 31 in the browser pane on a dark sheet: distinct and readable. The Add list and cards themselves were not opened in the app (CSS `.fx-add-top`, `.fx-ico` unchecked in place), light theme and iPad not checked. Retro pixels (dither) looks a little like a command key.
+- Source for the shortlist: Maxon's Universe tools locator (101 effects in Blurs and Glows, Color, Distortions, Generators, Motion Graphics, Stylize, Text, Transitions, Utilities). Already in 2Dope under another name: Glow, Blur, Point Zoom (Radial blur), Heatwave (Wave warp), Retro / VHS / Analog (Retro TV), Sketchify (Find edges), Blinds, Dither, Turbulence Noise (Ripple), Chromatic Aberration partly (Fringe), Typewriter-style text in Letters.
+- Lite and cool, not built (my pick order): **Glitch** (RGB split plus sliding blocks, per frame), **RGB separation** (red, green, blue shifted apart; the missing half of Chromatic Aberration), **Camera shake** (whole-layer jitter, keyable strength), **Long shadow** (flat 45° shadow stretching away), **Duotone / Multitone** (map light and dark to two colours; Noir as black-and-white high contrast), **Gradient ramp** and **Soft gradient background** (generators), **Wipes** (linear, clock, shape: cheap, extend Blinds), **Spot blur / Bokeh**, **Starglow / Shine** (light rays from bright parts). Heavier or off-plan: Particular / Form (particles), Electrify, Holomatrix, Array Gun, Knoll Light Factory, Shatter (not found on Maxon's list).
+
+### Draw on: procedural animated lines (2026-11-23, `67db357`)
 
 - Idea: Trapcode 3D Stroke's core (Start / End / Offset / Loop / Taper along a path), without its 3D camera or Repeater. Researched from Maxon's help pages; not a port.
 - New layer effect **Draw on** (Effects → Shape and movement), vector lines only. `core/drawon.ts` (pure): `drawOnWindows` turns Start, End, Offset, Travel per second and Loop into visible fractions of the path; `drawOnStrokes` cuts each pen / vector-brush line by arc length into new records (ids `…~dK`), tapering only the cut ends (Tapered ends, px, at most half the piece). Modes: All at once, or One after another (drawn order as one long path). Closed imported shapes (`rec.shape`) and brush (pixel) lines are left whole. The drawing is never changed.

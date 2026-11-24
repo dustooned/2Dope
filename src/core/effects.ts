@@ -11,12 +11,14 @@
 import { PALETTES, DITHER_METHODS, type DitherMethod, type PaletteId } from './dither';
 import { valueAt, type Interp, type Key, type Prop, type Side } from './anim';
 
-export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave' | 'timecode' | 'drawon';
+export type EffectType = 'boil' | 'roughen' | 'grain' | 'blur' | 'texture' | 'turbulence' | 'dither' | 'shadow' | 'glow' | 'dirblur' | 'radialblur' | 'posterize' | 'mosaic' | 'edges' | 'threshold' | 'twirl' | 'mirror' | 'offset' | 'wave' | 'fringe' | 'tv' | 'vignette' | 'echo' | 'motionblur' | 'fill' | 'outline' | 'blinds' | 'kaleido' | 'soundwave' | 'timecode' | 'drawon' | 'glitch' | 'rgbsplit' | 'shake' | 'longshadow' | 'duotone' | 'wipe';
 
 /** Effects added in format 10: older readers drop unknown effect types, so saving one needs reader 10. */
 export const FORMAT10_EFFECTS: readonly EffectType[] = ['fill', 'outline', 'blinds', 'kaleido', 'soundwave'];
 /** Effects added in format 12 (Timecode): older readers would drop them, so saving one needs reader 12. */
 export const FORMAT12_EFFECTS: readonly EffectType[] = ['timecode'];
+/** Effects added in format 14 (Draw on and the simple motion set): older readers would drop them, so saving one needs reader 14. */
+export const FORMAT14_EFFECTS: readonly EffectType[] = ['drawon', 'glitch', 'rgbsplit', 'shake', 'longshadow', 'duotone', 'wipe'];
 /** Longest label a text setting keeps (the Timecode prefix). */
 export const EFFECT_TEXT_MAX = 40;
 /** What an effect works on: Ink, Colour, the whole layer, or (captions only) the letters. */
@@ -249,6 +251,41 @@ export const EFFECT_TYPES: EffectDef[] = [
     ],
     pad: (e) => outlineReach(e) + e.size + 2,
     frameDependent: (e) => Number(param<number>(e, 'cycle')) !== 0 && (Math.round(Number(param<number>(e, 'count'))) > 1 || param<string>(e, 'palette') !== 'one' || param<string>(e, 'mode') === 'trail') },
+  { id: 'glitch', label: 'Glitch', hint: 'Bands of the picture slide sideways and split into colour fringes, then change: a broken screen or signal', target: 'layer', amount: 24, size: 10, hold: 2, amountRange: [0, 200], sizeRange: [2, 80], amountLabel: 'Slide', sizeLabel: 'Band height', amountUnit: ' px', sizeUnit: ' px', animated: true, seeded: true,
+    extras: [
+      { key: 'chance', label: 'Bands glitching', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 40 },
+      { key: 'split', label: 'Colour split', kind: 'range', min: 0, max: 30, step: 1, unit: ' px', def: 5 },
+    ],
+    pad: (e) => Math.ceil(e.amount + 1.5 * Number(param<number>(e, 'split')) + 2) },
+  { id: 'rgbsplit', label: 'RGB split', hint: 'Red slides one way and blue the other, leaving colour fringes along an angle. Key Distance to make it pulse', target: 'layer', amount: 6, size: 0, hold: 1, amountRange: [0, 60], sizeRange: [0, 0], amountLabel: 'Distance', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: '', animated: false,
+    extras: [{ key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 0 }],
+    pad: (e) => e.amount + 2 },
+  { id: 'shake', label: 'Camera shake', hint: 'The whole layer jitters like a shaken camera. Key Strength up and down for an impact or an explosion', target: 'layer', amount: 8, size: 0, hold: 1, amountRange: [0, 80], sizeRange: [0, 0], amountLabel: 'Strength', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: '', animated: true, seeded: true,
+    extras: [
+      { key: 'turn', label: 'Turn', kind: 'range', min: 0, max: 10, step: 0.5, unit: '\u00b0', def: 0 },
+      { key: 'smooth', label: 'Smoothness', kind: 'range', min: 0, max: 100, step: 5, unit: '%', def: 0 },
+    ],
+    pad: (e) => e.amount + 2 },
+  { id: 'longshadow', label: 'Long shadow', hint: 'A flat shadow stretches away from the art, the poster and icon look', target: 'layer', amount: 80, size: 0, hold: 1, amountRange: [0, 600], sizeRange: [0, 0], amountLabel: 'Length', sizeLabel: 'Size', amountUnit: ' px', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 135 },
+      { key: 'opacity', label: 'Opacity', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 60 },
+      { key: 'color', label: 'Colour', kind: 'color', def: '#000000' },
+    ],
+    pad: (e) => e.amount + 2 },
+  { id: 'duotone', label: 'Duotone', hint: 'Dark parts take one colour and light parts another, for a bold two-colour poster look', target: 'layer', amount: 100, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Mix', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'dark', label: 'Dark colour', kind: 'color', def: '#1b1464' },
+      { key: 'light', label: 'Light colour', kind: 'color', def: '#ffd36e' },
+      { key: 'balance', label: 'Balance', kind: 'range', min: -50, max: 50, step: 1, unit: '%', def: 0 },
+    ] },
+  { id: 'wipe', label: 'Wipe', hint: 'Hide or reveal the layer with a moving edge, a turning clock hand or a closing circle. Key Completion from 0 to 100%', target: 'layer', amount: 0, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 0], amountLabel: 'Completion', sizeLabel: 'Size', amountUnit: '%', sizeUnit: '', animated: false,
+    extras: [
+      { key: 'style', label: 'Style', kind: 'choice', options: [{ id: 'line', label: 'Line' }, { id: 'clock', label: 'Clock' }, { id: 'iris', label: 'Iris' }], def: 'line' },
+      { key: 'angle', label: 'Direction', kind: 'range', min: 0, max: 360, step: 5, unit: '\u00b0', def: 90 },
+      { key: 'feather', label: 'Feather', kind: 'range', min: 0, max: 100, step: 1, unit: '%', def: 0 },
+      { key: 'invert', label: 'Invert', kind: 'toggle', def: false },
+    ] },
   { id: 'drawon', label: 'Draw on', hint: 'Vector lines draw themselves along their path, or a short piece of each line travels along it, with tapered ends. Set Start and End for a piece; key End from 0 to 100% to draw a line on; Travel moves it with no keys', target: 'line', amount: 35, size: 0, hold: 1, amountRange: [0, 100], sizeRange: [0, 100], amountLabel: 'End', sizeLabel: 'Start', amountUnit: '%', sizeUnit: '%', animated: false,
     frameDependent: (e) => Number(param<number>(e, 'travel')) !== 0,
     extras: [

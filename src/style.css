@@ -5221,6 +5221,9 @@ body.ui-full.ws-motion:not(.ui-hidden):not(.quick) .bub-ctx, body.ui-full.ws-tim
 .fx-category > strong { grid-column: 1 / -1; padding: 4px 0; font-size: 12px; color: var(--muted); }
 .fx-category > button { text-align: left; min-height: 44px; white-space: normal; }
 .fx-category > button { display: flex; flex-direction: column; align-items: flex-start; padding: 8px; gap: 4px; }
+.fx-add-top { display: flex; align-items: center; gap: 8px; }
+.fx-add-top .ico, .fx-ico .ico { flex: 0 0 auto; width: 18px; height: 18px; color: var(--accent); }
+.fx-ico { display: inline-flex; align-items: center; margin-right: 6px; }
 .fx-add-hint { color: var(--muted); font-size: 11px; line-height: 1.35; font-weight: normal; }
 .fx-added { margin: 0; }
 .panel-help { flex: 0 0 auto; min-width: 36px; min-height: 36px; font-weight: 700; }
